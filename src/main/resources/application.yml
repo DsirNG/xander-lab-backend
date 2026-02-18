@@ -2,20 +2,22 @@ server:
   port: 30002
 
 spring:
+  config:
+    import: optional:application-local.yml
   application:
     name: xander-lab-backend
   datasource:
-    url: jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
-    username: ***
-    password: ***
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:your_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   # 邮件配置
   mail:
     host: smtp.qq.com
     port: 587
-    username: dsircity@foxmail.com
-    password: ***
+    username: ${SPRING_MAIL_USERNAME:your_email@foxmail.com}
+    password: ${SPRING_MAIL_PASSWORD:your_mail_authorization_code}
     protocol: smtp
     default-encoding: UTF-8
     properties:
@@ -41,10 +43,10 @@ spring:
 aliyun:
   oss:
     endpoint: oss-cn-beijing.aliyuncs.com
-    accessKeyId: ***
-    accessKeySecret: ***
-    bucketName: ***
-    domain: ***
+    accessKeyId: ${ALIYUN_OSS_ACCESS_KEY_ID:your_access_key_id}
+    accessKeySecret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:your_access_key_secret}
+    bucketName: food-cinder
+    domain: https://food-cinder.oss-cn-beijing.aliyuncs.com
     # 文件上传限制
     upload:
       avatar:
@@ -69,6 +71,7 @@ mybatis-plus:
 
 # JWT配置
 jwt:
-  secret: xander-lab-secret-key-must-be-at-least-32-chars-for-hmac
+  secret: ${JWT_SECRET:xander-lab-secret-key-must-be-at-least-32-chars-for-hmac}
   access-token-expire: 7200000
   refresh-token-expire: 604800000
+

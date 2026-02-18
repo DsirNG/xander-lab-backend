@@ -25,4 +25,6 @@ target/
 *.temp
 *.tmp
 .DS_Store
-Thumbs.db
+### Local Config ###
+src/main/resources/application-local.yml
+
