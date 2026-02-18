@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  xander-lab-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xander-lab-backend
+    restart: unless-stopped
+    ports:
+      - "30002:30002"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - JAVA_OPTS=-Xms512m -Xmx512m
+    networks:
+      - xander-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:30002/api/blog/posts/recent"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    labels:
+      - "com.xander-lab.description=Xander Lab Backend Application"
+      - "com.xander-lab.version=1.0.0"
+
+networks:
+  xander-network:
+    driver: bridge

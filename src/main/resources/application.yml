@@ -1,0 +1,74 @@
+server:
+  port: 30002
+
+spring:
+  application:
+    name: xander-lab-backend
+  datasource:
+    url: jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true
+    username: ***
+    password: ***
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  # 邮件配置
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: dsircity@foxmail.com
+    password: ***
+    protocol: smtp
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 200MB
+
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+    deserialization:
+      fail-on-unknown-properties: false
+
+# 阿里云OSS配置
+aliyun:
+  oss:
+    endpoint: oss-cn-beijing.aliyuncs.com
+    accessKeyId: ***
+    accessKeySecret: ***
+    bucketName: ***
+    domain: ***
+    # 文件上传限制
+    upload:
+      avatar:
+        maxSize: 10485760  # 10MB
+        allowedTypes: jpg,jpeg,png,gif
+        pathPrefix: avatars/
+      photo:
+        maxSize: 20971520  # 20MB
+        allowedTypes: jpg,jpeg,png,gif,webp
+        pathPrefix: photos/
+      video:
+        maxSize: 104857600  # 100MB
+        allowedTypes: mp4,avi,mov
+        pathPrefix: videos/
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  mapper-locations: classpath*:/mapper/*.xml
+  type-aliases-package: com.xander.lab.entity
+
+# JWT配置
+jwt:
+  secret: xander-lab-secret-key-must-be-at-least-32-chars-for-hmac
+  access-token-expire: 7200000
+  refresh-token-expire: 604800000

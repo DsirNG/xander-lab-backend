@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.xander.lab.mapper.BlogPostMapper">
+
+    <!-- 文章列表结果映射（不含 content） -->
+    <resultMap id="PostListRM" type="com.xander.lab.dto.BlogPostVO">
+        <id     property="id"           column="id"/>
+        <result property="title"        column="title"/>
+        <result property="summary"      column="summary"/>
+        <result property="category"     column="category"/>
+        <result property="categoryName" column="categoryName"/>
+        <result property="userId"       column="user_id"/>
+        <result property="author"       column="author"/>
+        <result property="date"         column="date"/>
+        <result property="readTime"     column="readTime"/>
+        <result property="views"        column="views"/>
+        <result property="tagsRaw"      column="tagsRaw"/>
+    </resultMap>
+
+    <!-- 文章详情结果映射（含 content） -->
+    <resultMap id="PostDetailRM" type="com.xander.lab.dto.BlogPostVO" extends="PostListRM">
+        <result property="content" column="content"/>
+    </resultMap>
+
+    <!-- ============================================================
+         selectPostList: 文章列表，支持 search / category / tag 筛选
+         ============================================================ -->
+    <select id="selectPostList" resultMap="PostListRM">
+        SELECT p.id,
+               p.title,
+               p.summary,
+               p.category_id                                    AS category,
+               c.name                                           AS categoryName,
+                p.user_id,
+                p.author,
+                p.published_at                                   AS date,
+                p.read_time                                      AS readTime,
+                p.views,
+                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
+        FROM blog_post p
+                 LEFT JOIN blog_category c ON c.id = p.category_id
+                 LEFT JOIN blog_post_tag pt ON pt.post_id = p.id
+                 LEFT JOIN blog_tag t ON t.id = pt.tag_id
+        WHERE p.status = 1
+        <if test="category != null and category != ''">
+            AND p.category_id = #{category}
+        </if>
+        <if test="tag != null and tag != ''">
+            AND p.id IN (
+                SELECT pt2.post_id
+                FROM blog_post_tag pt2
+                         INNER JOIN blog_tag t2 ON t2.id = pt2.tag_id
+                WHERE LOWER(t2.name) = LOWER(#{tag})
+            )
+        </if>
+        <if test="search != null and search != ''">
+            AND (
+                p.title LIKE CONCAT('%', #{search}, '%')
+                OR p.summary LIKE CONCAT('%', #{search}, '%')
+                OR p.id IN (
+                    SELECT pt3.post_id
+                    FROM blog_post_tag pt3
+                             INNER JOIN blog_tag t3 ON t3.id = pt3.tag_id
+                    WHERE LOWER(t3.name) LIKE CONCAT('%', LOWER(#{search}), '%')
+                )
+            )
+        </if>
+        GROUP BY p.id, p.title, p.summary, p.category_id, p.user_id,
+                 p.author, p.published_at, p.read_time, p.views
+        ORDER BY p.published_at DESC
+    </select>
+
+    <!-- ============================================================
+         selectRecentPosts: 最新文章，前N条
+         ============================================================ -->
+    <select id="selectRecentPosts" resultMap="PostListRM">
+        SELECT p.id,
+               p.title,
+               p.summary,
+               p.category_id                                    AS category,
+               c.name                                           AS categoryName,
+               p.user_id,
+               p.author,
+               p.published_at                                   AS date,
+               p.read_time                                      AS readTime,
+               p.views,
+               GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
+        FROM blog_post p
+                 LEFT JOIN blog_category c ON c.id = p.category_id
+                 LEFT JOIN blog_post_tag pt ON pt.post_id = p.id
+                 LEFT JOIN blog_tag t ON t.id = pt.tag_id
+        WHERE p.status = 1
+        GROUP BY p.id, p.title, p.summary, p.category_id, c.name, p.user_id,
+                 p.author, p.published_at, p.read_time, p.views
+        ORDER BY p.published_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- ============================================================
+         selectPostDetail: 文章详情（含 content）
+         ============================================================ -->
+    <select id="selectPostDetail" resultMap="PostDetailRM">
+        SELECT p.id,
+               p.title,
+               p.summary,
+               p.content,
+               p.category_id                                    AS category,
+               c.name                                           AS categoryName,
+               p.user_id,
+               p.author,
+               p.published_at                                   AS date,
+               p.read_time                                      AS readTime,
+               p.views,
+               GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
+        FROM blog_post p
+                 LEFT JOIN blog_category c ON c.id = p.category_id
+                 LEFT JOIN blog_post_tag pt ON pt.post_id = p.id
+                 LEFT JOIN blog_tag t ON t.id = pt.tag_id
+        WHERE p.id = #{id}
+          AND p.status = 1
+        GROUP BY p.id, p.title, p.summary, p.content, p.category_id, c.name, p.user_id,
+                 p.author, p.published_at, p.read_time, p.views
+    </select>
+
+</mapper>
