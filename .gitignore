@@ -27,4 +27,8 @@ target/
 .DS_Store
 ### Local Config ###
 src/main/resources/application-local.yml
+.env.local
+.env.production
+.env.development
+
 
