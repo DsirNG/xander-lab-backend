@@ -3,13 +3,17 @@ FROM maven:3.8.5-openjdk-17 AS builder
 
 WORKDIR /app
 
-# Copy pom.xml and download dependencies (cached layer)
+# Copy pom.xml and settings.xml
 COPY pom.xml .
-RUN mvn dependency:go-offline -B
+COPY settings.xml .
+
+# Download dependencies using Aliyun mirror
+RUN mvn dependency:go-offline -B -s settings.xml
 
 # Copy source code and build jar
 COPY src ./src
-RUN mvn package -DskipTests
+RUN mvn package -DskipTests -s settings.xml
+
 
 # Stage 2: Run the application
 FROM openjdk:17-jdk-slim

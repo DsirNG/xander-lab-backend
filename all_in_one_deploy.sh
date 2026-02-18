@@ -4,7 +4,7 @@
 
 # --- 1. 配置信息 ---
 # 注意：在 VPC 环境下，我们统一使用内网地址以获得最高速度
-REGISTRY="crpi-v3gvy8meoymt6a59-vpc.cn-shenzhen.personal.cr.aliyuncs.com"
+REGISTRY="crpi-v3gvy8meoymt6a59.cn-shenzhen.personal.cr.aliyuncs.com"
 NAMESPACE="test_xander"
 IMAGE_NAME="api-xander"
 CONTAINER_NAME="api-xander"
@@ -37,9 +37,16 @@ echo "$ALIYUN_REGISTRY_PASSWORD" | docker login "$REGISTRY" -u "$USERNAME" --pas
 # --- 4. 构建 Docker 镜像 ---
 echo "正在本地构建镜像: $IMAGE_NAME:$TAG ..."
 # 使用 Dockerfile 进行多阶段构建（包含 Maven 编译）
-docker build -t "$IMAGE_NAME:$TAG" .
+if ! docker build -t "$IMAGE_NAME:$TAG" .; then
+    echo "=========================================="
+    echo "错误: 镜像构建失败！"
+    echo "提示: 如果卡在 Maven 下载，通常是网络问题。已为您添加阿里云镜像加速。"
+    echo "=========================================="
+    exit 1
+fi
 
 # --- 5. 标记镜像并推送至仓库 ---
+
 echo "正在推送镜像至阿里云仓库..."
 docker tag "$IMAGE_NAME:$TAG" "$FULL_IMAGE"
 docker push "$FULL_IMAGE"
