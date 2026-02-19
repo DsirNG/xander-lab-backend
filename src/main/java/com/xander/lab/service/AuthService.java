@@ -1,25 +1,23 @@
 package com.xander.lab.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.xander.lab.common.Constants;
 import com.xander.lab.dto.auth.LoginRequest;
 import com.xander.lab.dto.auth.TokenResponse;
 import com.xander.lab.entity.User;
 import com.xander.lab.mapper.UserMapper;
 import com.xander.lab.util.JwtUtil;
-import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 认证服务
- * 切换为真实的数据库操作（MyBatis-Plus）
  */
 @Slf4j
 @Service
@@ -29,25 +27,7 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final MailService mailService;
     private final UserMapper userMapper;
-
-    /**
-     * 验证码缓存 (邮箱 -> {code, expireTime})
-     * 生产环境请替换为 Redis
-     */
-    private static final Map<String, CodeRecord> CODE_CACHE = new ConcurrentHashMap<>();
-
-    /**
-     * 已失效的 Refresh Token 黑名单
-     * 生产环境建议使用 Redis 存储，设置过期时间为 7 天
-     */
-    private static final Set<String> TOKEN_BLACKLIST = ConcurrentHashMap.newKeySet();
-
-    @Data
-    @AllArgsConstructor
-    private static class CodeRecord {
-        private String code;
-        private long expireTime;
-    }
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * 发送登录验证码
@@ -56,8 +36,9 @@ public class AuthService {
         // 生成 6 位随机验证码
         String code = String.valueOf((int) ((Math.random() * 9 + 1) * 100000));
         
-        // 存入缓存 (有效期 5 分钟)
-        CODE_CACHE.put(email, new CodeRecord(code, System.currentTimeMillis() + 5 * 60 * 1000));
+        // 存入 Redis (有效期 5 分钟)
+        String key = Constants.REDIS_CODE_PREFIX + email;
+        redisTemplate.opsForValue().set(key, code, Constants.CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
         
         // 发送邮件
         mailService.sendVerificationCode(email, code);
@@ -74,13 +55,11 @@ public class AuthService {
 
         if ("code".equalsIgnoreCase(request.getType())) {
             // 验证码登录逻辑
-            CodeRecord record = CODE_CACHE.get(account);
-            if (record == null || !record.getCode().equals(request.getCode())) {
-                throw new IllegalArgumentException("验证码错误");
-            }
-            if (System.currentTimeMillis() > record.getExpireTime()) {
-                CODE_CACHE.remove(account);
-                throw new IllegalArgumentException("验证码已过期");
+            String key = Constants.REDIS_CODE_PREFIX + account;
+            String cachedCode = redisTemplate.opsForValue().get(key);
+            
+            if (cachedCode == null || !cachedCode.equals(request.getCode())) {
+                throw new IllegalArgumentException("验证码错误或已过期");
             }
             
             // 根据邮箱查询用户，若不存在则自动注册
@@ -89,9 +68,9 @@ public class AuthService {
                 user = registerUser(account, null, account, "USER");
             }
             // 登录成功，移除验证码
-            CODE_CACHE.remove(account);
+            redisTemplate.delete(key);
         } else {
-            // 密码登录逻辑：支持用户名或邮箱登录
+            // 密码登录逻辑
             user = userMapper.selectOne(new LambdaQueryWrapper<User>()
                     .eq(User::getUsername, account)
                     .or()
@@ -110,12 +89,12 @@ public class AuthService {
     }
 
     /**
-     * 自动注册用户（用于验证码首次登录）
+     * 自动注册用户
      */
     private User registerUser(String username, String password, String email, String role) {
         User user = new User();
         user.setUsername(username);
-        user.setPassword(password != null ? password : "123456"); // 随机密码
+        user.setPassword(password != null ? password : "123456");
         user.setNickname(username.contains("@") ? username.split("@")[0] : username);
         user.setEmail(email);
         user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + username);
@@ -131,21 +110,29 @@ public class AuthService {
      * 刷新 Access Token
      */
     public TokenResponse refresh(String refreshToken) {
-        if (TOKEN_BLACKLIST.contains(refreshToken)) {
-            throw new IllegalArgumentException("Token 已失效，请重新登录");
-        }
+        // 1. JWT 基本校验
         if (!jwtUtil.isValid(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
-            throw new IllegalArgumentException("无效的 Refresh Token");
+            throw new IllegalArgumentException("无效的 Token");
         }
 
-        String username = jwtUtil.getSubject(refreshToken);
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+        // 2. Redis 黑名单校验
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(Constants.REDIS_BLACKLIST_PREFIX + refreshToken))) {
+            throw new IllegalArgumentException("Token 已失效");
+        }
+
+        String userId = jwtUtil.getSubject(refreshToken);
+        User user = userMapper.selectById(userId);
         if (user == null || user.getStatus() == 0) {
             throw new IllegalArgumentException("用户状态异常");
         }
 
-        // 旧 Token 加入黑名单
-        TOKEN_BLACKLIST.add(refreshToken);
+        // 3. 旧 Refresh Token 加入黑名单
+        redisTemplate.opsForValue().set(
+                Constants.REDIS_BLACKLIST_PREFIX + refreshToken,
+                "1",
+                jwtUtil.getRefreshTokenExpire(),
+                TimeUnit.MILLISECONDS
+        );
 
         return generateTokenResponse(user);
     }
@@ -155,7 +142,13 @@ public class AuthService {
      */
     public void logout(String refreshToken) {
         if (refreshToken != null && !refreshToken.isBlank()) {
-            TOKEN_BLACKLIST.add(refreshToken);
+            // 加入黑名单
+            redisTemplate.opsForValue().set(
+                    Constants.REDIS_BLACKLIST_PREFIX + refreshToken,
+                    "1",
+                    jwtUtil.getRefreshTokenExpire(),
+                    TimeUnit.MILLISECONDS
+            );
         }
         log.info("[Auth] 用户登出，Token 已失效");
     }
@@ -168,8 +161,8 @@ public class AuthService {
         if (!jwtUtil.isValid(token)) {
             throw new IllegalArgumentException("Token 无效或已过期");
         }
-        String username = jwtUtil.getSubject(token);
-        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
+        String userId = jwtUtil.getSubject(token);
+        User user = userMapper.selectById(userId);
         if (user == null) {
             throw new IllegalArgumentException("用户不存在");
         }
@@ -178,14 +171,24 @@ public class AuthService {
     }
 
     private TokenResponse generateTokenResponse(User user) {
+        String userIdStr = String.valueOf(user.getId());
         Map<String, Object> claims = Map.of("role", user.getRole(), "type", "access");
-        String accessToken = jwtUtil.generateAccessToken(user.getUsername(), claims);
-        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername());
+        String accessToken = jwtUtil.generateAccessToken(userIdStr, claims);
+        String refreshToken = jwtUtil.generateRefreshToken(userIdStr);
+
+        // 将当前有效的 Token 存入 Redis，以便拦截器验证（可选方案：支持单设备登录等）
+        // 这里我们主要存入一个 userId 映射，表示该用户处于活跃状态
+        redisTemplate.opsForValue().set(
+                Constants.REDIS_TOKEN_PREFIX + userIdStr,
+                accessToken,
+                jwtUtil.getAccessTokenExpire(),
+                TimeUnit.MILLISECONDS
+        );
 
         return TokenResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
-                .tokenType("Bearer")
+                .tokenType(Constants.TOKEN_PREFIX.trim())
                 .expiresIn(jwtUtil.getAccessTokenExpire() / 1000)
                 .userInfo(buildUserInfo(user))
                 .build();
@@ -201,8 +204,8 @@ public class AuthService {
     }
 
     public String extractToken(String bearerToken) {
-        if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
-            return bearerToken.substring(7);
+        if (bearerToken != null && bearerToken.startsWith(Constants.TOKEN_PREFIX)) {
+            return bearerToken.substring(Constants.TOKEN_PREFIX.length());
         }
         throw new IllegalArgumentException("Authorization 头格式错误");
     }

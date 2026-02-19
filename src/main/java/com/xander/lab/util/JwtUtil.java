@@ -76,10 +76,6 @@ public class JwtUtil {
 
     /**
      * 解析 Token，返回 Claims
-     *
-     * @param token JWT 字符串
-     * @return Claims
-     * @throws JwtException Token 无效或已过期
      */
     public Claims parseToken(String token) {
         return Jwts.parser()
