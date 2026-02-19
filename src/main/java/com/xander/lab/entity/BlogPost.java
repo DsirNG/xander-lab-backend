@@ -39,6 +39,9 @@ public class BlogPost {
     /** 预计阅读时间，如 "10 min" */
     private String readTime;
 
+    /** 文章提示信息（Tips） */
+    private String tips;
+
     /** 浏览次数 */
     private Integer views;
 

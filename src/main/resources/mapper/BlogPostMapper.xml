@@ -15,6 +15,7 @@
         <result property="author"       column="author"/>
         <result property="date"         column="date"/>
         <result property="readTime"     column="readTime"/>
+        <result property="tips"         column="tips"/>
         <result property="views"        column="views"/>
         <result property="tagsRaw"      column="tagsRaw"/>
     </resultMap>
@@ -37,6 +38,7 @@
                 p.author,
                 p.published_at                                   AS date,
                 p.read_time                                      AS readTime,
+                p.tips,
                 p.views,
                 GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
@@ -68,7 +70,7 @@
             )
         </if>
         GROUP BY p.id, p.title, p.summary, p.category_id, p.user_id,
-                 p.author, p.published_at, p.read_time, p.views
+                 p.author, p.published_at, p.read_time, p.tips, p.views
         ORDER BY p.published_at DESC
     </select>
 
@@ -85,6 +87,7 @@
                p.author,
                p.published_at                                   AS date,
                p.read_time                                      AS readTime,
+               p.tips,
                p.views,
                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
@@ -93,7 +96,7 @@
                  LEFT JOIN blog_tag t ON t.id = pt.tag_id
         WHERE p.status = 1
         GROUP BY p.id, p.title, p.summary, p.category_id, c.name, p.user_id,
-                 p.author, p.published_at, p.read_time, p.views
+                 p.author, p.published_at, p.read_time, p.tips, p.views
         ORDER BY p.published_at DESC
         LIMIT #{limit}
     </select>
@@ -112,6 +115,7 @@
                p.author,
                p.published_at                                   AS date,
                p.read_time                                      AS readTime,
+               p.tips,
                p.views,
                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
@@ -121,7 +125,7 @@
         WHERE p.id = #{id}
           AND p.status = 1
         GROUP BY p.id, p.title, p.summary, p.content, p.category_id, c.name, p.user_id,
-                 p.author, p.published_at, p.read_time, p.views
+                 p.author, p.published_at, p.read_time, p.tips, p.views
     </select>
 
 </mapper>

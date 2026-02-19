@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS `blog_post` (
   `category_id` VARCHAR(64)   NOT NULL COMMENT '分类ID，关联 blog_category.id',
   `author`      VARCHAR(64)   NOT NULL DEFAULT 'Xander' COMMENT '作者',
   `read_time`   VARCHAR(32)   NOT NULL DEFAULT '5 min' COMMENT '预计阅读时间',
+  `tips`        VARCHAR(255)  NULL COMMENT '文章提示信息',
   `views`       INT           NOT NULL DEFAULT 0 COMMENT '浏览次数',
   `status`      TINYINT       NOT NULL DEFAULT 1 COMMENT '状态：0=草稿 1=已发布',
   `published_at` DATE         NULL COMMENT '发布日期',
@@ -108,11 +109,11 @@ INSERT INTO `blog_tag` (`name`) VALUES
   ('Career'), ('Growth'), ('Life');
 
 -- 文章数据
-INSERT INTO `blog_post` (`id`, `title`, `summary`, `content`, `category_id`, `author`, `read_time`, `views`, `status`, `published_at`) VALUES
+INSERT INTO `blog_post` (`id`, `title`, `summary`, `content`, `category_id`, `author`, `read_time`, `tips`, `views`, `status`, `published_at`) VALUES
 (1, '深入理解 React Hooks 原理',
  '本文将深入探讨 React Hooks 的内部实现机制，包括 Fiber 架构、链表结构以及状态更新流程。我们还将讨论在使用 Hooks 时常见陷阱及其解决方案。',
  'React Hooks 是 React 16.8 引入的新特性，它允许你在不编写 class 的情况下使用 state 以及其他的 React 特性。\n\n## Fiber 架构与 Hooks\n\nHooks 的实现严重依赖于 React 的 **Fiber 架构**。每个组件实例对应一个 Fiber 节点，而 Hooks 的状态则是存储在 Fiber 节点的 `memoizedState` 链表中的。\n\n> 💡 Fiber 本质上是一个 JavaScript 对象，它描述了组件树中的一个工作单元。每次渲染时，React 会遍历 Fiber 树来决定需要更新哪些节点。\n\n### useState 的工作流程\n\n当我们调用 `useState` 时，React 内部做了什么？\n\n```javascript\nfunction Counter() {\n  const [count, setCount] = useState(0);\n  const [name, setName] = useState(''Xander'');\n  return (\n    <div>\n      <p>{name} 点击了 {count} 次</p>\n      <button onClick={() => setCount(c => c + 1)}>+1</button>\n    </div>\n  );\n}\n```\n\n## 为什么调用顺序很重要？\n\n因为 React 依赖 Hooks 调用的**顺序**来确定哪个 state 对应哪个 `useState`。\n\n## useEffect 的清理机制\n\n`useEffect` 返回的清理函数会在**下一次 effect 执行前**或**组件卸载时**调用。\n\n## 最佳实践\n\n1. **只在顶层调用 Hooks**\n2. **只在 React 函数中调用 Hooks**\n3. **使用 ESLint 插件**\n4. **合理拆分 state**\n5. **善用自定义 Hook**',
- 'frontend', 'Xander', '10 min', 1205, 1, '2026-02-08'),
+ 'frontend', 'Xander', '10 min', '仅代表自己在工作过程中的理解，如有偏差，还望海涵和指出错误', 1205, 1, '2026-02-08'),
 
 (2, '前端性能优化实战指南',
  '从网络请求、资源加载、代码执行等多个维度，详细介绍前端性能优化的策略和实践技巧。包含 Web Vitals 指标分析和工具使用。',

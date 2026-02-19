@@ -55,6 +55,9 @@ public class BlogPostVO {
     /** 预计阅读时间 */
     private String readTime;
 
+    /** 文章提示信息（Tips） */
+    private String tips;
+
     /** 浏览次数 */
     private Integer views;
 
