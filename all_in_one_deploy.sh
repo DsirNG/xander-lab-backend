@@ -3,7 +3,6 @@
 # 运行环境：已拉取代码的阿里云服务器 (Linux)
 
 # --- 1. 配置信息 ---
-# 注意：在 VPC 环境下，我们统一使用内网地址以获得最高速度
 REGISTRY="crpi-v3gvy8meoymt6a59.cn-shenzhen.personal.cr.aliyuncs.com"
 NAMESPACE="test_xander"
 IMAGE_NAME="api-xander"
@@ -11,6 +10,7 @@ CONTAINER_NAME="api-xander"
 TAG="v1.0.0" 
 USERNAME="aliyun6938781443"
 FULL_IMAGE="$REGISTRY/$NAMESPACE/$IMAGE_NAME:$TAG"
+
 
 echo "=========================================="
 echo "   阿里云服务器：本地构建 + 推送 + 部署"
