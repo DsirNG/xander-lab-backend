@@ -82,6 +82,11 @@ public class ComponentItem {
     private String version;
 
     /**
+     * 组件完整源码说明
+     */
+    private String sourceCode;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createdAt;

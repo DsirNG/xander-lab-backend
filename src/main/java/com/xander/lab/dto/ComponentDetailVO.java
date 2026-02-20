@@ -13,6 +13,7 @@ public class ComponentDetailVO {
     private String iconKey;
     private String author;
     private String version;
+    private String sourceCode;
     private List<ComponentDetailPageVO> detailPages;
     private List<ComponentScenarioVO> scenarios;
 }

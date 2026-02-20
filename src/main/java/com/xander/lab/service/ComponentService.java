@@ -95,6 +95,7 @@ public class ComponentService {
         vo.setIconKey(item.getIconKey());
         vo.setAuthor(item.getAuthor());
         vo.setVersion(item.getVersion());
+        vo.setSourceCode(item.getSourceCode());
 
         // 获取演示场景
         List<ComponentScenario> scenarios = scenarioMapper.selectList(
@@ -169,6 +170,7 @@ public class ComponentService {
         item.setDescriptionZh(dto.getDescriptionZh());
         item.setAuthor(authorName);
         item.setVersion(dto.getVersion() != null ? dto.getVersion() : "1.0.0");
+        item.setSourceCode(dto.getSourceCode());
         item.setStatus(0); // 🚀 默认设为待审核状态 (0)
         item.setSort(100); // 放在后面
         item.setTagZh("社区分享");
@@ -178,16 +180,20 @@ public class ComponentService {
         
         itemMapper.insert(item);
 
-        // 3. 创建并保存第一个演示场景
-        ComponentScenario scenario = new ComponentScenario();
-        scenario.setComponentId(id);
-        scenario.setTitleZh("基础用法");
-        scenario.setTitleEn("Basic Usage");
-        scenario.setDescriptionZh("由用户贡献的初始示例。");
-        scenario.setDemoCode(dto.getDemoCode());
-        scenario.setSort(1);
-        
-        scenarioMapper.insert(scenario);
+        // 3. 批量插入演示场景
+        List<ComponentShareDTO.ScenarioDTO> scenarioDTOs = dto.getScenarios();
+        for (int i = 0; i < scenarioDTOs.size(); i++) {
+            ComponentShareDTO.ScenarioDTO sDto = scenarioDTOs.get(i);
+            ComponentScenario scenario = new ComponentScenario();
+            scenario.setComponentId(id);
+            scenario.setTitleZh(sDto.getTitleZh() != null ? sDto.getTitleZh() : "场景 " + (i + 1));
+            scenario.setTitleEn(sDto.getTitleEn() != null ? sDto.getTitleEn() : "Scenario " + (i + 1));
+            scenario.setDescriptionZh(sDto.getDescription());
+            scenario.setDemoCode(sDto.getDemoCode());
+            scenario.setCodeSnippet(sDto.getCodeSnippet() != null ? sDto.getCodeSnippet() : sDto.getDemoCode());
+            scenario.setSort(i + 1);
+            scenarioMapper.insert(scenario);
+        }
 
         return id;
     }
