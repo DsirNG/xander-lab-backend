@@ -92,9 +92,14 @@ public class ComponentItem {
     private String libraryCode;
 
     /**
-     * 环境包裹代码
+     * App 包裹环境代码（需包含 {children} 占位符）
      */
     private String wrapperCode;
+
+    /**
+     * 自定义 CSS 样式代码
+     */
+    private String cssCode;
 
     /**
      * 创建时间

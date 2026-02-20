@@ -98,6 +98,7 @@ public class ComponentService {
         vo.setSourceCode(item.getSourceCode());
         vo.setLibraryCode(item.getLibraryCode());
         vo.setWrapperCode(item.getWrapperCode());
+        vo.setCssCode(item.getCssCode());
 
         // 获取演示场景
         List<ComponentScenario> scenarios = scenarioMapper.selectList(
@@ -166,6 +167,7 @@ public class ComponentService {
         item.setSourceCode(dto.getSourceCode());
         item.setLibraryCode(dto.getLibraryCode() != null ? dto.getLibraryCode() : "");
         item.setWrapperCode(dto.getWrapperCode() != null ? dto.getWrapperCode() : "");
+        item.setCssCode(dto.getCssCode() != null ? dto.getCssCode() : "");
         item.setStatus(0); //  默认设为待审核状态 (0)
         item.setSort(100); // 放在后面
         item.setTagZh("社区分享");

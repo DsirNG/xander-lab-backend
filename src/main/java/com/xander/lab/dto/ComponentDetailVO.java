@@ -16,6 +16,7 @@ public class ComponentDetailVO {
     private String sourceCode;
     private String libraryCode;
     private String wrapperCode;
+    private String cssCode;
     private List<ComponentDetailPageVO> detailPages;
     private List<ComponentScenarioVO> scenarios;
 }

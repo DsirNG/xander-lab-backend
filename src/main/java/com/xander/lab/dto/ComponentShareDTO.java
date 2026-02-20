@@ -39,6 +39,7 @@ public class ComponentShareDTO {
      * App 包裹环境代码（需包含 {children} 占位符）
      */
     private String wrapperCode;
+    private String cssCode;
 
     /**
      * 演示场景列表（至少一个）
