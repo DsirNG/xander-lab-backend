@@ -96,6 +96,8 @@ public class ComponentService {
         vo.setAuthor(item.getAuthor());
         vo.setVersion(item.getVersion());
         vo.setSourceCode(item.getSourceCode());
+        vo.setLibraryCode(item.getLibraryCode());
+        vo.setWrapperCode(item.getWrapperCode());
 
         // 获取演示场景
         List<ComponentScenario> scenarios = scenarioMapper.selectList(
@@ -168,9 +170,12 @@ public class ComponentService {
         item.setTitleZh(dto.getTitleZh());
         item.setTitleEn(dto.getTitleEn());
         item.setDescriptionZh(dto.getDescriptionZh());
+        item.setDescriptionEn(dto.getDescriptionEn() != null && !dto.getDescriptionEn().isEmpty() ? dto.getDescriptionEn() : dto.getDescriptionZh());
         item.setAuthor(authorName);
         item.setVersion(dto.getVersion() != null ? dto.getVersion() : "1.0.0");
         item.setSourceCode(dto.getSourceCode());
+        item.setLibraryCode(dto.getLibraryCode() != null ? dto.getLibraryCode() : "");
+        item.setWrapperCode(dto.getWrapperCode() != null ? dto.getWrapperCode() : "");
         item.setStatus(0); // 🚀 默认设为待审核状态 (0)
         item.setSort(100); // 放在后面
         item.setTagZh("社区分享");
@@ -187,8 +192,9 @@ public class ComponentService {
             ComponentScenario scenario = new ComponentScenario();
             scenario.setComponentId(id);
             scenario.setTitleZh(sDto.getTitleZh() != null ? sDto.getTitleZh() : "场景 " + (i + 1));
-            scenario.setTitleEn(sDto.getTitleEn() != null ? sDto.getTitleEn() : "Scenario " + (i + 1));
-            scenario.setDescriptionZh(sDto.getDescription());
+            scenario.setTitleEn(sDto.getTitleEn() != null && !sDto.getTitleEn().isEmpty() ? sDto.getTitleEn() : "Scenario " + (i + 1));
+            scenario.setDescriptionZh(sDto.getDescriptionZh());
+            scenario.setDescriptionEn(sDto.getDescriptionEn() != null && !sDto.getDescriptionEn().isEmpty() ? sDto.getDescriptionEn() : sDto.getDescriptionZh());
             scenario.setDemoCode(sDto.getDemoCode());
             scenario.setCodeSnippet(sDto.getCodeSnippet() != null ? sDto.getCodeSnippet() : sDto.getDemoCode());
             scenario.setSort(i + 1);

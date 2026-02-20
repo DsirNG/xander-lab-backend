@@ -87,6 +87,16 @@ public class ComponentItem {
     private String sourceCode;
 
     /**
+     * 底层库实现代码
+     */
+    private String libraryCode;
+
+    /**
+     * 环境包裹代码
+     */
+    private String wrapperCode;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createdAt;
