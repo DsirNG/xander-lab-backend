@@ -4,7 +4,7 @@ import lombok.Data;
 
 @Data
 public class ComponentListVO {
-    private String id;
+    private Long id;
     private String title;
     private String desc;
     private String tag;

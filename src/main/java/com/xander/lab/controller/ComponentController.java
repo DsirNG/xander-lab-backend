@@ -40,7 +40,7 @@ public class ComponentController {
      * @return 组件详情信息
      */
     @GetMapping("/{id}")
-    public Result<ComponentDetailVO> getComponent(@PathVariable String id, @RequestParam(defaultValue = "zh") String lang) {
+    public Result<ComponentDetailVO> getComponent(@PathVariable Long id, @RequestParam(defaultValue = "zh") String lang) {
         ComponentDetailVO vo = componentService.getComponentDetail(id, lang);
         if (vo == null) {
             return Result.error("未找到该组件");
@@ -55,8 +55,8 @@ public class ComponentController {
      * @return 成功返回组件ID
      */
     @PostMapping("/share")
-    public Result<String> shareComponent(@RequestBody ComponentShareDTO dto) {
-        String id = componentService.shareComponent(dto);
+    public Result<Long> shareComponent(@RequestBody ComponentShareDTO dto) {
+        Long id = componentService.shareComponent(dto);
         return Result.success(id);
     }
 }

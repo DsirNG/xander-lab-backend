@@ -6,7 +6,7 @@ import java.util.List;
 
 @Data
 public class ComponentDetailVO {
-    private String id;
+    private Long id;
     private String title;
     private String desc;
     private String tag;

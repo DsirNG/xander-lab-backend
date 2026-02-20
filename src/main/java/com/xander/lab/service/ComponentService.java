@@ -81,7 +81,7 @@ public class ComponentService {
      * @param lang 语言代码
      * @return 组件详情对象
      */
-    public ComponentDetailVO getComponentDetail(String id, String lang) {
+    public ComponentDetailVO getComponentDetail(Long id, String lang) {
         boolean isZh = "zh".equalsIgnoreCase(lang);
 
         ComponentItem item = itemMapper.selectById(id);
@@ -143,7 +143,7 @@ public class ComponentService {
      * @return 生成的组件ID
      */
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
-    public String shareComponent(ComponentShareDTO dto) {
+    public Long shareComponent(ComponentShareDTO dto) {
         // 0. 获取当前用户信息
         Long userId = com.xander.lab.common.UserContext.getUserId();
         String authorName = "匿名用户";
@@ -154,18 +154,8 @@ public class ComponentService {
             }
         }
 
-        // 1. 生成 ID (将标题转换为小写横杠格式，如 "My Table" -> "my-table")
-        String id = dto.getTitleEn().toLowerCase().replaceAll("[^a-z0-9]", "-");
-        
-        // 检查 ID 是否已存在，若存在则加后缀
-        ComponentItem existing = itemMapper.selectById(id);
-        if (existing != null) {
-            id = id + "-" + (System.currentTimeMillis() % 1000);
-        }
-
-        // 2. 创建并保存组件条目
+        // 1. 创建并保存组件条目
         ComponentItem item = new ComponentItem();
-        item.setId(id);
         item.setCategoryId(dto.getCategoryId());
         item.setTitleZh(dto.getTitleZh());
         item.setTitleEn(dto.getTitleEn());
@@ -176,7 +166,7 @@ public class ComponentService {
         item.setSourceCode(dto.getSourceCode());
         item.setLibraryCode(dto.getLibraryCode() != null ? dto.getLibraryCode() : "");
         item.setWrapperCode(dto.getWrapperCode() != null ? dto.getWrapperCode() : "");
-        item.setStatus(0); // 🚀 默认设为待审核状态 (0)
+        item.setStatus(0); //  默认设为待审核状态 (0)
         item.setSort(100); // 放在后面
         item.setTagZh("社区分享");
         item.setTagEn("Community");
@@ -190,7 +180,7 @@ public class ComponentService {
         for (int i = 0; i < scenarioDTOs.size(); i++) {
             ComponentShareDTO.ScenarioDTO sDto = scenarioDTOs.get(i);
             ComponentScenario scenario = new ComponentScenario();
-            scenario.setComponentId(id);
+            scenario.setComponentId(item.getId());
             scenario.setTitleZh(sDto.getTitleZh() != null ? sDto.getTitleZh() : "场景 " + (i + 1));
             scenario.setTitleEn(sDto.getTitleEn() != null && !sDto.getTitleEn().isEmpty() ? sDto.getTitleEn() : "Scenario " + (i + 1));
             scenario.setDescriptionZh(sDto.getDescriptionZh());
@@ -201,7 +191,7 @@ public class ComponentService {
             scenarioMapper.insert(scenario);
         }
 
-        return id;
+        return item.getId();
     }
 }
 

@@ -16,10 +16,10 @@ import java.time.LocalDateTime;
 public class ComponentItem {
 
     /**
-     * 组件ID (例如: toast)
+     * 组件ID (自增主键)
      */
-    @TableId(type = IdType.INPUT)
-    private String id;
+    @TableId(type = IdType.AUTO)
+    private Long id;
 
     /**
      * 关联 component_category.id

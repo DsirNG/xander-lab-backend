@@ -22,7 +22,7 @@ public class ComponentScenario {
     /**
      * 关联组件ID
      */
-    private String componentId;
+    private Long componentId;
 
     /**
      * 场景标题 (中文)
