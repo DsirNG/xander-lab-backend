@@ -39,9 +39,6 @@ public interface BlogTagMapper extends BaseMapper<BlogTag> {
             """)
     List<TagVO> selectPopularTags(@Param("limit") int limit);
 
-    /**
-     * 查询某篇文章的所有标签名称
-     */
     @Select("""
             SELECT t.name
             FROM blog_tag t
@@ -49,4 +46,21 @@ public interface BlogTagMapper extends BaseMapper<BlogTag> {
             WHERE pt.post_id = #{postId}
             """)
     List<String> selectTagNamesByPostId(@Param("postId") Long postId);
+
+    /**
+     * 插入文章标签关联
+     */
+    @org.apache.ibatis.annotations.Insert("""
+            INSERT INTO blog_post_tag (post_id, tag_id)
+            VALUES (#{postId}, #{tagId})
+            """)
+    void insertPostTag(@Param("postId") Long postId, @Param("tagId") Long tagId);
+
+    /**
+     * 删除文章的所有标签关联
+     */
+    @org.apache.ibatis.annotations.Delete("""
+            DELETE FROM blog_post_tag WHERE post_id = #{postId}
+            """)
+    void deletePostTags(@Param("postId") Long postId);
 }

@@ -1,10 +1,7 @@
 package com.xander.lab.controller;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.dto.BlogPostVO;
-import com.xander.lab.dto.CategoryVO;
-import com.xander.lab.dto.PageData;
-import com.xander.lab.dto.TagVO;
+import com.xander.lab.dto.*;
 import com.xander.lab.service.BlogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -17,6 +14,7 @@ import java.util.List;
  * <pre>
  * 接口列表：
  *   GET /api/blog/posts              获取文章列表（支持 search/category/tag 筛选，支持分页）
+ *   POST /api/blog/posts             发布文章
  *   GET /api/blog/posts/recent       获取最新文章（前N条）
  *   GET /api/blog/posts/{id}         获取文章详情
  *   GET /api/blog/categories         获取所有分类（含文章数量）
@@ -30,6 +28,14 @@ import java.util.List;
 public class BlogController {
 
     private final BlogService blogService;
+
+    /**
+     * 发布文章
+     */
+    @PostMapping("/posts")
+    public Result<Long> publishPost(@RequestBody BlogPostDTO dto) {
+        return Result.success(blogService.createBlog(dto));
+    }
 
     /**
      * 获取文章列表

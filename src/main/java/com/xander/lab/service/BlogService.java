@@ -1,17 +1,22 @@
 package com.xander.lab.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xander.lab.dto.BlogPostVO;
-import com.xander.lab.dto.CategoryVO;
-import com.xander.lab.dto.PageData;
-import com.xander.lab.dto.TagVO;
+import com.xander.lab.common.UserContext;
+import com.xander.lab.dto.*;
+import com.xander.lab.entity.BlogPost;
+import com.xander.lab.entity.BlogTag;
+import com.xander.lab.entity.User;
 import com.xander.lab.mapper.BlogCategoryMapper;
 import com.xander.lab.mapper.BlogPostMapper;
 import com.xander.lab.mapper.BlogTagMapper;
+import com.xander.lab.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -24,6 +29,54 @@ public class BlogService {
     private final BlogPostMapper blogPostMapper;
     private final BlogCategoryMapper blogCategoryMapper;
     private final BlogTagMapper blogTagMapper;
+    private final UserMapper userMapper;
+
+    /**
+     * 发布新博客
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Long createBlog(BlogPostDTO dto) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new RuntimeException("请先登录");
+        }
+
+        User user = userMapper.selectById(userId);
+
+        BlogPost post = new BlogPost();
+        post.setTitle(dto.getTitle());
+        post.setSummary(dto.getSummary());
+        post.setContent(dto.getContent());
+        post.setCategoryId(dto.getCategoryId());
+        post.setUserId(userId);
+        post.setAuthor(user != null ? user.getNickname() : "匿名");
+        post.setStatus(1); // 默认直接发布
+        post.setPublishedAt(LocalDate.now());
+
+        // 计算阅读时间 (粗略估算：500字/分钟)
+        int wordCount = dto.getContent() != null ? dto.getContent().length() : 0;
+        int minutes = Math.max(1, wordCount / 500);
+        post.setReadTime(minutes + " min");
+
+        blogPostMapper.insert(post);
+
+        // 处理标签
+        if (dto.getTags() != null && !dto.getTags().isEmpty()) {
+            for (String tagName : dto.getTags()) {
+                // 查找或创建标签
+                BlogTag tag = blogTagMapper.selectOne(new LambdaQueryWrapper<BlogTag>().eq(BlogTag::getName, tagName));
+                if (tag == null) {
+                    tag = new BlogTag();
+                    tag.setName(tagName);
+                    blogTagMapper.insert(tag);
+                }
+                // 关联标签
+                blogTagMapper.insertPostTag(post.getId(), tag.getId());
+            }
+        }
+
+        return post.getId();
+    }
 
     /**
      * 获取博客列表（支持搜索、分类、标签筛选，支持分页）

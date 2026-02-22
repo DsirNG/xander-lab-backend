@@ -25,6 +25,17 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     /**
+     * 参数类型转换失败
+     * 对应前端 HTTP_ERROR_MAP[400] = '请求参数错误'
+     */
+    @ExceptionHandler(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(org.springframework.http.HttpStatus.BAD_REQUEST)
+    public Result<Void> handleTypeMismatchException(org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex) {
+        log.warn("[Validation] 参数类型不匹配：{} -> {}", ex.getName(), ex.getValue());
+        return Result.badRequest("参数类型错误: " + ex.getName());
+    }
+
+    /**
      * 参数校验失败（@Valid 注解触发）
      * 对应前端 HTTP_ERROR_MAP[422] = '请求数据验证失败'
      */
