@@ -15,7 +15,7 @@ import java.util.List;
  * 提供组件菜单和详情的接口
  */
 @RestController
-@RequestMapping("/components")
+@RequestMapping("/api/components")
 @RequiredArgsConstructor
 public class ComponentController {
 

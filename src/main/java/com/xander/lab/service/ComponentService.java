@@ -1,6 +1,7 @@
 package com.xander.lab.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.xander.lab.common.UserContext;
 import com.xander.lab.dto.*;
 import com.xander.lab.entity.*;
 import com.xander.lab.mapper.*;
@@ -146,8 +147,8 @@ public class ComponentService {
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public Long shareComponent(ComponentShareDTO dto) {
         // 0. 获取当前用户信息
-        Long userId = com.xander.lab.common.UserContext.getUserId();
-        String authorName = "匿名用户";
+        Long userId = UserContext.getUserId();
+        String authorName = "匿名用户" + userId;
         if (userId != null) {
             User user = userMapper.selectById(userId);
             if (user != null) {
