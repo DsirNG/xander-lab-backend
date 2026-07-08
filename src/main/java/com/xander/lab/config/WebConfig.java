@@ -20,8 +20,11 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         // 注册认证拦截器
         registry.addInterceptor(authInterceptor)
-                .addPathPatterns("/api/**") // 拦截所有 API
-                .excludePathPatterns("/api/auth/login", "/api/auth/refresh", "/api/download/**"); // 排除登录、刷新、下载等白名单
+                .addPathPatterns("/api/**")
+                .excludePathPatterns(
+                        "/api/auth/**",       // 登录/注册/刷新/登出/验证，自行处理鉴权
+                        "/api/download/**"    // 文件下载公开
+                );
     }
 
     @Override

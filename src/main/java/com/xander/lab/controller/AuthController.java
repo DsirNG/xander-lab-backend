@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
  * <pre>
  *   POST /api/auth/login     登录，返回 accessToken + refreshToken
  *   POST /api/auth/refresh   无感刷新 Access Token（前端 401 自动触发）
- *   POST /api/auth/logout    登出，使 Refresh Token 失效
+ *   POST /api/auth/logout    登出当前设备，移除 Redis 中的 accessToken
  *   GET  /api/auth/me        获取当前登录用户信息
  * </pre>
  *
@@ -87,18 +87,21 @@ public class AuthController {
     }
 
     /**
-     * 登出
-     * 前端监听 auth:logout 事件后调用，或用户主动点击退出
+     * 登出当前设备
+     * 前端携带 Authorization 头中的 accessToken 调用，移除 Redis 中该 token 的记录
+     * 不影响其它设备的登录状态
      *
-     * 请求体：{ "refreshToken": "eyJ..." }
-     *
-     * @param request 包含 refreshToken 的请求体（可选，用于使 Token 失效）
+     * @param authorization Authorization: Bearer {accessToken}
      * @return 成功响应
      */
     @PostMapping("/logout")
-    public Result<Void> logout(@RequestBody(required = false) RefreshTokenRequest request) {
-        String refreshToken = request != null ? request.getRefreshToken() : null;
-        authService.logout(refreshToken);
+    public Result<Void> logout(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        String accessToken = null;
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            accessToken = authorization.substring(7);
+        }
+        authService.logout(accessToken);
         return Result.success();
     }
 

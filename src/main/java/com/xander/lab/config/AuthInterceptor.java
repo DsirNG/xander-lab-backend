@@ -9,11 +9,26 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.servlet.HandlerInterceptor;
+
+import java.util.List;
 
 /**
  * 认证拦截器
- * 流程：解析 Token -> Redis 验证 -> 存入 UserContext -> 请求结束清理
+ *
+ * <p>鉴权逻辑：
+ * <ol>
+ *   <li>解析 Bearer Token → JWT 签名 + 过期校验</li>
+ *   <li>查 Redis login:token:{token} 是否存在（确认 token 未被登出清除）</li>
+ *   <li>校验通过 → 存入 UserContext(ThreadLocal)</li>
+ * </ol>
+ *
+ * <p>路径策略：
+ * <ul>
+ *   <li>需要鉴权的路径（上传、创建等写操作）：无有效 token → 返回 401</li>
+ *   <li>其它路径：不强制要求 token，有则解析 UserContext，无则放行</li>
+ * </ul>
  */
 @Slf4j
 @Component
@@ -22,48 +37,117 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    /** 需要登录才能访问的路径模式 */
+    private static final List<String> AUTH_REQUIRED_PATTERNS = List.of(
+            "/api/upload/**",
+            "/api/components/share",
+            "/api/export/**"
+    );
+
+    /** GET 请求无需鉴权的路径（同路径的 POST/PUT/DELETE 需要鉴权） */
+    private static final List<String> GET_PUBLIC_PATTERNS = List.of(
+            "/api/blog/posts"
+    );
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 放行 OPTIONS 请求
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
 
-        // 获取 Token
-        String authHeader = request.getHeader(Constants.AUTHORIZATION_HEADER);
-        
-        if (authHeader != null && authHeader.startsWith(Constants.TOKEN_PREFIX)) {
-            String token = authHeader.substring(Constants.TOKEN_PREFIX.length());
-            
-            try {
-                // 1. JWT 解析与基础验证
-                if (jwtUtil.isValid(token) && !jwtUtil.isRefreshToken(token)) {
-                    String userId = jwtUtil.getSubject(token);
-                    
-                    // 2. Redis 活跃状态验证 (可选：验证 Token 是否与 Redis 中一致，或是否在黑名单)
-                    // 如果存在黑名单机制，此处应校验 redisTemplate.hasKey(Constants.REDIS_BLACKLIST_PREFIX + token)
-                    String redisToken = redisTemplate.opsForValue().get(Constants.REDIS_TOKEN_PREFIX + userId);
-                    
-                    if (redisToken != null) {
-                        // 3. 验证通过，存入 UserContext (ThreadLocal)
-                        UserContext.setUserId(Long.valueOf(userId));
-                        return true;
-                    }
-                }
-            } catch (Exception e) {
-                log.error("[AuthInterceptor] Token 验证异常: {}", e.getMessage());
-            }
+        String path = request.getRequestURI();
+        String token = extractToken(request);
+        String userId = validateTokenAndGetUserId(token);
+
+        if (userId != null) {
+            UserContext.setUserId(Long.valueOf(userId));
+            return true;
         }
 
-        // 注意：目前为了兼容博客浏览，不强制返回 401
-        // 后续如需增加权限控制，可根据注解或路径在此处拦截
-        return true; 
+        // token 无效或缺失，检查当前路径是否强制要求鉴权
+        if (isAuthRequired(path, request.getMethod())) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\":401,\"message\":\"未登录或登录已过期\"}");
+            return false;
+        }
+
+        return true;
     }
 
     @Override
     public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
-        // 请求结束后必须清理 ThreadLocal，防止内存泄漏和数据污染
         UserContext.clear();
+    }
+
+    /**
+     * 从请求头中提取并验证 Bearer Token，返回 userId
+     *
+     * @param request HTTP 请求
+     * @return userId 字符串，token 无效时返回 null
+     */
+    private String validateTokenAndGetUserId(HttpServletRequest request) {
+        String token = extractToken(request);
+        if (token == null) return null;
+
+        try {
+            if (!jwtUtil.isValid(token) || jwtUtil.isRefreshToken(token)) {
+                return null;
+            }
+
+            String userId = jwtUtil.getSubject(token);
+            // 查 Redis 确认该 token 仍处于活跃状态（未被登出清除）
+            String redisValue = redisTemplate.opsForValue().get(Constants.REDIS_TOKEN_PREFIX + token);
+            if (redisValue != null) {
+                return userId;
+            }
+        } catch (Exception e) {
+            log.error("[AuthInterceptor] Token 验证异常: {}", e.getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * 从 Authorization 请求头中提取 token 字符串
+     *
+     * @param request HTTP 请求
+     * @return token 字符串，不存在或格式错误时返回 null
+     */
+    private String extractToken(HttpServletRequest request) {
+        String authHeader = request.getHeader(Constants.AUTHORIZATION_HEADER);
+        if (authHeader != null && authHeader.startsWith(Constants.TOKEN_PREFIX)) {
+            return authHeader.substring(Constants.TOKEN_PREFIX.length());
+        }
+        return null;
+    }
+
+    /**
+     * 判断当前路径 + 方法组合是否需要鉴权
+     *
+     * @param path   请求路径
+     * @param method HTTP 方法
+     * @return true 表示必须携带有效 token
+     */
+    private boolean isAuthRequired(String path, String method) {
+        // 匹配写操作路径（上传、分享、导出等）
+        for (String pattern : AUTH_REQUIRED_PATTERNS) {
+            if (pathMatcher.match(pattern, path)) {
+                return true;
+            }
+        }
+
+        // GET 请求公开、其它方法需鉴权的路径（如 POST /api/blog/posts）
+        if (!"GET".equalsIgnoreCase(method)) {
+            for (String pattern : GET_PUBLIC_PATTERNS) {
+                if (pathMatcher.match(pattern, path)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 }

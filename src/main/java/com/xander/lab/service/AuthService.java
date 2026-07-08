@@ -108,16 +108,11 @@ public class AuthService {
 
     /**
      * 刷新 Access Token
+     * 验证 refreshToken JWT 有效性，生成新的 token 对
      */
     public TokenResponse refresh(String refreshToken) {
-        // 1. JWT 基本校验
         if (!jwtUtil.isValid(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
             throw new IllegalArgumentException("无效的 Token");
-        }
-
-        // 2. Redis 黑名单校验
-        if (Boolean.TRUE.equals(redisTemplate.hasKey(Constants.REDIS_BLACKLIST_PREFIX + refreshToken))) {
-            throw new IllegalArgumentException("Token 已失效");
         }
 
         String userId = jwtUtil.getSubject(refreshToken);
@@ -126,31 +121,31 @@ public class AuthService {
             throw new IllegalArgumentException("用户状态异常");
         }
 
-        // 3. 旧 Refresh Token 加入黑名单
-        redisTemplate.opsForValue().set(
-                Constants.REDIS_BLACKLIST_PREFIX + refreshToken,
-                "1",
-                jwtUtil.getRefreshTokenExpire(),
-                TimeUnit.MILLISECONDS
-        );
-
         return generateTokenResponse(user);
     }
 
     /**
-     * 登出
+     * 登出当前设备
+     * 从 Redis 移除该 accessToken，不影响其它设备的 token
+     *
+     * @param accessToken 当前设备的 access token（不含 Bearer 前缀）
      */
-    public void logout(String refreshToken) {
-        if (refreshToken != null && !refreshToken.isBlank()) {
-            // 加入黑名单
-            redisTemplate.opsForValue().set(
-                    Constants.REDIS_BLACKLIST_PREFIX + refreshToken,
-                    "1",
-                    jwtUtil.getRefreshTokenExpire(),
-                    TimeUnit.MILLISECONDS
-            );
+    public void logout(String accessToken) {
+        if (accessToken == null || accessToken.isBlank()) return;
+
+        try {
+            if (jwtUtil.isValid(accessToken)) {
+                String userId = jwtUtil.getSubject(accessToken);
+                // 从用户活跃 token 集合中移除
+                redisTemplate.opsForSet().remove(Constants.REDIS_USER_TOKENS_PREFIX + userId, accessToken);
+            }
+        } catch (Exception ignored) {
+            // JWT 解析失败也要尝试删除 Redis key
         }
-        log.info("[Auth] 用户登出，Token 已失效");
+
+        // 删除 token 在 Redis 中的记录
+        redisTemplate.delete(Constants.REDIS_TOKEN_PREFIX + accessToken);
+        log.info("[Auth] 用户登出，当前设备 Token 已失效");
     }
 
     /**
@@ -176,14 +171,15 @@ public class AuthService {
         String accessToken = jwtUtil.generateAccessToken(userIdStr, claims);
         String refreshToken = jwtUtil.generateRefreshToken(userIdStr);
 
-        // 将当前有效的 Token 存入 Redis，以便拦截器验证（可选方案：支持单设备登录等）
-        // 这里我们主要存入一个 userId 映射，表示该用户处于活跃状态
+        // 多设备支持：每个 token 独立存储，互不覆盖
         redisTemplate.opsForValue().set(
-                Constants.REDIS_TOKEN_PREFIX + userIdStr,
-                accessToken,
+                Constants.REDIS_TOKEN_PREFIX + accessToken,
+                userIdStr,
                 jwtUtil.getAccessTokenExpire(),
                 TimeUnit.MILLISECONDS
         );
+        // 记录该用户所有活跃 token，方便强制全部下线
+        redisTemplate.opsForSet().add(Constants.REDIS_USER_TOKENS_PREFIX + userIdStr, accessToken);
 
         return TokenResponse.builder()
                 .accessToken(accessToken)
@@ -210,7 +206,13 @@ public class AuthService {
         throw new IllegalArgumentException("Authorization 头格式错误");
     }
 
+    /**
+     * 验证 Access Token 是否有效（JWT 合法 + Redis 中仍存在）
+     */
     public boolean validateAccessToken(String token) {
-        return jwtUtil.isValid(token) && !jwtUtil.isRefreshToken(token);
+        if (!jwtUtil.isValid(token) || jwtUtil.isRefreshToken(token)) {
+            return false;
+        }
+        return Boolean.TRUE.equals(redisTemplate.hasKey(Constants.REDIS_TOKEN_PREFIX + token));
     }
 }
