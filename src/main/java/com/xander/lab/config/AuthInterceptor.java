@@ -1,6 +1,8 @@
 package com.xander.lab.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.common.Constants;
+import com.xander.lab.common.Result;
 import com.xander.lab.common.UserContext;
 import com.xander.lab.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,6 +39,7 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
 
     /** 需要登录才能访问的路径模式 */
@@ -58,19 +61,27 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         String path = request.getRequestURI();
+        String method = request.getMethod();
         String token = extractToken(request);
         String userId = validateTokenAndGetUserId(token);
 
         if (userId != null) {
             UserContext.setUserId(Long.valueOf(userId));
+            log.info("[Auth] {} {} → userId={}", method, path, userId);
             return true;
         }
 
         // token 无效或缺失，检查当前路径是否强制要求鉴权
-        if (isAuthRequired(path, request.getMethod())) {
+        if (isAuthRequired(path, method)) {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"code\":401,\"message\":\"未登录或登录已过期\"}");
+
+            String message = "未登录或登录已过期";
+            log.warn("[Auth] 401 {} {} → {}", method, path, message);
+
+            response.getWriter().write(objectMapper.writeValueAsString(
+                    Result.unauthorized(message)
+            ));
             return false;
         }
 
@@ -83,13 +94,12 @@ public class AuthInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 从请求头中提取并验证 Bearer Token，返回 userId
+     * 验证 token 有效性并返回 userId
      *
-     * @param request HTTP 请求
+     * @param token JWT token 字符串
      * @return userId 字符串，token 无效时返回 null
      */
-    private String validateTokenAndGetUserId(HttpServletRequest request) {
-        String token = extractToken(request);
+    private String validateTokenAndGetUserId(String token) {
         if (token == null) return null;
 
         try {
