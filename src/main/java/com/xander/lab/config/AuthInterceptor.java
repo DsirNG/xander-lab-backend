@@ -46,7 +46,9 @@ public class AuthInterceptor implements HandlerInterceptor {
     private static final List<String> AUTH_REQUIRED_PATTERNS = List.of(
             "/api/upload/**",
             "/api/components/share",
-            "/api/export/**"
+            "/api/export/**",
+            "/api/flow/projects/**",
+            "/api/flow/canvases/**"
     );
 
     /** GET 请求无需鉴权的路径（同路径的 POST/PUT/DELETE 需要鉴权） */

@@ -215,4 +215,28 @@ public class AuthService {
         }
         return Boolean.TRUE.equals(redisTemplate.hasKey(Constants.REDIS_TOKEN_PREFIX + token));
     }
+
+    /**
+     * FlowCraft 注册（邮箱 + 密码 + 用户名）
+     * 邮箱唯一，重复注册抛异常
+     */
+    public TokenResponse register(String email, String password, String name) {
+        User existing = userMapper.selectOne(
+                new LambdaQueryWrapper<User>().eq(User::getEmail, email));
+        if (existing != null) {
+            throw new IllegalArgumentException("该邮箱已注册");
+        }
+        User user = new User();
+        user.setUsername(email);
+        user.setPassword(password);
+        user.setNickname(name);
+        user.setEmail(email);
+        user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + email);
+        user.setRole("USER");
+        user.setStatus(1);
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        userMapper.insert(user);
+        return generateTokenResponse(user);
+    }
 }

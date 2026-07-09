@@ -3,6 +3,7 @@ package com.xander.lab.controller;
 import com.xander.lab.common.Result;
 import com.xander.lab.dto.auth.LoginRequest;
 import com.xander.lab.dto.auth.RefreshTokenRequest;
+import com.xander.lab.dto.auth.RegisterRequest;
 import com.xander.lab.dto.auth.TokenResponse;
 import com.xander.lab.service.AuthService;
 import jakarta.validation.Valid;
@@ -123,6 +124,20 @@ public class AuthController {
             return Result.success(userInfo);
         } catch (IllegalArgumentException e) {
             return Result.unauthorized(e.getMessage());
+        }
+    }
+
+    /**
+     * FlowCraft 注册（邮箱 + 密码 + 用户名）
+     * POST /api/auth/register
+     */
+    @PostMapping("/register")
+    public Result<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
+        try {
+            TokenResponse response = authService.register(request.getEmail(), request.getPassword(), request.getName());
+            return Result.success(response);
+        } catch (IllegalArgumentException e) {
+            return Result.badRequest(e.getMessage());
         }
     }
 
