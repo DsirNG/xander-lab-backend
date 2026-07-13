@@ -1,6 +1,7 @@
 package com.xander.lab.controller;
 
 import com.xander.lab.common.Result;
+import com.xander.lab.common.UserContext;
 import com.xander.lab.dto.*;
 import com.xander.lab.service.BlogService;
 import lombok.RequiredArgsConstructor;
@@ -13,13 +14,14 @@ import java.util.List;
  *
  * <pre>
  * 接口列表：
- *   GET /api/blog/posts              获取文章列表（支持 search/category/tag 筛选，支持分页）
- *   POST /api/blog/posts             发布文章
- *   GET /api/blog/posts/recent       获取最新文章（前N条）
- *   GET /api/blog/posts/{id}         获取文章详情
- *   GET /api/blog/categories         获取所有分类（含文章数量）
- *   GET /api/blog/tags               获取所有标签（含文章数量）
- *   GET /api/blog/tags/popular       获取热门标签（前N个）
+ *   GET  /api/blog/posts              获取文章列表（支持 search/category/tag 筛选，支持分页）
+ *   POST /api/blog/posts              发布文章
+ *   GET  /api/blog/posts/recent       获取最新文章（前N条）
+ *   GET  /api/blog/posts/{id}         获取文章详情
+ *   POST /api/blog/posts/{id}/view    记录文章阅读（含防刷）
+ *   GET  /api/blog/categories         获取所有分类（含文章数量）
+ *   GET  /api/blog/tags               获取所有标签（含文章数量）
+ *   GET  /api/blog/tags/popular       获取热门标签（前N个）
  * </pre>
  */
 @RestController
@@ -33,7 +35,7 @@ public class BlogController {
      * 发布文章
      */
     @PostMapping("/posts")
-    public Result<Long> publishPost(@RequestBody BlogPostDTO dto) {
+    public Result<BlogPostVO> publishPost(@RequestBody BlogPostDTO dto) {
         return Result.success(blogService.createBlog(dto));
     }
 
@@ -82,6 +84,30 @@ public class BlogController {
     }
 
     /**
+     * 记录文章阅读
+     * 前端在博客详情页 onLoad 时调用。
+     * 后端根据登录状态做去重：
+     * - 登录用户按 userId 去重（24h内同一用户同一文章只计数一次）
+     * - 未登录用户按 IP 去重（24h内同一IP同一文章只计数一次）
+     *
+     * @param id 文章ID
+     * @return counted=true 有效阅读（已计数），counted=false 冷却期内重复（未计数）
+     */
+    @PostMapping("/posts/{id}/view")
+    public Result<ViewResult> recordView(
+            @PathVariable Long id,
+            @RequestHeader(value = "User-Agent", required = false) String userAgent) {
+        Long userId = UserContext.getUserId();
+        String ip = UserContext.getClientIp();
+        if (ip == null || ip.isEmpty()) {
+            ip = "unknown";
+        }
+
+        boolean counted = blogService.recordView(id, userId, ip, userAgent);
+        return Result.success(new ViewResult(counted));
+    }
+
+    /**
      * 获取所有分类（含文章数量）
      */
     @GetMapping("/categories")
@@ -107,4 +133,9 @@ public class BlogController {
             @RequestParam(required = false, defaultValue = "8") int limit) {
         return Result.success(blogService.getPopularTags(limit));
     }
+
+    /**
+     * 阅读记录响应体
+     */
+    public record ViewResult(boolean counted) {}
 }

@@ -14,10 +14,10 @@ public interface Constants {
     /** Redis 验证码前缀: login:code:{email} */
     String REDIS_CODE_PREFIX = "login:code:";
 
-    /** Redis Token 前缀: login:token:{token} → userId（支持多设备，每个 token 独立存储） */
+    /** Redis Token 前缀: login:token:{token} -> userId（支持多设备，每个 token 独立存储） */
     String REDIS_TOKEN_PREFIX = "login:token:";
 
-    /** Redis 用户活跃 Token 集合: login:user_tokens:{userId} → Set<token> */
+    /** Redis 用户活跃 Token 集合: login:user_tokens:{userId} -> Set<token> */
     String REDIS_USER_TOKENS_PREFIX = "login:user_tokens:";
 
     /** Redis Token 黑名单前缀: login:blacklist:{token}（暂未启用） */
@@ -25,5 +25,10 @@ public interface Constants {
 
     /** Token 过期时间常量 */
     long CODE_EXPIRE_MINUTES = 5;
-    
+
+    /** Redis 阅读去重前缀: blog:view:{postId}:{identifier} */
+    String REDIS_VIEW_PREFIX = "blog:view:";
+
+    /** 阅读去重冷却时间（小时） */
+    long VIEW_DEDUP_HOURS = 24;
 }

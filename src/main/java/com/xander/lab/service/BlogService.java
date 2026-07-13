@@ -1,27 +1,39 @@
 package com.xander.lab.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xander.lab.common.Constants;
 import com.xander.lab.common.UserContext;
-import com.xander.lab.dto.*;
+import com.xander.lab.dto.BlogPostDTO;
+import com.xander.lab.dto.BlogPostVO;
+import com.xander.lab.dto.CategoryVO;
+import com.xander.lab.dto.TagVO;
+import com.xander.lab.dto.PageData;
+import com.xander.lab.entity.BlogCategory;
 import com.xander.lab.entity.BlogPost;
+import com.xander.lab.entity.BlogPostView;
 import com.xander.lab.entity.BlogTag;
-import com.xander.lab.entity.User;
 import com.xander.lab.mapper.BlogCategoryMapper;
 import com.xander.lab.mapper.BlogPostMapper;
+import com.xander.lab.mapper.BlogPostViewMapper;
 import com.xander.lab.mapper.BlogTagMapper;
-import com.xander.lab.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
- * 博客业务服务层
+ * 博客服务
+ * 提供博客的CRUD、分类、标签和阅读记录功能
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BlogService {
@@ -29,96 +41,146 @@ public class BlogService {
     private final BlogPostMapper blogPostMapper;
     private final BlogCategoryMapper blogCategoryMapper;
     private final BlogTagMapper blogTagMapper;
-    private final UserMapper userMapper;
+    private final BlogPostViewMapper blogPostViewMapper;
+    private final StringRedisTemplate redisTemplate;
 
     /**
-     * 发布新博客
+     * 创建博客
+     * 自动计算阅读时间、处理标签关联
+     *
+     * @param dto 博客创建请求
+     * @return 创建的博客VO
      */
-    @Transactional(rollbackFor = Exception.class)
-    public Long createBlog(BlogPostDTO dto) {
-        Long userId = UserContext.getUserId();
-        if (userId == null) {
-            throw new RuntimeException("请先登录");
-        }
-
-        User user = userMapper.selectById(userId);
-
+    @Transactional
+    public BlogPostVO createBlog(BlogPostDTO dto) {
         BlogPost post = new BlogPost();
         post.setTitle(dto.getTitle());
         post.setSummary(dto.getSummary());
         post.setContent(dto.getContent());
         post.setCategoryId(dto.getCategoryId());
-        post.setUserId(userId);
-        post.setAuthor(user != null ? user.getNickname() : "匿名");
-        post.setStatus(1); // 默认直接发布
+        post.setUserId(UserContext.getUserId());
+        post.setAuthor(UserContext.getUserId() != null ? UserContext.getUserId().toString() : "Anonymous");
+        post.setReadTime(Math.max(1, dto.getContent().length() / 500) + " min");
+        post.setStatus(1);
         post.setPublishedAt(LocalDate.now());
-
-        // 计算阅读时间 (粗略估算：500字/分钟)
-        int wordCount = dto.getContent() != null ? dto.getContent().length() : 0;
-        int minutes = Math.max(1, wordCount / 500);
-        post.setReadTime(minutes + " min");
-
+        post.setCreatedAt(LocalDateTime.now());
+        post.setUpdatedAt(LocalDateTime.now());
         blogPostMapper.insert(post);
 
         // 处理标签
         if (dto.getTags() != null && !dto.getTags().isEmpty()) {
             for (String tagName : dto.getTags()) {
-                // 查找或创建标签
-                BlogTag tag = blogTagMapper.selectOne(new LambdaQueryWrapper<BlogTag>().eq(BlogTag::getName, tagName));
+                BlogTag tag = blogTagMapper.selectOne(
+                        new LambdaQueryWrapper<BlogTag>().eq(BlogTag::getName, tagName));
                 if (tag == null) {
                     tag = new BlogTag();
                     tag.setName(tagName);
+                    tag.setCreatedAt(LocalDateTime.now());
                     blogTagMapper.insert(tag);
                 }
-                // 关联标签
                 blogTagMapper.insertPostTag(post.getId(), tag.getId());
             }
         }
 
-        return post.getId();
+        return getBlogById(post.getId());
     }
 
     /**
-     * 获取博客列表（支持搜索、分类、标签筛选，支持分页）
+     * 获取博客列表（支持搜索、分类、标签过滤）
      *
-     * @param search   关键词
+     * @param search   搜索关键词
      * @param category 分类ID
-     * @param tag      标签名称
+     * @param tag      标签名
      * @param page     页码
-     * @param size     每页数量
-     * @return 文章分页对象
+     * @param size     每页条数
+     * @return 分页博客列表
      */
-    public PageData<BlogPostVO> getBlogs(String search, String category, String tag, int page, int size) {
+    public PageData<BlogPostVO> getBlogs(String search, String category, String tag, Integer page, Integer size) {
         Page<BlogPostVO> pageParam = new Page<>(page, size);
-        IPage<BlogPostVO> result = blogPostMapper.selectPostList(pageParam, search, category, tag);
-        result.getRecords().forEach(BlogPostVO::parseTags);
-        return PageData.of(result);
+        blogPostMapper.selectPostList(pageParam, search, category, tag);
+
+        List<BlogPostVO> records = pageParam.getRecords().stream()
+                .peek(vo -> vo.setTags(blogTagMapper.selectTagNamesByPostId(vo.getId())))
+                .collect(Collectors.toList());
+
+        PageData<BlogPostVO> result = new PageData<>();
+        result.setRecords(records);
+        result.setTotal(pageParam.getTotal());
+        result.setCurrent(pageParam.getCurrent());
+        result.setSize(pageParam.getSize());
+        result.setPages(pageParam.getPages());
+        return result;
     }
 
     /**
-     * 获取最新发布的文章（前N条）
+     * 获取最新博客列表
      *
-     * @param limit 条数限制，默认5
-     * @return 文章列表（不含 content）
+     * @param limit 数量限制
+     * @return 最新博客列表
      */
     public List<BlogPostVO> getRecentBlogs(int limit) {
-        List<BlogPostVO> list = blogPostMapper.selectRecentPosts(limit);
-        list.forEach(BlogPostVO::parseTags);
-        return list;
+        List<BlogPostVO> posts = blogPostMapper.selectRecentPosts(limit);
+        posts.forEach(vo -> vo.setTags(blogTagMapper.selectTagNamesByPostId(vo.getId())));
+        return posts;
     }
 
     /**
-     * 获取文章详情（含 content）
+     * 根据ID获取博客详情
      *
-     * @param id 文章ID
-     * @return 文章详情，不存在时返回 null
+     * @param id 博客ID
+     * @return 博客详情VO
      */
     public BlogPostVO getBlogById(Long id) {
-        BlogPostVO vo = blogPostMapper.selectPostDetail(id);
-        if (vo != null) {
-            vo.parseTags();
+        BlogPostVO post = blogPostMapper.selectPostDetail(id);
+        if (post != null) {
+            post.setTags(blogTagMapper.selectTagNamesByPostId(post.getId()));
         }
-        return vo;
+        return post;
+    }
+
+    /**
+     * 记录博客阅读（含防刷机制）
+     * 登录用户按 userId 去重，未登录用户按 IP 去重，冷却时间 24 小时。
+     * 每次有效阅读都会：
+     * 1. 原子递增 blog_post.views
+     * 2. 写入 blog_post_view 阅读记录
+     * 3. 在 Redis 设置去重 key
+     *
+     * @param postId    文章ID
+     * @param userId    当前登录用户ID（可为null）
+     * @param ip        客户端IP
+     * @param userAgent 浏览器UA
+     * @return true=有效阅读（已计数），false=冷却期内重复阅读（未计数）
+     */
+    @Transactional
+    public boolean recordView(Long postId, Long userId, String ip, String userAgent) {
+        // 构建去重 key：登录用户按userId，未登录按IP
+        String identifier = (userId != null) ? "user:" + userId : "ip:" + ip;
+        String dedupKey = Constants.REDIS_VIEW_PREFIX + postId + ":" + identifier;
+
+        // 冷却期内不重复计数
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(dedupKey))) {
+            return false;
+        }
+
+        // 1. 原子递增阅读次数
+        blogPostViewMapper.incrementViewCount(postId);
+
+        // 2. 写入阅读记录（保留数据，功能暂不开放）
+        BlogPostView view = new BlogPostView();
+        view.setPostId(postId);
+        view.setUserId(userId);
+        view.setIpAddress(ip);
+        view.setUserAgent(userAgent != null && userAgent.length() > 500
+                ? userAgent.substring(0, 500) : userAgent);
+        view.setCreatedAt(LocalDateTime.now());
+        blogPostViewMapper.insert(view);
+
+        // 3. 设置 Redis 去重 key（24小时过期）
+        redisTemplate.opsForValue().set(dedupKey, "1", Constants.VIEW_DEDUP_HOURS, TimeUnit.HOURS);
+
+        log.info("[BlogView] 文章 {} 阅读 +1 ({})", postId, identifier);
+        return true;
     }
 
     /**
@@ -131,7 +193,7 @@ public class BlogService {
     }
 
     /**
-     * 获取所有标签（含文章数量，按数量降序）
+     * 获取所有标签（含文章数量，降序）
      *
      * @return 标签列表
      */
@@ -140,10 +202,10 @@ public class BlogService {
     }
 
     /**
-     * 获取热门标签（前N个）
+     * 获取热门标签
      *
-     * @param limit 条数限制，默认8
-     * @return 标签列表
+     * @param limit 数量限制
+     * @return 热门标签列表
      */
     public List<TagVO> getPopularTags(int limit) {
         return blogTagMapper.selectPopularTags(limit);
