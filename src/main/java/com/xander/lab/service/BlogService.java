@@ -53,6 +53,12 @@ public class BlogService {
      */
     @Transactional
     public BlogPostVO createBlog(BlogPostDTO dto) {
+        return createBlog(dto, true);
+    }
+
+    /** Creates either a draft or a published post. */
+    @Transactional
+    public BlogPostVO createBlog(BlogPostDTO dto, boolean publish) {
         BlogPost post = new BlogPost();
         post.setTitle(dto.getTitle());
         post.setSummary(dto.getSummary());
@@ -61,8 +67,8 @@ public class BlogService {
         post.setUserId(UserContext.getUserId());
         post.setAuthor(UserContext.getUserId() != null ? UserContext.getUserId().toString() : "Anonymous");
         post.setReadTime(Math.max(1, dto.getContent().length() / 500) + " min");
-        post.setStatus(1);
-        post.setPublishedAt(LocalDate.now());
+        post.setStatus(publish ? 1 : 0);
+        post.setPublishedAt(publish ? LocalDate.now() : null);
         post.setCreatedAt(LocalDateTime.now());
         post.setUpdatedAt(LocalDateTime.now());
         blogPostMapper.insert(post);

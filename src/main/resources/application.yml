@@ -83,3 +83,11 @@ jwt:
   access-token-expire: 7200000
   refresh-token-expire: 604800000
 
+# Disabled by default. Use a Base64-encoded 32-byte key, and keep the server token out of source control.
+mcp:
+  blog:
+    enabled: ${MCP_BLOG_ENABLED:false}
+    server-token: ${MCP_SERVER_TOKEN:}
+    credential-encryption-key: ${MCP_CREDENTIAL_ENCRYPTION_KEY:}
+    public-base-url: ${MCP_PUBLIC_BASE_URL:http://localhost:30002}
+
