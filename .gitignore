@@ -26,6 +26,7 @@ target/
 *.tmp
 .DS_Store
 ### Local Config ###
+.env
 src/main/resources/application-local.yml
 .env.local
 .env.production
