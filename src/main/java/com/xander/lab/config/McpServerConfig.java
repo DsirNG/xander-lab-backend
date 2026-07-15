@@ -33,13 +33,13 @@ public class McpServerConfig {
     @Bean
     HttpServletStreamableServerTransportProvider mcpTransport() {
         return HttpServletStreamableServerTransportProvider.builder()
-                .jsonMapper(McpJsonDefaults.getMapper()).mcpEndpoint("/mcp").build();
+                .jsonMapper(McpJsonDefaults.getMapper()).mcpEndpoint("/api/mcp").build();
     }
 
     @Bean
     ServletRegistrationBean<HttpServletStreamableServerTransportProvider> mcpServlet(
             HttpServletStreamableServerTransportProvider transport) {
-        return new ServletRegistrationBean<>(transport, "/mcp");
+        return new ServletRegistrationBean<>(transport, "/api/mcp");
     }
 
     @Bean
@@ -64,7 +64,7 @@ public class McpServerConfig {
             }
         };
         FilterRegistrationBean<OncePerRequestFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.addUrlPatterns("/mcp");
+        registration.addUrlPatterns("/api/mcp");
         registration.setOrder(-101);
         return registration;
     }

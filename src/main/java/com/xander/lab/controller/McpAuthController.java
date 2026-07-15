@@ -11,7 +11,7 @@ import java.util.Map;
 
 /** Browser-only, one-time credential handoff for the local MCP server. */
 @RestController
-@RequestMapping("/mcp/auth")
+@RequestMapping("/api/mcp/auth")
 @RequiredArgsConstructor
 public class McpAuthController {
     private final AuthService authService;
@@ -22,7 +22,7 @@ public class McpAuthController {
         return "<!doctype html><meta charset='utf-8'><title>MCP 博客授权</title>"
                 + "<main style='max-width:560px;margin:3rem auto;font-family:sans-serif'>"
                 + "<h1>MCP 博客授权</h1><p>请从博客前端登录后粘贴 Access Token 和 Refresh Token。凭据仅以 AES-GCM 加密形式保存在本服务的 Redis 中。</p>"
-                + "<form method='post' action='/mcp/auth/complete'><label>Access Token<br><textarea name='accessToken' required rows='5' style='width:100%'></textarea></label>"
+                + "<form method='post' action='/api/mcp/auth/complete'><label>Access Token<br><textarea name='accessToken' required rows='5' style='width:100%'></textarea></label>"
                 + "<label>Refresh Token（建议填写）<br><textarea name='refreshToken' rows='5' style='width:100%'></textarea></label><br><button>保存授权</button></form></main>";
     }
 
