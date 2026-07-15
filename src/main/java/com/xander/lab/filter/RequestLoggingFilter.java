@@ -89,7 +89,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 
         // Log Request Body (read from wrapper buffer)
         byte[] requestBody = request.getContentAsByteArray();
-        if (requestBody.length > 0) {
+        if (requestBody.length > 0 && !isSensitiveMcpRequest(request)) {
             String bodyString = new String(requestBody, StandardCharsets.UTF_8);
             msg.append("Req Body: ").append(truncate(bodyString)).append("\n");
         }
@@ -98,7 +98,8 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         // Only log response body for non-success or specific content types (e.g. JSON)
         // to avoid logging binary files or huge HTML.
         String contentType = response.getContentType();
-        if (contentType != null && (contentType.contains("json") || contentType.contains("text") || contentType.contains("xml"))) {
+        if (!isSensitiveMcpRequest(request) && contentType != null
+                && (contentType.contains("json") || contentType.contains("text") || contentType.contains("xml"))) {
             byte[] responseBody = response.getContentAsByteArray();
             if (responseBody.length > 0) {
                 String bodyString = new String(responseBody, StandardCharsets.UTF_8);
@@ -116,12 +117,18 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     }
 
     private String maskSensitive(String header, String value) {
-        if ("Authorization".equalsIgnoreCase(header)) {
+        if ("Authorization".equalsIgnoreCase(header)
+                || "X-MCP-Server-Token".equalsIgnoreCase(header)
+                || "Cookie".equalsIgnoreCase(header)) {
             if (value != null && value.length() > 20) {
                 return value.substring(0, 15) + "...";
             }
         }
         return value;
+    }
+
+    private boolean isSensitiveMcpRequest(HttpServletRequest request) {
+        return request.getRequestURI().startsWith("/api/mcp");
     }
 
     private String truncate(String content) {

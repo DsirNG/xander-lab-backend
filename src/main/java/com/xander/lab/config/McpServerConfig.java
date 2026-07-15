@@ -21,6 +21,8 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.*;
 
 @Configuration
@@ -84,7 +86,7 @@ public class McpServerConfig {
             if (!blogService.isAuthorized()) return authRequired();
             BlogPostDTO dto = new BlogPostDTO();
             dto.setTitle(value(args, "title"));
-            dto.setContent(value(args, "content"));
+            dto.setContent(content(args));
             dto.setSummary(optionalValue(args, "summary", summarize(dto.getContent())));
             dto.setCategoryId(optionalValue(args, "categoryId", "backend"));
             Object rawTags = args.get("tags");
@@ -108,9 +110,20 @@ public class McpServerConfig {
     }
     private Map<String, Object> emptySchema() { return Map.of("type", "object", "properties", Map.of()); }
     private Map<String, Object> postSchema() {
-        return Map.of("type", "object", "properties", Map.of("title", Map.of("type", "string"), "content", Map.of("type", "string"), "summary", Map.of("type", "string"), "categoryId", Map.of("type", "string"), "tags", Map.of("type", "array", "items", Map.of("type", "string"))), "required", List.of("title", "content"));
+        return Map.of("type", "object", "properties", Map.of("title", Map.of("type", "string"), "content", Map.of("type", "string"), "contentBase64", Map.of("type", "string", "description", "UTF-8 article content encoded as Base64. Use only when an upstream proxy blocks literal content."), "summary", Map.of("type", "string"), "categoryId", Map.of("type", "string"), "tags", Map.of("type", "array", "items", Map.of("type", "string"))), "required", List.of("title"));
     }
     private String value(Map<String, Object> args, String key) { return String.valueOf(args.get(key)); }
+    private String content(Map<String, Object> args) {
+        Object rawContent = args.get("content");
+        if (rawContent != null) return String.valueOf(rawContent);
+        Object rawBase64 = args.get("contentBase64");
+        if (rawBase64 == null) throw new IllegalArgumentException("content or contentBase64 is required");
+        try {
+            return new String(Base64.getDecoder().decode(String.valueOf(rawBase64)), StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("contentBase64 must be valid Base64-encoded UTF-8 text");
+        }
+    }
     private String optionalValue(Map<String, Object> args, String key, String defaultValue) { return args.containsKey(key) && args.get(key) != null ? String.valueOf(args.get(key)) : defaultValue; }
     private String summarize(String content) { return content.length() <= 160 ? content : content.substring(0, 157) + "..."; }
 }
