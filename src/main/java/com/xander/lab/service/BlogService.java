@@ -91,6 +91,53 @@ public class BlogService {
         return getBlogById(post.getId());
     }
 
+    /** Updates only supplied fields. Passing tags replaces all existing tags for the post. */
+    @Transactional
+    public BlogPostVO updateBlog(Long id, String title, String summary, String content,
+                                 String categoryId, List<String> tags) {
+        if (blogPostMapper.selectById(id) == null) {
+            throw new IllegalArgumentException("文章不存在");
+        }
+        if (title == null && summary == null && content == null && categoryId == null && tags == null) {
+            throw new IllegalArgumentException("至少提供一个需要更新的字段");
+        }
+        BlogPost update = new BlogPost();
+        update.setId(id);
+        update.setTitle(title);
+        update.setSummary(summary);
+        update.setContent(content);
+        update.setCategoryId(categoryId);
+        update.setUpdatedAt(LocalDateTime.now());
+        blogPostMapper.updateById(update);
+
+        if (tags != null) {
+            blogTagMapper.deletePostTags(id);
+            for (String tagName : tags) {
+                BlogTag tag = blogTagMapper.selectOne(
+                        new LambdaQueryWrapper<BlogTag>().eq(BlogTag::getName, tagName));
+                if (tag == null) {
+                    tag = new BlogTag();
+                    tag.setName(tagName);
+                    tag.setCreatedAt(LocalDateTime.now());
+                    blogTagMapper.insert(tag);
+                }
+                blogTagMapper.insertPostTag(id, tag.getId());
+            }
+        }
+        return getBlogById(id);
+    }
+
+    /** Permanently deletes a post and its associated view and tag records. */
+    @Transactional
+    public void deleteBlog(Long id) {
+        if (blogPostMapper.selectById(id) == null) {
+            throw new IllegalArgumentException("文章不存在");
+        }
+        blogPostViewMapper.delete(new LambdaQueryWrapper<BlogPostView>().eq(BlogPostView::getPostId, id));
+        blogTagMapper.deletePostTags(id);
+        blogPostMapper.deleteById(id);
+    }
+
     /**
      * 获取博客列表（支持搜索、分类、标签过滤）
      *

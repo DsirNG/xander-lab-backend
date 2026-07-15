@@ -29,6 +29,16 @@ public class McpBlogService {
         }
     }
 
+    public BlogPostVO update(Long id, String title, String summary, String content, String categoryId, java.util.List<String> tags) {
+        if (resolveAccessToken() == null) throw new McpAuthorizationRequiredException();
+        return blogService.updateBlog(id, title, summary, content, categoryId, tags);
+    }
+
+    public void delete(Long id) {
+        if (resolveAccessToken() == null) throw new McpAuthorizationRequiredException();
+        blogService.deleteBlog(id);
+    }
+
     private String resolveAccessToken() {
         TokenResponse saved = credentialService.load();
         if (saved == null) return null;
