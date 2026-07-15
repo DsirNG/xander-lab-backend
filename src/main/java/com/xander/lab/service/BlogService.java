@@ -13,10 +13,12 @@ import com.xander.lab.entity.BlogCategory;
 import com.xander.lab.entity.BlogPost;
 import com.xander.lab.entity.BlogPostView;
 import com.xander.lab.entity.BlogTag;
+import com.xander.lab.entity.User;
 import com.xander.lab.mapper.BlogCategoryMapper;
 import com.xander.lab.mapper.BlogPostMapper;
 import com.xander.lab.mapper.BlogPostViewMapper;
 import com.xander.lab.mapper.BlogTagMapper;
+import com.xander.lab.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,6 +44,7 @@ public class BlogService {
     private final BlogCategoryMapper blogCategoryMapper;
     private final BlogTagMapper blogTagMapper;
     private final BlogPostViewMapper blogPostViewMapper;
+    private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
 
     /**
@@ -65,7 +68,7 @@ public class BlogService {
         post.setContent(dto.getContent());
         post.setCategoryId(dto.getCategoryId());
         post.setUserId(UserContext.getUserId());
-        post.setAuthor(UserContext.getUserId() != null ? UserContext.getUserId().toString() : "Anonymous");
+        post.setAuthor(resolveAuthor(UserContext.getUserId()));
         post.setReadTime(Math.max(1, dto.getContent().length() / 500) + " min");
         post.setStatus(publish ? 1 : 0);
         post.setPublishedAt(publish ? LocalDate.now() : null);
@@ -107,6 +110,9 @@ public class BlogService {
         update.setSummary(summary);
         update.setContent(content);
         update.setCategoryId(categoryId);
+        if (UserContext.getUserId() != null) {
+            update.setAuthor(resolveAuthor(UserContext.getUserId()));
+        }
         update.setUpdatedAt(LocalDateTime.now());
         blogPostMapper.updateById(update);
 
@@ -125,6 +131,16 @@ public class BlogService {
             }
         }
         return getBlogById(id);
+    }
+
+    /** Author is derived from the authenticated account, never from client or AI input. */
+    private String resolveAuthor(Long userId) {
+        if (userId == null) return "Anonymous";
+        User user = userMapper.selectById(userId);
+        if (user == null) return "User " + userId;
+        if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
+        if (user.getUsername() != null && !user.getUsername().isBlank()) return user.getUsername();
+        return "User " + userId;
     }
 
     /** Permanently deletes a post and its associated view and tag records. */

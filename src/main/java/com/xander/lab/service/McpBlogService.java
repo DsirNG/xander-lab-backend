@@ -30,8 +30,14 @@ public class McpBlogService {
     }
 
     public BlogPostVO update(Long id, String title, String summary, String content, String categoryId, java.util.List<String> tags) {
-        if (resolveAccessToken() == null) throw new McpAuthorizationRequiredException();
-        return blogService.updateBlog(id, title, summary, content, categoryId, tags);
+        String accessToken = resolveAccessToken();
+        if (accessToken == null) throw new McpAuthorizationRequiredException();
+        try {
+            UserContext.setUserId(Long.parseLong(jwtUtil.getSubject(accessToken)));
+            return blogService.updateBlog(id, title, summary, content, categoryId, tags);
+        } finally {
+            UserContext.clear();
+        }
     }
 
     public void delete(Long id) {
