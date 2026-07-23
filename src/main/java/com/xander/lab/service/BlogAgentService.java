@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.dto.agent.BlogAgentTaskCreateRequest;
 import com.xander.lab.dto.agent.BlogAgentTaskVO;
+import com.xander.lab.dto.BlogPostDTO;
+import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.entity.BlogAgentSource;
 import com.xander.lab.entity.BlogAgentTask;
 import com.xander.lab.entity.BlogAgentVersion;
@@ -33,6 +35,7 @@ public class BlogAgentService {
     private final BlogAgentModelClient modelClient;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final BlogService blogService;
 
     @Transactional
     public BlogAgentTask create(Long userId, BlogAgentTaskCreateRequest request) {
@@ -120,6 +123,24 @@ public class BlogAgentService {
         vo.setVersions(versionMapper.selectList(new LambdaQueryWrapper<BlogAgentVersion>()
                 .eq(BlogAgentVersion::getTaskId, taskId).orderByDesc(BlogAgentVersion::getVersionNo)));
         return vo;
+    }
+
+    @Transactional
+    public BlogPostVO publish(Long taskId, Long userId) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        if (!"ready".equals(task.getStatus())) throw new IllegalStateException("文章尚未生成完成");
+        if (task.getPublishedPostId() != null) return blogService.getBlogById(task.getPublishedPostId());
+        BlogPostDTO post = new BlogPostDTO();
+        post.setTitle(task.getTitle());
+        post.setSummary(task.getSummary());
+        post.setContent(task.getContent());
+        post.setCategoryId(task.getCategoryId());
+        post.setTags(readTags(task.getTagsJson()));
+        BlogPostVO published = blogService.createBlog(post, true, "agent-task-" + taskId);
+        task.setPublishedPostId(published.getId());
+        task.setUpdatedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
+        return published;
     }
 
     private BlogAgentTask requireOwnedTask(Long taskId, Long userId) {

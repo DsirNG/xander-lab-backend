@@ -28,6 +28,7 @@ public class BlogAgentTask {
     private String categoryId;
     private String tagsJson;
     private String review;
+    private Long publishedPostId;
     private String errorMessage;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

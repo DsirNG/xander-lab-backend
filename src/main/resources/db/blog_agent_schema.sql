@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS `blog_agent_task` (
   `category_id` VARCHAR(64) NULL,
   `tags_json` TEXT NULL,
   `review` TEXT NULL,
+  `published_post_id` BIGINT NULL,
   `error_message` VARCHAR(1000) NULL,
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
