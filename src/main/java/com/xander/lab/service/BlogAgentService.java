@@ -36,9 +36,9 @@ public class BlogAgentService {
         BlogAgentTask task = new BlogAgentTask();
         task.setUserId(userId);
         task.setInput(request.getInput().trim());
-        task.setInputType(normalizeInputType(request.getInputType()));
-        task.setAudience(defaultText(request.getAudience(), "对这个主题感兴趣的普通读者"));
-        task.setTone(defaultText(request.getTone(), "清晰、真诚、可操作"));
+        task.setInputType("pending");
+        task.setAudience("");
+        task.setTone("");
         task.setStatus("created");
         task.setStage("analyze");
         task.setTagsJson("[]");
@@ -59,7 +59,7 @@ public class BlogAgentService {
         taskMapper.updateById(task);
 
         try {
-            JsonNode result = modelClient.createArticle(task.getInput(), task.getInputType(), task.getAudience(), task.getTone());
+            JsonNode result = modelClient.createArticle(task.getInput());
             applyResult(task, result);
             saveSources(task.getId(), result.path("sources"));
             saveVersion(task, "智能体完成调研、写作与审校");
@@ -107,6 +107,10 @@ public class BlogAgentService {
         task.setSummary(defaultText(result.path("summary").asText(), excerpt(content, 160)));
         task.setContent(content);
         task.setOutline(result.path("outline").asText(""));
+        JsonNode writingBrief = result.path("writingBrief");
+        task.setInputType(defaultText(writingBrief.path("inputNature").asText(), "topic"));
+        task.setAudience(defaultText(writingBrief.path("audience").asText(), "广泛读者"));
+        task.setTone(defaultText(writingBrief.path("tone").asText(), "清晰、准确、可读"));
         task.setContentBoundary(writeNode(result.path("contentBoundary")));
         task.setKnowledgeGraphJson(writeNode(result.path("knowledgeGraph")));
         task.setCategoryId(normalizeCategory(result.path("categoryId").asText()));
@@ -169,10 +173,6 @@ public class BlogAgentService {
         if (!node.isArray()) return result;
         node.forEach(value -> { if (StringUtils.hasText(value.asText())) result.add(value.asText().trim()); });
         return result.stream().distinct().limit(8).toList();
-    }
-
-    private String normalizeInputType(String inputType) {
-        return "diary".equalsIgnoreCase(inputType) ? "diary" : "topic";
     }
 
     private String normalizeCategory(String category) {
