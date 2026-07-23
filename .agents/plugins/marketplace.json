@@ -1,0 +1,20 @@
+{
+  "name": "xander-backend-local",
+  "interface": {
+    "displayName": "Xander Backend Local"
+  },
+  "plugins": [
+    {
+      "name": "xander-backend",
+      "source": {
+        "source": "local",
+        "path": "./plugins/xander-backend"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
