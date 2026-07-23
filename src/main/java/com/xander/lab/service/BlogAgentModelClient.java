@@ -160,9 +160,12 @@ public class BlogAgentModelClient {
                 + "如用户提到原因、影响、机制、为什么、导致等关系，才应建立清晰的因果链。只有知识节点之间存在多个关键关系且图谱能提升理解时，才启用知识图谱。"
                 + "你必须先澄清文章角度，再使用网页搜索工具核验或补充所有外部事实。用户的个人经历应保留为作者经历，不能伪装成普遍事实。"
                 + "没有可靠来源时，不得写成确定事实。输出必须是且仅是 JSON："
-                + "{\"title\":string,\"summary\":string,\"content\":string,\"outline\":string,\"writingBrief\":{\"inputNature\":string,\"audience\":string,\"tone\":string},\"contentBoundary\":{\"mustCover\":[string],\"relatedExpansion\":[string],\"outOfScope\":[string],\"optionalModules\":[string]},\"knowledgeGraph\":{\"enabled\":boolean,\"reason\":string,\"nodes\":[{\"id\":string,\"label\":string,\"description\":string}],\"edges\":[{\"from\":string,\"to\":string,\"relation\":string}]},\"categoryId\":string,\"tags\":[string],\"review\":string,\"sources\":[{\"title\":string,\"url\":string,\"publisher\":string,\"excerpt\":string,\"reliability\":string}]}。"
+                + "{\"title\":string,\"summary\":string,\"content\":string,\"outline\":string,\"writingBrief\":{\"inputNature\":string,\"audience\":string,\"tone\":string},\"contentBoundary\":{\"mustCover\":[string],\"relatedExpansion\":[string],\"outOfScope\":[string],\"optionalModules\":[string]},\"knowledgeGraph\":{\"enabled\":boolean,\"reason\":string,\"nodes\":[{\"id\":string,\"label\":string,\"description\":string}],\"edges\":[{\"from\":string,\"to\":string,\"relation\":string}]},\"categoryId\":string,\"tags\":[string],\"review\":string,\"illustrations\":[{\"placeholder\":string,\"title\":string,\"alt\":string,\"prompt\":string,\"purpose\":string}],\"sources\":[{\"title\":string,\"url\":string,\"publisher\":string,\"excerpt\":string,\"reliability\":string}]}。"
                 + "writingBrief.inputNature 只能是 topic、project_context 或 journal 之一；audience 最多 120 个字符，tone 最多 60 个字符。"
                 + "content 必须是完整文章，不含参考资料列表；文章末尾追加“## 参考资料”，以 Markdown 链接列出 sources。"
+                + "仅当插图能显著帮助理解机制、流程、结构、对比或关键关系时才规划插图，最多 3 张，不要为装饰而配图。"
+                + "每张插图必须在 content 的准确位置放置唯一占位符，格式严格为 <!-- illustration:英文短标识 -->，并在 illustrations 中返回完全相同的 placeholder。"
+                + "illustrations 的 prompt 必须描述需要表达的知识关系、视觉结构、必要标签和风格；alt 必须准确说明图片传递的信息。无需插图时返回空数组，content 中不得出现插图占位符。"
                 + "contentBoundary 必须精确说明哪些内容来自用户、允许怎样的直接扩展，以及不应扩展的边界。knowledgeGraph 未启用时，nodes 和 edges 必须为空数组。"
                 + "categoryId 只可使用 frontend、backend、architecture、devops、career。sources 中仅保留实际检索到且被用于文章的来源。";
     }

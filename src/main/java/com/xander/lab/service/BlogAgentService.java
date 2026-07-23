@@ -12,6 +12,8 @@ import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.entity.BlogAgentSource;
 import com.xander.lab.entity.BlogAgentTask;
 import com.xander.lab.entity.BlogAgentVersion;
+import com.xander.lab.entity.BlogMediaAsset;
+import com.xander.lab.config.BlogAgentProperties;
 import com.xander.lab.mapper.BlogAgentSourceMapper;
 import com.xander.lab.mapper.BlogAgentTaskMapper;
 import com.xander.lab.mapper.BlogAgentVersionMapper;
@@ -36,6 +38,9 @@ public class BlogAgentService {
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
     private final BlogService blogService;
+    private final BlogAgentImageClient imageClient;
+    private final BlogMediaService mediaService;
+    private final BlogAgentProperties properties;
 
     @Transactional
     public BlogAgentTask create(Long userId, BlogAgentTaskCreateRequest request) {
@@ -70,7 +75,9 @@ public class BlogAgentService {
             JsonNode result = streaming
                     ? modelClient.createArticleStream(getInput(taskId, userId), onDelta)
                     : modelClient.createArticle(getInput(taskId, userId));
-            return transactionTemplate.execute(status -> persistResult(taskId, userId, result));
+            transactionTemplate.executeWithoutResult(status -> persistArticleDraft(taskId, userId, result));
+            IllustrationOutcome outcome = generateIllustrations(taskId, userId, result.path("illustrations"));
+            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, outcome));
         } catch (RuntimeException e) {
             transactionTemplate.executeWithoutResult(status -> markFailed(taskId, userId, e.getMessage()));
             throw e;
@@ -90,11 +97,26 @@ public class BlogAgentService {
         return requireOwnedTask(taskId, userId).getInput();
     }
 
-    private BlogAgentTaskVO persistResult(Long taskId, Long userId, JsonNode result) {
+    private void persistArticleDraft(Long taskId, Long userId, JsonNode result) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
         applyResult(task, result);
         saveSources(task.getId(), result.path("sources"));
-        saveVersion(task, "智能体完成调研、写作与审校");
+        task.setStatus("running");
+        task.setStage("illustrate");
+        task.setIllustrationStatus(imageClient.isEnabled() ? "running" : "disabled");
+        task.setIllustrationError(null);
+        task.setUpdatedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
+    }
+
+    private BlogAgentTaskVO finalizeResult(Long taskId, Long userId, IllustrationOutcome outcome) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        task.setContent(outcome.content());
+        task.setIllustrationStatus(outcome.status());
+        task.setIllustrationError(limit(outcome.error(), 1000));
+        saveVersion(task, outcome.generated() > 0
+                ? "智能体完成调研、写作、插图与审校"
+                : "智能体完成调研、写作与审校");
         task.setStatus("ready");
         task.setStage("review");
         task.setUpdatedAt(LocalDateTime.now());
@@ -122,7 +144,77 @@ public class BlogAgentService {
                 .eq(BlogAgentSource::getTaskId, taskId).orderByAsc(BlogAgentSource::getId)));
         vo.setVersions(versionMapper.selectList(new LambdaQueryWrapper<BlogAgentVersion>()
                 .eq(BlogAgentVersion::getTaskId, taskId).orderByDesc(BlogAgentVersion::getVersionNo)));
+        vo.setIllustrations(mediaService.getTaskImages(userId, taskId));
         return vo;
+    }
+
+    private IllustrationOutcome generateIllustrations(Long taskId, Long userId, JsonNode plans) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        String content = task.getContent();
+        if (!plans.isArray() || plans.isEmpty()) {
+            return new IllustrationOutcome(removeIllustrationPlaceholders(content), "none", "", 0);
+        }
+        if (!imageClient.isEnabled()) {
+            return new IllustrationOutcome(removeIllustrationPlaceholders(content), "disabled",
+                    "未配置 BLOG_AGENT_IMAGE_MODEL，已跳过插图生成", 0);
+        }
+
+        int generatedCount = 0;
+        List<String> errors = new ArrayList<>();
+        int limit = Math.max(0, Math.min(properties.getMaxIllustrations(), 3));
+        for (int index = 0; index < Math.min(plans.size(), limit); index++) {
+            JsonNode plan = plans.get(index);
+            String placeholder = normalizePlaceholder(plan.path("placeholder").asText(), index);
+            String title = defaultText(plan.path("title").asText(), "知识插图 " + (index + 1));
+            String alt = sanitizeAlt(defaultText(plan.path("alt").asText(), title));
+            String prompt = plan.path("prompt").asText();
+            if (!StringUtils.hasText(prompt)) {
+                content = content.replace(placeholder, "");
+                continue;
+            }
+            try {
+                BlogAgentImageClient.GeneratedImage generated = imageClient.generate(
+                        "为中文知识博客生成一张准确、克制、专业的知识插图。画面必须服务于理解，不要添加水印。"
+                                + "如果包含文字，确保文字简短清晰。插图要求：" + prompt);
+                String fileName = "agent-" + taskId + "-" + (index + 1) + "." + generated.extension();
+                String meta = objectMapper.writeValueAsString(java.util.Map.of(
+                        "title", title,
+                        "alt", alt,
+                        "prompt", prompt,
+                        "model", properties.getImageModel(),
+                        "size", properties.getImageSize()));
+                BlogMediaAsset asset = mediaService.saveAgentImage(userId, taskId, fileName, generated, meta);
+                String markdown = "![" + alt + "](" + asset.getUrl() + ")";
+                content = replaceOrAppend(content, placeholder, markdown);
+                generatedCount++;
+            } catch (Exception e) {
+                errors.add(title + "：" + defaultText(e.getMessage(), "生成失败"));
+                content = content.replace(placeholder, "");
+            }
+        }
+        content = removeIllustrationPlaceholders(content);
+        String status = errors.isEmpty() ? "complete" : generatedCount > 0 ? "partial" : "failed";
+        return new IllustrationOutcome(content, status, String.join("；", errors), generatedCount);
+    }
+
+    private String normalizePlaceholder(String value, int index) {
+        if (StringUtils.hasText(value) && value.matches("<!-- illustration:[a-z0-9-]+ -->")) return value;
+        return "<!-- illustration:auto-" + (index + 1) + " -->";
+    }
+
+    private String replaceOrAppend(String content, String placeholder, String markdown) {
+        if (content.contains(placeholder)) return content.replace(placeholder, markdown);
+        int references = content.indexOf("\n## 参考资料");
+        if (references >= 0) return content.substring(0, references) + "\n\n" + markdown + "\n" + content.substring(references);
+        return content + "\n\n" + markdown + "\n";
+    }
+
+    private String removeIllustrationPlaceholders(String content) {
+        return content.replaceAll("(?m)^\\s*<!-- illustration:[a-z0-9-]+ -->\\s*$", "").trim();
+    }
+
+    private String sanitizeAlt(String value) {
+        return limit(value.replace("[", "").replace("]", "").replace("\n", " "), 180);
     }
 
     @Transactional
@@ -246,4 +338,6 @@ public class BlogAgentService {
         return safeValue.length() <= maxLength ? safeValue : safeValue.substring(0, maxLength);
     }
     private String excerpt(String content, int length) { return content.length() <= length ? content : content.substring(0, length - 1) + "…"; }
+
+    private record IllustrationOutcome(String content, String status, String error, int generated) {}
 }

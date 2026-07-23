@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.util.UUID;
 
 /**
@@ -76,6 +77,33 @@ public class OssService {
             if (ossClient != null) {
                 ossClient.shutdown();
             }
+        }
+    }
+
+    public UploadResponse upload(byte[] bytes, String originalName, String contentType, String pathPrefix) {
+        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
+        try {
+            String extension = originalName != null && originalName.contains(".")
+                    ? originalName.substring(originalName.lastIndexOf('.') + 1).toLowerCase()
+                    : "png";
+            String storedName = UUID.randomUUID() + "." + extension;
+            String objectName = pathPrefix + storedName;
+            try (InputStream inputStream = new ByteArrayInputStream(bytes)) {
+                ossClient.putObject(bucketName, objectName, inputStream);
+            }
+            return UploadResponse.builder()
+                    .url(domain + "/" + objectName)
+                    .originalName(originalName)
+                    .storedName(storedName)
+                    .size((long) bytes.length)
+                    .contentType(contentType)
+                    .extension(extension)
+                    .build();
+        } catch (Exception e) {
+            log.error("[OSS] 智能体图片上传失败: {}", e.getMessage());
+            throw new IllegalStateException("智能体图片上传至云存储失败", e);
+        } finally {
+            ossClient.shutdown();
         }
     }
 }

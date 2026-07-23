@@ -20,5 +20,8 @@ public class BlogMediaAsset {
     private String contentType;
     private Integer width;
     private Integer height;
+    private String sourceType;
+    private Long agentTaskId;
+    private String generationMeta;
     private LocalDateTime createdAt;
 }

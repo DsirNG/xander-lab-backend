@@ -98,4 +98,7 @@ blog:
     api-key: ${BLOG_AGENT_API_KEY:}
     model: ${BLOG_AGENT_MODEL:}
     web-search-enabled: ${BLOG_AGENT_WEB_SEARCH_ENABLED:true}
+    image-model: ${BLOG_AGENT_IMAGE_MODEL:}
+    image-size: ${BLOG_AGENT_IMAGE_SIZE:1536x1024}
+    max-illustrations: ${BLOG_AGENT_MAX_ILLUSTRATIONS:3}
 

@@ -11,6 +11,7 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.util.List;
 import java.util.Set;
 
@@ -50,8 +51,46 @@ public class BlogMediaService {
         asset.setContentType(uploaded.getContentType());
         asset.setWidth(image.getWidth());
         asset.setHeight(image.getHeight());
+        asset.setSourceType("user_upload");
         assetMapper.insert(asset);
         return asset;
+    }
+
+    public BlogMediaAsset saveAgentImage(Long userId, Long taskId, String originalName,
+                                         BlogAgentImageClient.GeneratedImage generated, String generationMeta) {
+        requireUser(userId);
+        BufferedImage image;
+        try {
+            image = ImageIO.read(new ByteArrayInputStream(generated.bytes()));
+        } catch (IOException e) {
+            throw new IllegalStateException("无法读取智能体生成的图片", e);
+        }
+        if (image == null) throw new IllegalStateException("智能体生成的图片格式无法识别");
+
+        UploadResponse uploaded = ossService.upload(
+                generated.bytes(), originalName, generated.contentType(), "photos/blog/agent/");
+        BlogMediaAsset asset = new BlogMediaAsset();
+        asset.setUserId(userId);
+        asset.setAgentTaskId(taskId);
+        asset.setSourceType("agent_generated");
+        asset.setGenerationMeta(generationMeta);
+        asset.setUrl(uploaded.getUrl());
+        asset.setOriginalName(uploaded.getOriginalName());
+        asset.setStoredName(uploaded.getStoredName());
+        asset.setSize(uploaded.getSize());
+        asset.setContentType(uploaded.getContentType());
+        asset.setWidth(image.getWidth());
+        asset.setHeight(image.getHeight());
+        assetMapper.insert(asset);
+        return asset;
+    }
+
+    public List<BlogMediaAsset> getTaskImages(Long userId, Long taskId) {
+        requireUser(userId);
+        return assetMapper.selectList(new LambdaQueryWrapper<BlogMediaAsset>()
+                .eq(BlogMediaAsset::getUserId, userId)
+                .eq(BlogMediaAsset::getAgentTaskId, taskId)
+                .orderByAsc(BlogMediaAsset::getId));
     }
 
     public List<BlogMediaAsset> getImages(Long userId, String scope, String keyword) {

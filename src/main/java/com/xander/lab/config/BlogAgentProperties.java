@@ -13,4 +13,8 @@ public class BlogAgentProperties {
     private String apiKey;
     private String model;
     private boolean webSearchEnabled = true;
+    /** Optional OpenAI-compatible image generation model. Blank disables illustrations. */
+    private String imageModel;
+    private String imageSize = "1536x1024";
+    private int maxIllustrations = 3;
 }
