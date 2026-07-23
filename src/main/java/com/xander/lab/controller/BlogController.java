@@ -35,8 +35,15 @@ public class BlogController {
      * 发布文章
      */
     @PostMapping("/posts")
-    public Result<BlogPostVO> publishPost(@RequestBody BlogPostDTO dto) {
-        return Result.success(blogService.createBlog(dto));
+    public Result<BlogPostVO> publishPost(@RequestBody BlogPostDTO dto,
+                                          @RequestHeader(value = "Idempotency-Key", required = false) String requestId) {
+        return Result.success(blogService.createBlog(dto, true, requestId));
+    }
+
+    @GetMapping("/posts/publish-status")
+    public Result<PublishStatus> getPublishStatus(@RequestParam String requestId) {
+        Long postId = blogService.getPublishedPostId(requestId);
+        return Result.success(new PublishStatus(postId == null ? "pending" : "published", postId));
     }
 
     /**
@@ -138,4 +145,5 @@ public class BlogController {
      * 阅读记录响应体
      */
     public record ViewResult(boolean counted) {}
+    public record PublishStatus(String status, Long postId) {}
 }

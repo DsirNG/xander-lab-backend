@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class BlogService {
+    private static final String PUBLISH_REQUEST_PREFIX = "blog:publish:request:";
 
     private final BlogPostMapper blogPostMapper;
     private final BlogCategoryMapper blogCategoryMapper;
@@ -62,6 +63,18 @@ public class BlogService {
     /** Creates either a draft or a published post. */
     @Transactional
     public BlogPostVO createBlog(BlogPostDTO dto, boolean publish) {
+        return createBlog(dto, publish, null);
+    }
+
+    /** Reuses a completed publish request so a client retry cannot create a duplicate post. */
+    @Transactional
+    public BlogPostVO createBlog(BlogPostDTO dto, boolean publish, String requestId) {
+        String requestKey = publish && requestId != null && !requestId.isBlank()
+                ? PUBLISH_REQUEST_PREFIX + UserContext.getUserId() + ":" + requestId.trim() : null;
+        if (requestKey != null) {
+            Long existingId = getPublishedPostId(requestId);
+            if (existingId != null) return getBlogById(existingId);
+        }
         BlogPost post = new BlogPost();
         post.setTitle(dto.getTitle());
         post.setSummary(dto.getSummary());
@@ -91,7 +104,24 @@ public class BlogService {
             }
         }
 
+        if (requestKey != null) {
+            redisTemplate.opsForValue().set(requestKey, post.getId().toString(), 24, TimeUnit.HOURS);
+        }
         return getBlogById(post.getId());
+    }
+
+    /** Returns the post created by this user's publish request, if it has committed. */
+    public Long getPublishedPostId(String requestId) {
+        if (requestId == null || requestId.isBlank() || UserContext.getUserId() == null) return null;
+        String key = PUBLISH_REQUEST_PREFIX + UserContext.getUserId() + ":" + requestId.trim();
+        String postId = redisTemplate.opsForValue().get(key);
+        if (postId == null) return null;
+        try {
+            BlogPost post = blogPostMapper.selectById(Long.parseLong(postId));
+            if (post != null && UserContext.getUserId().equals(post.getUserId())) return post.getId();
+        } catch (NumberFormatException ignored) { }
+        redisTemplate.delete(key);
+        return null;
     }
 
     /** Updates only supplied fields. Passing tags replaces all existing tags for the post. */

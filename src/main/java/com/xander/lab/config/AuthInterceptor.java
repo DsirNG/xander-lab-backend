@@ -29,6 +29,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     /** 需要登录的写操作路径 */
     private static final List<String> PROTECTED_WRITE_PATTERNS = List.of(
             "POST:/api/blog/posts",
+            "GET:/api/blog/posts/publish-status",
             "POST:/api/blog-agent/tasks",
             "POST:/api/blog-agent/tasks/*",
             // Agent tasks contain private user material, so their reads are protected too.
@@ -78,6 +79,12 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         // 公开的GET读操作直接放行（但仍尝试解析token以便记录用户信息）
+        // This matches the public post-detail wildcard below, but idempotent
+        // publish status belongs to the authenticated user only.
+        if ("GET".equals(method) && "/api/blog/posts/publish-status".equals(path)) {
+            return requireAuth(request, response);
+        }
+
         for (String pattern : GET_PUBLIC_PATTERNS) {
             String[] parts = pattern.split(":", 2);
             if (parts[0].equals(method) && matchPath(parts[1], path)) {
