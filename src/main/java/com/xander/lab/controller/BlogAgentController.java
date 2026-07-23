@@ -8,7 +8,12 @@ import com.xander.lab.entity.BlogAgentTask;
 import com.xander.lab.service.BlogAgentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/blog-agent/tasks")
@@ -29,6 +34,32 @@ public class BlogAgentController {
     @PostMapping("/{id}/run")
     public Result<BlogAgentTaskVO> run(@PathVariable Long id) {
         return Result.success(service.run(id, UserContext.getUserId()));
+    }
+
+    @PostMapping(value = "/{id}/run/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter runStream(@PathVariable Long id) {
+        Long userId = UserContext.getUserId();
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                emitter.send(SseEmitter.event().name("status").data("正在调研与写作"));
+                BlogAgentTaskVO task = service.runStream(id, userId, delta -> send(emitter, "delta", delta));
+                emitter.send(SseEmitter.event().name("complete").data(task));
+                emitter.complete();
+            } catch (Exception e) {
+                send(emitter, "error", e.getMessage());
+                emitter.completeWithError(e);
+            }
+        });
+        return emitter;
+    }
+
+    private void send(SseEmitter emitter, String event, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(event).data(data));
+        } catch (IOException ignored) {
+            emitter.complete();
+        }
     }
 
 }

@@ -21,6 +21,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
@@ -51,6 +52,15 @@ public class BlogAgentService {
     /** Executes analyze → research → write → review as one durable task run. */
     @Transactional
     public BlogAgentTaskVO run(Long taskId, Long userId) {
+        return execute(taskId, userId, false, ignored -> { });
+    }
+
+    @Transactional
+    public BlogAgentTaskVO runStream(Long taskId, Long userId, Consumer<String> onDelta) {
+        return execute(taskId, userId, true, onDelta);
+    }
+
+    private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming, Consumer<String> onDelta) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
         task.setStatus("running");
         task.setStage("research");
@@ -59,7 +69,9 @@ public class BlogAgentService {
         taskMapper.updateById(task);
 
         try {
-            JsonNode result = modelClient.createArticle(task.getInput());
+            JsonNode result = streaming
+                    ? modelClient.createArticleStream(task.getInput(), onDelta)
+                    : modelClient.createArticle(task.getInput());
             applyResult(task, result);
             saveSources(task.getId(), result.path("sources"));
             saveVersion(task, "智能体完成调研、写作与审校");

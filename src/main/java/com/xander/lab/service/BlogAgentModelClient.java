@@ -9,6 +9,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.function.Consumer;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,7 +52,7 @@ public class BlogAgentModelClient {
                 .retrieve()
                 .body(JsonNode.class);
 
-        String text = response == null ? null : response.path("output_text").asText(null);
+        String text = extractOutputText(response);
         if (!StringUtils.hasText(text)) {
             throw new IllegalStateException("模型没有返回可读取的文章结果");
         }
@@ -54,6 +61,96 @@ public class BlogAgentModelClient {
         } catch (Exception e) {
             throw new IllegalStateException("模型返回格式不正确，请重试", e);
         }
+    }
+
+    /** Streams output tokens from a Responses-compatible endpoint and returns the final JSON article. */
+    public JsonNode createArticleStream(String input, Consumer<String> onDelta) {
+        Map<String, Object> payload = requestPayload(input);
+        payload.put("stream", true);
+        HttpURLConnection connection = null;
+        StringBuilder output = new StringBuilder();
+        try {
+            connection = (HttpURLConnection) URI.create(trimTrailingSlash(properties.getBaseUrl()) + "/responses").toURL().openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Authorization", "Bearer " + properties.getApiKey());
+            connection.setRequestProperty("Content-Type", MediaType.APPLICATION_JSON_VALUE);
+            connection.setRequestProperty("Accept", MediaType.TEXT_EVENT_STREAM_VALUE);
+            connection.setDoOutput(true);
+            connection.setConnectTimeout(15_000);
+            connection.setReadTimeout(0);
+            connection.getOutputStream().write(objectMapper.writeValueAsBytes(payload));
+
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) {
+                throw new IllegalStateException("模型服务请求失败（HTTP " + status + "）：" + readError(connection.getErrorStream()));
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("data:")) continue;
+                    String data = line.substring(5).trim();
+                    if (data.isEmpty() || "[DONE]".equals(data)) continue;
+                    JsonNode event = objectMapper.readTree(data);
+                    String type = event.path("type").asText();
+                    if ("response.output_text.delta".equals(type)) {
+                        String delta = event.path("delta").asText("");
+                        output.append(delta);
+                        onDelta.accept(delta);
+                    } else if ("response.output_text.done".equals(type) && output.isEmpty()) {
+                        String text = event.path("text").asText("");
+                        output.append(text);
+                        onDelta.accept(text);
+                    } else if ("response.completed".equals(type) && output.isEmpty()) {
+                        String text = extractOutputText(event.path("response"));
+                        output.append(text == null ? "" : text);
+                    } else if ("error".equals(type)) {
+                        throw new IllegalStateException("模型服务返回错误：" + event.path("message").asText("未知错误"));
+                    }
+                }
+            }
+            if (!StringUtils.hasText(output)) throw new IllegalStateException("模型没有返回可读取的文章结果");
+            return objectMapper.readTree(stripCodeFence(output.toString()));
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("读取模型流式结果失败：" + e.getMessage(), e);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    private Map<String, Object> requestPayload(String input) {
+        if (!StringUtils.hasText(properties.getApiKey()) || !StringUtils.hasText(properties.getModel())) {
+            throw new IllegalStateException("博客智能体尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", properties.getModel());
+        payload.put("store", false);
+        payload.put("instructions", instructions());
+        payload.put("input", "用户输入：\n" + input);
+        if (properties.isWebSearchEnabled()) payload.put("tools", List.of(Map.of("type", "web_search")));
+        return payload;
+    }
+
+    private String extractOutputText(JsonNode response) {
+        if (response == null || response.isMissingNode()) return null;
+        String direct = response.path("output_text").asText();
+        if (StringUtils.hasText(direct)) return direct;
+        for (JsonNode output : response.path("output")) {
+            for (JsonNode content : output.path("content")) {
+                String text = content.path("text").asText();
+                if (StringUtils.hasText(text)) return text;
+            }
+        }
+        String chatContent = response.path("choices").path(0).path("message").path("content").asText();
+        return StringUtils.hasText(chatContent) ? chatContent : null;
+    }
+
+    private String readError(InputStream stream) {
+        if (stream == null) return "未知错误";
+        try (stream; BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
+            return reader.readLine();
+        } catch (Exception ignored) { return "未知错误"; }
     }
 
     private String instructions() {
