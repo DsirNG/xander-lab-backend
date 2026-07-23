@@ -29,6 +29,10 @@ public class AuthInterceptor implements HandlerInterceptor {
     /** 需要登录的写操作路径 */
     private static final List<String> PROTECTED_WRITE_PATTERNS = List.of(
             "POST:/api/blog/posts",
+            "POST:/api/blog-agent/tasks",
+            "POST:/api/blog-agent/tasks/*",
+            // Agent tasks contain private user material, so their reads are protected too.
+            "GET:/api/blog-agent/tasks/*",
             "POST:/api/component/items",
             "POST:/api/studio/upload",
             "POST:/api/studio/save"

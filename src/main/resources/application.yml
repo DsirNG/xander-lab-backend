@@ -91,3 +91,11 @@ mcp:
     credential-encryption-key: ${MCP_CREDENTIAL_ENCRYPTION_KEY:}
     public-base-url: ${MCP_PUBLIC_BASE_URL:http://localhost:30002}
 
+# Leave credentials in application-local.yml or environment variables; never commit them.
+blog:
+  agent:
+    base-url: ${BLOG_AGENT_BASE_URL:https://api.openai.com/v1}
+    api-key: ${BLOG_AGENT_API_KEY:}
+    model: ${BLOG_AGENT_MODEL:}
+    web-search-enabled: ${BLOG_AGENT_WEB_SEARCH_ENABLED:true}
+
