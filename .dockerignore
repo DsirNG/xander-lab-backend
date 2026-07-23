@@ -5,6 +5,8 @@ target/
 *.war
 *.ear
 *.log
+.env*
+src/main/resources/application-local.yml
 
 # IDEs
 .idea/

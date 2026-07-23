@@ -2,6 +2,8 @@ version: '3.8'
 
 services:
   xander-lab-backend:
+    env_file:
+      - .env.local
     build:
       context: .
       dockerfile: Dockerfile
