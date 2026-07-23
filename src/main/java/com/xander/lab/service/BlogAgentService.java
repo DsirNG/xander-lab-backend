@@ -7,16 +7,19 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.dto.agent.BlogAgentTaskCreateRequest;
 import com.xander.lab.dto.agent.BlogAgentTaskVO;
+import com.xander.lab.dto.agent.BlogAgentSessionVO;
 import com.xander.lab.dto.BlogPostDTO;
 import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.entity.BlogAgentSource;
 import com.xander.lab.entity.BlogAgentTask;
 import com.xander.lab.entity.BlogAgentVersion;
 import com.xander.lab.entity.BlogMediaAsset;
+import com.xander.lab.entity.BlogAgentMessage;
 import com.xander.lab.config.BlogAgentProperties;
 import com.xander.lab.mapper.BlogAgentSourceMapper;
 import com.xander.lab.mapper.BlogAgentTaskMapper;
 import com.xander.lab.mapper.BlogAgentVersionMapper;
+import com.xander.lab.mapper.BlogAgentMessageMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +30,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +45,7 @@ public class BlogAgentService {
     private final BlogAgentImageClient imageClient;
     private final BlogMediaService mediaService;
     private final BlogAgentProperties properties;
+    private final BlogAgentMessageMapper messageMapper;
 
     @Transactional
     public BlogAgentTask create(Long userId, BlogAgentTaskCreateRequest request) {
@@ -56,6 +61,7 @@ public class BlogAgentService {
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
         taskMapper.insert(task);
+        saveMessage(task.getId(), "user", "message", null, task.getInput());
         return task;
     }
 
@@ -65,22 +71,68 @@ public class BlogAgentService {
     }
 
     public BlogAgentTaskVO runStream(Long taskId, Long userId, Consumer<String> onDelta) {
-        return execute(taskId, userId, true, onDelta);
+        return runStream(taskId, userId, (event, data) -> {
+            if ("delta".equals(event)) onDelta.accept(data);
+        });
+    }
+
+    public BlogAgentTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
+        return execute(taskId, userId, true, onEvent);
     }
 
     private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming, Consumer<String> onDelta) {
+        return execute(taskId, userId, streaming, (event, data) -> {
+            if ("delta".equals(event)) onDelta.accept(data);
+        });
+    }
+
+    private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming, BiConsumer<String, String> onEvent) {
         transactionTemplate.executeWithoutResult(status -> markRunning(taskId, userId));
 
         try {
+            updateStage(taskId, userId, "analyze", "正在理解你的目标和文章边界", onEvent);
+            JsonNode analysis = modelClient.analyze(getInput(taskId, userId));
+            updateStage(taskId, userId, "research", "正在联网查找并核验相关资料", onEvent);
+            JsonNode research = modelClient.research(getInput(taskId, userId), analysis);
+            updateStage(taskId, userId, "write", "正在根据策划和调研结果撰写文章草稿", onEvent);
+            String writingInput = getInput(taskId, userId)
+                    + "\n\n策划结果：\n" + analysis
+                    + "\n\n调研结果：\n" + research;
             JsonNode result = streaming
-                    ? modelClient.createArticleStream(getInput(taskId, userId), onDelta)
-                    : modelClient.createArticle(getInput(taskId, userId));
+                    ? modelClient.createArticleStream(writingInput, delta -> onEvent.accept("delta", delta))
+                    : modelClient.createArticle(writingInput);
             transactionTemplate.executeWithoutResult(status -> persistArticleDraft(taskId, userId, result));
+            updateStage(taskId, userId, "illustrate", "正在按需生成并保存知识插图", onEvent);
             IllustrationOutcome outcome = generateIllustrations(taskId, userId, result.path("illustrations"));
-            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, outcome));
+            updateStage(taskId, userId, "review", "正在进行最终逻辑与表达审校", onEvent);
+            IllustrationOutcome reviewed = reviewOutcome(outcome, getInput(taskId, userId));
+            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, reviewed));
         } catch (RuntimeException e) {
             transactionTemplate.executeWithoutResult(status -> markFailed(taskId, userId, e.getMessage()));
             throw e;
+        }
+    }
+
+    private void updateStage(Long taskId, Long userId, String stage, String message,
+                             BiConsumer<String, String> onEvent) {
+        transactionTemplate.executeWithoutResult(status -> {
+            BlogAgentTask task = requireOwnedTask(taskId, userId);
+            task.setStatus("running");
+            task.setStage(stage);
+            task.setUpdatedAt(LocalDateTime.now());
+            taskMapper.updateById(task);
+            saveMessage(taskId, "assistant", "process", stage, message);
+        });
+        onEvent.accept("stage", stage + "|" + message);
+    }
+
+    private IllustrationOutcome reviewOutcome(IllustrationOutcome outcome, String request) {
+        try {
+            JsonNode reviewed = modelClient.reviewArticle(outcome.content(), request);
+            String content = defaultText(reviewed.path("content").asText(), outcome.content());
+            return new IllustrationOutcome(content, outcome.status(), outcome.error(), outcome.generated());
+        } catch (Exception ignored) {
+            return outcome;
         }
     }
 
@@ -121,6 +173,7 @@ public class BlogAgentService {
         task.setStage("review");
         task.setUpdatedAt(LocalDateTime.now());
         taskMapper.updateById(task);
+        saveMessage(taskId, "assistant", "result", "review", task.getTitle());
         return get(taskId, userId);
     }
 
@@ -145,7 +198,78 @@ public class BlogAgentService {
         vo.setVersions(versionMapper.selectList(new LambdaQueryWrapper<BlogAgentVersion>()
                 .eq(BlogAgentVersion::getTaskId, taskId).orderByDesc(BlogAgentVersion::getVersionNo)));
         vo.setIllustrations(mediaService.getTaskImages(userId, taskId));
+        vo.setMessages(messageMapper.selectList(new LambdaQueryWrapper<BlogAgentMessage>()
+                .eq(BlogAgentMessage::getTaskId, taskId).orderByAsc(BlogAgentMessage::getId)));
         return vo;
+    }
+
+    public List<BlogAgentSessionVO> listSessions(Long userId) {
+        if (userId == null) throw new IllegalArgumentException("未登录或登录已过期");
+        return taskMapper.selectList(new LambdaQueryWrapper<BlogAgentTask>()
+                        .eq(BlogAgentTask::getUserId, userId)
+                        .orderByDesc(BlogAgentTask::getUpdatedAt)
+                        .last("LIMIT 50"))
+                .stream()
+                .map(task -> BlogAgentSessionVO.builder()
+                        .id(task.getId())
+                        .title(defaultText(task.getTitle(), excerpt(task.getInput(), 36)))
+                        .input(task.getInput())
+                        .status(task.getStatus())
+                        .stage(task.getStage())
+                        .createdAt(task.getCreatedAt())
+                        .updatedAt(task.getUpdatedAt())
+                        .build())
+                .toList();
+    }
+
+    public BlogAgentTaskVO reviseStream(Long taskId, Long userId, String instruction,
+                                        BiConsumer<String, String> onEvent) {
+        BlogAgentTask existing = requireOwnedTask(taskId, userId);
+        if (!"ready".equals(existing.getStatus())) throw new IllegalStateException("当前文章尚未准备好，不能修改");
+        transactionTemplate.executeWithoutResult(status -> {
+            saveMessage(taskId, "user", "message", null, instruction.trim());
+            existing.setStatus("running");
+            existing.setStage("write");
+            existing.setErrorMessage(null);
+            existing.setUpdatedAt(LocalDateTime.now());
+            taskMapper.updateById(existing);
+        });
+        try {
+            updateStage(taskId, userId, "write", "正在根据你的新要求修改文章", onEvent);
+            JsonNode result = modelClient.reviseArticleStream(
+                    requireOwnedTask(taskId, userId).getContent(), instruction,
+                    delta -> onEvent.accept("delta", delta));
+            transactionTemplate.executeWithoutResult(status -> persistArticleDraft(taskId, userId, result));
+            updateStage(taskId, userId, "illustrate", "正在同步调整文章插图", onEvent);
+            IllustrationOutcome outcome = generateIllustrations(taskId, userId, result.path("illustrations"));
+            updateStage(taskId, userId, "review", "正在检查本轮修改", onEvent);
+            IllustrationOutcome reviewed = reviewOutcome(outcome, instruction);
+            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, reviewed));
+        } catch (RuntimeException e) {
+            transactionTemplate.executeWithoutResult(status -> markRevisionFailed(taskId, userId, e.getMessage()));
+            throw e;
+        }
+    }
+
+    private void markRevisionFailed(Long taskId, Long userId, String errorMessage) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        task.setStatus("ready");
+        task.setStage("review");
+        task.setErrorMessage(limit(errorMessage, 1000));
+        task.setUpdatedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
+        saveMessage(taskId, "assistant", "process", "review", "本轮修改失败，已保留上一版文章");
+    }
+
+    private void saveMessage(Long taskId, String role, String kind, String stage, String content) {
+        BlogAgentMessage message = new BlogAgentMessage();
+        message.setTaskId(taskId);
+        message.setRole(role);
+        message.setKind(kind);
+        message.setStage(stage);
+        message.setContent(defaultText(content, ""));
+        message.setCreatedAt(LocalDateTime.now());
+        messageMapper.insert(message);
     }
 
     private IllustrationOutcome generateIllustrations(Long taskId, Long userId, JsonNode plans) {

@@ -27,6 +27,41 @@ public class BlogAgentModelClient {
     private final BlogAgentProperties properties;
     private final ObjectMapper objectMapper;
 
+    public JsonNode analyze(String input) {
+        return requestJson(
+                "你是知识博客策划编辑。只分析用户真正想写什么、必须保留什么、哪些信息需要查证。"
+                        + "不要写文章，不要搜索。仅返回 JSON："
+                        + "{\"angle\":string,\"inputNature\":string,\"audience\":string,"
+                        + "\"mustCover\":[string],\"questions\":[string],\"researchQueries\":[string]}。",
+                input, false);
+    }
+
+    public JsonNode research(String input, JsonNode analysis) {
+        return requestJson(
+                "你是知识博客研究员。使用网页搜索核验和补全用户主题，只保留与文章主线直接相关的权威信息。"
+                        + "不要写文章。仅返回 JSON："
+                        + "{\"findings\":[{\"claim\":string,\"evidence\":string,\"url\":string,\"publisher\":string}],"
+                        + "\"gaps\":[string],\"recommendedStructure\":[string]}。",
+                "用户输入：\n" + input + "\n\n策划结果：\n" + analysis, true);
+    }
+
+    public JsonNode reviewArticle(String content, String userRequest) {
+        return requestJson(
+                "你是严谨的中文知识博客审校编辑。检查逻辑、事实表述、结构、Markdown 和用户要求。"
+                        + "保留文章中的图片 Markdown，不要虚构来源。仅返回 JSON："
+                        + "{\"content\":string,\"review\":string}。",
+                "本轮用户要求：\n" + userRequest + "\n\n待审校文章：\n" + content, false);
+    }
+
+    public JsonNode reviseArticleStream(String currentArticle, String instruction, Consumer<String> onDelta) {
+        Map<String, Object> payload = requestPayload(
+                "当前文章：\n" + currentArticle + "\n\n用户本轮修改要求：\n" + instruction);
+        payload.put("instructions", instructions()
+                + "这是同一会话中的后续修改。必须以当前文章为基础执行用户要求，不要无故重写未涉及部分。"
+                + "仍返回完整 JSON 文章对象，便于保存新版本。");
+        return streamJson(payload, onDelta);
+    }
+
     public JsonNode createArticle(String input) {
         if (!StringUtils.hasText(properties.getApiKey()) || !StringUtils.hasText(properties.getModel())) {
             throw new IllegalStateException("博客智能体尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
@@ -66,6 +101,10 @@ public class BlogAgentModelClient {
     /** Streams output tokens from a Responses-compatible endpoint and returns the final JSON article. */
     public JsonNode createArticleStream(String input, Consumer<String> onDelta) {
         Map<String, Object> payload = requestPayload(input);
+        return streamJson(payload, onDelta);
+    }
+
+    private JsonNode streamJson(Map<String, Object> payload, Consumer<String> onDelta) {
         payload.put("stream", true);
         HttpURLConnection connection = null;
         StringBuilder output = new StringBuilder();
@@ -116,6 +155,37 @@ public class BlogAgentModelClient {
             throw new IllegalStateException("读取模型流式结果失败：" + e.getMessage(), e);
         } finally {
             if (connection != null) connection.disconnect();
+        }
+    }
+
+    private JsonNode requestJson(String instruction, String input, boolean webSearch) {
+        if (!StringUtils.hasText(properties.getApiKey()) || !StringUtils.hasText(properties.getModel())) {
+            throw new IllegalStateException("博客智能体尚未配置模型服务");
+        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", properties.getModel());
+        payload.put("store", false);
+        payload.put("instructions", instruction);
+        payload.put("input", input);
+        if (webSearch && properties.isWebSearchEnabled()) {
+            payload.put("tools", List.of(Map.of("type", "web_search")));
+        }
+        JsonNode response = RestClient.builder()
+                .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
+                .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
+                .build()
+                .post()
+                .uri("/responses")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .body(JsonNode.class);
+        String text = extractOutputText(response);
+        if (!StringUtils.hasText(text)) throw new IllegalStateException("模型没有返回可读取的阶段结果");
+        try {
+            return objectMapper.readTree(stripCodeFence(text));
+        } catch (Exception e) {
+            throw new IllegalStateException("模型阶段结果不是有效 JSON", e);
         }
     }
 

@@ -4,6 +4,7 @@ import com.xander.lab.entity.BlogAgentSource;
 import com.xander.lab.entity.BlogAgentTask;
 import com.xander.lab.entity.BlogAgentVersion;
 import com.xander.lab.entity.BlogMediaAsset;
+import com.xander.lab.entity.BlogAgentMessage;
 import lombok.Data;
 
 import java.util.List;
@@ -18,4 +19,5 @@ public class BlogAgentTaskVO {
     private List<BlogAgentSource> sources;
     private List<BlogAgentVersion> versions;
     private List<BlogMediaAsset> illustrations;
+    private List<BlogAgentMessage> messages;
 }

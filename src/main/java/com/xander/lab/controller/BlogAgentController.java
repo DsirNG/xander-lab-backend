@@ -4,6 +4,8 @@ import com.xander.lab.common.Result;
 import com.xander.lab.common.UserContext;
 import com.xander.lab.dto.agent.BlogAgentTaskCreateRequest;
 import com.xander.lab.dto.agent.BlogAgentTaskVO;
+import com.xander.lab.dto.agent.BlogAgentMessageRequest;
+import com.xander.lab.dto.agent.BlogAgentSessionVO;
 import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.entity.BlogAgentTask;
 import com.xander.lab.service.BlogAgentService;
@@ -16,6 +18,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/blog-agent/tasks")
@@ -39,6 +42,11 @@ public class BlogAgentController {
         return Result.success(service.get(id, UserContext.getUserId()));
     }
 
+    @GetMapping
+    public Result<List<BlogAgentSessionVO>> list() {
+        return Result.success(service.listSessions(UserContext.getUserId()));
+    }
+
     @PostMapping("/{id}/run")
     public Result<BlogAgentTaskVO> run(@PathVariable Long id) {
         return Result.success(service.run(id, UserContext.getUserId()));
@@ -55,14 +63,33 @@ public class BlogAgentController {
         SseEmitter emitter = new SseEmitter(0L);
         CompletableFuture.runAsync(() -> {
             try {
-                emitter.send(SseEmitter.event().name("status").data("正在调研与写作"));
-                BlogAgentTaskVO task = service.runStream(id, userId, delta -> send(emitter, "delta", delta));
+                BlogAgentTaskVO task = service.runStream(id, userId,
+                        (event, data) -> send(emitter, event, data));
                 emitter.send(SseEmitter.event().name("complete").data(task));
                 emitter.complete();
             } catch (Exception e) {
                 send(emitter, "error", e.getMessage());
                 // The error has been delivered as an SSE event. Completing
                 // normally keeps Axios from replacing it with a generic error.
+                emitter.complete();
+            }
+        }, blogAgentTaskExecutor);
+        return emitter;
+    }
+
+    @PostMapping(value = "/{id}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter reviseStream(@PathVariable Long id,
+                                   @Valid @RequestBody BlogAgentMessageRequest request) {
+        Long userId = UserContext.getUserId();
+        SseEmitter emitter = new SseEmitter(0L);
+        CompletableFuture.runAsync(() -> {
+            try {
+                BlogAgentTaskVO task = service.reviseStream(id, userId, request.getContent(),
+                        (event, data) -> send(emitter, event, data));
+                send(emitter, "complete", task);
+                emitter.complete();
+            } catch (Exception e) {
+                send(emitter, "error", e.getMessage());
                 emitter.complete();
             }
         }, blogAgentTaskExecutor);
