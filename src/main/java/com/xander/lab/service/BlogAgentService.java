@@ -103,7 +103,7 @@ public class BlogAgentService {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
         task.setStatus("failed");
         task.setStage("analyze");
-        task.setErrorMessage(errorMessage);
+        task.setErrorMessage(limit(errorMessage, 1000));
         task.setUpdatedAt(LocalDateTime.now());
         taskMapper.updateById(task);
     }
@@ -133,14 +133,14 @@ public class BlogAgentService {
     private void applyResult(BlogAgentTask task, JsonNode result) {
         String title = required(result, "title");
         String content = required(result, "content");
-        task.setTitle(title);
+        task.setTitle(limit(title, 255));
         task.setSummary(defaultText(result.path("summary").asText(), excerpt(content, 160)));
         task.setContent(content);
         task.setOutline(result.path("outline").asText(""));
         JsonNode writingBrief = result.path("writingBrief");
-        task.setInputType(defaultText(writingBrief.path("inputNature").asText(), "topic"));
-        task.setAudience(defaultText(writingBrief.path("audience").asText(), "广泛读者"));
-        task.setTone(defaultText(writingBrief.path("tone").asText(), "清晰、准确、可读"));
+        task.setInputType(normalizeInputType(writingBrief.path("inputNature").asText()));
+        task.setAudience(limit(defaultText(writingBrief.path("audience").asText(), "广泛读者"), 120));
+        task.setTone(limit(defaultText(writingBrief.path("tone").asText(), "清晰、准确、可读"), 60));
         task.setContentBoundary(writeNode(result.path("contentBoundary")));
         task.setKnowledgeGraphJson(writeNode(result.path("knowledgeGraph")));
         task.setCategoryId(normalizeCategory(result.path("categoryId").asText()));
@@ -157,14 +157,14 @@ public class BlogAgentService {
         if (!sourceNodes.isArray()) return;
         for (JsonNode node : sourceNodes) {
             String url = node.path("url").asText();
-            if (!StringUtils.hasText(url) || !url.startsWith("http")) continue;
+            if (!StringUtils.hasText(url) || !url.startsWith("http") || url.length() > 2000) continue;
             BlogAgentSource source = new BlogAgentSource();
             source.setTaskId(taskId);
-            source.setTitle(defaultText(node.path("title").asText(), url));
+            source.setTitle(limit(defaultText(node.path("title").asText(), url), 500));
             source.setUrl(url);
-            source.setPublisher(node.path("publisher").asText(""));
+            source.setPublisher(limit(node.path("publisher").asText(""), 255));
             source.setExcerpt(node.path("excerpt").asText(""));
-            source.setReliability(defaultText(node.path("reliability").asText(), "未标注"));
+            source.setReliability(limit(defaultText(node.path("reliability").asText(), "未标注"), 64));
             source.setRetrievedAt(LocalDateTime.now());
             sourceMapper.insert(source);
         }
@@ -209,6 +209,10 @@ public class BlogAgentService {
         return List.of("frontend", "backend", "architecture", "devops", "career").contains(category) ? category : "career";
     }
 
+    private String normalizeInputType(String inputType) {
+        return List.of("topic", "project_context", "journal").contains(inputType) ? inputType : "topic";
+    }
+
     private String required(JsonNode node, String field) {
         String value = node.path(field).asText();
         if (!StringUtils.hasText(value)) throw new IllegalStateException("模型未返回 " + field);
@@ -216,5 +220,9 @@ public class BlogAgentService {
     }
 
     private String defaultText(String value, String fallback) { return StringUtils.hasText(value) ? value.trim() : fallback; }
+    private String limit(String value, int maxLength) {
+        String safeValue = value == null ? "" : value;
+        return safeValue.length() <= maxLength ? safeValue : safeValue.substring(0, maxLength);
+    }
     private String excerpt(String content, int length) { return content.length() <= length ? content : content.substring(0, length - 1) + "…"; }
 }

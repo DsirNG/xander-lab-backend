@@ -161,6 +161,7 @@ public class BlogAgentModelClient {
                 + "你必须先澄清文章角度，再使用网页搜索工具核验或补充所有外部事实。用户的个人经历应保留为作者经历，不能伪装成普遍事实。"
                 + "没有可靠来源时，不得写成确定事实。输出必须是且仅是 JSON："
                 + "{\"title\":string,\"summary\":string,\"content\":string,\"outline\":string,\"writingBrief\":{\"inputNature\":string,\"audience\":string,\"tone\":string},\"contentBoundary\":{\"mustCover\":[string],\"relatedExpansion\":[string],\"outOfScope\":[string],\"optionalModules\":[string]},\"knowledgeGraph\":{\"enabled\":boolean,\"reason\":string,\"nodes\":[{\"id\":string,\"label\":string,\"description\":string}],\"edges\":[{\"from\":string,\"to\":string,\"relation\":string}]},\"categoryId\":string,\"tags\":[string],\"review\":string,\"sources\":[{\"title\":string,\"url\":string,\"publisher\":string,\"excerpt\":string,\"reliability\":string}]}。"
+                + "writingBrief.inputNature 只能是 topic、project_context 或 journal 之一；audience 最多 120 个字符，tone 最多 60 个字符。"
                 + "content 必须是完整文章，不含参考资料列表；文章末尾追加“## 参考资料”，以 Markdown 链接列出 sources。"
                 + "contentBoundary 必须精确说明哪些内容来自用户、允许怎样的直接扩展，以及不应扩展的边界。knowledgeGraph 未启用时，nodes 和 edges 必须为空数组。"
                 + "categoryId 只可使用 frontend、backend、architecture、devops、career。sources 中仅保留实际检索到且被用于文章的来源。";
