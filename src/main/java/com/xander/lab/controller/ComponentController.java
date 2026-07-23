@@ -43,7 +43,7 @@ public class ComponentController {
     public Result<ComponentDetailVO> getComponent(@PathVariable Long id, @RequestParam(defaultValue = "zh") String lang) {
         ComponentDetailVO vo = componentService.getComponentDetail(id, lang);
         if (vo == null) {
-            return Result.error("未找到该组件");
+            return Result.notFound("未找到该组件");
         }
         return Result.success(vo);
     }

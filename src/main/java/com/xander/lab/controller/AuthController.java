@@ -9,6 +9,8 @@ import com.xander.lab.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -78,12 +80,12 @@ public class AuthController {
      * @return 新的 accessToken + refreshToken
      */
     @PostMapping("/refresh")
-    public Result<TokenResponse> refresh(@Valid @RequestBody RefreshTokenRequest request) {
+    public ResponseEntity<Result<TokenResponse>> refresh(@Valid @RequestBody RefreshTokenRequest request) {
         try {
             TokenResponse response = authService.refresh(request.getRefreshToken());
-            return Result.success(response);
+            return ResponseEntity.ok(Result.success(response));
         } catch (IllegalArgumentException e) {
-            return Result.unauthorized(e.getMessage());
+            return unauthorizedResponse();
         }
     }
 
@@ -114,16 +116,16 @@ public class AuthController {
      * @return 当前用户信息
      */
     @GetMapping("/me")
-    public Result<TokenResponse.UserInfo> getCurrentUser(
+    public ResponseEntity<Result<TokenResponse.UserInfo>> getCurrentUser(
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         if (authorization == null || authorization.isBlank()) {
-            return Result.unauthorized("未提供认证信息");
+            return unauthorizedResponse();
         }
         try {
             TokenResponse.UserInfo userInfo = authService.getCurrentUser(authorization);
-            return Result.success(userInfo);
+            return ResponseEntity.ok(Result.success(userInfo));
         } catch (IllegalArgumentException e) {
-            return Result.unauthorized(e.getMessage());
+            return unauthorizedResponse();
         }
     }
 
@@ -156,5 +158,10 @@ public class AuthController {
         }
         String token = authorization.substring(7);
         return Result.success(authService.validateAccessToken(token));
+    }
+
+    private static <T> ResponseEntity<Result<T>> unauthorizedResponse() {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(Result.unauthorized("未登录或登录已过期"));
     }
 }

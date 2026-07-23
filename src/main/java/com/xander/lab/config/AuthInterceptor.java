@@ -188,7 +188,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     private void unauthorized(HttpServletResponse response) {
         try {
             response.setContentType("application/json;charset=UTF-8");
-            response.setStatus(HttpServletResponse.SC_OK);
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.getWriter().write("{\"code\":401,\"message\":\"未登录或登录已过期\",\"data\":null}");
         } catch (Exception e) {
             log.error("[Auth] 响应写入失败", e);

@@ -80,8 +80,8 @@ mybatis-plus:
 # JWT配置
 jwt:
   secret: ${JWT_SECRET:xander-lab-secret-key-must-be-at-least-32-chars-for-hmac}
-  access-token-expire: 7200000
-  refresh-token-expire: 604800000
+  access-token-expire: 86400000
+  refresh-token-expire: 2592000000
 
 # Disabled by default. Use a Base64-encoded 32-byte key, and keep the server token out of source control.
 mcp:
