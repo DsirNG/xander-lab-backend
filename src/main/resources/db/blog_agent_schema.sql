@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS `blog_agent_task` (
   `summary` TEXT NULL,
   `content` LONGTEXT NULL,
   `outline` TEXT NULL,
+  `content_boundary` TEXT NULL COMMENT '用户主线、直接扩展与范围边界',
+  `knowledge_graph_json` LONGTEXT NULL COMMENT '按需生成的知识关系图谱',
   `category_id` VARCHAR(64) NULL,
   `tags_json` TEXT NULL,
   `review` TEXT NULL,

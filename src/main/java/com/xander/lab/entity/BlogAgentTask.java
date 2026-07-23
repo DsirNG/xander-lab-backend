@@ -23,6 +23,8 @@ public class BlogAgentTask {
     private String summary;
     private String content;
     private String outline;
+    private String contentBoundary;
+    private String knowledgeGraphJson;
     private String categoryId;
     private String tagsJson;
     private String review;

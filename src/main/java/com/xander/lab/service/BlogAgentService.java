@@ -83,6 +83,8 @@ public class BlogAgentService {
         BlogAgentTaskVO vo = new BlogAgentTaskVO();
         vo.setTask(task);
         vo.setTags(readTags(task.getTagsJson()));
+        vo.setContentBoundary(readObject(task.getContentBoundary()));
+        vo.setKnowledgeGraph(readObject(task.getKnowledgeGraphJson()));
         vo.setSources(sourceMapper.selectList(new LambdaQueryWrapper<BlogAgentSource>()
                 .eq(BlogAgentSource::getTaskId, taskId).orderByAsc(BlogAgentSource::getId)));
         vo.setVersions(versionMapper.selectList(new LambdaQueryWrapper<BlogAgentVersion>()
@@ -105,6 +107,8 @@ public class BlogAgentService {
         task.setSummary(defaultText(result.path("summary").asText(), excerpt(content, 160)));
         task.setContent(content);
         task.setOutline(result.path("outline").asText(""));
+        task.setContentBoundary(writeNode(result.path("contentBoundary")));
+        task.setKnowledgeGraphJson(writeNode(result.path("knowledgeGraph")));
         task.setCategoryId(normalizeCategory(result.path("categoryId").asText()));
         task.setReview(result.path("review").asText(""));
         try {
@@ -148,6 +152,16 @@ public class BlogAgentService {
     private List<String> readTags(String json) {
         try { return objectMapper.readValue(defaultText(json, "[]"), new TypeReference<List<String>>() {}); }
         catch (Exception e) { return List.of(); }
+    }
+
+    private java.util.Map<String, Object> readObject(String json) {
+        try { return objectMapper.readValue(defaultText(json, "{}"), new TypeReference<java.util.Map<String, Object>>() {}); }
+        catch (Exception e) { return java.util.Map.of(); }
+    }
+
+    private String writeNode(JsonNode node) {
+        try { return node != null && node.isObject() ? objectMapper.writeValueAsString(node) : "{}"; }
+        catch (Exception e) { return "{}"; }
     }
 
     private List<String> readStringArray(JsonNode node) {
