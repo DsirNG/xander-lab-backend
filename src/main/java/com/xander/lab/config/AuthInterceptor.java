@@ -30,6 +30,8 @@ public class AuthInterceptor implements HandlerInterceptor {
     private static final List<String> PROTECTED_WRITE_PATTERNS = List.of(
             "POST:/api/blog/posts",
             "GET:/api/blog/posts/publish-status",
+            "POST:/api/blog/media/images",
+            "GET:/api/blog/media/images",
             "POST:/api/blog-agent/tasks",
             "POST:/api/blog-agent/tasks/*",
             // Agent tasks contain private user material, so their reads are protected too.
