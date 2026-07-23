@@ -7,8 +7,9 @@ import com.xander.lab.dto.agent.BlogAgentTaskVO;
 import com.xander.lab.entity.BlogAgentTask;
 import com.xander.lab.service.BlogAgentService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -17,9 +18,15 @@ import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/api/blog-agent/tasks")
-@RequiredArgsConstructor
 public class BlogAgentController {
     private final BlogAgentService service;
+    private final TaskExecutor blogAgentTaskExecutor;
+
+    public BlogAgentController(BlogAgentService service,
+                               @Qualifier("blogAgentTaskExecutor") TaskExecutor blogAgentTaskExecutor) {
+        this.service = service;
+        this.blogAgentTaskExecutor = blogAgentTaskExecutor;
+    }
 
     @PostMapping
     public Result<BlogAgentTask> create(@Valid @RequestBody BlogAgentTaskCreateRequest request) {
@@ -48,9 +55,11 @@ public class BlogAgentController {
                 emitter.complete();
             } catch (Exception e) {
                 send(emitter, "error", e.getMessage());
-                emitter.completeWithError(e);
+                // The error has been delivered as an SSE event. Completing
+                // normally keeps Axios from replacing it with a generic error.
+                emitter.complete();
             }
-        });
+        }, blogAgentTaskExecutor);
         return emitter;
     }
 

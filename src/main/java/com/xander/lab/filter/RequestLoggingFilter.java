@@ -27,6 +27,15 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     private static final int MAX_PAYLOAD_LENGTH = 1000; // Truncate logs if body is too long
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        // ContentCachingResponseWrapper buffers output until the request returns,
+        // which prevents an SseEmitter from flushing events after the controller
+        // has switched to async processing.
+        return uri.startsWith("/api/blog-agent/tasks/") && uri.endsWith("/run/stream");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 

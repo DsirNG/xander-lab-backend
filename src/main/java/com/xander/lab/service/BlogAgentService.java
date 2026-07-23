@@ -16,6 +16,7 @@ import com.xander.lab.mapper.BlogAgentVersionMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -31,6 +32,7 @@ public class BlogAgentService {
     private final BlogAgentVersionMapper versionMapper;
     private final BlogAgentModelClient modelClient;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     @Transactional
     public BlogAgentTask create(Long userId, BlogAgentTaskCreateRequest request) {
@@ -50,44 +52,60 @@ public class BlogAgentService {
     }
 
     /** Executes analyze → research → write → review as one durable task run. */
-    @Transactional
     public BlogAgentTaskVO run(Long taskId, Long userId) {
         return execute(taskId, userId, false, ignored -> { });
     }
 
-    @Transactional
     public BlogAgentTaskVO runStream(Long taskId, Long userId, Consumer<String> onDelta) {
         return execute(taskId, userId, true, onDelta);
     }
 
     private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming, Consumer<String> onDelta) {
+        transactionTemplate.executeWithoutResult(status -> markRunning(taskId, userId));
+
+        try {
+            JsonNode result = streaming
+                    ? modelClient.createArticleStream(getInput(taskId, userId), onDelta)
+                    : modelClient.createArticle(getInput(taskId, userId));
+            return transactionTemplate.execute(status -> persistResult(taskId, userId, result));
+        } catch (RuntimeException e) {
+            transactionTemplate.executeWithoutResult(status -> markFailed(taskId, userId, e.getMessage()));
+            throw e;
+        }
+    }
+
+    private void markRunning(Long taskId, Long userId) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
         task.setStatus("running");
         task.setStage("research");
         task.setErrorMessage(null);
         task.setUpdatedAt(LocalDateTime.now());
         taskMapper.updateById(task);
+    }
 
-        try {
-            JsonNode result = streaming
-                    ? modelClient.createArticleStream(task.getInput(), onDelta)
-                    : modelClient.createArticle(task.getInput());
-            applyResult(task, result);
-            saveSources(task.getId(), result.path("sources"));
-            saveVersion(task, "智能体完成调研、写作与审校");
-            task.setStatus("ready");
-            task.setStage("review");
-            task.setUpdatedAt(LocalDateTime.now());
-            taskMapper.updateById(task);
-            return get(taskId, userId);
-        } catch (RuntimeException e) {
-            task.setStatus("failed");
-            task.setStage("analyze");
-            task.setErrorMessage(e.getMessage());
-            task.setUpdatedAt(LocalDateTime.now());
-            taskMapper.updateById(task);
-            throw e;
-        }
+    private String getInput(Long taskId, Long userId) {
+        return requireOwnedTask(taskId, userId).getInput();
+    }
+
+    private BlogAgentTaskVO persistResult(Long taskId, Long userId, JsonNode result) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        applyResult(task, result);
+        saveSources(task.getId(), result.path("sources"));
+        saveVersion(task, "智能体完成调研、写作与审校");
+        task.setStatus("ready");
+        task.setStage("review");
+        task.setUpdatedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
+        return get(taskId, userId);
+    }
+
+    private void markFailed(Long taskId, Long userId, String errorMessage) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        task.setStatus("failed");
+        task.setStage("analyze");
+        task.setErrorMessage(errorMessage);
+        task.setUpdatedAt(LocalDateTime.now());
+        taskMapper.updateById(task);
     }
 
     public BlogAgentTaskVO get(Long taskId, Long userId) {
