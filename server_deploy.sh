@@ -30,7 +30,7 @@ docker run -d \
   --restart unless-stopped \
   -p 30002:30002 \
   -e SPRING_PROFILES_ACTIVE=prod \
-  -e SPRING_DATASOURCE_URL="jdbc:mysql://您的数据库地址:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true" \
+  -e SPRING_DATASOURCE_URL="jdbc:mysql://您的数据库地址:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&connectionTimeZone=Asia%2FShanghai&forceConnectionTimeZoneToSession=true" \
   -e SPRING_DATASOURCE_USERNAME="root" \
   -e SPRING_DATASOURCE_PASSWORD="您的密码" \
   -e RESEND_API_KEY="您的 Resend API Key" \
