@@ -3,12 +3,14 @@ package com.xander.lab.config;
 import com.xander.lab.common.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.stream.Collectors;
 
@@ -23,6 +25,19 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * Domain services use ResponseStatusException for explicit 4xx semantics.
+     * Preserve the shared Result envelope instead of falling through to the
+     * generic RuntimeException handler.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<Result<Void>> handleResponseStatusException(ResponseStatusException ex) {
+        int status = ex.getStatusCode().value();
+        String message = ex.getReason() == null ? "请求处理失败" : ex.getReason();
+        return ResponseEntity.status(ex.getStatusCode())
+                .body(Result.error(status, message));
+    }
 
     /**
      * 参数类型转换失败

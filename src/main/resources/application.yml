@@ -32,6 +32,9 @@ spring:
       mail:
         smtp:
           auth: true
+          connectiontimeout: 10000
+          timeout: 15000
+          writetimeout: 15000
           ssl:
             enable: true
           starttls:
@@ -106,4 +109,16 @@ blog:
     image-model: ${BLOG_AGENT_IMAGE_MODEL:}
     image-size: ${BLOG_AGENT_IMAGE_SIZE:1536x1024}
     max-illustrations: ${BLOG_AGENT_MAX_ILLUSTRATIONS:3}
+
+# The database migration must be applied before enabling the scheduler.
+email-reminder:
+  enabled: ${EMAIL_REMINDER_ENABLED:false}
+  poll-interval-ms: ${EMAIL_REMINDER_POLL_INTERVAL_MS:10000}
+  initial-delay-ms: ${EMAIL_REMINDER_INITIAL_DELAY_MS:15000}
+  claim-timeout-ms: ${EMAIL_REMINDER_CLAIM_TIMEOUT_MS:600000}
+  batch-size: ${EMAIL_REMINDER_BATCH_SIZE:20}
+  minimum-lead-seconds: ${EMAIL_REMINDER_MINIMUM_LEAD_SECONDS:30}
+  max-active-per-user: ${EMAIL_REMINDER_MAX_ACTIVE_PER_USER:50}
+  max-created-per-day: ${EMAIL_REMINDER_MAX_CREATED_PER_DAY:20}
+  display-zone: ${EMAIL_REMINDER_DISPLAY_ZONE:Asia/Shanghai}
 

@@ -36,6 +36,10 @@ public class AuthInterceptor implements HandlerInterceptor {
             "POST:/api/blog-agent/tasks/*",
             // Agent tasks contain private user material, so their reads are protected too.
             "GET:/api/blog-agent/tasks/*",
+            "GET:/api/email-reminders",
+            "POST:/api/email-reminders",
+            "PATCH:/api/email-reminders/*",
+            "DELETE:/api/email-reminders/*",
             "POST:/api/component/items",
             "POST:/api/studio/upload",
             "POST:/api/studio/save"
