@@ -9,11 +9,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
@@ -36,8 +35,7 @@ class EmailReminderSchedulerTest {
     void setUp() {
         scheduler = new EmailReminderScheduler(
                 taskMapper,
-                mailService,
-                Clock.fixed(NOW, ZoneOffset.UTC)
+                mailService
         );
         ReflectionTestUtils.setField(scheduler, "batchSize", 20);
         ReflectionTestUtils.setField(scheduler, "claimTimeoutMs", 600_000L);
@@ -46,7 +44,7 @@ class EmailReminderSchedulerTest {
     }
 
     @Test
-    void dispatchUsesUtcClockForDueQueryAndStateTransitions() {
+    void dispatchLetsMysqlEvaluateDueTimeAndStateTimestamps() {
         EmailReminderTask task = new EmailReminderTask();
         task.setId(11L);
         task.setRecipientEmail("recipient@example.com");
@@ -54,27 +52,24 @@ class EmailReminderSchedulerTest {
         task.setMessage("Message");
         task.setScheduledAt(NOW);
 
-        when(taskMapper.selectDueTasks(NOW, NOW.minusSeconds(30), 20))
+        when(taskMapper.selectDueTasks(30_000L, 20))
                 .thenReturn(List.of(task));
         when(taskMapper.claimForSending(
-                org.mockito.ArgumentMatchers.eq(11L),
-                anyString(),
-                org.mockito.ArgumentMatchers.eq(NOW)
+                eq(11L),
+                anyString()
         )).thenReturn(1);
         when(taskMapper.markSent(
-                org.mockito.ArgumentMatchers.eq(11L),
-                anyString(),
-                org.mockito.ArgumentMatchers.eq(NOW)
+                eq(11L),
+                anyString()
         )).thenReturn(1);
 
         scheduler.dispatchDueReminders();
 
         verify(taskMapper).failStaleClaims(
-                NOW.minusMillis(600_000L),
-                NOW,
+                600_000L,
                 "发送进程意外中断，任务已停止以避免重复发送，请手动恢复后重试"
         );
-        verify(taskMapper).selectDueTasks(NOW, NOW.minusSeconds(30), 20);
+        verify(taskMapper).selectDueTasks(30_000L, 20);
         verify(mailService).sendReminderMail(
                 "recipient@example.com",
                 "Reminder",
@@ -93,18 +88,16 @@ class EmailReminderSchedulerTest {
         task.setScheduledAt(NOW);
         task.setSendAttempts(0);
 
-        when(taskMapper.selectDueTasks(NOW, NOW.minusSeconds(30), 20))
+        when(taskMapper.selectDueTasks(30_000L, 20))
                 .thenReturn(List.of(task));
         when(taskMapper.claimForSending(
-                org.mockito.ArgumentMatchers.eq(12L),
-                anyString(),
-                org.mockito.ArgumentMatchers.eq(NOW)
+                eq(12L),
+                anyString()
         )).thenReturn(1);
         when(taskMapper.requeueAfterFailure(
-                org.mockito.ArgumentMatchers.eq(12L),
+                eq(12L),
                 anyString(),
-                org.mockito.ArgumentMatchers.eq("temporary SMTP failure"),
-                org.mockito.ArgumentMatchers.eq(NOW)
+                eq("temporary SMTP failure")
         )).thenReturn(1);
         doThrow(new RuntimeException("temporary SMTP failure"))
                 .when(mailService)
@@ -118,10 +111,9 @@ class EmailReminderSchedulerTest {
         scheduler.dispatchDueReminders();
 
         verify(taskMapper).requeueAfterFailure(
-                org.mockito.ArgumentMatchers.eq(12L),
+                eq(12L),
                 anyString(),
-                org.mockito.ArgumentMatchers.eq("temporary SMTP failure"),
-                org.mockito.ArgumentMatchers.eq(NOW)
+                eq("temporary SMTP failure")
         );
     }
 }

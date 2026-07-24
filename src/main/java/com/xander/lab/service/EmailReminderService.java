@@ -12,9 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.Clock;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
 
@@ -31,7 +29,6 @@ public class EmailReminderService {
     private static final String UNAUTHORIZED_MESSAGE = "未登录或登录已过期";
 
     private final EmailReminderTaskMapper taskMapper;
-    private final Clock clock;
 
     @Value("${mail.from}")
     private String senderEmail;
@@ -76,18 +73,17 @@ public class EmailReminderService {
             }
         }
 
-        Instant now = clock.instant();
         Instant scheduledAt = request.getScheduledAt().toInstant();
-        if (scheduledAt.isBefore(now.plusSeconds(Math.max(1, minimumLeadSeconds)))) {
+        if (!taskMapper.isScheduledAtLeastLeadTime(
+                scheduledAt,
+                Math.max(1, minimumLeadSeconds)
+        )) {
             throw new IllegalArgumentException(
                     "发送时间至少需要晚于当前时间 " + Math.max(1, minimumLeadSeconds) + " 秒"
             );
         }
 
-        long activeCount = taskMapper.selectCount(new LambdaQueryWrapper<EmailReminderTask>()
-                .eq(EmailReminderTask::getUserId, userId)
-                .isNull(EmailReminderTask::getDeletedAt)
-                .in(EmailReminderTask::getStatus, STATUS_PENDING, STATUS_PAUSED, STATUS_SENDING));
+        long activeCount = taskMapper.countActiveTasks(userId);
         if (activeCount >= maxActivePerUser) {
             throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
@@ -95,9 +91,7 @@ public class EmailReminderService {
             );
         }
 
-        long dailyCreatedCount = taskMapper.selectCount(new LambdaQueryWrapper<EmailReminderTask>()
-                .eq(EmailReminderTask::getUserId, userId)
-                .ge(EmailReminderTask::getCreatedAt, now.minus(1, ChronoUnit.DAYS)));
+        long dailyCreatedCount = taskMapper.countCreatedInPastDay(userId);
         if (dailyCreatedCount >= maxCreatedPerDay) {
             throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS,
@@ -119,10 +113,12 @@ public class EmailReminderService {
         task.setScheduledAt(scheduledAt);
         task.setStatus(STATUS_PENDING);
         task.setSendAttempts(0);
-        task.setCreatedAt(now);
-        task.setUpdatedAt(now);
         taskMapper.insert(task);
-        return toVO(task);
+        EmailReminderTask created = taskMapper.selectById(task.getId());
+        if (created == null) {
+            throw new IllegalStateException("定时邮件任务创建后无法读取");
+        }
+        return toVO(created);
     }
 
     @Transactional
@@ -135,21 +131,20 @@ public class EmailReminderService {
             return toVO(task);
         }
 
-        Instant now = clock.instant();
         int updated;
         if (STATUS_PAUSED.equals(targetStatus)) {
             if (!STATUS_PENDING.equals(task.getStatus())) {
                 throw conflict("当前状态无法暂停");
             }
-            updated = taskMapper.pauseOwnedTask(taskId, userId, now);
+            updated = taskMapper.pauseOwnedTask(taskId, userId);
         } else if (STATUS_PENDING.equals(targetStatus)) {
             if (!STATUS_PAUSED.equals(task.getStatus()) && !STATUS_FAILED.equals(task.getStatus())) {
                 throw conflict("当前状态无法恢复");
             }
-            if (!task.getScheduledAt().isAfter(now)) {
+            if (!taskMapper.isScheduledInFuture(taskId, userId)) {
                 throw new IllegalArgumentException("计划发送时间已过，请删除后重新创建任务");
             }
-            updated = taskMapper.resumeOwnedTask(taskId, userId, now);
+            updated = taskMapper.resumeOwnedTask(taskId, userId);
         } else {
             throw new IllegalArgumentException("任务状态只支持 PENDING 或 PAUSED");
         }
@@ -168,7 +163,7 @@ public class EmailReminderService {
         if (STATUS_SENDING.equals(task.getStatus())) {
             throw conflict("邮件正在发送，暂时不能删除");
         }
-        if (taskMapper.deleteOwnedTaskUnlessSending(taskId, userId, clock.instant()) != 1) {
+        if (taskMapper.deleteOwnedTaskUnlessSending(taskId, userId) != 1) {
             EmailReminderTask latest = requireOwnedTask(taskId, userId);
             if (STATUS_SENDING.equals(latest.getStatus())) {
                 throw conflict("邮件正在发送，暂时不能删除");

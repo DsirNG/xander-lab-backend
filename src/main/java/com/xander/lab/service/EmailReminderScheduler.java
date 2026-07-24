@@ -9,8 +9,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import java.time.Clock;
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,7 +28,6 @@ public class EmailReminderScheduler {
 
     private final EmailReminderTaskMapper taskMapper;
     private final MailService mailService;
-    private final Clock clock;
 
     @Value("${email-reminder.batch-size:20}")
     private int batchSize;
@@ -49,11 +46,9 @@ public class EmailReminderScheduler {
             initialDelayString = "${email-reminder.initial-delay-ms:15000}"
     )
     public void dispatchDueReminders() {
-        Instant now = clock.instant();
         try {
             int recovered = taskMapper.failStaleClaims(
-                    now.minusMillis(claimTimeoutMs),
-                    now,
+                    Math.max(1, claimTimeoutMs),
                     STALE_CLAIM_ERROR
             );
             if (recovered > 0) {
@@ -61,8 +56,7 @@ public class EmailReminderScheduler {
             }
 
             List<EmailReminderTask> dueTasks = taskMapper.selectDueTasks(
-                    now,
-                    now.minusMillis(Math.max(1, retryDelayMs)),
+                    Math.max(1, retryDelayMs),
                     Math.max(1, batchSize)
             );
             for (EmailReminderTask task : dueTasks) {
@@ -74,9 +68,8 @@ public class EmailReminderScheduler {
     }
 
     private void dispatchOne(EmailReminderTask task) {
-        Instant claimedAt = clock.instant();
         String processingToken = UUID.randomUUID().toString();
-        if (taskMapper.claimForSending(task.getId(), processingToken, claimedAt) != 1) {
+        if (taskMapper.claimForSending(task.getId(), processingToken) != 1) {
             return;
         }
 
@@ -89,26 +82,23 @@ public class EmailReminderScheduler {
                     task.getMessage(),
                     task.getScheduledAt()
             );
-            if (taskMapper.markSent(task.getId(), processingToken, clock.instant()) != 1) {
+            if (taskMapper.markSent(task.getId(), processingToken) != 1) {
                 log.error("[EmailReminder] 邮件已发送但任务完成状态写入失败：taskId={}", task.getId());
             }
         } catch (Exception e) {
             String errorMessage = limitError(rootMessage(e));
             int attempt = (task.getSendAttempts() == null ? 0 : task.getSendAttempts()) + 1;
             boolean shouldRetry = attempt < Math.max(1, maxSendAttempts);
-            Instant failedAt = clock.instant();
             int updated = shouldRetry
                     ? taskMapper.requeueAfterFailure(
                             task.getId(),
                             processingToken,
-                            errorMessage,
-                            failedAt
+                            errorMessage
                     )
                     : taskMapper.markFailed(
                             task.getId(),
                             processingToken,
-                            errorMessage,
-                            failedAt
+                            errorMessage
                     );
             if (updated != 1) {
                 log.error("[EmailReminder] 发送失败且任务错误状态写入失败：taskId={}, reason={}",
