@@ -7,7 +7,7 @@ spring:
   application:
     name: xander-lab-backend
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8&allowPublicKeyRetrieval=true}
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:your_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -25,7 +25,7 @@ spring:
     host: smtp.resend.com
     port: 465
     username: resend
-    password: ${RESEND_API_KEY:}
+    password: ${SPRING_MAIL_PASSWORD:${RESEND_API_KEY:}}
     protocol: smtp
     default-encoding: UTF-8
     properties:
@@ -41,19 +41,18 @@ spring:
             enable: false
             required: false
 
-mail:
-  from: ${MAIL_FROM:noreply@mail.dsircity.top}
-
   servlet:
     multipart:
       max-file-size: 100MB
       max-request-size: 200MB
 
   jackson:
-    date-format: yyyy-MM-dd HH:mm:ss
-    time-zone: GMT+8
+    time-zone: UTC
     deserialization:
       fail-on-unknown-properties: false
+
+mail:
+  from: ${MAIL_FROM:noreply@mail.dsircity.top}
 
 # 阿里云OSS配置
 aliyun:
@@ -112,11 +111,13 @@ blog:
 
 # The database migration must be applied before enabling the scheduler.
 email-reminder:
-  enabled: ${EMAIL_REMINDER_ENABLED:false}
-  poll-interval-ms: ${EMAIL_REMINDER_POLL_INTERVAL_MS:10000}
-  initial-delay-ms: ${EMAIL_REMINDER_INITIAL_DELAY_MS:15000}
+  enabled: ${EMAIL_REMINDER_ENABLED:true}
+  poll-interval-ms: ${EMAIL_REMINDER_POLL_INTERVAL_MS:1000}
+  initial-delay-ms: ${EMAIL_REMINDER_INITIAL_DELAY_MS:1000}
   claim-timeout-ms: ${EMAIL_REMINDER_CLAIM_TIMEOUT_MS:600000}
   batch-size: ${EMAIL_REMINDER_BATCH_SIZE:20}
+  max-send-attempts: ${EMAIL_REMINDER_MAX_SEND_ATTEMPTS:3}
+  retry-delay-ms: ${EMAIL_REMINDER_RETRY_DELAY_MS:30000}
   minimum-lead-seconds: ${EMAIL_REMINDER_MINIMUM_LEAD_SECONDS:30}
   max-active-per-user: ${EMAIL_REMINDER_MAX_ACTIVE_PER_USER:50}
   max-created-per-day: ${EMAIL_REMINDER_MAX_CREATED_PER_DAY:20}

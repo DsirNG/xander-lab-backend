@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +30,7 @@ public class EmailReminderScheduler {
 
     private final EmailReminderTaskMapper taskMapper;
     private final MailService mailService;
+    private final Clock clock;
 
     @Value("${email-reminder.batch-size:20}")
     private int batchSize;
@@ -36,12 +38,18 @@ public class EmailReminderScheduler {
     @Value("${email-reminder.claim-timeout-ms:600000}")
     private long claimTimeoutMs;
 
+    @Value("${email-reminder.max-send-attempts:3}")
+    private int maxSendAttempts;
+
+    @Value("${email-reminder.retry-delay-ms:30000}")
+    private long retryDelayMs;
+
     @Scheduled(
             fixedDelayString = "${email-reminder.poll-interval-ms:10000}",
             initialDelayString = "${email-reminder.initial-delay-ms:15000}"
     )
     public void dispatchDueReminders() {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         try {
             int recovered = taskMapper.failStaleClaims(
                     now.minusMillis(claimTimeoutMs),
@@ -52,7 +60,11 @@ public class EmailReminderScheduler {
                 log.warn("[EmailReminder] 已将 {} 个超时发送任务标记为失败", recovered);
             }
 
-            List<EmailReminderTask> dueTasks = taskMapper.selectDueTasks(now, Math.max(1, batchSize));
+            List<EmailReminderTask> dueTasks = taskMapper.selectDueTasks(
+                    now,
+                    now.minusMillis(Math.max(1, retryDelayMs)),
+                    Math.max(1, batchSize)
+            );
             for (EmailReminderTask task : dueTasks) {
                 dispatchOne(task);
             }
@@ -62,7 +74,7 @@ public class EmailReminderScheduler {
     }
 
     private void dispatchOne(EmailReminderTask task) {
-        Instant claimedAt = Instant.now();
+        Instant claimedAt = clock.instant();
         String processingToken = UUID.randomUUID().toString();
         if (taskMapper.claimForSending(task.getId(), processingToken, claimedAt) != 1) {
             return;
@@ -77,20 +89,33 @@ public class EmailReminderScheduler {
                     task.getMessage(),
                     task.getScheduledAt()
             );
-            if (taskMapper.markSent(task.getId(), processingToken, Instant.now()) != 1) {
+            if (taskMapper.markSent(task.getId(), processingToken, clock.instant()) != 1) {
                 log.error("[EmailReminder] 邮件已发送但任务完成状态写入失败：taskId={}", task.getId());
             }
         } catch (Exception e) {
             String errorMessage = limitError(rootMessage(e));
-            int updated = taskMapper.markFailed(
-                    task.getId(),
-                    processingToken,
-                    errorMessage,
-                    Instant.now()
-            );
+            int attempt = (task.getSendAttempts() == null ? 0 : task.getSendAttempts()) + 1;
+            boolean shouldRetry = attempt < Math.max(1, maxSendAttempts);
+            Instant failedAt = clock.instant();
+            int updated = shouldRetry
+                    ? taskMapper.requeueAfterFailure(
+                            task.getId(),
+                            processingToken,
+                            errorMessage,
+                            failedAt
+                    )
+                    : taskMapper.markFailed(
+                            task.getId(),
+                            processingToken,
+                            errorMessage,
+                            failedAt
+                    );
             if (updated != 1) {
                 log.error("[EmailReminder] 发送失败且任务错误状态写入失败：taskId={}, reason={}",
                         task.getId(), errorMessage);
+            } else if (shouldRetry) {
+                log.warn("[EmailReminder] 第 {} 次发送失败，将自动重试：taskId={}, reason={}",
+                        attempt, task.getId(), errorMessage);
             } else {
                 log.warn("[EmailReminder] 发送失败：taskId={}, reason={}", task.getId(), errorMessage);
             }

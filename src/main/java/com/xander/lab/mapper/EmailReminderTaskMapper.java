@@ -22,10 +22,12 @@ public interface EmailReminderTaskMapper extends BaseMapper<EmailReminderTask> {
             WHERE status = 'PENDING'
               AND deleted_at IS NULL
               AND scheduled_at <= #{now}
+              AND (send_attempts = 0 OR updated_at <= #{retryBefore})
             ORDER BY scheduled_at ASC, id ASC
             LIMIT #{batchSize}
             """)
     List<EmailReminderTask> selectDueTasks(@Param("now") Instant now,
+                                           @Param("retryBefore") Instant retryBefore,
                                            @Param("batchSize") int batchSize);
 
     @Update("""
@@ -78,6 +80,23 @@ public interface EmailReminderTaskMapper extends BaseMapper<EmailReminderTask> {
                    @Param("processingToken") String processingToken,
                    @Param("errorMessage") String errorMessage,
                    @Param("failedAt") Instant failedAt);
+
+    @Update("""
+            UPDATE email_reminder_task
+            SET status = 'PENDING',
+                processing_token = NULL,
+                claimed_at = NULL,
+                error_message = #{errorMessage},
+                updated_at = #{retryAt}
+            WHERE id = #{id}
+              AND deleted_at IS NULL
+              AND status = 'SENDING'
+              AND processing_token = #{processingToken}
+            """)
+    int requeueAfterFailure(@Param("id") Long id,
+                            @Param("processingToken") String processingToken,
+                            @Param("errorMessage") String errorMessage,
+                            @Param("retryAt") Instant retryAt);
 
     @Update("""
             UPDATE email_reminder_task

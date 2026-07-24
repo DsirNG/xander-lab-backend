@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -30,6 +31,7 @@ public class EmailReminderService {
     private static final String UNAUTHORIZED_MESSAGE = "未登录或登录已过期";
 
     private final EmailReminderTaskMapper taskMapper;
+    private final Clock clock;
 
     @Value("${mail.from}")
     private String senderEmail;
@@ -74,7 +76,7 @@ public class EmailReminderService {
             }
         }
 
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant scheduledAt = request.getScheduledAt().toInstant();
         if (scheduledAt.isBefore(now.plusSeconds(Math.max(1, minimumLeadSeconds)))) {
             throw new IllegalArgumentException(
@@ -133,7 +135,7 @@ public class EmailReminderService {
             return toVO(task);
         }
 
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         int updated;
         if (STATUS_PAUSED.equals(targetStatus)) {
             if (!STATUS_PENDING.equals(task.getStatus())) {
@@ -166,7 +168,7 @@ public class EmailReminderService {
         if (STATUS_SENDING.equals(task.getStatus())) {
             throw conflict("邮件正在发送，暂时不能删除");
         }
-        if (taskMapper.deleteOwnedTaskUnlessSending(taskId, userId, Instant.now()) != 1) {
+        if (taskMapper.deleteOwnedTaskUnlessSending(taskId, userId, clock.instant()) != 1) {
             EmailReminderTask latest = requireOwnedTask(taskId, userId);
             if (STATUS_SENDING.equals(latest.getStatus())) {
                 throw conflict("邮件正在发送，暂时不能删除");

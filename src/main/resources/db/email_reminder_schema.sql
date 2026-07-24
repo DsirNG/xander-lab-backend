@@ -1,7 +1,7 @@
 -- Scheduled email reminders.
--- All timestamp columns are TIMESTAMP so the database stores UTC instants and
--- converts only at the connection boundary. API values always include an
--- explicit ISO-8601 offset.
+-- The application forces every JDBC session to UTC. All timestamp columns
+-- therefore store and compare UTC instants without connection-local shifts.
+-- API values always include an explicit ISO-8601 offset.
 CREATE TABLE IF NOT EXISTS `email_reminder_task` (
   `id` BIGINT NOT NULL AUTO_INCREMENT,
   `user_id` BIGINT NOT NULL,
