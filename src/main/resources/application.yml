@@ -25,7 +25,7 @@ spring:
     host: smtp.resend.com
     port: 465
     username: resend
-    password: ${SPRING_MAIL_PASSWORD:${RESEND_API_KEY:}}
+    password: ${RESEND_API_KEY:}
     protocol: smtp
     default-encoding: UTF-8
     properties:
@@ -47,6 +47,7 @@ spring:
       max-request-size: 200MB
 
   jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
     time-zone: UTC
     deserialization:
       fail-on-unknown-properties: false

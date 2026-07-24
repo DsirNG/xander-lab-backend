@@ -34,7 +34,6 @@ docker run -d \
   -e SPRING_DATASOURCE_USERNAME="root" \
   -e SPRING_DATASOURCE_PASSWORD="您的密码" \
   -e RESEND_API_KEY="您的 Resend API Key" \
-  -e SPRING_MAIL_PASSWORD="您的 Resend API Key" \
   -e MAIL_FROM="noreply@mail.dsircity.top" \
   -e EMAIL_REMINDER_ENABLED=true \
   -e EMAIL_REMINDER_POLL_INTERVAL_MS=1000 \
