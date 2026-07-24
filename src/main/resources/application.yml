@@ -22,10 +22,10 @@ spring:
 
   # 邮件配置
   mail:
-    host: smtp.qq.com
+    host: smtp.resend.com
     port: 587
-    username: ${SPRING_MAIL_USERNAME:your_email@foxmail.com}
-    password: ${SPRING_MAIL_PASSWORD:your_mail_authorization_code}
+    username: resend
+    password: ${RESEND_API_KEY:}
     protocol: smtp
     default-encoding: UTF-8
     properties:
@@ -35,6 +35,9 @@ spring:
           starttls:
             enable: true
             required: true
+
+mail:
+  from: ${MAIL_FROM:noreply@mail.dsircity.top}
 
   servlet:
     multipart:

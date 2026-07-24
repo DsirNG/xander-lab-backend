@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +25,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class AuthService {
 
+    private static final SecureRandom CODE_RANDOM = new SecureRandom();
+
     private final JwtUtil jwtUtil;
     private final MailService mailService;
     private final UserMapper userMapper;
@@ -34,7 +37,7 @@ public class AuthService {
      */
     public void sendCode(String email) {
         // 生成 6 位随机验证码
-        String code = String.valueOf((int) ((Math.random() * 9 + 1) * 100000));
+        String code = String.valueOf(100000 + CODE_RANDOM.nextInt(900000));
         
         // 存入 Redis (有效期 5 分钟)
         String key = Constants.REDIS_CODE_PREFIX + email;
@@ -43,7 +46,7 @@ public class AuthService {
         // 发送邮件
         mailService.sendVerificationCode(email, code);
         
-        log.info("[Auth] 验证码已发送至 {}: {}", email, code);
+        log.info("[Auth] 验证码已发送至 {}", email);
     }
 
     /**

@@ -33,8 +33,8 @@ docker run -d \
   -e SPRING_DATASOURCE_URL="jdbc:mysql://您的数据库地址:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8" \
   -e SPRING_DATASOURCE_USERNAME="root" \
   -e SPRING_DATASOURCE_PASSWORD="您的密码" \
-  -e SPRING_MAIL_USERNAME="您的邮箱" \
-  -e SPRING_MAIL_PASSWORD="您的授权码" \
+  -e RESEND_API_KEY="您的 Resend API Key" \
+  -e MAIL_FROM="noreply@mail.dsircity.top" \
   -e ALIYUN_OSS_ACCESS_KEY_ID="您的ID" \
   -e ALIYUN_OSS_ACCESS_KEY_SECRET="您的Secret" \
   -e JWT_SECRET="您的JWT密钥" \
