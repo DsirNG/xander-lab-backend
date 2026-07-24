@@ -23,7 +23,7 @@ spring:
   # 邮件配置
   mail:
     host: smtp.resend.com
-    port: 587
+    port: 465
     username: resend
     password: ${RESEND_API_KEY:}
     protocol: smtp
@@ -32,9 +32,11 @@ spring:
       mail:
         smtp:
           auth: true
-          starttls:
+          ssl:
             enable: true
-            required: true
+          starttls:
+            enable: false
+            required: false
 
 mail:
   from: ${MAIL_FROM:noreply@mail.dsircity.top}
