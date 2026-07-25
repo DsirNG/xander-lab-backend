@@ -52,8 +52,8 @@ public class MailService {
     }
 
     /**
-     * Sends a branded reminder email. PLAIN content is escaped into the template;
-     * HTML content is rendered inside the selected layout template.
+     * PLAIN (no markup): body text only.
+     * HTML: custom HTML as-is, or wrapped by a selected layout template.
      */
     public void sendReminderMail(String to, String subject, String userMessage, Instant scheduledAt) {
         sendReminderMail(
@@ -61,20 +61,30 @@ public class MailService {
                 subject,
                 userMessage,
                 scheduledAt,
-                EmailReminderMailTemplates.CONTENT_PLAIN,
-                EmailReminderMailTemplates.TEMPLATE_CLASSIC
+                null,
+                EmailReminderMailTemplates.TEMPLATE_NONE
         );
     }
 
     public void sendReminderMail(String to, String subject, String userMessage, Instant scheduledAt,
                                  String contentType, String templateId) {
         try {
+            String normalizedType = EmailReminderMailTemplates.resolveEffectiveContentType(
+                    contentType, templateId, userMessage
+            );
+            String normalizedTemplate = EmailReminderMailTemplates.normalizeTemplateId(templateId);
+
+            if (EmailReminderMailTemplates.CONTENT_PLAIN.equals(normalizedType)) {
+                String plainBody = userMessage == null ? "" : userMessage;
+                sendSimpleMail(to, subject, plainBody);
+                log.info("[Mail] 定时提醒发送成功：task recipient={}, contentType=PLAIN", to);
+                return;
+            }
+
             ZoneId displayZone = ZoneId.of(reminderDisplayZone);
             String formattedTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
                     .withZone(displayZone)
                     .format(scheduledAt);
-            String normalizedType = EmailReminderMailTemplates.normalizeContentType(contentType);
-            String normalizedTemplate = EmailReminderMailTemplates.normalizeTemplateId(templateId);
             String bodyHtml = EmailReminderMailTemplates.resolveBodyHtml(userMessage, normalizedType);
             String html = EmailReminderMailTemplates.buildHtml(
                     normalizedTemplate,
@@ -86,8 +96,12 @@ public class MailService {
             String plainText = EmailReminderMailTemplates.resolvePlainText(
                     userMessage,
                     normalizedType,
-                    formattedTime,
-                    displayZone.getId()
+                    EmailReminderMailTemplates.TEMPLATE_NONE.equals(normalizedTemplate)
+                            ? ""
+                            : formattedTime,
+                    EmailReminderMailTemplates.TEMPLATE_NONE.equals(normalizedTemplate)
+                            ? ""
+                            : displayZone.getId()
             );
 
             MimeMessage message = mailSender.createMimeMessage();
@@ -101,8 +115,8 @@ public class MailService {
             helper.setSubject(subject);
             helper.setText(plainText, html);
             mailSender.send(message);
-            log.info("[Mail] 定时提醒发送成功：task recipient={}, contentType={}, template={}",
-                    to, normalizedType, normalizedTemplate);
+            log.info("[Mail] 定时提醒发送成功：task recipient={}, contentType=HTML, template={}",
+                    to, normalizedTemplate);
         } catch (Exception e) {
             log.error("[Mail] 定时提醒发送失败：recipient={}, reason={}", to, e.getMessage());
             throw new RuntimeException("定时提醒邮件发送失败", e);

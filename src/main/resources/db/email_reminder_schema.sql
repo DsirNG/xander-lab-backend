@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS `email_reminder_task` (
   `subject` VARCHAR(200) NOT NULL COMMENT '邮件主题',
   `message` TEXT NOT NULL COMMENT '邮件正文（纯文本或 HTML）',
   `content_type` VARCHAR(16) NOT NULL DEFAULT 'PLAIN' COMMENT '内容格式：PLAIN/HTML',
-  `template_id` VARCHAR(32) NOT NULL DEFAULT 'classic' COMMENT '邮件版式模板：classic/minimal/card/notice',
+  `template_id` VARCHAR(32) NOT NULL DEFAULT 'none' COMMENT '邮件版式模板：none/classic/minimal/card/notice',
   `frequency` VARCHAR(16) NOT NULL DEFAULT 'ONCE' COMMENT '发送频率：ONCE/DAILY/WEEKLY/MONTHLY/CUSTOM',
   `timezone` VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai' COMMENT 'IANA 时区，如 Asia/Shanghai',
   `send_time` VARCHAR(5) NULL COMMENT '周期发送本地时刻 HH:mm',
