@@ -110,6 +110,13 @@ blog:
     image-size: ${BLOG_AGENT_IMAGE_SIZE:1536x1024}
     max-illustrations: ${BLOG_AGENT_MAX_ILLUSTRATIONS:3}
 
+# Image → procedural Three.js. Blank fields fall back to blog.agent credentials.
+img2three:
+  agent:
+    base-url: ${IMG2THREE_AGENT_BASE_URL:}
+    api-key: ${IMG2THREE_AGENT_API_KEY:}
+    model: ${IMG2THREE_AGENT_MODEL:}
+
 # The database migration must be applied before enabling the scheduler.
 email-reminder:
   enabled: ${EMAIL_REMINDER_ENABLED:true}
