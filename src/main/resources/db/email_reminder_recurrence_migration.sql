@@ -25,11 +25,11 @@ SET @sql_freq = IF(
       AND COLUMN_NAME = 'frequency'
   ),
   'ALTER TABLE `email_reminder_task`
-     ADD COLUMN `frequency` VARCHAR(16) NOT NULL DEFAULT ''ONCE'' AFTER `message`,
-     ADD COLUMN `timezone` VARCHAR(64) NOT NULL DEFAULT ''Asia/Shanghai'' AFTER `frequency`,
-     ADD COLUMN `send_time` VARCHAR(5) NULL AFTER `timezone`,
-     ADD COLUMN `recurrence_day` INT NULL AFTER `send_time`,
-     ADD COLUMN `interval_days` INT NULL AFTER `recurrence_day`',
+     ADD COLUMN `frequency` VARCHAR(16) NOT NULL DEFAULT ''ONCE'' COMMENT ''发送频率：ONCE/DAILY/WEEKLY/MONTHLY/CUSTOM'' AFTER `message`,
+     ADD COLUMN `timezone` VARCHAR(64) NOT NULL DEFAULT ''Asia/Shanghai'' COMMENT ''IANA 时区，如 Asia/Shanghai'' AFTER `frequency`,
+     ADD COLUMN `send_time` VARCHAR(5) NULL COMMENT ''周期发送本地时刻 HH:mm'' AFTER `timezone`,
+     ADD COLUMN `recurrence_day` INT NULL COMMENT ''周期日：周=ISO 1-7，月=1-31'' AFTER `send_time`,
+     ADD COLUMN `interval_days` INT NULL COMMENT ''自定义间隔天数'' AFTER `recurrence_day`',
   'SELECT 1'
 );
 PREPARE stmt_freq FROM @sql_freq;

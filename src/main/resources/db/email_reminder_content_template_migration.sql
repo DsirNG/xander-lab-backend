@@ -24,8 +24,8 @@ SET @sql_content = IF(
       AND COLUMN_NAME = 'content_type'
   ),
   'ALTER TABLE `email_reminder_task`
-     ADD COLUMN `content_type` VARCHAR(16) NOT NULL DEFAULT ''PLAIN'' AFTER `message`,
-     ADD COLUMN `template_id` VARCHAR(32) NOT NULL DEFAULT ''classic'' AFTER `content_type`',
+     ADD COLUMN `content_type` VARCHAR(16) NOT NULL DEFAULT ''PLAIN'' COMMENT ''内容格式：PLAIN/HTML'' AFTER `message`,
+     ADD COLUMN `template_id` VARCHAR(32) NOT NULL DEFAULT ''classic'' COMMENT ''邮件版式模板：classic/minimal/card/notice'' AFTER `content_type`',
   'SELECT 1'
 );
 PREPARE stmt_content FROM @sql_content;

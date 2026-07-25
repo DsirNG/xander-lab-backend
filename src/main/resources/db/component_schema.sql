@@ -40,6 +40,7 @@ CREATE TABLE `component_item` (
   `source_code`    LONGTEXT      NULL COMMENT '组件原始代码 (参考/阅读用)',
   `library_code`   LONGTEXT      NULL COMMENT '沙箱底层依赖代码 (Provider/Hooks)',
   `wrapper_code`   LONGTEXT      NULL COMMENT '沙箱环境包裹代码 (HOC/Wrapper)',
+  `css_code`       TEXT          NULL COMMENT '组件附加 CSS 代码',
   `icon_key`       VARCHAR(64)   NULL COMMENT '图标标识符',
   `sort`           INT           NOT NULL DEFAULT 0 COMMENT '排序权重',
   `status`         TINYINT       NOT NULL DEFAULT 1 COMMENT '状态: 1=启用, 0=审核中, -1=禁用',
