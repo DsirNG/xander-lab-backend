@@ -1,6 +1,9 @@
 package com.xander.lab.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.dto.emailreminder.EmailReminderCreateRequest;
+import com.xander.lab.dto.emailreminder.EmailReminderListResult;
 import com.xander.lab.entity.EmailReminderTask;
 import com.xander.lab.mapper.EmailReminderTaskMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +40,10 @@ class EmailReminderServiceTest {
         ReflectionTestUtils.setField(service, "minimumLeadSeconds", 30L);
         ReflectionTestUtils.setField(service, "maxActivePerUser", 50L);
         ReflectionTestUtils.setField(service, "maxCreatedPerDay", 20L);
+    }
 
+    @Test
+    void createLetsMysqlPopulateSystemTimestamps() {
         when(taskMapper.lockUserForReminderCreation(7L)).thenReturn(7L);
         when(taskMapper.isScheduledAtLeastLeadTime(any(Instant.class), eq(30L)))
                 .thenReturn(true);
@@ -48,10 +54,7 @@ class EmailReminderServiceTest {
             task.setId(81L);
             return 1;
         });
-    }
 
-    @Test
-    void createLetsMysqlPopulateSystemTimestamps() {
         EmailReminderCreateRequest request = new EmailReminderCreateRequest();
         request.setClientRequestId("request-1");
         request.setRecipientEmail("USER@example.com");
@@ -92,5 +95,62 @@ class EmailReminderServiceTest {
         assertThat(result.getCreatedAt()).isEqualTo(NOW);
         assertThat(result.getUpdatedAt()).isEqualTo(NOW);
         verify(taskMapper).selectById(81L);
+    }
+
+    @Test
+    void listReturnsPagedResultWithStats() {
+        EmailReminderTask task = new EmailReminderTask();
+        task.setId(3L);
+        task.setRecipientEmail("a@example.com");
+        task.setSubject("Hello");
+        task.setMessage("Body");
+        task.setContentType("PLAIN");
+        task.setTemplateId("none");
+        task.setFrequency("ONCE");
+        task.setTimezone("Asia/Shanghai");
+        task.setScheduledAt(NOW);
+        task.setStatus(EmailReminderService.STATUS_PENDING);
+        task.setSendAttempts(0);
+        task.setCreatedAt(NOW);
+        task.setUpdatedAt(NOW);
+
+        Page<EmailReminderTask> page = new Page<>(2, 10, 15);
+        page.setRecords(java.util.List.of(task));
+        when(taskMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenReturn(page);
+        when(taskMapper.selectCount(any(LambdaQueryWrapper.class)))
+                .thenReturn(15L, 4L, 1L, 6L);
+
+        EmailReminderListResult result = service.list(7L, 2, 10, "PENDING", "hello");
+
+        assertThat(result.getCurrent()).isEqualTo(2);
+        assertThat(result.getSize()).isEqualTo(10);
+        assertThat(result.getTotal()).isEqualTo(15);
+        assertThat(result.getPages()).isEqualTo(2);
+        assertThat(result.isHasMore()).isFalse();
+        assertThat(result.getRecords()).hasSize(1);
+        assertThat(result.getRecords().get(0).getSubject()).isEqualTo("Hello");
+        assertThat(result.getStats().getTotal()).isEqualTo(15);
+        assertThat(result.getStats().getPending()).isEqualTo(4);
+        assertThat(result.getStats().getActive()).isEqualTo(5);
+        assertThat(result.getStats().getSent()).isEqualTo(6);
+        verify(taskMapper).selectPage(any(Page.class), any(LambdaQueryWrapper.class));
+    }
+
+    @Test
+    void listFallsBackToDefaultPageSizeWhenUnsupported() {
+        Page<EmailReminderTask> page = new Page<>(1, 10, 0);
+        page.setRecords(java.util.List.of());
+        when(taskMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class))).thenAnswer(invocation -> {
+            Page<?> requested = invocation.getArgument(0);
+            assertThat(requested.getSize()).isEqualTo(10);
+            return page;
+        });
+        when(taskMapper.selectCount(any(LambdaQueryWrapper.class)))
+                .thenReturn(0L, 0L, 0L, 0L);
+
+        EmailReminderListResult result = service.list(7L, 1, 7, null, null);
+
+        assertThat(result.getSize()).isEqualTo(10);
+        assertThat(result.getRecords()).isEmpty();
     }
 }

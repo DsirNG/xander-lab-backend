@@ -46,9 +46,26 @@ public class MailService {
     }
 
     public void sendVerificationCode(String email, String code) {
-        String subject = "【Xander Lab】登录验证码";
-        String content = "您的登录验证码为：" + code + "，有效期为 5 分钟。请勿泄露给他人。";
-        sendSimpleMail(email, subject, content);
+        String subject = LoginVerificationMailTemplates.buildSubject();
+        String plainText = LoginVerificationMailTemplates.buildPlainText(code);
+        String html = LoginVerificationMailTemplates.buildHtml(code);
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(
+                    message,
+                    MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name()
+            );
+            helper.setFrom(from);
+            helper.setTo(email);
+            helper.setSubject(subject);
+            helper.setText(plainText, html);
+            mailSender.send(message);
+            log.info("[Mail] 登录验证码发送成功：{} -> {}", from, email);
+        } catch (Exception e) {
+            log.error("[Mail] 登录验证码发送失败：{}", e.getMessage());
+            throw new RuntimeException("邮件发送失败，请稍后重试", e);
+        }
     }
 
     /**

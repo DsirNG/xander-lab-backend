@@ -3,6 +3,7 @@ package com.xander.lab.controller;
 import com.xander.lab.common.Result;
 import com.xander.lab.common.UserContext;
 import com.xander.lab.dto.emailreminder.EmailReminderCreateRequest;
+import com.xander.lab.dto.emailreminder.EmailReminderListResult;
 import com.xander.lab.dto.emailreminder.EmailReminderStatusUpdateRequest;
 import com.xander.lab.dto.emailreminder.EmailReminderTaskVO;
 import com.xander.lab.service.EmailReminderService;
@@ -15,9 +16,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/email-reminders")
@@ -27,8 +27,18 @@ public class EmailReminderController {
     private final EmailReminderService reminderService;
 
     @GetMapping
-    public Result<List<EmailReminderTaskVO>> list() {
-        return Result.success(reminderService.list(UserContext.getUserId()));
+    public Result<EmailReminderListResult> list(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String search) {
+        return Result.success(reminderService.list(
+                UserContext.getUserId(),
+                page,
+                size,
+                status,
+                search
+        ));
     }
 
     @PostMapping

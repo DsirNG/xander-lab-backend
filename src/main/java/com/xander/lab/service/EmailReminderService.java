@@ -1,7 +1,10 @@
 package com.xander.lab.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.dto.emailreminder.EmailReminderCreateRequest;
+import com.xander.lab.dto.emailreminder.EmailReminderListResult;
+import com.xander.lab.dto.emailreminder.EmailReminderStatsVO;
 import com.xander.lab.dto.emailreminder.EmailReminderTaskVO;
 import com.xander.lab.entity.EmailReminderTask;
 import com.xander.lab.mapper.EmailReminderTaskMapper;
@@ -14,8 +17,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +31,11 @@ public class EmailReminderService {
     public static final String STATUS_FAILED = "FAILED";
 
     private static final String UNAUTHORIZED_MESSAGE = "未登录或登录已过期";
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final Set<Integer> ALLOWED_PAGE_SIZES = Set.of(5, 10, 15, 20);
+    private static final Set<String> LIST_STATUSES = Set.of(
+            STATUS_PENDING, STATUS_PAUSED, STATUS_SENDING, STATUS_SENT, STATUS_FAILED
+    );
 
     private final EmailReminderTaskMapper taskMapper;
 
@@ -44,16 +52,79 @@ public class EmailReminderService {
     private long maxCreatedPerDay;
 
     @Transactional(readOnly = true)
-    public List<EmailReminderTaskVO> list(Long userId) {
+    public EmailReminderListResult list(
+            Long userId,
+            int page,
+            int size,
+            String status,
+            String search) {
         requireUser(userId);
-        return taskMapper.selectList(new LambdaQueryWrapper<EmailReminderTask>()
-                        .eq(EmailReminderTask::getUserId, userId)
-                        .isNull(EmailReminderTask::getDeletedAt)
-                        .orderByDesc(EmailReminderTask::getCreatedAt)
-                        .orderByDesc(EmailReminderTask::getId))
-                .stream()
-                .map(this::toVO)
-                .toList();
+
+        int safePage = Math.max(page, 1);
+        int safeSize = ALLOWED_PAGE_SIZES.contains(size) ? size : DEFAULT_PAGE_SIZE;
+        String statusFilter = normalizeListStatus(status);
+        String keyword = search == null ? "" : search.strip();
+
+        LambdaQueryWrapper<EmailReminderTask> wrapper = new LambdaQueryWrapper<EmailReminderTask>()
+                .eq(EmailReminderTask::getUserId, userId)
+                .isNull(EmailReminderTask::getDeletedAt)
+                .eq(statusFilter != null, EmailReminderTask::getStatus, statusFilter)
+                .and(!keyword.isEmpty(), q -> q
+                        .like(EmailReminderTask::getSubject, keyword)
+                        .or()
+                        .like(EmailReminderTask::getRecipientEmail, keyword))
+                .orderByDesc(EmailReminderTask::getCreatedAt)
+                .orderByDesc(EmailReminderTask::getId);
+
+        Page<EmailReminderTask> pageParam = new Page<>(safePage, safeSize);
+        Page<EmailReminderTask> result = taskMapper.selectPage(pageParam, wrapper);
+
+        Page<EmailReminderTaskVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        voPage.setRecords(result.getRecords().stream().map(this::toVO).toList());
+        return EmailReminderListResult.of(voPage, buildStats(userId));
+    }
+
+    private EmailReminderStatsVO buildStats(Long userId) {
+        long total = taskMapper.selectCount(ownedTasksWrapper(userId));
+        long pending = taskMapper.selectCount(
+                ownedTasksWrapper(userId).eq(EmailReminderTask::getStatus, STATUS_PENDING));
+        long sending = taskMapper.selectCount(
+                ownedTasksWrapper(userId).eq(EmailReminderTask::getStatus, STATUS_SENDING));
+        long sent = taskMapper.selectCount(
+                ownedTasksWrapper(userId).eq(EmailReminderTask::getStatus, STATUS_SENT));
+
+        return EmailReminderStatsVO.builder()
+                .total(total)
+                .active(pending + sending)
+                .sent(sent)
+                .pending(pending)
+                .build();
+    }
+
+    private LambdaQueryWrapper<EmailReminderTask> ownedTasksWrapper(Long userId) {
+        return new LambdaQueryWrapper<EmailReminderTask>()
+                .eq(EmailReminderTask::getUserId, userId)
+                .isNull(EmailReminderTask::getDeletedAt);
+    }
+
+    private String normalizeListStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        String normalized = status.strip().toUpperCase(Locale.ROOT);
+        if ("ALL".equals(normalized)) {
+            return null;
+        }
+        if ("SCHEDULED".equals(normalized) || "ACTIVE".equals(normalized)) {
+            return STATUS_PENDING;
+        }
+        if ("PROCESSING".equals(normalized)) {
+            return STATUS_SENDING;
+        }
+        if (!LIST_STATUSES.contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的任务状态筛选");
+        }
+        return normalized;
     }
 
     @Transactional
