@@ -9,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -80,9 +81,31 @@ public class EmailReminderScheduler {
                     task.getRecipientEmail(),
                     task.getSubject(),
                     task.getMessage(),
-                    task.getScheduledAt()
+                    task.getScheduledAt(),
+                    task.getContentType(),
+                    task.getTemplateId()
             );
-            if (taskMapper.markSent(task.getId(), processingToken) != 1) {
+            Instant nextScheduledAt = null;
+            String frequency = task.getFrequency() == null
+                    ? EmailReminderScheduleCalculator.FREQ_ONCE
+                    : task.getFrequency();
+            if (!EmailReminderScheduleCalculator.FREQ_ONCE.equals(
+                    EmailReminderScheduleCalculator.normalizeFrequency(frequency)
+            )) {
+                nextScheduledAt = EmailReminderScheduleCalculator.resolveNextAfterSend(
+                        frequency,
+                        EmailReminderScheduleCalculator.resolveZone(task.getTimezone()),
+                        task.getSendTime(),
+                        task.getRecurrenceDay(),
+                        task.getIntervalDays(),
+                        task.getScheduledAt(),
+                        Instant.now()
+                );
+            }
+            int completed = nextScheduledAt == null
+                    ? taskMapper.markSent(task.getId(), processingToken)
+                    : taskMapper.markSentAndReschedule(task.getId(), processingToken, nextScheduledAt);
+            if (completed != 1) {
                 log.error("[EmailReminder] 邮件已发送但任务完成状态写入失败：taskId={}", task.getId());
             }
         } catch (Exception e) {

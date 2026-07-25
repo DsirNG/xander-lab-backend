@@ -50,6 +50,8 @@ class EmailReminderSchedulerTest {
         task.setRecipientEmail("recipient@example.com");
         task.setSubject("Reminder");
         task.setMessage("Message");
+        task.setFrequency("ONCE");
+        task.setTimezone("Asia/Shanghai");
         task.setScheduledAt(NOW);
 
         when(taskMapper.selectDueTasks(30_000L, 20))
@@ -74,7 +76,9 @@ class EmailReminderSchedulerTest {
                 "recipient@example.com",
                 "Reminder",
                 "Message",
-                NOW
+                NOW,
+                null,
+                null
         );
     }
 
@@ -105,7 +109,9 @@ class EmailReminderSchedulerTest {
                         "recipient@example.com",
                         "Reminder",
                         "Message",
-                        NOW
+                        NOW,
+                        null,
+                        null
                 );
 
         scheduler.dispatchDueReminders();

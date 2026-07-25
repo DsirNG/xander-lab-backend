@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 
@@ -73,7 +74,20 @@ public class EmailReminderService {
             }
         }
 
-        Instant scheduledAt = request.getScheduledAt().toInstant();
+        String frequency = EmailReminderScheduleCalculator.normalizeFrequency(request.getFrequency());
+        ZoneId zone = EmailReminderScheduleCalculator.resolveZone(request.getTimezone());
+        Instant now = Instant.now();
+        Instant onceAt = request.getScheduledAt() == null ? null : request.getScheduledAt().toInstant();
+        Instant scheduledAt = EmailReminderScheduleCalculator.resolveFirstFire(
+                frequency,
+                zone,
+                onceAt,
+                request.getSendTime(),
+                request.getRecurrenceDay(),
+                request.getIntervalDays(),
+                now
+        );
+
         if (!taskMapper.isScheduledAtLeastLeadTime(
                 scheduledAt,
                 Math.max(1, minimumLeadSeconds)
@@ -110,6 +124,13 @@ public class EmailReminderService {
         task.setRecipientEmail(request.getRecipientEmail().strip().toLowerCase(Locale.ROOT));
         task.setSubject(subject);
         task.setMessage(request.getMessage().strip());
+        task.setContentType(EmailReminderMailTemplates.normalizeContentType(request.getContentType()));
+        task.setTemplateId(EmailReminderMailTemplates.normalizeTemplateId(request.getTemplateId()));
+        task.setFrequency(frequency);
+        task.setTimezone(zone.getId());
+        task.setSendTime(normalizeSendTime(frequency, request.getSendTime()));
+        task.setRecurrenceDay(normalizeRecurrenceDay(frequency, request.getRecurrenceDay()));
+        task.setIntervalDays(normalizeIntervalDays(frequency, request.getIntervalDays()));
         task.setScheduledAt(scheduledAt);
         task.setStatus(STATUS_PENDING);
         task.setSendAttempts(0);
@@ -141,10 +162,32 @@ public class EmailReminderService {
             if (!STATUS_PAUSED.equals(task.getStatus()) && !STATUS_FAILED.equals(task.getStatus())) {
                 throw conflict("当前状态无法恢复");
             }
-            if (!taskMapper.isScheduledInFuture(taskId, userId)) {
-                throw new IllegalArgumentException("计划发送时间已过，请删除后重新创建任务");
+            Instant now = Instant.now();
+            Instant nextAt = task.getScheduledAt();
+            boolean recurring = !EmailReminderScheduleCalculator.FREQ_ONCE.equals(
+                    EmailReminderScheduleCalculator.normalizeFrequency(task.getFrequency())
+            );
+            if (nextAt == null || !nextAt.isAfter(now)) {
+                if (!recurring) {
+                    throw new IllegalArgumentException("计划发送时间已过，请删除后重新创建任务");
+                }
+                ZoneId zone = EmailReminderScheduleCalculator.resolveZone(task.getTimezone());
+                nextAt = EmailReminderScheduleCalculator.resolveNextAfterSend(
+                        task.getFrequency(),
+                        zone,
+                        task.getSendTime(),
+                        task.getRecurrenceDay(),
+                        task.getIntervalDays(),
+                        task.getScheduledAt(),
+                        now
+                );
+                if (nextAt == null || !nextAt.isAfter(now)) {
+                    throw new IllegalArgumentException("无法计算下一次发送时间，请删除后重新创建任务");
+                }
+                updated = taskMapper.resumeOwnedTaskAt(taskId, userId, nextAt);
+            } else {
+                updated = taskMapper.resumeOwnedTask(taskId, userId);
             }
-            updated = taskMapper.resumeOwnedTask(taskId, userId);
         } else {
             throw new IllegalArgumentException("任务状态只支持 PENDING 或 PAUSED");
         }
@@ -170,6 +213,29 @@ public class EmailReminderService {
             }
             throw conflict("任务状态已变化，请刷新后重试");
         }
+    }
+
+    private String normalizeSendTime(String frequency, String sendTime) {
+        if (EmailReminderScheduleCalculator.FREQ_ONCE.equals(frequency)) {
+            return null;
+        }
+        return EmailReminderScheduleCalculator.parseSendTime(sendTime)
+                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"));
+    }
+
+    private Integer normalizeRecurrenceDay(String frequency, Integer recurrenceDay) {
+        if (EmailReminderScheduleCalculator.FREQ_WEEKLY.equals(frequency)
+                || EmailReminderScheduleCalculator.FREQ_MONTHLY.equals(frequency)) {
+            return recurrenceDay;
+        }
+        return null;
+    }
+
+    private Integer normalizeIntervalDays(String frequency, Integer intervalDays) {
+        if (EmailReminderScheduleCalculator.FREQ_CUSTOM.equals(frequency)) {
+            return intervalDays;
+        }
+        return null;
     }
 
     private EmailReminderTask requireOwnedTask(Long taskId, Long userId) {
@@ -214,6 +280,15 @@ public class EmailReminderService {
                 .recipientEmail(task.getRecipientEmail())
                 .subject(task.getSubject())
                 .message(task.getMessage())
+                .contentType(EmailReminderMailTemplates.normalizeContentType(task.getContentType()))
+                .templateId(EmailReminderMailTemplates.normalizeTemplateId(task.getTemplateId()))
+                .frequency(task.getFrequency() == null
+                        ? EmailReminderScheduleCalculator.FREQ_ONCE
+                        : task.getFrequency())
+                .timezone(task.getTimezone() == null ? "Asia/Shanghai" : task.getTimezone())
+                .sendTime(task.getSendTime())
+                .recurrenceDay(task.getRecurrenceDay())
+                .intervalDays(task.getIntervalDays())
                 .scheduledAt(task.getScheduledAt())
                 .status(task.getStatus())
                 .sendAttempts(task.getSendAttempts())

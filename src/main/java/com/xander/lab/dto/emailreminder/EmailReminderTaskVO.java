@@ -14,6 +14,13 @@ public class EmailReminderTaskVO {
     private String recipientEmail;
     private String subject;
     private String message;
+    private String contentType;
+    private String templateId;
+    private String frequency;
+    private String timezone;
+    private String sendTime;
+    private Integer recurrenceDay;
+    private Integer intervalDays;
     private Instant scheduledAt;
     private String status;
     private Integer sendAttempts;

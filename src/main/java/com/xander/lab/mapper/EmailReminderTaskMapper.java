@@ -114,6 +114,40 @@ public interface EmailReminderTaskMapper extends BaseMapper<EmailReminderTask> {
 
     @Update("""
             UPDATE email_reminder_task
+            SET status = 'PENDING',
+                scheduled_at = #{nextScheduledAt},
+                sent_at = CURRENT_TIMESTAMP(3),
+                send_attempts = 0,
+                processing_token = NULL,
+                claimed_at = NULL,
+                error_message = NULL
+            WHERE id = #{id}
+              AND deleted_at IS NULL
+              AND status = 'SENDING'
+              AND processing_token = #{processingToken}
+            """)
+    int markSentAndReschedule(@Param("id") Long id,
+                              @Param("processingToken") String processingToken,
+                              @Param("nextScheduledAt") Instant nextScheduledAt);
+
+    @Update("""
+            UPDATE email_reminder_task
+            SET status = 'PENDING',
+                scheduled_at = #{nextScheduledAt},
+                error_message = NULL,
+                processing_token = NULL,
+                claimed_at = NULL
+            WHERE id = #{id}
+              AND user_id = #{userId}
+              AND deleted_at IS NULL
+              AND status IN ('PAUSED', 'FAILED')
+            """)
+    int resumeOwnedTaskAt(@Param("id") Long id,
+                          @Param("userId") Long userId,
+                          @Param("nextScheduledAt") Instant nextScheduledAt);
+
+    @Update("""
+            UPDATE email_reminder_task
             SET status = 'FAILED',
                 processing_token = NULL,
                 claimed_at = NULL,

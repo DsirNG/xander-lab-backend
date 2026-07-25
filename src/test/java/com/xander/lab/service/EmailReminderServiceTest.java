@@ -57,7 +57,9 @@ class EmailReminderServiceTest {
         request.setRecipientEmail("USER@example.com");
         request.setSubject("Reminder");
         request.setMessage("Message");
-        request.setScheduledAt(OffsetDateTime.parse("2026-07-24T18:30:00+08:00"));
+        request.setScheduledAt(OffsetDateTime.now().plusHours(2));
+        request.setFrequency("ONCE");
+        request.setTimezone("Asia/Shanghai");
 
         EmailReminderTask databaseTask = new EmailReminderTask();
         databaseTask.setId(81L);
@@ -65,7 +67,9 @@ class EmailReminderServiceTest {
         databaseTask.setRecipientEmail("user@example.com");
         databaseTask.setSubject("Reminder");
         databaseTask.setMessage("Message");
-        databaseTask.setScheduledAt(Instant.parse("2026-07-24T10:30:00Z"));
+        databaseTask.setFrequency("ONCE");
+        databaseTask.setTimezone("Asia/Shanghai");
+        databaseTask.setScheduledAt(request.getScheduledAt().toInstant());
         databaseTask.setStatus(EmailReminderService.STATUS_PENDING);
         databaseTask.setSendAttempts(0);
         databaseTask.setCreatedAt(NOW);
@@ -79,8 +83,9 @@ class EmailReminderServiceTest {
         verify(taskMapper).insert(taskCaptor.capture());
         EmailReminderTask task = taskCaptor.getValue();
 
-        assertThat(task.getScheduledAt())
-                .isEqualTo(Instant.parse("2026-07-24T10:30:00Z"));
+        assertThat(task.getScheduledAt()).isEqualTo(request.getScheduledAt().toInstant());
+        assertThat(task.getFrequency()).isEqualTo("ONCE");
+        assertThat(task.getTimezone()).isEqualTo("Asia/Shanghai");
         assertThat(task.getCreatedAt()).isNull();
         assertThat(task.getUpdatedAt()).isNull();
         assertThat(task.getRecipientEmail()).isEqualTo("user@example.com");
