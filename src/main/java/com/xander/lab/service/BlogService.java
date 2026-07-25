@@ -39,6 +39,10 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class BlogService {
+    public static final int STATUS_DRAFT = 0;
+    public static final int STATUS_PUBLISHED = 1;
+    public static final int STATUS_TRASHED = -1;
+
     private static final String PUBLISH_REQUEST_PREFIX = "blog:publish:request:";
 
     private final BlogPostMapper blogPostMapper;
@@ -107,7 +111,7 @@ public class BlogService {
         if (requestKey != null) {
             redisTemplate.opsForValue().set(requestKey, post.getId().toString(), 24, TimeUnit.HOURS);
         }
-        return getBlogById(post.getId());
+        return getManagedBlogById(UserContext.getUserId(), post.getId());
     }
 
     /** Returns the post created by this user's publish request, if it has committed. */
@@ -128,9 +132,7 @@ public class BlogService {
     @Transactional
     public BlogPostVO updateBlog(Long id, String title, String summary, String content,
                                  String categoryId, List<String> tags) {
-        if (blogPostMapper.selectById(id) == null) {
-            throw new IllegalArgumentException("文章不存在");
-        }
+        BlogPost existing = requireOwnedPost(id, UserContext.getUserId());
         if (title == null && summary == null && content == null && categoryId == null && tags == null) {
             throw new IllegalArgumentException("至少提供一个需要更新的字段");
         }
@@ -140,6 +142,9 @@ public class BlogService {
         update.setSummary(summary);
         update.setContent(content);
         update.setCategoryId(categoryId);
+        if (content != null && !content.isBlank()) {
+            update.setReadTime(Math.max(1, content.length() / 500) + " min");
+        }
         if (UserContext.getUserId() != null) {
             update.setAuthor(resolveAuthor(UserContext.getUserId()));
         }
@@ -160,7 +165,61 @@ public class BlogService {
                 blogTagMapper.insertPostTag(id, tag.getId());
             }
         }
-        return getBlogById(id);
+        return getManagedBlogById(existing.getUserId(), id);
+    }
+
+    @Transactional
+    public BlogPostVO updateBlogFromDto(Long id, BlogPostDTO dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("请求体不能为空");
+        }
+        return updateBlog(id, dto.getTitle(), dto.getSummary(), dto.getContent(),
+                dto.getCategoryId(), dto.getTags());
+    }
+
+    /**
+     * 更新文章状态：0=草稿 1=发布 -1=回收站。
+     * 从回收站恢复默认回到草稿。
+     */
+    @Transactional
+    public BlogPostVO updateBlogStatus(Long id, Integer status) {
+        Long userId = UserContext.getUserId();
+        BlogPost existing = requireOwnedPost(id, userId);
+        int nextStatus = normalizeManagedStatus(status);
+        BlogPost update = new BlogPost();
+        update.setId(id);
+        update.setStatus(nextStatus);
+        update.setUpdatedAt(LocalDateTime.now());
+        if (nextStatus == STATUS_PUBLISHED) {
+            update.setPublishedAt(existing.getPublishedAt() == null ? LocalDate.now() : existing.getPublishedAt());
+        }
+        blogPostMapper.updateById(update);
+        return getManagedBlogById(userId, id);
+    }
+
+    /** Soft-delete: move post to recycle bin (status=-1). */
+    @Transactional
+    public void deleteBlog(Long id) {
+        Long userId = UserContext.getUserId();
+        requireOwnedPost(id, userId);
+        BlogPost update = new BlogPost();
+        update.setId(id);
+        update.setStatus(STATUS_TRASHED);
+        update.setUpdatedAt(LocalDateTime.now());
+        blogPostMapper.updateById(update);
+    }
+
+    /** Permanently deletes a trashed post and related records. */
+    @Transactional
+    public void permanentlyDeleteBlog(Long id) {
+        Long userId = UserContext.getUserId();
+        BlogPost existing = requireOwnedPost(id, userId);
+        if (existing.getStatus() == null || existing.getStatus() != STATUS_TRASHED) {
+            throw new IllegalArgumentException("仅回收站中的文章可以彻底删除");
+        }
+        blogPostViewMapper.delete(new LambdaQueryWrapper<BlogPostView>().eq(BlogPostView::getPostId, id));
+        blogTagMapper.deletePostTags(id);
+        blogPostMapper.deleteById(id);
     }
 
     /** Author is derived from the authenticated account, never from client or AI input. */
@@ -173,26 +232,78 @@ public class BlogService {
         return "User " + userId;
     }
 
-    /** Permanently deletes a post and its associated view and tag records. */
-    @Transactional
-    public void deleteBlog(Long id) {
-        if (blogPostMapper.selectById(id) == null) {
+    public PageData<BlogPostVO> getMyBlogs(Integer status, String search, Integer page, Integer size) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        int safePage = page == null || page < 1 ? 1 : page;
+        int safeSize = size == null || size < 1 ? 10 : Math.min(size, 50);
+        Integer statusFilter = null;
+        if (status != null) {
+            statusFilter = normalizeManagedStatus(status);
+        }
+        Page<BlogPostVO> pageParam = new Page<>(safePage, safeSize);
+        blogPostMapper.selectMyPostList(pageParam, userId, statusFilter, search);
+
+        List<BlogPostVO> records = pageParam.getRecords().stream()
+                .peek(vo -> {
+                    if (vo.getTags() == null || vo.getTags().isEmpty()) {
+                        vo.setTags(blogTagMapper.selectTagNamesByPostId(vo.getId()));
+                    } else {
+                        vo.parseTags();
+                    }
+                })
+                .collect(Collectors.toList());
+
+        PageData<BlogPostVO> result = new PageData<>();
+        result.setRecords(records);
+        result.setTotal(pageParam.getTotal());
+        result.setCurrent(pageParam.getCurrent());
+        result.setSize(pageParam.getSize());
+        result.setPages(pageParam.getPages());
+        result.setHasMore(result.getCurrent() < result.getPages());
+        return result;
+    }
+
+    public BlogPostVO getManagedBlogById(Long userId, Long id) {
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        BlogPostVO post = blogPostMapper.selectPostDetailAnyStatus(id);
+        if (post == null || post.getUserId() == null || !userId.equals(post.getUserId())) {
+            return null;
+        }
+        post.setTags(blogTagMapper.selectTagNamesByPostId(post.getId()));
+        return post;
+    }
+
+    private BlogPost requireOwnedPost(Long id, Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        BlogPost existing = blogPostMapper.selectById(id);
+        if (existing == null) {
             throw new IllegalArgumentException("文章不存在");
         }
-        blogPostViewMapper.delete(new LambdaQueryWrapper<BlogPostView>().eq(BlogPostView::getPostId, id));
-        blogTagMapper.deletePostTags(id);
-        blogPostMapper.deleteById(id);
+        if (existing.getUserId() == null || !userId.equals(existing.getUserId())) {
+            throw new IllegalArgumentException("无权操作该文章");
+        }
+        return existing;
+    }
+
+    private int normalizeManagedStatus(Integer status) {
+        if (status == null) {
+            throw new IllegalArgumentException("状态不能为空");
+        }
+        if (status != STATUS_DRAFT && status != STATUS_PUBLISHED && status != STATUS_TRASHED) {
+            throw new IllegalArgumentException("不支持的文章状态");
+        }
+        return status;
     }
 
     /**
      * 获取博客列表（支持搜索、分类、标签过滤）
-     *
-     * @param search   搜索关键词
-     * @param category 分类ID
-     * @param tag      标签名
-     * @param page     页码
-     * @param size     每页条数
-     * @return 分页博客列表
      */
     public PageData<BlogPostVO> getBlogs(String search, String category, String tag, Integer page, Integer size) {
         Page<BlogPostVO> pageParam = new Page<>(page, size);

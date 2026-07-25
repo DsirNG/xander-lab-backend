@@ -62,6 +62,11 @@ public class BlogPostVO {
     private Integer views;
 
     /**
+     * 状态：0=草稿 1=已发布 -1=回收站
+     */
+    private Integer status;
+
+    /**
      * 将 tagsRaw 拆分为 tags 列表
      * 在 Service 层调用
      */

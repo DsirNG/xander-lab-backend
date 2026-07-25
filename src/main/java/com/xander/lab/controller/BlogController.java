@@ -5,7 +5,9 @@ import com.xander.lab.common.UserContext;
 import com.xander.lab.dto.*;
 import com.xander.lab.service.BlogService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -14,14 +16,14 @@ import java.util.List;
  *
  * <pre>
  * 接口列表：
- *   GET  /api/blog/posts              获取文章列表（支持 search/category/tag 筛选，支持分页）
- *   POST /api/blog/posts              发布文章
- *   GET  /api/blog/posts/recent       获取最新文章（前N条）
- *   GET  /api/blog/posts/{id}         获取文章详情
- *   POST /api/blog/posts/{id}/view    记录文章阅读（含防刷）
- *   GET  /api/blog/categories         获取所有分类（含文章数量）
- *   GET  /api/blog/tags               获取所有标签（含文章数量）
- *   GET  /api/blog/tags/popular       获取热门标签（前N个）
+ *   GET    /api/blog/posts                 获取文章列表（公开，仅已发布）
+ *   POST   /api/blog/posts                 发布/存草稿（publish=false）
+ *   GET    /api/blog/posts/mine            我的文章管理列表
+ *   GET    /api/blog/posts/mine/{id}       我的文章详情（含草稿/回收站）
+ *   PUT    /api/blog/posts/{id}            更新文章
+ *   PATCH  /api/blog/posts/{id}/status     变更状态（草稿/发布/回收站）
+ *   DELETE /api/blog/posts/{id}            软删除（进入回收站）
+ *   DELETE /api/blog/posts/{id}/permanent  彻底删除（仅回收站）
  * </pre>
  */
 @RestController
@@ -32,12 +34,13 @@ public class BlogController {
     private final BlogService blogService;
 
     /**
-     * 发布文章
+     * 发布文章或保存草稿（DTO.publish=false 时为草稿）
      */
     @PostMapping("/posts")
     public Result<BlogPostVO> publishPost(@RequestBody BlogPostDTO dto,
                                           @RequestHeader(value = "Idempotency-Key", required = false) String requestId) {
-        return Result.success(blogService.createBlog(dto, true, requestId));
+        boolean publish = dto.getPublish() == null || Boolean.TRUE.equals(dto.getPublish());
+        return Result.success(blogService.createBlog(dto, publish, requestId));
     }
 
     @GetMapping("/posts/publish-status")
@@ -47,13 +50,73 @@ public class BlogController {
     }
 
     /**
+     * 我的文章列表（管理端）
+     * status: 不传=草稿+已发布；0=草稿；1=已发布；-1=回收站
+     */
+    @GetMapping("/posts/mine")
+    public Result<PageData<BlogPostVO>> getMyPosts(
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false, defaultValue = "") String search,
+            @RequestParam(required = false, defaultValue = "1") int page,
+            @RequestParam(required = false, defaultValue = "10") int size) {
+        try {
+            return Result.success(blogService.getMyBlogs(status, search, page, size));
+        } catch (IllegalArgumentException e) {
+            return Result.badRequest(e.getMessage());
+        }
+    }
+
+    @GetMapping("/posts/mine/{id}")
+    public Result<BlogPostVO> getMyPostById(@PathVariable Long id) {
+        BlogPostVO vo = blogService.getManagedBlogById(UserContext.getUserId(), id);
+        if (vo == null) {
+            return Result.notFound("文章不存在");
+        }
+        return Result.success(vo);
+    }
+
+    @PutMapping("/posts/{id}")
+    public Result<BlogPostVO> updatePost(@PathVariable Long id, @RequestBody BlogPostDTO dto) {
+        try {
+            return Result.success(blogService.updateBlogFromDto(id, dto));
+        } catch (IllegalArgumentException e) {
+            return mapBlogError(e);
+        }
+    }
+
+    @PatchMapping("/posts/{id}/status")
+    public Result<BlogPostVO> updatePostStatus(
+            @PathVariable Long id,
+            @RequestBody BlogPostStatusUpdateRequest request) {
+        try {
+            return Result.success(blogService.updateBlogStatus(id, request == null ? null : request.getStatus()));
+        } catch (IllegalArgumentException e) {
+            return mapBlogError(e);
+        }
+    }
+
+    @DeleteMapping("/posts/{id}")
+    public Result<Void> softDeletePost(@PathVariable Long id) {
+        try {
+            blogService.deleteBlog(id);
+            return Result.success();
+        } catch (IllegalArgumentException e) {
+            return mapBlogError(e);
+        }
+    }
+
+    @DeleteMapping("/posts/{id}/permanent")
+    public Result<Void> permanentlyDeletePost(@PathVariable Long id) {
+        try {
+            blogService.permanentlyDeleteBlog(id);
+            return Result.success();
+        } catch (IllegalArgumentException e) {
+            return mapBlogError(e);
+        }
+    }
+
+    /**
      * 获取文章列表
-     *
-     * @param search   关键词（可选）
-     * @param category 分类ID（可选）
-     * @param tag      标签名称（可选）
-     * @param page     页码，默认1
-     * @param size     页大小，默认10
      */
     @GetMapping("/posts")
     public Result<PageData<BlogPostVO>> getPosts(
@@ -65,22 +128,12 @@ public class BlogController {
         return Result.success(blogService.getBlogs(search, category, tag, page, size));
     }
 
-    /**
-     * 获取最新文章
-     *
-     * @param limit 条数，默认5
-     */
     @GetMapping("/posts/recent")
     public Result<List<BlogPostVO>> getRecentPosts(
             @RequestParam(required = false, defaultValue = "5") int limit) {
         return Result.success(blogService.getRecentBlogs(limit));
     }
 
-    /**
-     * 获取文章详情
-     *
-     * @param id 文章ID
-     */
     @GetMapping("/posts/{id}")
     public Result<BlogPostVO> getPostById(@PathVariable Long id) {
         BlogPostVO vo = blogService.getBlogById(id);
@@ -90,16 +143,6 @@ public class BlogController {
         return Result.success(vo);
     }
 
-    /**
-     * 记录文章阅读
-     * 前端在博客详情页 onLoad 时调用。
-     * 后端根据登录状态做去重：
-     * - 登录用户按 userId 去重（24h内同一用户同一文章只计数一次）
-     * - 未登录用户按 IP 去重（24h内同一IP同一文章只计数一次）
-     *
-     * @param id 文章ID
-     * @return counted=true 有效阅读（已计数），counted=false 冷却期内重复（未计数）
-     */
     @PostMapping("/posts/{id}/view")
     public Result<ViewResult> recordView(
             @PathVariable Long id,
@@ -114,36 +157,36 @@ public class BlogController {
         return Result.success(new ViewResult(counted));
     }
 
-    /**
-     * 获取所有分类（含文章数量）
-     */
     @GetMapping("/categories")
     public Result<List<CategoryVO>> getCategories() {
         return Result.success(blogService.getCategories());
     }
 
-    /**
-     * 获取所有标签（含文章数量，按数量降序）
-     */
     @GetMapping("/tags")
     public Result<List<TagVO>> getAllTags() {
         return Result.success(blogService.getAllTags());
     }
 
-    /**
-     * 获取热门标签
-     *
-     * @param limit 条数，默认8
-     */
     @GetMapping("/tags/popular")
     public Result<List<TagVO>> getPopularTags(
             @RequestParam(required = false, defaultValue = "8") int limit) {
         return Result.success(blogService.getPopularTags(limit));
     }
 
-    /**
-     * 阅读记录响应体
-     */
+    private <T> Result<T> mapBlogError(IllegalArgumentException e) {
+        String message = e.getMessage() == null ? "请求无效" : e.getMessage();
+        if (message.contains("未登录")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, message);
+        }
+        if (message.contains("无权")) {
+            return Result.forbidden(message);
+        }
+        if (message.contains("不存在")) {
+            return Result.notFound(message);
+        }
+        return Result.badRequest(message);
+    }
+
     public record ViewResult(boolean counted) {}
     public record PublishStatus(String status, Long postId) {}
 }

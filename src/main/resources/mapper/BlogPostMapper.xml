@@ -17,6 +17,7 @@
         <result property="readTime"     column="readTime"/>
         <result property="tips"         column="tips"/>
         <result property="views"        column="views"/>
+        <result property="status"       column="status"/>
         <result property="tagsRaw"      column="tagsRaw"/>
     </resultMap>
 
@@ -40,6 +41,7 @@
                 p.read_time                                      AS readTime,
                 p.tips,
                 p.views,
+                p.status,
                 GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
                  LEFT JOIN blog_category c ON c.id = p.category_id
@@ -70,7 +72,7 @@
             )
         </if>
         GROUP BY p.id, p.title, p.summary, p.category_id, p.user_id,
-                 p.author, p.published_at, p.read_time, p.tips, p.views
+                 p.author, p.published_at, p.read_time, p.tips, p.views, p.status
         ORDER BY p.published_at DESC
     </select>
 
@@ -89,6 +91,7 @@
                p.read_time                                      AS readTime,
                p.tips,
                p.views,
+               p.status,
                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
                  LEFT JOIN blog_category c ON c.id = p.category_id
@@ -96,13 +99,13 @@
                  LEFT JOIN blog_tag t ON t.id = pt.tag_id
         WHERE p.status = 1
         GROUP BY p.id, p.title, p.summary, p.category_id, c.name, p.user_id,
-                 p.author, p.published_at, p.read_time, p.tips, p.views
+                 p.author, p.published_at, p.read_time, p.tips, p.views, p.status
         ORDER BY p.published_at DESC
         LIMIT #{limit}
     </select>
 
     <!-- ============================================================
-         selectPostDetail: 文章详情（含 content）
+         selectPostDetail: 文章详情（含 content，仅已发布）
          ============================================================ -->
     <select id="selectPostDetail" resultMap="PostDetailRM">
         SELECT p.id,
@@ -117,6 +120,7 @@
                p.read_time                                      AS readTime,
                p.tips,
                p.views,
+               p.status,
                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
                  LEFT JOIN blog_category c ON c.id = p.category_id
@@ -125,7 +129,76 @@
         WHERE p.id = #{id}
           AND p.status = 1
         GROUP BY p.id, p.title, p.summary, p.content, p.category_id, c.name, p.user_id,
-                 p.author, p.published_at, p.read_time, p.tips, p.views
+                 p.author, p.published_at, p.read_time, p.tips, p.views, p.status
+    </select>
+
+    <!-- ============================================================
+         selectPostDetailAnyStatus: 管理端详情（含草稿/回收站）
+         ============================================================ -->
+    <select id="selectPostDetailAnyStatus" resultMap="PostDetailRM">
+        SELECT p.id,
+               p.title,
+               p.summary,
+               p.content,
+               p.category_id                                    AS category,
+               c.name                                           AS categoryName,
+               p.user_id,
+               p.author,
+               p.published_at                                   AS date,
+               p.read_time                                      AS readTime,
+               p.tips,
+               p.views,
+               p.status,
+               GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
+        FROM blog_post p
+                 LEFT JOIN blog_category c ON c.id = p.category_id
+                 LEFT JOIN blog_post_tag pt ON pt.post_id = p.id
+                 LEFT JOIN blog_tag t ON t.id = pt.tag_id
+        WHERE p.id = #{id}
+        GROUP BY p.id, p.title, p.summary, p.content, p.category_id, c.name, p.user_id,
+                 p.author, p.published_at, p.read_time, p.tips, p.views, p.status
+    </select>
+
+    <!-- ============================================================
+         selectMyPostList: 当前用户文章管理列表
+         status 传 null 时排除回收站（仅草稿+已发布）；传 -1 为回收站
+         ============================================================ -->
+    <select id="selectMyPostList" resultMap="PostListRM">
+        SELECT p.id,
+               p.title,
+               p.summary,
+               p.category_id                                    AS category,
+               c.name                                           AS categoryName,
+               p.user_id,
+               p.author,
+               p.published_at                                   AS date,
+               p.read_time                                      AS readTime,
+               p.tips,
+               p.views,
+               p.status,
+               GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
+        FROM blog_post p
+                 LEFT JOIN blog_category c ON c.id = p.category_id
+                 LEFT JOIN blog_post_tag pt ON pt.post_id = p.id
+                 LEFT JOIN blog_tag t ON t.id = pt.tag_id
+        WHERE p.user_id = #{userId}
+        <choose>
+            <when test="status != null">
+                AND p.status = #{status}
+            </when>
+            <otherwise>
+                AND p.status IN (0, 1)
+            </otherwise>
+        </choose>
+        <if test="search != null and search != ''">
+            AND (
+                p.title LIKE CONCAT('%', #{search}, '%')
+                OR p.summary LIKE CONCAT('%', #{search}, '%')
+            )
+        </if>
+        GROUP BY p.id, p.title, p.summary, p.category_id, c.name, p.user_id,
+                 p.author, p.published_at, p.read_time, p.tips, p.views, p.status
+        ORDER BY p.updated_at DESC, p.id DESC
     </select>
 
 </mapper>

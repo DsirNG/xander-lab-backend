@@ -22,4 +22,9 @@ public class BlogPostDTO {
 
     /** 标签列表 */
     private List<String> tags;
+
+    /**
+     * 是否立即发布；null/true=发布，false=草稿
+     */
+    private Boolean publish;
 }

@@ -45,7 +45,7 @@ public class BlogPost {
     /** 浏览次数 */
     private Integer views;
 
-    /** 状态：0=草稿 1=已发布 */
+    /** 状态：0=草稿 1=已发布 -1=回收站 */
     private Integer status;
 
     /** 发布日期 */

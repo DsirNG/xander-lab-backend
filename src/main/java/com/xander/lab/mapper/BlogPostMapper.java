@@ -32,4 +32,17 @@ public interface BlogPostMapper extends BaseMapper<BlogPost> {
      * 对应 XML: BlogPostMapper.xml -> selectPostDetail
      */
     BlogPostVO selectPostDetail(@Param("id") Long id);
+
+    /**
+     * 查询文章详情（含 content，不限状态；管理端/作者用）
+     */
+    BlogPostVO selectPostDetailAnyStatus(@Param("id") Long id);
+
+    /**
+     * 当前用户文章列表（可按状态/关键词筛选）
+     */
+    IPage<BlogPostVO> selectMyPostList(Page<BlogPostVO> page,
+                                       @Param("userId") Long userId,
+                                       @Param("status") Integer status,
+                                       @Param("search") String search);
 }

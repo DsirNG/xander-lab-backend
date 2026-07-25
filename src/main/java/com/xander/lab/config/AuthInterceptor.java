@@ -30,6 +30,9 @@ public class AuthInterceptor implements HandlerInterceptor {
     private static final List<String> PROTECTED_WRITE_PATTERNS = List.of(
             "POST:/api/blog/posts",
             "GET:/api/blog/posts/publish-status",
+            "PUT:/api/blog/posts/*",
+            "PATCH:/api/blog/posts/*",
+            "DELETE:/api/blog/posts/*",
             "POST:/api/blog/media/images",
             "GET:/api/blog/media/images",
             "POST:/api/blog-agent/tasks",
@@ -88,6 +91,9 @@ public class AuthInterceptor implements HandlerInterceptor {
         // This matches the public post-detail wildcard below, but idempotent
         // publish status belongs to the authenticated user only.
         if ("GET".equals(method) && "/api/blog/posts/publish-status".equals(path)) {
+            return requireAuth(request, response);
+        }
+        if ("GET".equals(method) && (path.equals("/api/blog/posts/mine") || path.startsWith("/api/blog/posts/mine/"))) {
             return requireAuth(request, response);
         }
 
