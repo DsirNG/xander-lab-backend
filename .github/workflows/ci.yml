@@ -63,6 +63,10 @@ jobs:
             git checkout --force master
             git reset --hard '${{ github.sha }}'
             git submodule sync --recursive
+            if ! git -C plugins/img2threejs rev-parse --verify HEAD >/dev/null 2>&1; then
+              git submodule deinit -f -- plugins/img2threejs || true
+              rm -rf plugins/img2threejs .git/modules/plugins/img2threejs
+            fi
             git submodule update --init --recursive --depth 1
             bash scripts/deploy.sh
           "
