@@ -2,6 +2,7 @@ package com.xander.lab.controller;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.common.UserContext;
+import com.xander.lab.dto.img2three.Img2ThreeTaskSummaryVO;
 import com.xander.lab.dto.img2three.Img2ThreeTaskVO;
 import com.xander.lab.entity.Img2ThreeTask;
 import com.xander.lab.service.Img2ThreeService;
@@ -15,6 +16,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
@@ -33,6 +35,15 @@ public class Img2ThreeController {
     public Result<Img2ThreeTask> create(@RequestPart("file") MultipartFile file) {
         try {
             return Result.success(service.create(UserContext.getUserId(), file));
+        } catch (IllegalArgumentException e) {
+            return mapClientError(e);
+        }
+    }
+
+    @GetMapping
+    public Result<List<Img2ThreeTaskSummaryVO>> list() {
+        try {
+            return Result.success(service.list(UserContext.getUserId()));
         } catch (IllegalArgumentException e) {
             return mapClientError(e);
         }

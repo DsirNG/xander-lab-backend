@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.dto.img2three.Img2ThreeTaskVO;
+import com.xander.lab.dto.img2three.Img2ThreeTaskSummaryVO;
 import com.xander.lab.entity.BlogMediaAsset;
 import com.xander.lab.entity.Img2ThreeTask;
 import com.xander.lab.mapper.Img2ThreeTaskMapper;
@@ -20,6 +21,7 @@ import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.function.BiConsumer;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -53,6 +55,19 @@ public class Img2ThreeService {
 
     public Img2ThreeTaskVO get(Long taskId, Long userId) {
         return toVo(requireOwned(taskId, userId));
+    }
+
+    public List<Img2ThreeTaskSummaryVO> list(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        return taskMapper.selectList(new LambdaQueryWrapper<Img2ThreeTask>()
+                        .eq(Img2ThreeTask::getUserId, userId)
+                        .orderByDesc(Img2ThreeTask::getCreatedAt)
+                        .last("LIMIT 50"))
+                .stream()
+                .map(this::toSummaryVo)
+                .toList();
     }
 
     public Img2ThreeTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
@@ -172,6 +187,19 @@ public class Img2ThreeService {
             vo.setAnalysis(null);
             vo.setSceneSpec(null);
         }
+        return vo;
+    }
+
+    private Img2ThreeTaskSummaryVO toSummaryVo(Img2ThreeTask task) {
+        Img2ThreeTaskSummaryVO vo = new Img2ThreeTaskSummaryVO();
+        vo.setId(task.getId());
+        vo.setStatus(task.getStatus());
+        vo.setStage(task.getStage());
+        vo.setTitle(task.getTitle());
+        vo.setReferenceMediaUrl(task.getReferenceMediaUrl());
+        vo.setErrorMessage(task.getErrorMessage());
+        vo.setCreatedAt(task.getCreatedAt() == null ? null : task.getCreatedAt().format(ISO));
+        vo.setUpdatedAt(task.getUpdatedAt() == null ? null : task.getUpdatedAt().format(ISO));
         return vo;
     }
 
