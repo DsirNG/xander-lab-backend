@@ -66,7 +66,7 @@ public class Img2ThreeModelClient {
             throw new IllegalStateException("模型没有返回可读取的重建结果");
         }
         try {
-            return objectMapper.readTree(stripCodeFence(text));
+            return parseJsonObject(text);
         } catch (Exception e) {
             throw new IllegalStateException("模型返回不是有效 JSON，请重试", e);
         }
@@ -146,6 +146,43 @@ public class Img2ThreeModelClient {
             }
         }
         return trimmed;
+    }
+
+    /**
+     * Models occasionally add a short sentence before/after the requested JSON.  Accept one complete
+     * top-level object, while keeping the response contract strict enough to reject malformed output.
+     */
+    private JsonNode parseJsonObject(String text) throws Exception {
+        String normalized = stripCodeFence(text);
+        try {
+            return objectMapper.readTree(normalized);
+        } catch (Exception ignored) {
+            // Fall through and find the first balanced JSON object outside quoted strings.
+        }
+        for (int start = normalized.indexOf('{'); start >= 0; start = normalized.indexOf('{', start + 1)) {
+            int depth = 0;
+            boolean quoted = false;
+            boolean escaped = false;
+            for (int i = start; i < normalized.length(); i++) {
+                char current = normalized.charAt(i);
+                if (quoted) {
+                    if (escaped) escaped = false;
+                    else if (current == '\\') escaped = true;
+                    else if (current == '"') quoted = false;
+                    continue;
+                }
+                if (current == '"') quoted = true;
+                else if (current == '{') depth++;
+                else if (current == '}' && --depth == 0) {
+                    try {
+                        return objectMapper.readTree(normalized.substring(start, i + 1));
+                    } catch (Exception ignored) {
+                        break;
+                    }
+                }
+            }
+        }
+        throw new IllegalArgumentException("No complete JSON object found in model output");
     }
 
     private String trimTrailingSlash(String url) {
