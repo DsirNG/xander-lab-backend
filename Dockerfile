@@ -20,8 +20,15 @@ FROM openjdk:17-jdk-slim
 
 WORKDIR /app
 
+# img2threejs forge scripts are dependency-free but require a Python 3 runtime.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy the built jar from the builder stage
 COPY --from=builder /app/target/*.jar app.jar
+# Keep the upstream pipeline in the runtime image; the backend executes these scripts by path.
+COPY plugins/img2threejs ./plugins/img2threejs
 
 # Spring Boot 运行在 30002
 EXPOSE 30002

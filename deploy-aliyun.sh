@@ -65,6 +65,8 @@ FULL_IMAGE_NAME="${REGISTRY_URL}/${REGISTRY_NAMESPACE}/${IMAGE_NAME}:${TAG}"
 
 build_image() {
   echo -e "${BLUE}步骤 1: 构建 Docker 镜像${NC}"
+  # The runtime image executes img2threejs forge scripts from the checked-out submodule.
+  git submodule update --init --recursive
   docker build -t "$IMAGE_NAME:$TAG" .
   docker tag "$IMAGE_NAME:$TAG" "$FULL_IMAGE_NAME"
   echo -e "${GREEN}✓ 镜像构建完成${NC}"
