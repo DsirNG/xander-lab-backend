@@ -1,3 +1,4 @@
 [submodule "plugins/img2threejs"]
 	path = plugins/img2threejs
 	url = https://github.com/img2threejs/img2threejs.git
+	shallow = true

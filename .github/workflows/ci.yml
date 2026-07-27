@@ -63,6 +63,6 @@ jobs:
             git checkout --force master
             git reset --hard '${{ github.sha }}'
             git submodule sync --recursive
-            git submodule update --init --recursive
+            git submodule update --init --recursive --depth 1
             bash scripts/deploy.sh
           "
