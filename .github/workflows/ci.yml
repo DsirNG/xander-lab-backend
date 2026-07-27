@@ -56,11 +56,13 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" "
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=20 "$DEPLOY_USER@$DEPLOY_HOST" "
             set -euo pipefail
             cd '$DEPLOY_PATH'
             git fetch --prune origin master
             git checkout --force master
             git reset --hard '${{ github.sha }}'
+            git submodule sync --recursive
+            git submodule update --init --recursive
             bash scripts/deploy.sh
           "
