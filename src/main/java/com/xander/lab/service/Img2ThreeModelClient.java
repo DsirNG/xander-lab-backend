@@ -40,7 +40,7 @@ public class Img2ThreeModelClient {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("store", false);
-        payload.put("instructions", instructions());
+        payload.put("instructions", pipelineInstructions());
         payload.put("input", List.of(Map.of(
                 "role", "user",
                 "content", List.of(
@@ -92,6 +92,17 @@ public class Img2ThreeModelClient {
                 + "factoryCode 必须是完整可编译的 TypeScript 字符串：导出 function createModel(): THREE.Group，"
                 + "仅使用 three 的原始几何与 MeshStandardMaterial，不要 import，不要网络请求，不要 eval。"
                 + "factoryCode 供用户下载阅读，前端不会执行它；预览只使用 sceneSpec。";
+    }
+
+    private String pipelineInstructions() {
+        return "You are the vision-authoring stage of the img2threejs pipeline. "
+                + "Return JSON only: {\"title\": string, \"analysis\": object, \"spec\": object}. "
+                + "spec must be a complete img2threejs ObjectSculptSpec, not a legacy sceneSpec or factoryCode. "
+                + "Include target, componentTree, materials, detailInventory, qualityContract, sculptPipeline, "
+                + "reviewViewpoints, and lookDevTargets. Build a real macro/meso/micro component hierarchy; "
+                + "map every identity-defining detail to a component or material; declare sockets/action profiles "
+                + "for moveable parts. Mark hidden geometry as inferred. Do not fake structure with a flat texture. "
+                + "The returned spec is passed to img2threejs strict validation, so satisfy its quality contract.";
     }
 
     private String resolveApiKey() {

@@ -112,6 +112,9 @@ blog:
 
 # Image → procedural Three.js. Blank fields fall back to blog.agent credentials.
 img2three:
+  pipeline-enabled: ${IMG2THREE_PIPELINE_ENABLED:true}
+  pipeline-root: ${IMG2THREE_PIPELINE_ROOT:plugins/img2threejs}
+  python-command: ${IMG2THREE_PYTHON_COMMAND:python}
   agent:
     base-url: ${IMG2THREE_AGENT_BASE_URL:}
     api-key: ${IMG2THREE_AGENT_API_KEY:}

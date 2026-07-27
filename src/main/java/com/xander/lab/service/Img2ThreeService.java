@@ -29,6 +29,7 @@ public class Img2ThreeService {
     private final Img2ThreeTaskMapper taskMapper;
     private final BlogMediaService mediaService;
     private final Img2ThreeModelClient modelClient;
+    private final Img2ThreePipeline pipeline;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
 
@@ -69,17 +70,13 @@ public class Img2ThreeService {
 
             JsonNode result = modelClient.reconstruct(imageBytes, contentType);
             JsonNode analysis = result.path("analysis");
-            JsonNode sceneSpec = result.path("sceneSpec");
-            String factoryCode = result.path("factoryCode").asText("");
+            JsonNode sceneSpec = result.path("spec");
             String title = result.path("title").asText(null);
             if (!StringUtils.hasText(title) && sceneSpec.hasNonNull("title")) {
                 title = sceneSpec.path("title").asText("");
             }
-            if (sceneSpec.isMissingNode() || sceneSpec.isNull() || !sceneSpec.has("nodes")) {
-                throw new IllegalStateException("模型未返回可用的 sceneSpec.nodes");
-            }
-            if (!StringUtils.hasText(factoryCode)) {
-                factoryCode = fallbackFactoryCode(title);
+            if (sceneSpec.isMissingNode() || sceneSpec.isNull() || !sceneSpec.isObject()) {
+                throw new IllegalStateException("模型未返回 img2threejs ObjectSculptSpec");
             }
 
             emit(onEvent, "stage", "factory|正在整理可下载的 TypeScript 工厂");
@@ -87,8 +84,8 @@ public class Img2ThreeService {
 
             String analysisJson = objectMapper.writeValueAsString(analysis.isMissingNode() ? objectMapper.createObjectNode() : analysis);
             String specJson = objectMapper.writeValueAsString(sceneSpec);
-            String finalTitle = title;
-            String finalFactory = factoryCode;
+            String finalTitle = StringUtils.hasText(title) ? title : "Generated Model";
+            String finalFactory = pipeline.validateAndGenerate(finalTitle, specJson);
             transactionTemplate.executeWithoutResult(status -> {
                 LambdaUpdateWrapper<Img2ThreeTask> update = new LambdaUpdateWrapper<Img2ThreeTask>()
                         .eq(Img2ThreeTask::getId, taskId)
