@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
@@ -23,6 +25,7 @@ import java.util.concurrent.CompletableFuture;
 @RestController
 @RequestMapping("/api/img2three/tasks")
 public class Img2ThreeController {
+    private static final Logger log = LoggerFactory.getLogger(Img2ThreeController.class);
     private final Img2ThreeService service;
     private final TaskExecutor img2ThreeTaskExecutor;
 
@@ -65,6 +68,10 @@ public class Img2ThreeController {
         response.setHeader("Cache-Control", "no-cache, no-transform");
         response.setHeader("X-Accel-Buffering", "no");
         SseEmitter emitter = new SseEmitter(0L);
+        // The reconstruction is durable and must continue after a browser, proxy, or SSE connection closes.
+        // Emitter callbacks are intentionally best-effort notifications only.
+        emitter.onCompletion(() -> log.debug("img2three SSE subscriber closed for task {}", id));
+        emitter.onTimeout(() -> log.debug("img2three SSE subscriber timed out for task {}", id));
         CompletableFuture.runAsync(() -> {
             try {
                 Img2ThreeTaskVO task = service.runStream(id, userId,
@@ -82,8 +89,9 @@ public class Img2ThreeController {
     private void send(SseEmitter emitter, String event, Object data) {
         try {
             emitter.send(SseEmitter.event().name(event).data(data));
-        } catch (IOException ignored) {
-            emitter.complete();
+        } catch (IOException | IllegalStateException ignored) {
+            // A disconnected SSE subscriber must never cancel the durable background task.
+            log.debug("img2three SSE event {} was dropped because the subscriber is closed", event);
         }
     }
 

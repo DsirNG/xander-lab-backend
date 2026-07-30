@@ -11,6 +11,7 @@ import com.xander.lab.entity.Img2ThreeTask;
 import com.xander.lab.mapper.Img2ThreeTaskMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
@@ -69,6 +70,18 @@ public class Img2ThreeService {
                 .stream()
                 .map(this::toSummaryVo)
                 .toList();
+    }
+
+    /** A process restart cannot resume an in-memory worker, so stale records must not poll forever. */
+    @Scheduled(fixedDelay = 60_000)
+    public void failAbandonedRunningTasks() {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(20);
+        taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
+                .eq(Img2ThreeTask::getStatus, "running")
+                .lt(Img2ThreeTask::getUpdatedAt, cutoff)
+                .set(Img2ThreeTask::getStatus, "failed")
+                .set(Img2ThreeTask::getErrorMessage, "Reconstruction worker timed out or was interrupted; run the task again")
+                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
     }
 
     public Img2ThreeTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
@@ -281,8 +294,13 @@ public class Img2ThreeService {
         if (!StringUtils.hasText(url)) {
             throw new IllegalArgumentException("参考图地址无效");
         }
-        try (InputStream in = URI.create(url).toURL().openStream()) {
-            return in.readAllBytes();
+        try {
+            java.net.URLConnection connection = URI.create(url).toURL().openConnection();
+            connection.setConnectTimeout(30_000);
+            connection.setReadTimeout(30_000);
+            try (InputStream in = connection.getInputStream()) {
+                return in.readAllBytes();
+            }
         } catch (Exception e) {
             throw new IllegalStateException("无法读取参考图：" + e.getMessage(), e);
         }

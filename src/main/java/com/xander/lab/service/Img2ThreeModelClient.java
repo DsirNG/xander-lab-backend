@@ -6,10 +6,12 @@ import com.xander.lab.config.BlogAgentProperties;
 import com.xander.lab.config.Img2ThreeProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -56,16 +58,7 @@ public class Img2ThreeModelClient {
                 )
         )));
 
-        JsonNode response = RestClient.builder()
-                .baseUrl(trimTrailingSlash(baseUrl))
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .build()
-                .post()
-                .uri("/responses")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(payload)
-                .retrieve()
-                .body(JsonNode.class);
+        JsonNode response = invokeResponsesApi(baseUrl, apiKey, payload);
 
         String text = extractOutputText(response);
         if (!StringUtils.hasText(text)) {
@@ -109,16 +102,7 @@ public class Img2ThreeModelClient {
                 )
         )));
 
-        JsonNode response = RestClient.builder()
-                .baseUrl(trimTrailingSlash(baseUrl))
-                .defaultHeader("Authorization", "Bearer " + apiKey)
-                .build()
-                .post()
-                .uri("/responses")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(payload)
-                .retrieve()
-                .body(JsonNode.class);
+        JsonNode response = invokeResponsesApi(baseUrl, apiKey, payload);
 
         String text = extractOutputText(response);
         if (!StringUtils.hasText(text)) {
@@ -191,6 +175,28 @@ public class Img2ThreeModelClient {
                 + "for moveable parts. Populate all complexity scores and minimum component/detail/material counts. "
                 + "Mark hidden geometry as inferred. Do not fake structure with a flat texture. "
                 + "The returned spec is passed to img2threejs strict validation, so satisfy its quality contract.";
+    }
+
+    private JsonNode invokeResponsesApi(String baseUrl, String apiKey, Map<String, Object> payload) {
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(20));
+        // ObjectSculptSpec responses can take minutes; this bound still guarantees durable failure recovery.
+        requestFactory.setReadTimeout(Duration.ofMinutes(4));
+        try {
+            return RestClient.builder()
+                    .baseUrl(trimTrailingSlash(baseUrl))
+                    .requestFactory(requestFactory)
+                    .defaultHeader("Authorization", "Bearer " + apiKey)
+                    .build()
+                    .post()
+                    .uri("/responses")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(JsonNode.class);
+        } catch (Exception e) {
+            throw new IllegalStateException("Image-to-3D model request failed or timed out", e);
+        }
     }
 
     private String resolveApiKey() {
