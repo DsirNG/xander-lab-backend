@@ -44,7 +44,7 @@ services:
     networks:
       - xander-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:30002/api/blog/posts/recent"]
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://localhost:30002/health"]
 
       interval: 30s
       timeout: 10s
