@@ -20,11 +20,39 @@ public class Img2ThreePipeline {
 
     private final Img2ThreeProperties properties;
 
+    public String createStarterSpec() {
+        if (!properties.isPipelineEnabled()) {
+            throw new IllegalStateException("img2threejs pipeline is disabled");
+        }
+        Path root = pipelineRoot();
+        if (!Files.isRegularFile(root.resolve("forge/stage2_spec/new_sculpt_spec.py"))) {
+            throw new IllegalStateException("img2threejs pipeline is unavailable: " + root);
+        }
+        try {
+            Path work = Files.createTempDirectory("img2three-scaffold-");
+            try {
+                Path scaffold = work.resolve("starter-spec.json");
+                run(root, List.of(
+                        "forge/stage2_spec/new_sculpt_spec.py",
+                        "reference-object",
+                        "--out",
+                        scaffold.toString(),
+                        "--force"
+                ));
+                return Files.readString(scaffold, StandardCharsets.UTF_8);
+            } finally {
+                deleteTree(work);
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Unable to create img2threejs starter spec", e);
+        }
+    }
+
     public String validateAndGenerate(String title, String specJson) {
         if (!properties.isPipelineEnabled()) {
             throw new IllegalStateException("img2threejs pipeline is disabled");
         }
-        Path root = Path.of(properties.getPipelineRoot()).toAbsolutePath().normalize();
+        Path root = pipelineRoot();
         if (!Files.isRegularFile(root.resolve("forge/stage2_spec/validate_sculpt_spec.py"))) {
             throw new IllegalStateException("img2threejs pipeline is unavailable: " + root);
         }
@@ -43,6 +71,10 @@ public class Img2ThreePipeline {
         } catch (IOException e) {
             throw new IllegalStateException("Unable to run img2threejs pipeline", e);
         }
+    }
+
+    private Path pipelineRoot() {
+        return Path.of(properties.getPipelineRoot()).toAbsolutePath().normalize();
     }
 
     private void run(Path root, List<String> scriptArgs) {

@@ -83,7 +83,8 @@ public class Img2ThreeService {
             emit(onEvent, "stage", "spec|正在生成受限场景规格");
             updateStage(taskId, userId, "spec");
 
-            JsonNode result = modelClient.reconstruct(imageBytes, contentType);
+            String starterSpecJson = pipeline.createStarterSpec();
+            JsonNode result = modelClient.reconstruct(imageBytes, contentType, starterSpecJson);
             JsonNode analysis = result.path("analysis");
             JsonNode sceneSpec = result.path("spec");
             String title = result.path("title").asText(null);

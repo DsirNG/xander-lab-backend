@@ -26,7 +26,7 @@ public class Img2ThreeModelClient {
     private final BlogAgentProperties blogAgentProperties;
     private final ObjectMapper objectMapper;
 
-    public JsonNode reconstruct(byte[] imageBytes, String contentType) {
+    public JsonNode reconstruct(byte[] imageBytes, String contentType, String starterSpecJson) {
         String apiKey = resolveApiKey();
         String model = resolveModel();
         String baseUrl = resolveBaseUrl();
@@ -40,12 +40,18 @@ public class Img2ThreeModelClient {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("store", false);
+        payload.put("max_output_tokens", 30000);
         payload.put("instructions", pipelineInstructions());
         payload.put("input", List.of(Map.of(
                 "role", "user",
                 "content", List.of(
                         Map.of("type", "input_text", "text",
-                                "请根据参考图重建硬表面物体。只返回一个 JSON 对象，不要 Markdown 围栏。"),
+                                "Reconstruct the reference image as a procedural 3D object. Return one JSON "
+                                        + "object only, without Markdown. Use the following current img2threejs "
+                                        + "starter spec as the mandatory structural template. Assess and replace "
+                                        + "every generic or unassessed value with image-specific evidence; do not "
+                                        + "remove template fields or flatten its hierarchy.\n\nSTARTER_SPEC:\n"
+                                        + starterSpecJson),
                         Map.of("type", "input_image", "image_url", dataUrl)
                 )
         )));
@@ -98,10 +104,16 @@ public class Img2ThreeModelClient {
         return "You are the vision-authoring stage of the img2threejs pipeline. "
                 + "Return JSON only: {\"title\": string, \"analysis\": object, \"spec\": object}. "
                 + "spec must be a complete img2threejs ObjectSculptSpec, not a legacy sceneSpec or factoryCode. "
-                + "Include target, componentTree, materials, detailInventory, qualityContract, sculptPipeline, "
-                + "reviewViewpoints, and lookDevTargets. Build a real macro/meso/micro component hierarchy; "
+                + "Preserve the supplied current-version starter structure and fully author preSpecAssessment, "
+                + "terminologyProfile, scores, qualityTargets, qualityContract, actionReadiness, selfCorrectLoop, "
+                + "featureReviewTargets, buildPasses, sculptPipeline, lookDevTargets, componentTree, materials, "
+                + "and detailInventory. Set qualityContract.qualityBar from the assessed complexity. Keep "
+                + "sculptPipeline.passGateMode as locked-sequential and passOrder synchronized with buildPasses. "
+                + "Replace generic starter featureReviewTargets with image-specific semantic systems. "
+                + "Build a real macro/meso/micro component hierarchy; "
                 + "map every identity-defining detail to a component or material; declare sockets/action profiles "
-                + "for moveable parts. Mark hidden geometry as inferred. Do not fake structure with a flat texture. "
+                + "for moveable parts. Populate all complexity scores and minimum component/detail/material counts. "
+                + "Mark hidden geometry as inferred. Do not fake structure with a flat texture. "
                 + "The returned spec is passed to img2threejs strict validation, so satisfy its quality contract.";
     }
 
