@@ -6,6 +6,7 @@ import com.xander.lab.dto.img2three.Img2ThreeTaskSummaryVO;
 import com.xander.lab.dto.img2three.Img2ThreeTaskVO;
 import com.xander.lab.entity.Img2ThreeTask;
 import com.xander.lab.service.Img2ThreeService;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
@@ -59,8 +60,10 @@ public class Img2ThreeController {
     }
 
     @PostMapping(value = "/{id}/run/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter runStream(@PathVariable Long id) {
+    public SseEmitter runStream(@PathVariable Long id, HttpServletResponse response) {
         Long userId = UserContext.getUserId();
+        response.setHeader("Cache-Control", "no-cache, no-transform");
+        response.setHeader("X-Accel-Buffering", "no");
         SseEmitter emitter = new SseEmitter(0L);
         CompletableFuture.runAsync(() -> {
             try {

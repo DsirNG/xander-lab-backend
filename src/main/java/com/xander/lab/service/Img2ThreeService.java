@@ -71,7 +71,10 @@ public class Img2ThreeService {
     }
 
     public Img2ThreeTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
-        transactionTemplate.executeWithoutResult(status -> markRunning(taskId, userId));
+        Boolean claimed = transactionTemplate.execute(status -> claimRunning(taskId, userId));
+        if (!Boolean.TRUE.equals(claimed)) {
+            throw new IllegalStateException("任务正在运行，请等待当前重建完成");
+        }
         try {
             emit(onEvent, "stage", "analyze|正在观察参考图与主体结构");
             updateStage(taskId, userId, "analyze");
@@ -126,14 +129,16 @@ public class Img2ThreeService {
         }
     }
 
-    private void markRunning(Long taskId, Long userId) {
+    private boolean claimRunning(Long taskId, Long userId) {
         requireOwned(taskId, userId);
-        taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
                 .eq(Img2ThreeTask::getId, taskId)
                 .eq(Img2ThreeTask::getUserId, userId)
+                .ne(Img2ThreeTask::getStatus, "running")
                 .set(Img2ThreeTask::getStatus, "running")
                 .set(Img2ThreeTask::getErrorMessage, null)
                 .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
+        return updated == 1;
     }
 
     private void markFailed(Long taskId, Long userId, String message) {
