@@ -93,7 +93,7 @@ public class Img2ThreePipeline {
                 throw new IllegalStateException("img2threejs pipeline timed out");
             }
             if (process.exitValue() != 0) {
-                throw new IllegalStateException("img2threejs quality gate rejected this reconstruction: " + truncate(output, 1500));
+                throw new IllegalStateException("img2threejs quality gate rejected this reconstruction: " + truncate(output, 12000));
             }
         } catch (IOException e) {
             throw new IllegalStateException("Cannot start Python for img2threejs; configure IMG2THREE_PYTHON_COMMAND", e);

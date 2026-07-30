@@ -78,6 +78,59 @@ public class Img2ThreeModelClient {
         }
     }
 
+    public JsonNode repair(byte[] imageBytes, String contentType, JsonNode previousResult, String gateFeedback) {
+        String apiKey = resolveApiKey();
+        String model = resolveModel();
+        String baseUrl = resolveBaseUrl();
+        if (!StringUtils.hasText(apiKey) || !StringUtils.hasText(model)) {
+            throw new IllegalStateException("图片转 3D 尚未配置模型服务，请设置 IMG2THREE_AGENT_API_KEY / IMG2THREE_AGENT_MODEL（或复用 BLOG_AGENT_*）");
+        }
+
+        String mime = StringUtils.hasText(contentType) ? contentType : "image/jpeg";
+        String dataUrl = "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(imageBytes);
+        String repairPrompt = "Repair the previous img2threejs result using the strict validator feedback. "
+                + "Return exactly {\"title\": string, \"analysis\": object, \"spec\": ObjectSculptSpec}. "
+                + "Preserve every valid, image-specific field; correct every reported issue without lowering the "
+                + "quality bar, deleting required structures, inventing persistent assets, or changing the subject. "
+                + "Reinspect the attached reference image before correcting geometry, materials, evidence, and "
+                + "component contracts.\n\nVALIDATOR_FEEDBACK:\n" + gateFeedback
+                + "\n\nPREVIOUS_RESULT:\n" + previousResult;
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", model);
+        payload.put("store", false);
+        payload.put("max_output_tokens", 30000);
+        payload.put("instructions", pipelineInstructions());
+        payload.put("input", List.of(Map.of(
+                "role", "user",
+                "content", List.of(
+                        Map.of("type", "input_text", "text", repairPrompt),
+                        Map.of("type", "input_image", "image_url", dataUrl)
+                )
+        )));
+
+        JsonNode response = RestClient.builder()
+                .baseUrl(trimTrailingSlash(baseUrl))
+                .defaultHeader("Authorization", "Bearer " + apiKey)
+                .build()
+                .post()
+                .uri("/responses")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .body(JsonNode.class);
+
+        String text = extractOutputText(response);
+        if (!StringUtils.hasText(text)) {
+            throw new IllegalStateException("模型没有返回可读取的修订结果");
+        }
+        try {
+            return parseJsonObject(text);
+        } catch (Exception e) {
+            throw new IllegalStateException("模型修订结果不是有效 JSON，请重试", e);
+        }
+    }
+
     private String instructions() {
         return "你是 Xander Lab 的过程式 Three.js 重建助手，灵感来自 img2threejs。"
                 + "根据一张参考图，输出可在浏览器用白名单几何拼出的近似 3D 模型。"

@@ -27,6 +27,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class Img2ThreeService {
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    private static final int MAX_SPEC_REPAIR_ATTEMPTS = 2;
 
     private final Img2ThreeTaskMapper taskMapper;
     private final BlogMediaService mediaService;
@@ -88,23 +89,57 @@ public class Img2ThreeService {
 
             String starterSpecJson = pipeline.createStarterSpec();
             JsonNode result = modelClient.reconstruct(imageBytes, contentType, starterSpecJson);
-            JsonNode analysis = result.path("analysis");
-            JsonNode sceneSpec = result.path("spec");
-            String title = result.path("title").asText(null);
-            if (!StringUtils.hasText(title) && sceneSpec.hasNonNull("title")) {
-                title = sceneSpec.path("title").asText("");
-            }
-            if (sceneSpec.isMissingNode() || sceneSpec.isNull() || !sceneSpec.isObject()) {
-                throw new IllegalStateException("模型未返回 img2threejs ObjectSculptSpec");
+            JsonNode analysis = objectMapper.createObjectNode();
+            JsonNode sceneSpec = null;
+            String title = null;
+            String specJson = null;
+            String finalFactory = null;
+
+            for (int attempt = 0; attempt <= MAX_SPEC_REPAIR_ATTEMPTS; attempt++) {
+                analysis = result.path("analysis");
+                sceneSpec = extractObjectSculptSpec(result);
+                title = extractTitle(result, sceneSpec);
+
+                if (sceneSpec == null) {
+                    if (attempt == MAX_SPEC_REPAIR_ATTEMPTS) {
+                        throw new IllegalStateException("模型未返回 img2threejs ObjectSculptSpec");
+                    }
+                    emit(onEvent, "stage", "spec|模型返回结构不完整，正在按 img2threejs 契约修订");
+                    result = modelClient.repair(
+                            imageBytes,
+                            contentType,
+                            result,
+                            "The response did not contain an ObjectSculptSpec. Return either a spec object with "
+                                    + "schemaVersion/componentTree/materials, or preferably wrap it as "
+                                    + "{\"title\": string, \"analysis\": object, \"spec\": ObjectSculptSpec}."
+                    );
+                    continue;
+                }
+
+                specJson = objectMapper.writeValueAsString(sceneSpec);
+                String candidateTitle = StringUtils.hasText(title) ? title : "Generated Model";
+                try {
+                    finalFactory = pipeline.validateAndGenerate(candidateTitle, specJson);
+                    break;
+                } catch (IllegalStateException e) {
+                    if (!isQualityGateFailure(e) || attempt == MAX_SPEC_REPAIR_ATTEMPTS) {
+                        throw e;
+                    }
+                    emit(onEvent, "stage", "spec|质量门未通过，正在根据完整报告修订规格");
+                    updateStage(taskId, userId, "spec");
+                    result = modelClient.repair(imageBytes, contentType, result, e.getMessage());
+                }
             }
 
             emit(onEvent, "stage", "factory|正在整理可下载的 TypeScript 工厂");
             updateStage(taskId, userId, "factory");
 
-            String analysisJson = objectMapper.writeValueAsString(analysis.isMissingNode() ? objectMapper.createObjectNode() : analysis);
-            String specJson = objectMapper.writeValueAsString(sceneSpec);
+            String analysisJson = objectMapper.writeValueAsString(
+                    analysis.isMissingNode() ? objectMapper.createObjectNode() : analysis
+            );
+            String finalSpecJson = specJson;
             String finalTitle = StringUtils.hasText(title) ? title : "Generated Model";
-            String finalFactory = pipeline.validateAndGenerate(finalTitle, specJson);
+            String generatedFactory = finalFactory;
             transactionTemplate.executeWithoutResult(status -> {
                 LambdaUpdateWrapper<Img2ThreeTask> update = new LambdaUpdateWrapper<Img2ThreeTask>()
                         .eq(Img2ThreeTask::getId, taskId)
@@ -113,8 +148,8 @@ public class Img2ThreeService {
                         .set(Img2ThreeTask::getStage, "factory")
                         .set(Img2ThreeTask::getTitle, finalTitle)
                         .set(Img2ThreeTask::getAnalysisJson, analysisJson)
-                        .set(Img2ThreeTask::getSpecJson, specJson)
-                        .set(Img2ThreeTask::getFactoryCode, finalFactory)
+                        .set(Img2ThreeTask::getSpecJson, finalSpecJson)
+                        .set(Img2ThreeTask::getFactoryCode, generatedFactory)
                         .set(Img2ThreeTask::getErrorMessage, null)
                         .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now());
                 taskMapper.update(null, update);
@@ -127,6 +162,39 @@ public class Img2ThreeService {
                     ? (RuntimeException) e
                     : new IllegalStateException(message, e);
         }
+    }
+
+    private JsonNode extractObjectSculptSpec(JsonNode result) {
+        if (result == null || !result.isObject()) return null;
+        for (String field : List.of("spec", "objectSculptSpec", "sceneSpec")) {
+            JsonNode wrapped = result.path(field);
+            if (looksLikeObjectSculptSpec(wrapped)) return wrapped;
+        }
+        return looksLikeObjectSculptSpec(result) ? result : null;
+    }
+
+    private boolean looksLikeObjectSculptSpec(JsonNode candidate) {
+        return candidate != null
+                && candidate.isObject()
+                && candidate.has("componentTree")
+                && candidate.has("materials")
+                && (candidate.has("schemaVersion") || candidate.has("qualityContract"));
+    }
+
+    private String extractTitle(JsonNode result, JsonNode sceneSpec) {
+        String title = result == null ? null : result.path("title").asText(null);
+        if (!StringUtils.hasText(title) && sceneSpec != null) {
+            title = sceneSpec.path("title").asText(null);
+        }
+        if (!StringUtils.hasText(title) && sceneSpec != null) {
+            title = sceneSpec.path("targetName").asText(null);
+        }
+        return title;
+    }
+
+    private boolean isQualityGateFailure(IllegalStateException error) {
+        return error.getMessage() != null
+                && error.getMessage().startsWith("img2threejs quality gate rejected");
     }
 
     private boolean claimRunning(Long taskId, Long userId) {
