@@ -5,11 +5,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.config.BlogAgentProperties;
 import com.xander.lab.config.Img2ThreeProperties;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.time.Duration;
 import java.util.Base64;
@@ -24,6 +27,8 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 public class Img2ThreeModelClient {
+    private static final Logger log = LoggerFactory.getLogger(Img2ThreeModelClient.class);
+    private static final int MAX_OUTPUT_TOKENS = 16_000;
     private final Img2ThreeProperties properties;
     private final BlogAgentProperties blogAgentProperties;
     private final ObjectMapper objectMapper;
@@ -42,7 +47,7 @@ public class Img2ThreeModelClient {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("store", false);
-        payload.put("max_output_tokens", 30000);
+        payload.put("max_output_tokens", MAX_OUTPUT_TOKENS);
         payload.put("instructions", pipelineInstructions());
         payload.put("input", List.of(Map.of(
                 "role", "user",
@@ -92,7 +97,7 @@ public class Img2ThreeModelClient {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("store", false);
-        payload.put("max_output_tokens", 30000);
+        payload.put("max_output_tokens", MAX_OUTPUT_TOKENS);
         payload.put("instructions", pipelineInstructions());
         payload.put("input", List.of(Map.of(
                 "role", "user",
@@ -195,8 +200,25 @@ public class Img2ThreeModelClient {
                     .retrieve()
                     .body(JsonNode.class);
         } catch (Exception e) {
-            throw new IllegalStateException("Image-to-3D model request failed or timed out", e);
+            String reason = describeFailure(e);
+            log.warn("img2three Responses API request failed: {}", reason, e);
+            throw new IllegalStateException("Image-to-3D model request failed or timed out: " + reason, e);
         }
+    }
+
+    private String describeFailure(Exception error) {
+        if (error instanceof RestClientResponseException responseError) {
+            String body = responseError.getResponseBodyAsString();
+            String summary = body == null ? "" : body.replaceAll("\\s+", " ").trim();
+            if (summary.length() > 500) summary = summary.substring(0, 500);
+            return "HTTP " + responseError.getStatusCode().value()
+                    + (summary.isBlank() ? "" : " " + summary);
+        }
+        Throwable root = error;
+        while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+        String message = root.getMessage();
+        return root.getClass().getSimpleName()
+                + (StringUtils.hasText(message) ? ": " + message : "");
     }
 
     private String resolveApiKey() {

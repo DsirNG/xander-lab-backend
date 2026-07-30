@@ -10,6 +10,8 @@ import com.xander.lab.entity.BlogMediaAsset;
 import com.xander.lab.entity.Img2ThreeTask;
 import com.xander.lab.mapper.Img2ThreeTaskMapper;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class Img2ThreeService {
+    private static final Logger log = LoggerFactory.getLogger(Img2ThreeService.class);
     private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     private static final int MAX_SPEC_REPAIR_ATTEMPTS = 2;
 
@@ -100,8 +103,12 @@ public class Img2ThreeService {
             emit(onEvent, "stage", "spec|正在生成受限场景规格");
             updateStage(taskId, userId, "spec");
 
+            log.info("img2three task {} creating starter spec", taskId);
             String starterSpecJson = pipeline.createStarterSpec();
+            log.info("img2three task {} requesting model reconstruction (imageBytes={}, starterSpecChars={})",
+                    taskId, imageBytes.length, starterSpecJson.length());
             JsonNode result = modelClient.reconstruct(imageBytes, contentType, starterSpecJson);
+            log.info("img2three task {} received initial model response", taskId);
             JsonNode analysis = objectMapper.createObjectNode();
             JsonNode sceneSpec = null;
             String title = null;
@@ -169,6 +176,7 @@ public class Img2ThreeService {
             });
             return get(taskId, userId);
         } catch (Exception e) {
+            log.warn("img2three task {} failed at its current stage", taskId, e);
             String message = e.getMessage() == null ? "重建失败" : e.getMessage();
             transactionTemplate.executeWithoutResult(status -> markFailed(taskId, userId, message));
             throw e instanceof IllegalStateException || e instanceof IllegalArgumentException
