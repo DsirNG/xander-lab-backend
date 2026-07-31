@@ -21,10 +21,12 @@ import com.xander.lab.mapper.BlogAgentTaskMapper;
 import com.xander.lab.mapper.BlogAgentVersionMapper;
 import com.xander.lab.mapper.BlogAgentMessageMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -46,6 +48,7 @@ public class BlogAgentService {
     private final BlogMediaService mediaService;
     private final BlogAgentProperties properties;
     private final BlogAgentMessageMapper messageMapper;
+    private final BlogAgentEventService eventService;
 
     @Transactional
     public BlogAgentTask create(Long userId, BlogAgentTaskCreateRequest request) {
@@ -87,7 +90,7 @@ public class BlogAgentService {
     }
 
     private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming, BiConsumer<String, String> onEvent) {
-        transactionTemplate.executeWithoutResult(status -> markRunning(taskId, userId));
+        transactionTemplate.executeWithoutResult(status -> claimInitialRun(taskId, userId));
 
         try {
             updateStage(taskId, userId, "analyze", "正在理解你的目标和文章边界", onEvent);
@@ -136,13 +139,25 @@ public class BlogAgentService {
         }
     }
 
-    private void markRunning(Long taskId, Long userId) {
+    private void claimInitialRun(Long taskId, Long userId) {
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, taskId)
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "created")
+                .set(BlogAgentTask::getStatus, "running")
+                .set(BlogAgentTask::getStage, "analyze")
+                .set(BlogAgentTask::getErrorMessage, null)
+                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+        if (updated == 1) {
+            eventService.clearTaskEvents(taskId);
+            return;
+        }
+
         BlogAgentTask task = requireOwnedTask(taskId, userId);
-        task.setStatus("running");
-        task.setStage("research");
-        task.setErrorMessage(null);
-        task.setUpdatedAt(LocalDateTime.now());
-        taskMapper.updateById(task);
+        if ("running".equals(task.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "任务正在执行，请勿重复启动");
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "当前任务状态不能重新启动");
     }
 
     private String getInput(Long taskId, Long userId) {
@@ -224,16 +239,7 @@ public class BlogAgentService {
 
     public BlogAgentTaskVO reviseStream(Long taskId, Long userId, String instruction,
                                         BiConsumer<String, String> onEvent) {
-        BlogAgentTask existing = requireOwnedTask(taskId, userId);
-        if (!"ready".equals(existing.getStatus())) throw new IllegalStateException("当前文章尚未准备好，不能修改");
-        transactionTemplate.executeWithoutResult(status -> {
-            saveMessage(taskId, "user", "message", null, instruction.trim());
-            existing.setStatus("running");
-            existing.setStage("write");
-            existing.setErrorMessage(null);
-            existing.setUpdatedAt(LocalDateTime.now());
-            taskMapper.updateById(existing);
-        });
+        transactionTemplate.executeWithoutResult(status -> claimRevision(taskId, userId, instruction));
         try {
             updateStage(taskId, userId, "write", "正在根据你的新要求修改文章", onEvent);
             JsonNode result = modelClient.reviseArticleStream(
@@ -249,6 +255,28 @@ public class BlogAgentService {
             transactionTemplate.executeWithoutResult(status -> markRevisionFailed(taskId, userId, e.getMessage()));
             throw e;
         }
+    }
+
+    private void claimRevision(Long taskId, Long userId, String instruction) {
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, taskId)
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "ready")
+                .set(BlogAgentTask::getStatus, "running")
+                .set(BlogAgentTask::getStage, "write")
+                .set(BlogAgentTask::getErrorMessage, null)
+                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+        if (updated == 1) {
+            eventService.clearTaskEvents(taskId);
+            saveMessage(taskId, "user", "message", null, instruction.trim());
+            return;
+        }
+
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        if ("running".equals(task.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "任务正在执行，请勿重复提交修改");
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "当前文章尚未准备好，不能修改");
     }
 
     private void markRevisionFailed(Long taskId, Long userId, String errorMessage) {
