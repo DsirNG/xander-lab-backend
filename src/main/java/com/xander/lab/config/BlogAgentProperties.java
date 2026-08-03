@@ -17,4 +17,6 @@ public class BlogAgentProperties {
     private String imageModel;
     private String imageSize = "1536x1024";
     private int maxIllustrations = 3;
+    /** Running tasks older than this are treated as interrupted workers. */
+    private int staleTaskMinutes = 30;
 }

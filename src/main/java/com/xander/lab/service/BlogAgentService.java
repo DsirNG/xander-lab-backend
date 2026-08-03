@@ -202,7 +202,7 @@ public class BlogAgentService {
     }
 
     public BlogAgentTaskVO get(Long taskId, Long userId) {
-        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        BlogAgentTask task = resolveStaleTask(requireOwnedTask(taskId, userId), userId);
         BlogAgentTaskVO vo = new BlogAgentTaskVO();
         vo.setTask(task);
         vo.setTags(readTags(task.getTagsJson()));
@@ -216,6 +216,28 @@ public class BlogAgentService {
         vo.setMessages(messageMapper.selectList(new LambdaQueryWrapper<BlogAgentMessage>()
                 .eq(BlogAgentMessage::getTaskId, taskId).orderByAsc(BlogAgentMessage::getId)));
         return vo;
+    }
+
+    BlogAgentTask resolveStaleTask(BlogAgentTask task, Long userId) {
+        if (!"running".equals(task.getStatus()) || task.getUpdatedAt() == null) return task;
+        int staleMinutes = Math.max(1, properties.getStaleTaskMinutes());
+        LocalDateTime staleBefore = LocalDateTime.now().minusMinutes(staleMinutes);
+        if (task.getUpdatedAt().isAfter(staleBefore)) return task;
+
+        boolean hasDraft = StringUtils.hasText(task.getContent());
+        String status = hasDraft ? "ready" : "failed";
+        String message = hasDraft
+                ? "任务执行中断，已保留当前文章草稿"
+                : "任务执行中断，请重新创建任务";
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, task.getId())
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "running")
+                .le(BlogAgentTask::getUpdatedAt, staleBefore)
+                .set(BlogAgentTask::getStatus, status)
+                .set(BlogAgentTask::getErrorMessage, message)
+                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+        return updated == 1 ? requireOwnedTask(task.getId(), userId) : task;
     }
 
     public List<BlogAgentSessionVO> listSessions(Long userId) {

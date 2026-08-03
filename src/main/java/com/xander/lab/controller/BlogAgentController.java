@@ -24,6 +24,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledFuture;
@@ -33,6 +34,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RestController
 @RequestMapping("/api/blog-agent/tasks")
 public class BlogAgentController {
+    private static final Duration HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
+
     private final BlogAgentService service;
     private final BlogAgentEventService eventService;
     private final TaskExecutor blogAgentTaskExecutor;
@@ -152,11 +155,12 @@ public class BlogAgentController {
         return new SseEmitter(0L);
     }
 
-    private ScheduledFuture<?> scheduleHeartbeat(Long taskId, SseEmitter emitter,
-                                                 AtomicBoolean subscriberOpen) {
+    ScheduledFuture<?> scheduleHeartbeat(Long taskId, SseEmitter emitter,
+                                         AtomicBoolean subscriberOpen) {
         return blogAgentHeartbeatScheduler.scheduleAtFixedRate(
                 () -> sendHeartbeat(taskId, emitter, subscriberOpen),
-                Duration.ofSeconds(15));
+                Instant.now().plus(HEARTBEAT_INTERVAL),
+                HEARTBEAT_INTERVAL);
     }
 
     private void registerSubscriberCallbacks(Long taskId, SseEmitter emitter,
