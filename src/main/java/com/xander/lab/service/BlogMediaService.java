@@ -39,7 +39,12 @@ public class BlogMediaService {
         } catch (IOException e) {
             throw new IllegalArgumentException("无法读取图片内容");
         }
-        if (image == null) throw new IllegalArgumentException("无法识别图片内容");
+        // Standard JDK ImageIO usually has no WebP reader. Browsers and the
+        // Img2Three relief renderer can consume WebP directly, so validate its
+        // RIFF signature instead of advertising support and then rejecting it.
+        if (image == null && !("image/webp".equals(file.getContentType()) && isWebp(file))) {
+            throw new IllegalArgumentException("无法识别图片内容");
+        }
 
         UploadResponse uploaded = ossService.upload(file, "photos/blog/");
         BlogMediaAsset asset = new BlogMediaAsset();
@@ -49,8 +54,8 @@ public class BlogMediaService {
         asset.setStoredName(uploaded.getStoredName());
         asset.setSize(uploaded.getSize());
         asset.setContentType(uploaded.getContentType());
-        asset.setWidth(image.getWidth());
-        asset.setHeight(image.getHeight());
+        asset.setWidth(image == null ? null : image.getWidth());
+        asset.setHeight(image == null ? null : image.getHeight());
         asset.setSourceType("user_upload");
         assetMapper.insert(asset);
         return asset;
@@ -108,6 +113,23 @@ public class BlogMediaService {
     private void requireUser(Long userId) {
         if (userId == null) {
             throw new IllegalStateException("未登录或登录已过期");
+        }
+    }
+
+    private boolean isWebp(MultipartFile file) {
+        try {
+            byte[] header = file.getBytes();
+            return header.length >= 12
+                    && header[0] == 'R'
+                    && header[1] == 'I'
+                    && header[2] == 'F'
+                    && header[3] == 'F'
+                    && header[8] == 'W'
+                    && header[9] == 'E'
+                    && header[10] == 'B'
+                    && header[11] == 'P';
+        } catch (IOException e) {
+            return false;
         }
     }
 }

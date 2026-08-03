@@ -4,7 +4,6 @@ import com.xander.lab.common.Result;
 import com.xander.lab.common.UserContext;
 import com.xander.lab.dto.img2three.Img2ThreeTaskSummaryVO;
 import com.xander.lab.dto.img2three.Img2ThreeTaskVO;
-import com.xander.lab.entity.Img2ThreeTask;
 import com.xander.lab.service.Img2ThreeService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -36,7 +35,7 @@ public class Img2ThreeController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Result<Img2ThreeTask> create(@RequestPart("file") MultipartFile file) {
+    public Result<Img2ThreeTaskVO> create(@RequestPart("file") MultipartFile file) {
         try {
             return Result.success(service.create(UserContext.getUserId(), file));
         } catch (IllegalArgumentException e) {

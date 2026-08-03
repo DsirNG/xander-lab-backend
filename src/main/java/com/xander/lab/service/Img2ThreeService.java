@@ -8,13 +8,13 @@ import com.xander.lab.dto.img2three.Img2ThreeTaskVO;
 import com.xander.lab.dto.img2three.Img2ThreeTaskSummaryVO;
 import com.xander.lab.entity.BlogMediaAsset;
 import com.xander.lab.entity.Img2ThreeTask;
+import com.xander.lab.config.Img2ThreeProperties;
 import com.xander.lab.mapper.Img2ThreeTaskMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,25 +37,28 @@ public class Img2ThreeService {
     private final BlogMediaService mediaService;
     private final Img2ThreeModelClient modelClient;
     private final Img2ThreePipeline pipeline;
+    private final Img2ThreeReliefGenerator reliefGenerator;
+    private final Img2ThreeProperties properties;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
 
-    @Transactional
-    public Img2ThreeTask create(Long userId, MultipartFile file) {
+    public Img2ThreeTaskVO create(Long userId, MultipartFile file) {
         if (userId == null) {
             throw new IllegalArgumentException("未登录或登录已过期");
         }
+        // OSS is a remote network call. Keep it outside a database transaction.
         BlogMediaAsset asset = mediaService.uploadImage(userId, file);
         Img2ThreeTask task = new Img2ThreeTask();
         task.setUserId(userId);
         task.setStatus("created");
         task.setStage("analyze");
+        task.setTitle(titleFromFileName(file.getOriginalFilename()));
         task.setReferenceMediaUrl(asset.getUrl());
         task.setReferenceMediaAssetId(asset.getId());
         task.setCreatedAt(LocalDateTime.now());
         task.setUpdatedAt(LocalDateTime.now());
-        taskMapper.insert(task);
-        return task;
+        transactionTemplate.executeWithoutResult(status -> taskMapper.insert(task));
+        return toVo(task);
     }
 
     public Img2ThreeTaskVO get(Long taskId, Long userId) {
@@ -88,6 +91,10 @@ public class Img2ThreeService {
     }
 
     public Img2ThreeTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
+        Img2ThreeTask existing = requireOwned(taskId, userId);
+        if ("ready".equals(existing.getStatus()) && StringUtils.hasText(existing.getSpecJson())) {
+            return toVo(existing);
+        }
         Boolean claimed = transactionTemplate.execute(status -> claimRunning(taskId, userId));
         if (!Boolean.TRUE.equals(claimed)) {
             throw new IllegalStateException("任务正在运行，请等待当前重建完成");
@@ -100,70 +107,47 @@ public class Img2ThreeService {
             byte[] imageBytes = downloadBytes(task.getReferenceMediaUrl());
             String contentType = guessContentType(task.getReferenceMediaUrl());
 
-            emit(onEvent, "stage", "spec|正在生成受限场景规格");
+            // Always prepare a local, deterministic model first. This guarantees that a task
+            // can finish even when the optional vision model or strict upstream gate is offline.
+            Img2ThreeReliefGenerator.GeneratedRelief relief = reliefGenerator.generate(
+                    imageBytes,
+                    contentType,
+                    task.getReferenceMediaUrl(),
+                    task.getTitle()
+            );
+
+            emit(onEvent, "stage", "spec|正在提取主体轮廓、纹理与浮雕深度");
             updateStage(taskId, userId, "spec");
 
-            log.info("img2three task {} creating starter spec", taskId);
-            String starterSpecJson = pipeline.createStarterSpec();
-            log.info("img2three task {} requesting model reconstruction (imageBytes={}, starterSpecChars={})",
-                    taskId, imageBytes.length, starterSpecJson.length());
-            JsonNode result = modelClient.reconstruct(imageBytes, contentType, starterSpecJson);
-            log.info("img2three task {} received initial model response", taskId);
-            JsonNode analysis = objectMapper.createObjectNode();
-            JsonNode sceneSpec = null;
-            String title = null;
-            String specJson = null;
-            String finalFactory = null;
-
-            for (int attempt = 0; attempt <= MAX_SPEC_REPAIR_ATTEMPTS; attempt++) {
-                analysis = result.path("analysis");
-                sceneSpec = extractObjectSculptSpec(result);
-                title = extractTitle(result, sceneSpec);
-
-                if (sceneSpec == null) {
-                    if (attempt == MAX_SPEC_REPAIR_ATTEMPTS) {
-                        throw new IllegalStateException("模型未返回 img2threejs ObjectSculptSpec");
-                    }
-                    emit(onEvent, "stage", "spec|模型返回结构不完整，正在按 img2threejs 契约修订");
-                    result = modelClient.repair(
-                            imageBytes,
-                            contentType,
-                            result,
-                            "The response did not contain an ObjectSculptSpec. Return either a spec object with "
-                                    + "schemaVersion/componentTree/materials, or preferably wrap it as "
-                                    + "{\"title\": string, \"analysis\": object, \"spec\": ObjectSculptSpec}."
-                    );
-                    continue;
-                }
-
-                specJson = objectMapper.writeValueAsString(sceneSpec);
-                String candidateTitle = StringUtils.hasText(title) ? title : "Generated Model";
+            GeneratedModel generated = new GeneratedModel(
+                    relief.title(), relief.analysis(), relief.sceneSpec(), relief.factoryCode()
+            );
+            if (properties.isAgentEnabled()) {
                 try {
-                    finalFactory = pipeline.validateAndGenerate(candidateTitle, specJson);
-                    break;
-                } catch (IllegalStateException e) {
-                    if (!isQualityGateFailure(e) || attempt == MAX_SPEC_REPAIR_ATTEMPTS) {
-                        throw e;
-                    }
-                    emit(onEvent, "stage", "spec|质量门未通过，正在根据完整报告修订规格");
-                    updateStage(taskId, userId, "spec");
-                    result = modelClient.repair(imageBytes, contentType, result, e.getMessage());
+                    generated = generateAdvancedModel(taskId, imageBytes, contentType, onEvent);
+                } catch (Exception advancedError) {
+                    String reason = advancedError.getMessage() == null
+                            ? advancedError.getClass().getSimpleName()
+                            : advancedError.getMessage();
+                    log.warn("img2three task {} advanced reconstruction failed; using deterministic relief: {}",
+                            taskId, reason, advancedError);
+                    relief.analysis().put("advancedFallbackReason", truncate(reason, 500));
+                    emit(onEvent, "stage", "spec|智能重建暂不可用，正在完成可靠的图片浮雕模型");
                 }
             }
 
             emit(onEvent, "stage", "factory|正在整理可下载的 TypeScript 工厂");
             updateStage(taskId, userId, "factory");
 
-            String analysisJson = objectMapper.writeValueAsString(
-                    analysis.isMissingNode() ? objectMapper.createObjectNode() : analysis
-            );
-            String finalSpecJson = specJson;
-            String finalTitle = StringUtils.hasText(title) ? title : "Generated Model";
-            String generatedFactory = finalFactory;
-            transactionTemplate.executeWithoutResult(status -> {
+            String analysisJson = objectMapper.writeValueAsString(generated.analysis());
+            String finalSpecJson = objectMapper.writeValueAsString(generated.sceneSpec());
+            String finalTitle = generated.title();
+            String generatedFactory = generated.factoryCode();
+            Integer completed = transactionTemplate.execute(status -> {
                 LambdaUpdateWrapper<Img2ThreeTask> update = new LambdaUpdateWrapper<Img2ThreeTask>()
                         .eq(Img2ThreeTask::getId, taskId)
                         .eq(Img2ThreeTask::getUserId, userId)
+                        .eq(Img2ThreeTask::getStatus, "running")
                         .set(Img2ThreeTask::getStatus, "ready")
                         .set(Img2ThreeTask::getStage, "factory")
                         .set(Img2ThreeTask::getTitle, finalTitle)
@@ -172,8 +156,11 @@ public class Img2ThreeService {
                         .set(Img2ThreeTask::getFactoryCode, generatedFactory)
                         .set(Img2ThreeTask::getErrorMessage, null)
                         .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now());
-                taskMapper.update(null, update);
+                return taskMapper.update(null, update);
             });
+            if (!Integer.valueOf(1).equals(completed)) {
+                throw new IllegalStateException("任务状态已变化，本次重建结果未覆盖较新的任务状态");
+            }
             return get(taskId, userId);
         } catch (Exception e) {
             log.warn("img2three task {} failed at its current stage", taskId, e);
@@ -183,6 +170,70 @@ public class Img2ThreeService {
                     ? (RuntimeException) e
                     : new IllegalStateException(message, e);
         }
+    }
+
+    private GeneratedModel generateAdvancedModel(Long taskId,
+                                                 byte[] imageBytes,
+                                                 String contentType,
+                                                 BiConsumer<String, String> onEvent) throws Exception {
+        if (!pipeline.isAvailable()) {
+            throw new IllegalStateException("img2threejs pipeline is unavailable");
+        }
+        log.info("img2three task {} creating starter spec", taskId);
+        String starterSpecJson = pipeline.createStarterSpec();
+        log.info("img2three task {} requesting model reconstruction (imageBytes={}, starterSpecChars={})",
+                taskId, imageBytes.length, starterSpecJson.length());
+        JsonNode result = modelClient.reconstruct(imageBytes, contentType, starterSpecJson);
+        log.info("img2three task {} received initial model response", taskId);
+        JsonNode analysis = objectMapper.createObjectNode();
+        JsonNode sceneSpec = null;
+        String title = null;
+        String factoryCode = null;
+
+        for (int attempt = 0; attempt <= MAX_SPEC_REPAIR_ATTEMPTS; attempt++) {
+            analysis = result.path("analysis");
+            sceneSpec = extractObjectSculptSpec(result);
+            title = extractTitle(result, sceneSpec);
+
+            if (sceneSpec == null) {
+                if (attempt == MAX_SPEC_REPAIR_ATTEMPTS) {
+                    throw new IllegalStateException("模型未返回 img2threejs ObjectSculptSpec");
+                }
+                emit(onEvent, "stage", "spec|模型返回结构不完整，正在按 img2threejs 契约修订");
+                result = modelClient.repair(
+                        imageBytes,
+                        contentType,
+                        result,
+                        "The response did not contain an ObjectSculptSpec. Return either a spec object with "
+                                + "schemaVersion/componentTree/materials, or preferably wrap it as "
+                                + "{\"title\": string, \"analysis\": object, \"spec\": ObjectSculptSpec}."
+                );
+                continue;
+            }
+
+            String specJson = objectMapper.writeValueAsString(sceneSpec);
+            String candidateTitle = StringUtils.hasText(title) ? title : "Generated Model";
+            try {
+                factoryCode = pipeline.validateAndGenerate(candidateTitle, specJson);
+                break;
+            } catch (IllegalStateException e) {
+                if (!isQualityGateFailure(e) || attempt == MAX_SPEC_REPAIR_ATTEMPTS) {
+                    throw e;
+                }
+                emit(onEvent, "stage", "spec|质量门未通过，正在根据完整报告修订规格");
+                result = modelClient.repair(imageBytes, contentType, result, e.getMessage());
+            }
+        }
+
+        JsonNode safeAnalysis = analysis == null || analysis.isMissingNode()
+                ? objectMapper.createObjectNode()
+                : analysis;
+        return new GeneratedModel(
+                StringUtils.hasText(title) ? title : "Generated Model",
+                safeAnalysis,
+                sceneSpec,
+                factoryCode
+        );
     }
 
     private JsonNode extractObjectSculptSpec(JsonNode result) {
@@ -223,7 +274,7 @@ public class Img2ThreeService {
         int updated = taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
                 .eq(Img2ThreeTask::getId, taskId)
                 .eq(Img2ThreeTask::getUserId, userId)
-                .ne(Img2ThreeTask::getStatus, "running")
+                .in(Img2ThreeTask::getStatus, "created", "failed")
                 .set(Img2ThreeTask::getStatus, "running")
                 .set(Img2ThreeTask::getErrorMessage, null)
                 .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
@@ -234,6 +285,7 @@ public class Img2ThreeService {
         taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
                 .eq(Img2ThreeTask::getId, taskId)
                 .eq(Img2ThreeTask::getUserId, userId)
+                .eq(Img2ThreeTask::getStatus, "running")
                 .set(Img2ThreeTask::getStatus, "failed")
                 .set(Img2ThreeTask::getErrorMessage, truncate(message, 1000))
                 .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
@@ -322,23 +374,14 @@ public class Img2ThreeService {
         return "image/jpeg";
     }
 
-    private String fallbackFactoryCode(String title) {
-        String safe = StringUtils.hasText(title) ? title.replace("\"", "'") : "Generated Model";
-        return """
-                import * as THREE from 'three';
-
-                /** Generated for: %s */
-                export function createModel(): THREE.Group {
-                  const root = new THREE.Group();
-                  root.name = 'generated-model';
-                  const mesh = new THREE.Mesh(
-                    new THREE.BoxGeometry(1, 1, 1),
-                    new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.2, roughness: 0.6 })
-                  );
-                  root.add(mesh);
-                  return root;
-                }
-                """.formatted(safe);
+    private String titleFromFileName(String fileName) {
+        if (!StringUtils.hasText(fileName)) return "Image relief model";
+        String normalized = fileName.replace('\\', '/');
+        String name = normalized.substring(normalized.lastIndexOf('/') + 1).trim();
+        int extension = name.lastIndexOf('.');
+        if (extension > 0) name = name.substring(0, extension);
+        if (!StringUtils.hasText(name)) return "Image relief model";
+        return name.length() <= 100 ? name : name.substring(0, 100);
     }
 
     private void emit(BiConsumer<String, String> onEvent, String event, String data) {
@@ -348,5 +391,13 @@ public class Img2ThreeService {
     private String truncate(String value, int max) {
         if (value == null) return null;
         return value.length() <= max ? value : value.substring(0, max);
+    }
+
+    private record GeneratedModel(
+            String title,
+            JsonNode analysis,
+            JsonNode sceneSpec,
+            String factoryCode
+    ) {
     }
 }
