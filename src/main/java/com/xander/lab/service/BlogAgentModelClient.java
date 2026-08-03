@@ -143,7 +143,7 @@ public class BlogAgentModelClient {
                         String text = extractOutputText(event.path("response"));
                         output.append(text == null ? "" : text);
                     } else if ("error".equals(type)) {
-                        throw new IllegalStateException("模型服务返回错误：" + event.path("message").asText("未知错误"));
+                        throw new IllegalStateException("模型服务返回错误：" + streamErrorMessage(event));
                     }
                 }
             }
@@ -221,6 +221,15 @@ public class BlogAgentModelClient {
         try (stream; BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             return reader.readLine();
         } catch (Exception ignored) { return "未知错误"; }
+    }
+
+    private String streamErrorMessage(JsonNode event) {
+        JsonNode error = event.path("error");
+        String message = error.path("message").asText();
+        if (!StringUtils.hasText(message)) message = event.path("message").asText();
+        if (!StringUtils.hasText(message)) message = error.path("code").asText();
+        if (!StringUtils.hasText(message)) message = event.path("code").asText();
+        return StringUtils.hasText(message) ? message : "未知错误";
     }
 
     private String instructions() {
