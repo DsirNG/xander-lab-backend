@@ -32,7 +32,8 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         // ContentCachingResponseWrapper buffers output until the request returns,
         // which prevents an SseEmitter from flushing events after the controller
         // has switched to async processing.
-        return (uri.startsWith("/api/blog-agent/tasks/") && uri.endsWith("/stream"))
+        return (uri.startsWith("/api/blog-agent/tasks/")
+                && (uri.endsWith("/stream") || uri.endsWith("/events")))
                 || (uri.startsWith("/api/img2three/tasks/") && uri.endsWith("/run/stream"));
     }
 
