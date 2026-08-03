@@ -139,9 +139,15 @@ public class BlogAgentModelClient {
                         String text = event.path("text").asText("");
                         output.append(text);
                         onDelta.accept(text);
-                    } else if ("response.completed".equals(type) && output.isEmpty()) {
-                        String text = extractOutputText(event.path("response"));
-                        output.append(text == null ? "" : text);
+                    } else if ("response.completed".equals(type)) {
+                        if (output.isEmpty()) {
+                            String text = extractOutputText(event.path("response"));
+                            output.append(text == null ? "" : text);
+                        }
+                        // A completed response may keep the upstream SSE connection open.
+                        // The accumulated deltas are already the final article, so do not wait
+                        // indefinitely for the provider to close the socket.
+                        break;
                     } else if ("error".equals(type)) {
                         throw new IllegalStateException("模型服务返回错误：" + streamErrorMessage(event));
                     }
