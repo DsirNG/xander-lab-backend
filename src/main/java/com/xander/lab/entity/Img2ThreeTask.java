@@ -15,6 +15,7 @@ public class Img2ThreeTask {
     private Long userId;
     private String status;
     private String stage;
+    private String runToken;
     private String title;
     private String referenceMediaUrl;
     private Long referenceMediaAssetId;

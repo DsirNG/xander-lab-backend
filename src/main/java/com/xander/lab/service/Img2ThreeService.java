@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.List;
 
@@ -82,12 +83,13 @@ public class Img2ThreeService {
     @Scheduled(fixedDelay = 60_000)
     public void failAbandonedRunningTasks() {
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(20);
-        taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
+        List<Img2ThreeTask> abandonedTasks = taskMapper.selectList(new LambdaQueryWrapper<Img2ThreeTask>()
                 .eq(Img2ThreeTask::getStatus, "running")
                 .lt(Img2ThreeTask::getUpdatedAt, cutoff)
-                .set(Img2ThreeTask::getStatus, "failed")
-                .set(Img2ThreeTask::getErrorMessage, "Reconstruction worker timed out or was interrupted; run the task again")
-                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
+                .last("LIMIT 100"));
+        for (Img2ThreeTask task : abandonedTasks) {
+            failTimedOutExecution(task, cutoff);
+        }
     }
 
     public Img2ThreeTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
@@ -95,13 +97,13 @@ public class Img2ThreeService {
         if ("ready".equals(existing.getStatus()) && StringUtils.hasText(existing.getSpecJson())) {
             return toVo(existing);
         }
-        Boolean claimed = transactionTemplate.execute(status -> claimRunning(taskId, userId));
-        if (!Boolean.TRUE.equals(claimed)) {
+        String runToken = transactionTemplate.execute(status -> claimRunning(taskId, userId));
+        if (!StringUtils.hasText(runToken)) {
             throw new IllegalStateException("任务正在运行，请等待当前重建完成");
         }
         try {
             emit(onEvent, "stage", "analyze|正在观察参考图与主体结构");
-            updateStage(taskId, userId, "analyze");
+            requireActiveExecution(updateStage(taskId, userId, runToken, "analyze"));
 
             Img2ThreeTask task = requireOwned(taskId, userId);
             byte[] imageBytes = downloadBytes(task.getReferenceMediaUrl());
@@ -117,7 +119,7 @@ public class Img2ThreeService {
             );
 
             emit(onEvent, "stage", "spec|正在提取主体轮廓、纹理与浮雕深度");
-            updateStage(taskId, userId, "spec");
+            requireActiveExecution(updateStage(taskId, userId, runToken, "spec"));
 
             GeneratedModel generated = new GeneratedModel(
                     relief.title(), relief.analysis(), relief.sceneSpec(), relief.factoryCode()
@@ -137,27 +139,21 @@ public class Img2ThreeService {
             }
 
             emit(onEvent, "stage", "factory|正在整理可下载的 TypeScript 工厂");
-            updateStage(taskId, userId, "factory");
+            requireActiveExecution(updateStage(taskId, userId, runToken, "factory"));
 
             String analysisJson = objectMapper.writeValueAsString(generated.analysis());
             String finalSpecJson = objectMapper.writeValueAsString(generated.sceneSpec());
             String finalTitle = generated.title();
             String generatedFactory = generated.factoryCode();
-            Integer completed = transactionTemplate.execute(status -> {
-                LambdaUpdateWrapper<Img2ThreeTask> update = new LambdaUpdateWrapper<Img2ThreeTask>()
-                        .eq(Img2ThreeTask::getId, taskId)
-                        .eq(Img2ThreeTask::getUserId, userId)
-                        .eq(Img2ThreeTask::getStatus, "running")
-                        .set(Img2ThreeTask::getStatus, "ready")
-                        .set(Img2ThreeTask::getStage, "factory")
-                        .set(Img2ThreeTask::getTitle, finalTitle)
-                        .set(Img2ThreeTask::getAnalysisJson, analysisJson)
-                        .set(Img2ThreeTask::getSpecJson, finalSpecJson)
-                        .set(Img2ThreeTask::getFactoryCode, generatedFactory)
-                        .set(Img2ThreeTask::getErrorMessage, null)
-                        .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now());
-                return taskMapper.update(null, update);
-            });
+            Integer completed = transactionTemplate.execute(status -> completeRunning(
+                    taskId,
+                    userId,
+                    runToken,
+                    finalTitle,
+                    analysisJson,
+                    finalSpecJson,
+                    generatedFactory
+            ));
             if (!Integer.valueOf(1).equals(completed)) {
                 throw new IllegalStateException("任务状态已变化，本次重建结果未覆盖较新的任务状态");
             }
@@ -165,7 +161,7 @@ public class Img2ThreeService {
         } catch (Exception e) {
             log.warn("img2three task {} failed at its current stage", taskId, e);
             String message = e.getMessage() == null ? "重建失败" : e.getMessage();
-            transactionTemplate.executeWithoutResult(status -> markFailed(taskId, userId, message));
+            transactionTemplate.executeWithoutResult(status -> markFailed(taskId, userId, runToken, message));
             throw e instanceof IllegalStateException || e instanceof IllegalArgumentException
                     ? (RuntimeException) e
                     : new IllegalStateException(message, e);
@@ -269,34 +265,86 @@ public class Img2ThreeService {
                 && error.getMessage().startsWith("img2threejs quality gate rejected");
     }
 
-    private boolean claimRunning(Long taskId, Long userId) {
+    String claimRunning(Long taskId, Long userId) {
         requireOwned(taskId, userId);
+        String runToken = UUID.randomUUID().toString();
         int updated = taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
                 .eq(Img2ThreeTask::getId, taskId)
                 .eq(Img2ThreeTask::getUserId, userId)
                 .in(Img2ThreeTask::getStatus, "created", "failed")
                 .set(Img2ThreeTask::getStatus, "running")
+                .set(Img2ThreeTask::getRunToken, runToken)
                 .set(Img2ThreeTask::getErrorMessage, null)
                 .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
-        return updated == 1;
+        return updated == 1 ? runToken : null;
     }
 
-    private void markFailed(Long taskId, Long userId, String message) {
-        taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
+    int markFailed(Long taskId, Long userId, String runToken, String message) {
+        return taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
                 .eq(Img2ThreeTask::getId, taskId)
                 .eq(Img2ThreeTask::getUserId, userId)
                 .eq(Img2ThreeTask::getStatus, "running")
+                .eq(Img2ThreeTask::getRunToken, runToken)
                 .set(Img2ThreeTask::getStatus, "failed")
                 .set(Img2ThreeTask::getErrorMessage, truncate(message, 1000))
                 .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
     }
 
-    private void updateStage(Long taskId, Long userId, String stage) {
-        taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
+    int updateStage(Long taskId, Long userId, String runToken, String stage) {
+        return taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
                 .eq(Img2ThreeTask::getId, taskId)
                 .eq(Img2ThreeTask::getUserId, userId)
+                .eq(Img2ThreeTask::getStatus, "running")
+                .eq(Img2ThreeTask::getRunToken, runToken)
                 .set(Img2ThreeTask::getStage, stage)
                 .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
+    }
+
+    int completeRunning(Long taskId,
+                        Long userId,
+                        String runToken,
+                        String title,
+                        String analysisJson,
+                        String specJson,
+                        String factoryCode) {
+        return taskMapper.update(null, new LambdaUpdateWrapper<Img2ThreeTask>()
+                .eq(Img2ThreeTask::getId, taskId)
+                .eq(Img2ThreeTask::getUserId, userId)
+                .eq(Img2ThreeTask::getStatus, "running")
+                .eq(Img2ThreeTask::getRunToken, runToken)
+                .set(Img2ThreeTask::getStatus, "ready")
+                .set(Img2ThreeTask::getStage, "factory")
+                .set(Img2ThreeTask::getTitle, title)
+                .set(Img2ThreeTask::getAnalysisJson, analysisJson)
+                .set(Img2ThreeTask::getSpecJson, specJson)
+                .set(Img2ThreeTask::getFactoryCode, factoryCode)
+                .set(Img2ThreeTask::getErrorMessage, null)
+                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
+    }
+
+    private void failTimedOutExecution(Img2ThreeTask task, LocalDateTime cutoff) {
+        LambdaUpdateWrapper<Img2ThreeTask> update = new LambdaUpdateWrapper<Img2ThreeTask>()
+                .eq(Img2ThreeTask::getId, task.getId())
+                .eq(Img2ThreeTask::getUserId, task.getUserId())
+                .eq(Img2ThreeTask::getStatus, "running")
+                .lt(Img2ThreeTask::getUpdatedAt, cutoff);
+        if (StringUtils.hasText(task.getRunToken())) {
+            update.eq(Img2ThreeTask::getRunToken, task.getRunToken());
+        } else {
+            // Legacy running rows created before the run-token migration still need one-time recovery.
+            update.isNull(Img2ThreeTask::getRunToken);
+        }
+        update.set(Img2ThreeTask::getStatus, "failed")
+                .set(Img2ThreeTask::getErrorMessage,
+                        "Reconstruction worker timed out or was interrupted; run the task again")
+                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now());
+        taskMapper.update(null, update);
+    }
+
+    private void requireActiveExecution(int updated) {
+        if (updated != 1) {
+            throw new IllegalStateException("任务执行代次已变化，本次旧重建已停止");
+        }
     }
 
     private Img2ThreeTask requireOwned(Long taskId, Long userId) {

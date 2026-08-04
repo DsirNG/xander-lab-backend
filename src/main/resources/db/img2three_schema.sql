@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS `img2three_task` (
   `user_id` BIGINT NOT NULL COMMENT '所属用户ID',
   `status` VARCHAR(16) NOT NULL DEFAULT 'created' COMMENT 'created/running/ready/failed',
   `stage` VARCHAR(32) NOT NULL DEFAULT 'analyze' COMMENT 'analyze/spec/factory',
+  `run_token` VARCHAR(36) NULL COMMENT '当前执行代次令牌，用于隔离超时重试与旧工作线程',
   `title` VARCHAR(255) NULL COMMENT '生成标题',
   `reference_media_url` VARCHAR(2000) NOT NULL COMMENT '参考图 URL',
   `reference_media_asset_id` BIGINT NULL COMMENT '关联 blog_media_asset.id',
