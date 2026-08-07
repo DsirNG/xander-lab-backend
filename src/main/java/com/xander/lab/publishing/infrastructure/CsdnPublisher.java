@@ -7,6 +7,7 @@ import com.xander.lab.publishing.domain.PublishResult;
 import com.xander.lab.publishing.application.CsdnCredentialService;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -17,6 +18,7 @@ import java.util.stream.Collectors;
 
 /** Publishes an article through CSDN's web console API. */
 @Component
+@Slf4j
 public class CsdnPublisher implements BlogPublisher {
     private static final String SAVE_PATH = "/blog-console-api/v1/postedit/saveArticle";
     private static final String ACCEPT = "application/json, text/plain, */*";
@@ -59,7 +61,15 @@ public class CsdnPublisher implements BlogPublisher {
             throw new IllegalStateException("CSDN publish failed: " + (response == null ? "empty response" : response.path("msg").asText("unknown error")));
         }
         JsonNode data = response.path("data");
-        return new PublishResult(platform(), data.path("article_id").asText(), data.path("url").asText());
+        String articleId = data.path("article_id").asText("");
+        String url = data.path("url").asText("");
+        if (articleId.isBlank() || url.isBlank()) {
+            log.warn("[CSDN] Publish returned incomplete result: code={}, msg={}, data={}",
+                    response.path("code").asText(), response.path("msg").asText(), data);
+            throw new IllegalStateException("CSDN publish returned no article result: "
+                    + response.path("msg").asText("no message"));
+        }
+        return new PublishResult(platform(), articleId, url);
     }
 
     private String sign(String apiKey, String nonce) {
