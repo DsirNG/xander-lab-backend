@@ -36,11 +36,18 @@ public class CsdnCredentialService {
         }
     }
 
-    public boolean isAuthorized(Long userId) { return find(userId) != null; }
+    public boolean isAuthorized(Long userId) {
+        CsdnPlatformCredential credential = find(userId);
+        return credential != null
+                && hasText(credential.getEncryptedCookie())
+                && hasText(credential.getCsdnUsername());
+    }
 
     public String requireCookie(Long userId) {
         CsdnPlatformCredential credential = find(userId);
-        if (credential == null) throw new IllegalStateException("CSDN authorization is required");
+        if (credential == null || !hasText(credential.getEncryptedCookie()) || !hasText(credential.getCsdnUsername())) {
+            throw new IllegalStateException("CSDN authorization is required");
+        }
         try { return decrypt(credential.getEncryptedCookie()); }
         catch (Exception e) { throw new IllegalStateException("Unable to read CSDN authorization", e); }
     }
@@ -63,6 +70,10 @@ public class CsdnCredentialService {
     private CsdnPlatformCredential find(Long userId) {
         return mapper.selectOne(new LambdaQueryWrapper<CsdnPlatformCredential>()
                 .eq(CsdnPlatformCredential::getUserId, userId).eq(CsdnPlatformCredential::getStatus, "ACTIVE"));
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private String encrypt(String plaintext) throws Exception {
