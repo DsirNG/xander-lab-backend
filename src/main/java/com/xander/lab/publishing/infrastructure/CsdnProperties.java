@@ -12,9 +12,6 @@ public class CsdnProperties {
     private boolean enabled;
     private String baseUrl = "https://bizapi.csdn.net";
     private String apiKey = "203803574";
-    /** Captured CSDN web-console signing pair; not a user credential. */
-    private String signature = "LR91sXgft3iYsI+K0/cRgOCK5LzLHJbUSgKRPrUEaR8=";
-    private String nonce = "6fc69002-35f0-4d7c-8fde-67c9cd36ba4b";
     private String seleniumUrl = "http://selenium:4444/wd/hub";
     private String credentialEncryptionKey;
     private int authorizationTimeoutSeconds = 180;
