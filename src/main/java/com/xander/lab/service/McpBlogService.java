@@ -7,6 +7,7 @@ import com.xander.lab.dto.BlogPostDTO;
 import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.security.JwtUtil;
+import com.xander.lab.dto.PageData;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +20,28 @@ public class McpBlogService {
     private final BlogService blogService;
 
     public boolean isAuthorized() { return resolveAccessToken() != null; }
+
+    /** Returns the authorized user's posts for AI context and duplicate detection. */
+    public PageData<BlogPostVO> list(Integer page, Integer size, String search) {
+        String accessToken = requireAccessToken();
+        try {
+            UserContext.setUserId(Long.parseLong(jwtUtil.getSubject(accessToken)));
+            return blogService.getMyBlogs(null, search, page, size);
+        } finally {
+            UserContext.clear();
+        }
+    }
+
+    /** Loads one post only after ownership has been established. */
+    public BlogPostVO get(Long id) {
+        String accessToken = requireAccessToken();
+        try {
+            UserContext.setUserId(Long.parseLong(jwtUtil.getSubject(accessToken)));
+            return blogService.getManagedBlogById(UserContext.getUserId(), id);
+        } finally {
+            UserContext.clear();
+        }
+    }
 
     public BlogPostVO create(BlogPostDTO post, boolean publish) {
         String accessToken = resolveAccessToken();
@@ -43,8 +66,19 @@ public class McpBlogService {
     }
 
     public void delete(Long id) {
-        if (resolveAccessToken() == null) throw new McpAuthorizationRequiredException();
-        blogService.deleteBlog(id);
+        String accessToken = requireAccessToken();
+        try {
+            UserContext.setUserId(Long.parseLong(jwtUtil.getSubject(accessToken)));
+            blogService.deleteBlog(id);
+        } finally {
+            UserContext.clear();
+        }
+    }
+
+    private String requireAccessToken() {
+        String accessToken = resolveAccessToken();
+        if (accessToken == null) throw new McpAuthorizationRequiredException();
+        return accessToken;
     }
 
     private String resolveAccessToken() {

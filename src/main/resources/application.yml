@@ -110,6 +110,15 @@ blog:
     image-size: ${BLOG_AGENT_IMAGE_SIZE:1536x1024}
     max-illustrations: ${BLOG_AGENT_MAX_ILLUSTRATIONS:3}
 
+publishing:
+  csdn:
+    enabled: ${CSDN_PUBLISH_ENABLED:false}
+    base-url: ${CSDN_API_BASE_URL:https://bizapi.csdn.net}
+    cookie: ${CSDN_COOKIE:}
+    api-key: ${CSDN_API_KEY:203803574}
+    signature: ${CSDN_API_SIGNATURE:}
+    categories: ${CSDN_CATEGORY:面试}
+
 # Image → procedural Three.js. Blank fields fall back to blog.agent credentials.
 img2three:
   pipeline-enabled: ${IMG2THREE_PIPELINE_ENABLED:true}

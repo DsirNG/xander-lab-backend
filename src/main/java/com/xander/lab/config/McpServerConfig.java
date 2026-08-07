@@ -47,7 +47,7 @@ public class McpServerConfig {
     @Bean
     McpSyncServer blogMcpServer(HttpServletStreamableServerTransportProvider transport) {
         return McpServer.sync(transport).serverInfo("xander-blog", "1.0.0")
-                .tools(authStatusTool(), startLoginTool(), postTool("create_draft", false), postTool("publish_post", true),
+                .tools(authStatusTool(), startLoginTool(), listPostsTool(), getPostTool(), postTool("create_draft", false), postTool("publish_post", true),
                         updatePostTool(), deletePostTool())
                 .build();
     }
@@ -80,6 +80,24 @@ public class McpServerConfig {
     private McpServerFeatures.SyncToolSpecification startLoginTool() {
         return tool("start_login", "Returns a browser URL for one-time blog authorization. Never ask for passwords in chat.", emptySchema(),
                 ignored -> result(Map.of("ok", true, "authorizeUrl", properties.getPublicBaseUrl() + "/mcp/auth/login")));
+    }
+
+    private McpServerFeatures.SyncToolSpecification listPostsTool() {
+        return tool("list_posts", "Lists the authorized user's blog posts for topic deduplication and context selection.", listSchema(), args -> {
+            if (!blogService.isAuthorized()) return authRequired();
+            var posts = blogService.list(integerValue(args, "page", 1), integerValue(args, "size", 10), optionalValue(args, "search", null));
+            return result(Map.of("ok", true, "posts", posts));
+        });
+    }
+
+    private McpServerFeatures.SyncToolSpecification getPostTool() {
+        return tool("get_post", "Reads one of the authorized user's blog posts by id.", Map.of(
+                "type", "object", "properties", Map.of("postId", Map.of("type", "integer")),
+                "required", List.of("postId")), args -> {
+            if (!blogService.isAuthorized()) return authRequired();
+            BlogPostVO post = blogService.get(longValue(args, "postId"));
+            return result(Map.of("ok", true, "post", post));
+        });
     }
 
     private McpServerFeatures.SyncToolSpecification postTool(String name, boolean publish) {
@@ -139,6 +157,12 @@ public class McpServerConfig {
     private Map<String, Object> postSchema() {
         return Map.of("type", "object", "properties", Map.of("title", Map.of("type", "string"), "content", Map.of("type", "string"), "contentBase64", Map.of("type", "string", "description", "UTF-8 article content encoded as Base64. Use only when an upstream proxy blocks literal content."), "summary", Map.of("type", "string"), "categoryId", Map.of("type", "string"), "tags", Map.of("type", "array", "items", Map.of("type", "string"))), "required", List.of("title"));
     }
+    private Map<String, Object> listSchema() {
+        return Map.of("type", "object", "properties", Map.of(
+                "page", Map.of("type", "integer", "minimum", 1),
+                "size", Map.of("type", "integer", "minimum", 1, "maximum", 50),
+                "search", Map.of("type", "string")));
+    }
     private Map<String, Object> updateSchema() {
         return Map.of("type", "object", "properties", Map.of("postId", Map.of("type", "integer"), "title", Map.of("type", "string"), "titleBase64", Map.of("type", "string"), "summary", Map.of("type", "string"), "summaryBase64", Map.of("type", "string"), "content", Map.of("type", "string"), "contentBase64", Map.of("type", "string"), "categoryId", Map.of("type", "string"), "tags", Map.of("type", "array", "items", Map.of("type", "string"))), "required", List.of("postId"));
     }
@@ -150,6 +174,12 @@ public class McpServerConfig {
         Object value = args.get(key);
         if (value instanceof Number number) return number.longValue();
         return Long.parseLong(String.valueOf(value));
+    }
+    private Integer integerValue(Map<String, Object> args, String key, int fallback) {
+        Object value = args.get(key);
+        if (value == null) return fallback;
+        if (value instanceof Number number) return number.intValue();
+        return Integer.parseInt(String.valueOf(value));
     }
     private boolean hasAny(Map<String, Object> args, String... keys) {
         return java.util.Arrays.stream(keys).anyMatch(key -> args.get(key) != null);
