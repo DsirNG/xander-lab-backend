@@ -23,6 +23,11 @@
             <artifactId>flexmark-all</artifactId>
             <version>0.64.8</version>
         </dependency>
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.1</version>
+        </dependency>
         <!-- MCP server transport, using Jackson 2 to stay compatible with Spring Boot 3.2. -->
         <dependency>
             <groupId>io.modelcontextprotocol.sdk</groupId>
