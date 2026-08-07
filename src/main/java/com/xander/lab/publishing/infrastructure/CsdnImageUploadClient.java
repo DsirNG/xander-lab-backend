@@ -40,10 +40,29 @@ class CsdnImageUploadClient implements CsdnImageStorageClient {
         if (response == null || response.path("code").asInt(0) != 200) {
             throw new IllegalStateException("CSDN image upload failed: " + (response == null ? "empty response" : response.path("msg").asText("unknown error")));
         }
-        String data = response.path("data").asText("");
+        String data = extractUrl(response.path("data"));
         if (data.isBlank()) {
             throw new IllegalStateException("CSDN image upload returned empty url");
         }
         return data;
+    }
+
+    static String extractUrl(JsonNode data) {
+        if (data == null || data.isNull() || data.isMissingNode()) {
+            return "";
+        }
+        if (data.isTextual()) {
+            return data.asText("");
+        }
+        if (data.isObject()) {
+            String[] keys = {"url", "imgUrl", "imageUrl", "image_url", "src", "link"};
+            for (String key : keys) {
+                String value = data.path(key).asText("");
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        }
+        return data.asText("");
     }
 }
