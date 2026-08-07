@@ -4,7 +4,6 @@ import com.xander.lab.publishing.infrastructure.CsdnProperties;
 import lombok.RequiredArgsConstructor;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Cookie;
-import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.remote.RemoteWebDriver;
@@ -35,7 +34,7 @@ public class CsdnAuthorizationService {
         try {
             ChromeOptions options = new ChromeOptions();
             options.addArguments("--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--window-size=1360,1020");
-            WebDriver driver = new RemoteWebDriver(URI.create(properties.getSeleniumUrl()).toURL(), options);
+            RemoteWebDriver driver = new RemoteWebDriver(URI.create(properties.getSeleniumUrl()).toURL(), options);
             session = new Session(userId, driver, Instant.now().plusSeconds(properties.getAuthorizationTimeoutSeconds()));
             driver.get("https://mp.csdn.net/");
             WebElement frame = new WebDriverWait(driver, Duration.ofSeconds(20))
@@ -61,16 +60,23 @@ public class CsdnAuthorizationService {
         if (session == null || !session.userId().equals(userId)) {
             return new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
         }
-        Set<Cookie> cookies = session.driver().manage().getCookies();
         boolean loginFrameVisible = session.driver().findElements(By.cssSelector("iframe[src*='passport.csdn.net/account/login']"))
                 .stream().anyMatch(element -> {
                     try { return element.isDisplayed(); } catch (Exception ignored) { return false; }
                 });
-        boolean loggedIn = !loginFrameVisible && cookies.stream().anyMatch(c -> "UserToken".equals(c.getName()));
+        boolean loggedIn = !loginFrameVisible;
         if (!loggedIn) return new AuthorizationView("PENDING", null);
+        session.driver().navigate().refresh();
+        new WebDriverWait(session.driver(), Duration.ofSeconds(20)).until(driver ->
+                "complete".equals(((org.openqa.selenium.JavascriptExecutor) driver).executeScript("return document.readyState")));
+        Set<Cookie> cookies = session.driver().manage().getCookies();
+        String token = cookies.stream().filter(cookie -> "UserToken".equals(cookie.getName()))
+                .map(Cookie::getValue).findFirst().orElse(null);
+        if (token == null || token.isBlank()) return new AuthorizationView("PENDING", null);
         String header = cookies.stream().sorted(Comparator.comparing(Cookie::getName))
-                .map(c -> c.getName() + "=" + c.getValue()).collect(Collectors.joining("; "));
-        String username = cookies.stream().filter(c -> "UserName".equals(c.getName())).map(Cookie::getValue).findFirst().orElse(null);
+                .map(cookie -> cookie.getName() + "=" + cookie.getValue()).collect(Collectors.joining("; "));
+        String username = cookies.stream().filter(cookie -> "UserName".equals(cookie.getName()))
+                .map(Cookie::getValue).findFirst().orElse(null);
         credentials.save(userId, header, username);
         closeSession();
         return new AuthorizationView("AUTHORIZED", null);
@@ -91,6 +97,6 @@ public class CsdnAuthorizationService {
         session = null;
     }
 
-    private record Session(Long userId, WebDriver driver, Instant expiresAt) { }
+    private record Session(Long userId, RemoteWebDriver driver, Instant expiresAt) { }
     public record AuthorizationView(String status, String qrCodeDataUrl) { }
 }

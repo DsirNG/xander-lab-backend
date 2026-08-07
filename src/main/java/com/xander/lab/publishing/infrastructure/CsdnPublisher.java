@@ -61,6 +61,9 @@ public class CsdnPublisher implements BlogPublisher {
             throw new IllegalStateException("CSDN publish failed: " + (response == null ? "empty response" : response.path("msg").asText("unknown error")));
         }
         JsonNode data = response.path("data");
+        if (data.isTextual() && "成功".equals(data.asText())) {
+            return new PublishResult(platform(), "accepted:" + command.taskId(), "");
+        }
         String articleId = data.path("article_id").asText("");
         String url = data.path("url").asText("");
         if (articleId.isBlank() || url.isBlank()) {

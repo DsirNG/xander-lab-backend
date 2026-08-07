@@ -30,8 +30,7 @@ public class PublicationService {
         BlogPublishRecord existing = recordMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<BlogPublishRecord>()
                 .eq("task_id", command.taskId()).eq("platform", platform));
         if (existing != null && "SUCCEEDED".equals(existing.getStatus())
-                && existing.getExternalId() != null && !existing.getExternalId().isBlank()
-                && existing.getUrl() != null && !existing.getUrl().isBlank()) {
+                && existing.getExternalId() != null && !existing.getExternalId().isBlank()) {
             return new PublishResult(platform, existing.getExternalId(), existing.getUrl());
         }
         BlogPublishRecord record = existing == null ? new BlogPublishRecord() : existing;
