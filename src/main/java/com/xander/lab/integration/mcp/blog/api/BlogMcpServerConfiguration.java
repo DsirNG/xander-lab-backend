@@ -2,9 +2,7 @@ package com.xander.lab.integration.mcp.blog.api;
 
 import com.xander.lab.dto.BlogPostDTO;
 import com.xander.lab.dto.BlogPostVO;
-import com.xander.lab.config.McpBlogProperties;
-import com.xander.lab.integration.mcp.application.McpClientAuthorizationService;
-import com.xander.lab.integration.mcp.security.McpClientContext;
+import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
@@ -15,16 +13,10 @@ import io.modelcontextprotocol.spec.McpSchema;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.filter.OncePerRequestFilter;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.*;
@@ -33,9 +25,7 @@ import java.util.*;
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "mcp.blog", name = "enabled", havingValue = "true")
 public class BlogMcpServerConfiguration {
-    private final McpBlogProperties properties;
     private final BlogMcpApplicationService blogService;
-    private final McpClientAuthorizationService authorizationService;
 
     @Bean
     HttpServletStreamableServerTransportProvider mcpTransport() {
@@ -52,53 +42,14 @@ public class BlogMcpServerConfiguration {
     @Bean
     McpSyncServer blogMcpServer(@Qualifier("mcpTransport") HttpServletStreamableServerTransportProvider transport) {
         return McpServer.sync(transport).serverInfo("xander-blog", "1.0.0")
-                .tools(authStatusTool(), startLoginTool(), listPostsTool(), getPostTool(), postTool("create_draft", false), postTool("publish_post", true),
+                .tools(listPostsTool(), getPostTool(), postTool("create_draft", false), postTool("publish_post", true),
                         updatePostTool(), deletePostTool())
                 .build();
     }
 
-    @Bean
-    FilterRegistrationBean<OncePerRequestFilter> mcpClientTokenFilter() {
-        OncePerRequestFilter filter = new OncePerRequestFilter() {
-            @Override protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
-                                                      FilterChain chain) throws IOException, jakarta.servlet.ServletException {
-                String clientId = request.getHeader("X-MCP-Client-Id");
-                String clientSecret = request.getHeader("X-MCP-Client-Secret");
-                if (!Objects.equals(properties.getServerToken(), request.getHeader("X-MCP-Server-Token"))
-                        || clientId == null || !clientId.matches("[A-Za-z0-9._-]{16,128}")
-                        || clientSecret == null || !clientSecret.matches("[A-Za-z0-9._~-]{32,256}")) {
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write("{\"error\":\"MCP_CLIENT_AUTH_REQUIRED\"}");
-                    return;
-                }
-                McpClientContext.setClient(clientId, clientSecret);
-                try {
-                    chain.doFilter(request, response);
-                } finally {
-                    McpClientContext.clear();
-                }
-            }
-        };
-        FilterRegistrationBean<OncePerRequestFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.addUrlPatterns("/api/mcp");
-        registration.setOrder(-101);
-        return registration;
-    }
-
-    private McpServerFeatures.SyncToolSpecification authStatusTool() {
-        return tool("get_auth_status", "Returns whether the MCP server has an active blog authorization.", emptySchema(),
-                ignored -> result(Map.of("ok", true, "authorized", blogService.isAuthorized())));
-    }
-
-    private McpServerFeatures.SyncToolSpecification startLoginTool() {
-        return tool("start_login", "Returns a browser URL for one-time blog authorization. Never ask for passwords in chat.", emptySchema(),
-                ignored -> result(Map.of("ok", true, "authorizeUrl", authorizeUrl())));
-    }
-
     private McpServerFeatures.SyncToolSpecification listPostsTool() {
         return tool("list_posts", "Lists the authorized user's blog posts for topic deduplication and context selection.", listSchema(), args -> {
-            if (!blogService.isAuthorized()) return authRequired();
+            McpOAuthRequestContext.requireScope("blog:read");
             var posts = blogService.list(integerValue(args, "page", 1), integerValue(args, "size", 10), optionalValue(args, "search", null));
             return result(Map.of("ok", true, "posts", posts));
         });
@@ -108,7 +59,7 @@ public class BlogMcpServerConfiguration {
         return tool("get_post", "Reads one of the authorized user's blog posts by id.", Map.of(
                 "type", "object", "properties", Map.of("postId", Map.of("type", "integer")),
                 "required", List.of("postId")), args -> {
-            if (!blogService.isAuthorized()) return authRequired();
+            McpOAuthRequestContext.requireScope("blog:read");
             BlogPostVO post = blogService.get(longValue(args, "postId"));
             return result(Map.of("ok", true, "post", post));
         });
@@ -116,7 +67,7 @@ public class BlogMcpServerConfiguration {
 
     private McpServerFeatures.SyncToolSpecification postTool(String name, boolean publish) {
         return tool(name, publish ? "Publishes a blog post." : "Creates an unpublished blog draft.", postSchema(), args -> {
-            if (!blogService.isAuthorized()) return authRequired();
+            McpOAuthRequestContext.requireScope("blog:write");
             BlogPostDTO dto = new BlogPostDTO();
             dto.setTitle(value(args, "title"));
             dto.setContent(content(args));
@@ -131,7 +82,7 @@ public class BlogMcpServerConfiguration {
 
     private McpServerFeatures.SyncToolSpecification updatePostTool() {
         return tool("update_post", "Updates supplied fields of an existing blog post. Providing tags replaces all tags.", updateSchema(), args -> {
-            if (!blogService.isAuthorized()) return authRequired();
+            McpOAuthRequestContext.requireScope("blog:write");
             Long postId = longValue(args, "postId");
             String title = textOrBase64(args, "title", "titleBase64");
             String summary = textOrBase64(args, "summary", "summaryBase64");
@@ -145,7 +96,7 @@ public class BlogMcpServerConfiguration {
 
     private McpServerFeatures.SyncToolSpecification deletePostTool() {
         return tool("delete_post", "Permanently deletes a blog post. Requires confirm=true.", deleteSchema(), args -> {
-            if (!blogService.isAuthorized()) return authRequired();
+            McpOAuthRequestContext.requireScope("blog:write");
             if (!Boolean.TRUE.equals(args.get("confirm"))) {
                 return McpSchema.CallToolResult.builder().isError(true).structuredContent(Map.of("ok", false, "error", "CONFIRMATION_REQUIRED", "message", "Set confirm=true to permanently delete this post.")).addTextContent("CONFIRMATION_REQUIRED").build();
             }
@@ -163,9 +114,6 @@ public class BlogMcpServerConfiguration {
 
     private McpSchema.CallToolResult result(Map<String, Object> data) {
         return McpSchema.CallToolResult.builder().structuredContent(data).addTextContent(data.toString()).build();
-    }
-    private McpSchema.CallToolResult authRequired() {
-        return McpSchema.CallToolResult.builder().isError(true).structuredContent(Map.of("ok", false, "error", "AUTH_REQUIRED", "message", "请先完成博客后台授权", "authorizeUrl", authorizeUrl())).addTextContent("AUTH_REQUIRED: 请先完成博客后台授权").build();
     }
     private Map<String, Object> emptySchema() { return Map.of("type", "object", "properties", Map.of()); }
     private Map<String, Object> postSchema() {
@@ -226,10 +174,4 @@ public class BlogMcpServerConfiguration {
     }
     private String optionalValue(Map<String, Object> args, String key, String defaultValue) { return args.containsKey(key) && args.get(key) != null ? String.valueOf(args.get(key)) : defaultValue; }
     private String summarize(String content) { return content.length() <= 160 ? content : content.substring(0, 157) + "..."; }
-    private String authorizeUrl() {
-        String clientId = McpClientContext.getClientId();
-        if (clientId == null) throw new IllegalStateException("MCP client identity is required");
-        String code = authorizationService.createBrowserAuthorizationRequest(clientId, McpClientContext.getClientSecret());
-        return properties.getPublicBaseUrl() + "/api/mcp/auth/login?clientId=" + clientId + "&code=" + code;
-    }
 }

@@ -129,7 +129,6 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 
     private String maskSensitive(String header, String value) {
         if ("Authorization".equalsIgnoreCase(header)
-                || "X-MCP-Server-Token".equalsIgnoreCase(header)
                 || "Cookie".equalsIgnoreCase(header)) {
             if (value != null && value.length() > 20) {
                 return value.substring(0, 15) + "...";

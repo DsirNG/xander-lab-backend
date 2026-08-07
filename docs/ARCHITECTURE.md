@@ -31,10 +31,10 @@ platform credentials.
 The migration is incremental. Existing public HTTP routes, tables and runtime
 configuration must remain compatible during package moves.
 
-`integration.mcp` now owns MCP client authorization, browser handoff, request
-identity, and MCP-facing blog commands. A durable MCP client authorization maps
-one external client installation to one application user; it is distinct from
-both browser JWT sessions and CSDN platform credentials.
+`integration.mcp.security` owns OAuth 2.1 discovery, PKCE authorization,
+bearer-token validation, consent, and MCP request identity. It is distinct from
+both browser JWT sessions and CSDN platform credentials. The `blog`, `csdn`,
+and `dual` MCP modules own only their transport contracts and application flows.
 
 ## Migration Order
 

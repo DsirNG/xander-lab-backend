@@ -4,8 +4,7 @@ import com.xander.lab.dto.BlogPostDTO;
 import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.dto.PageData;
 import com.xander.lab.identity.security.UserContext;
-import com.xander.lab.integration.mcp.application.McpClientAuthorizationService;
-import com.xander.lab.integration.mcp.security.McpClientContext;
+import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.service.BlogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,7 +15,6 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class BlogMcpApplicationService {
-    private final McpClientAuthorizationService authorizationService;
     private final BlogService blogService;
 
     public boolean isAuthorized() { return currentUserId() != null; }
@@ -43,9 +41,7 @@ public class BlogMcpApplicationService {
 
     /** Returns the Xander Lab user represented by the client bound to this request. */
     public Long currentUserId() {
-        String clientId = McpClientContext.getClientId();
-        String clientSecret = McpClientContext.getClientSecret();
-        return clientId == null || clientSecret == null ? null : authorizationService.currentUserId(clientId, clientSecret);
+        return McpOAuthRequestContext.userId();
     }
 
     private <T> T asUser(java.util.function.Function<Long, T> command) {

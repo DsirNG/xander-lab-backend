@@ -1,7 +1,6 @@
 package com.xander.lab.integration.mcp.csdn.application;
 
-import com.xander.lab.integration.mcp.application.McpClientAuthorizationService;
-import com.xander.lab.integration.mcp.security.McpClientContext;
+import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import com.xander.lab.publishing.domain.PublishResult;
@@ -12,7 +11,6 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class CsdnMcpApplicationService {
-    private final McpClientAuthorizationService clientAuthorizationService;
     private final CsdnAuthorizationService csdnAuthorizationService;
     private final CsdnBlogSyncService csdnBlogSyncService;
 
@@ -29,10 +27,7 @@ public class CsdnMcpApplicationService {
     }
 
     public Long currentUserId() {
-        String clientId = McpClientContext.getClientId();
-        String clientSecret = McpClientContext.getClientSecret();
-        return clientId == null || clientSecret == null ? null
-                : clientAuthorizationService.currentUserId(clientId, clientSecret);
+        return McpOAuthRequestContext.userId();
     }
 
     private Long requireUserId() {

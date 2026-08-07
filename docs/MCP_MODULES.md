@@ -14,4 +14,5 @@ Markdown conversion, HTTP publisher, and sync application service. The dual
 endpoint is a thin application-level composition: it creates and publishes the
 local article, then asks the CSDN application service to synchronize the same
 owned post. Neither platform module reads the other's credentials. Client
-authorization is shared infrastructure only; the business flows remain separate.
+authorization is shared OAuth infrastructure only; each request is mapped to the
+consenting Xander Lab user and the business flows remain separate.

@@ -10,6 +10,4 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "mcp.dual")
 public class McpDualProperties {
     private boolean enabled = false;
-    private String serverToken;
-    private String publicBaseUrl = "http://localhost:30002";
 }

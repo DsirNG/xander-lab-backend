@@ -1,4 +1,4 @@
-package com.xander.lab.integration.mcp.infrastructure;
+package com.xander.lab.integration.mcp.security.infrastructure;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -7,17 +7,17 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
-/** Durable authorization linking one MCP client installation to one application user. */
+/** Durable user consent grant for one public MCP OAuth client. */
 @Data
-@TableName("mcp_client_authorization")
-public class McpClientAuthorization {
+@TableName("mcp_oauth_grant")
+public class McpOAuthGrant {
     @TableId(type = IdType.AUTO) private Long id;
-    private String clientId;
-    private String clientSecretHash;
     private Long userId;
-    private String encryptedTokens;
+    private String clientId;
+    private String scopes;
     private String status;
-    private LocalDateTime authorizedAt;
+    private LocalDateTime grantedAt;
+    private LocalDateTime revokedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

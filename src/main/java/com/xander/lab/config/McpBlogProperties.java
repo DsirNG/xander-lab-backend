@@ -9,7 +9,4 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "mcp.blog")
 public class McpBlogProperties {
     private boolean enabled = false;
-    private String serverToken;
-    private String credentialEncryptionKey;
-    private String publicBaseUrl = "http://localhost:30002";
 }

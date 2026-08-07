@@ -9,6 +9,4 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "mcp.csdn")
 public class CsdnMcpProperties {
     private boolean enabled = false;
-    private String serverToken;
-    private String publicBaseUrl = "http://localhost:30002";
 }

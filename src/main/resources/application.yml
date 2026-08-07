@@ -93,18 +93,17 @@ jwt:
 
 # Disabled by default. Use a Base64-encoded 32-byte key, and keep the server token out of source control.
 mcp:
-  authorization:
-    credential-encryption-key: ${MCP_CREDENTIAL_ENCRYPTION_KEY:}
-    request-ttl-seconds: ${MCP_AUTHORIZATION_REQUEST_TTL_SECONDS:600}
+  oauth:
+    enabled: ${MCP_OAUTH_ENABLED:false}
+    public-base-url: ${MCP_PUBLIC_BASE_URL:http://localhost:30002}
+    authorization-request-ttl-seconds: ${MCP_OAUTH_AUTHORIZATION_REQUEST_TTL_SECONDS:600}
+    authorization-code-ttl-seconds: ${MCP_OAUTH_AUTHORIZATION_CODE_TTL_SECONDS:300}
+    access-token-ttl-seconds: ${MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS:3600}
+    refresh-token-ttl-seconds: ${MCP_OAUTH_REFRESH_TOKEN_TTL_SECONDS:2592000}
   blog:
     enabled: ${MCP_BLOG_ENABLED:false}
-    server-token: ${MCP_SERVER_TOKEN:}
-    credential-encryption-key: ${MCP_CREDENTIAL_ENCRYPTION_KEY:}
-    public-base-url: ${MCP_PUBLIC_BASE_URL:http://localhost:30002}
   csdn:
     enabled: ${MCP_CSDN_ENABLED:false}
-    server-token: ${MCP_CSDN_SERVER_TOKEN:${MCP_SERVER_TOKEN:}}
-    public-base-url: ${MCP_CSDN_PUBLIC_BASE_URL:http://localhost:30002}
     platform:
       enabled: ${CSDN_PUBLISH_ENABLED:false}
       base-url: ${CSDN_API_BASE_URL:https://bizapi.csdn.net}
@@ -114,8 +113,6 @@ mcp:
       authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:180}
   dual:
     enabled: ${MCP_DUAL_ENABLED:false}
-    server-token: ${MCP_DUAL_SERVER_TOKEN:${MCP_SERVER_TOKEN:}}
-    public-base-url: ${MCP_DUAL_PUBLIC_BASE_URL:http://localhost:30002}
 
 # Leave credentials in application-local.yml or environment variables; never commit them.
 blog:

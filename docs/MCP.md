@@ -1,19 +1,19 @@
-# MCP Client Authorization
+# Remote MCP Authorization
 
-Both MCP endpoints require three headers from an external desktop client:
+Xander Lab exposes standard Streamable HTTP MCP resources at `/api/mcp`,
+`/api/mcp/csdn`, and `/api/mcp/dual`. An external MCP host needs only an
+endpoint URL. It discovers OAuth requirements from the HTTP 401 challenge and
+the `/.well-known/oauth-protected-resource` metadata endpoint.
+
+The OAuth server implements dynamic public-client registration and Authorization
+Code with mandatory S256 PKCE. After the user logs into Xander Lab and approves
+scopes in the profile consent page, the host receives an opaque bearer token.
+All MCP requests use:
 
 ```text
-X-MCP-Server-Token: configured server token
-X-MCP-Client-Id: stable opaque installation identifier (16-128 characters)
-X-MCP-Client-Secret: random per-installation secret (32-256 URL-safe characters)
+Authorization: Bearer <access_token>
 ```
 
-The first `start_login` call returns a one-time browser URL. The user logs in on
-that page and the server stores an encrypted refresh-token pair for that client
-installation. Subsequent calls resolve the bound Xander Lab user from the
-client ID and secret. CSDN publication then uses only that user's CSDN
-credential.
-
-Never share a client secret. To revoke a desktop installation, mark its
-`mcp_client_authorization` row as `REVOKED` until a dedicated management API is
-added.
+No global MCP server token, user-visible client secret, or MCP-specific password
+form exists. Users can review and revoke approved MCP clients from their profile.
+See `MCP_OAUTH_DESIGN.md` for scopes, persistence, and rollout details.
