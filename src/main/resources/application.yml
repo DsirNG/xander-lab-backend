@@ -93,6 +93,9 @@ jwt:
 
 # Disabled by default. Use a Base64-encoded 32-byte key, and keep the server token out of source control.
 mcp:
+  authorization:
+    credential-encryption-key: ${MCP_CREDENTIAL_ENCRYPTION_KEY:}
+    request-ttl-seconds: ${MCP_AUTHORIZATION_REQUEST_TTL_SECONDS:600}
   blog:
     enabled: ${MCP_BLOG_ENABLED:false}
     server-token: ${MCP_SERVER_TOKEN:}
@@ -100,8 +103,19 @@ mcp:
     public-base-url: ${MCP_PUBLIC_BASE_URL:http://localhost:30002}
   csdn:
     enabled: ${MCP_CSDN_ENABLED:false}
-    server-token: ${MCP_CSDN_SERVER_TOKEN:}
+    server-token: ${MCP_CSDN_SERVER_TOKEN:${MCP_SERVER_TOKEN:}}
     public-base-url: ${MCP_CSDN_PUBLIC_BASE_URL:http://localhost:30002}
+    platform:
+      enabled: ${CSDN_PUBLISH_ENABLED:false}
+      base-url: ${CSDN_API_BASE_URL:https://bizapi.csdn.net}
+      api-key: ${CSDN_API_KEY:203803574}
+      selenium-url: ${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}
+      credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
+      authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:180}
+  dual:
+    enabled: ${MCP_DUAL_ENABLED:false}
+    server-token: ${MCP_DUAL_SERVER_TOKEN:${MCP_SERVER_TOKEN:}}
+    public-base-url: ${MCP_DUAL_PUBLIC_BASE_URL:http://localhost:30002}
 
 # Leave credentials in application-local.yml or environment variables; never commit them.
 blog:
@@ -113,15 +127,6 @@ blog:
     image-model: ${BLOG_AGENT_IMAGE_MODEL:}
     image-size: ${BLOG_AGENT_IMAGE_SIZE:1536x1024}
     max-illustrations: ${BLOG_AGENT_MAX_ILLUSTRATIONS:3}
-
-publishing:
-  csdn:
-    enabled: ${CSDN_PUBLISH_ENABLED:false}
-    base-url: ${CSDN_API_BASE_URL:https://bizapi.csdn.net}
-    api-key: ${CSDN_API_KEY:203803574}
-    selenium-url: ${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}
-    credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
-    authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:180}
 
 # Image → procedural Three.js. Blank fields fall back to blog.agent credentials.
 img2three:

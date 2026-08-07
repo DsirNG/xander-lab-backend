@@ -7,9 +7,9 @@ feature; deployment and database topology stay unchanged.
 
 - `identity` (migrated): owns users, login, token refresh, JWT validation and request authorization.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions.
-- `publishing`: owns blog posts, publication commands, platform adapters, and durable multi-platform publication records.
+- `publishing`: owns blog posts, publication commands, generic publication contracts, and durable publication records.
 - `automation`: will own recurring content plans and durable plan runs.
-- `integration`: will own MCP and external platform adapters.
+- `integration`: owns MCP protocol adapters and vendor-specific integrations such as the complete CSDN MCP flow.
 - `studio`: will group Flow and Img2Three creation tools.
 
 ## Module Documentation
@@ -30,6 +30,11 @@ platform credentials.
 
 The migration is incremental. Existing public HTTP routes, tables and runtime
 configuration must remain compatible during package moves.
+
+`integration.mcp` now owns MCP client authorization, browser handoff, request
+identity, and MCP-facing blog commands. A durable MCP client authorization maps
+one external client installation to one application user; it is distinct from
+both browser JWT sessions and CSDN platform credentials.
 
 ## Migration Order
 
