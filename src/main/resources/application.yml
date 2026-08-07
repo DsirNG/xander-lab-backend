@@ -81,7 +81,7 @@ aliyun:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   mapper-locations: classpath*:/mapper/*.xml
   type-aliases-package: com.xander.lab.entity
 
@@ -126,7 +126,7 @@ img2three:
 # The database migration must be applied before enabling the scheduler.
 email-reminder:
   enabled: ${EMAIL_REMINDER_ENABLED:true}
-  poll-interval-ms: ${EMAIL_REMINDER_POLL_INTERVAL_MS:1000}
+  poll-interval-ms: ${EMAIL_REMINDER_POLL_INTERVAL_MS:10000}
   initial-delay-ms: ${EMAIL_REMINDER_INITIAL_DELAY_MS:1000}
   claim-timeout-ms: ${EMAIL_REMINDER_CLAIM_TIMEOUT_MS:600000}
   batch-size: ${EMAIL_REMINDER_BATCH_SIZE:20}
