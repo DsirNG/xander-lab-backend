@@ -37,7 +37,7 @@ public class DualPublishMcpServerConfiguration {
 
     @Bean
     ServletRegistrationBean<HttpServletStreamableServerTransportProvider> dualMcpServlet(
-            HttpServletStreamableServerTransportProvider transport) {
+            @Qualifier("dualMcpTransport") HttpServletStreamableServerTransportProvider transport) {
         return new ServletRegistrationBean<>(transport, "/api/mcp/dual");
     }
 

@@ -32,7 +32,7 @@ public class CsdnMcpServerConfiguration {
 
     @Bean
     ServletRegistrationBean<HttpServletStreamableServerTransportProvider> csdnMcpServlet(
-            HttpServletStreamableServerTransportProvider transport) {
+            @Qualifier("csdnMcpTransport") HttpServletStreamableServerTransportProvider transport) {
         return new ServletRegistrationBean<>(transport, "/api/mcp/csdn");
     }
 

@@ -35,7 +35,7 @@ public class BlogMcpServerConfiguration {
 
     @Bean
     ServletRegistrationBean<HttpServletStreamableServerTransportProvider> mcpServlet(
-            HttpServletStreamableServerTransportProvider transport) {
+            @Qualifier("mcpTransport") HttpServletStreamableServerTransportProvider transport) {
         return new ServletRegistrationBean<>(transport, "/api/mcp");
     }
 
