@@ -66,6 +66,9 @@ public class BlogPostVO {
      */
     private Integer status;
 
+    /** Whether this post has a successful CSDN publication record. */
+    private Boolean csdnSynced;
+
     /**
      * 将 tagsRaw 拆分为 tags 列表
      * 在 Service 层调用
