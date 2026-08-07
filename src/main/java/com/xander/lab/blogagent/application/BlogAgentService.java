@@ -24,9 +24,12 @@ import com.xander.lab.blogagent.infrastructure.BlogAgentVersionMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentMessageMapper;
 import com.xander.lab.service.BlogMediaService;
 import com.xander.lab.service.BlogService;
+import com.xander.lab.publishing.application.PublicationService;
+import com.xander.lab.publishing.domain.PublishCommand;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
@@ -48,11 +51,17 @@ public class BlogAgentService {
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
     private final BlogService blogService;
+    private PublicationService publicationService;
     private final BlogAgentImageClient imageClient;
     private final BlogMediaService mediaService;
     private final BlogAgentProperties properties;
     private final BlogAgentMessageMapper messageMapper;
     private final BlogAgentEventService eventService;
+
+    @Autowired
+    void setPublicationService(PublicationService publicationService) {
+        this.publicationService = publicationService;
+    }
 
     @Transactional
     public BlogAgentTask create(Long userId, BlogAgentTaskCreateRequest request) {
@@ -395,18 +404,13 @@ public class BlogAgentService {
         return limit(value.replace("[", "").replace("]", "").replace("\n", " "), 180);
     }
 
-    @Transactional
     public BlogPostVO publish(Long taskId, Long userId) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
         if (!"ready".equals(task.getStatus())) throw new IllegalStateException("文章尚未生成完成");
         if (task.getPublishedPostId() != null) return blogService.getBlogById(task.getPublishedPostId());
-        BlogPostDTO post = new BlogPostDTO();
-        post.setTitle(task.getTitle());
-        post.setSummary(task.getSummary());
-        post.setContent(task.getContent());
-        post.setCategoryId(task.getCategoryId());
-        post.setTags(readTags(task.getTagsJson()));
-        BlogPostVO published = blogService.createBlog(post, true, "agent-task-" + taskId);
+        var result = publicationService.publish(new PublishCommand(taskId, userId, task.getTitle(),
+                task.getSummary(), task.getContent(), task.getCategoryId(), readTags(task.getTagsJson())), "local");
+        BlogPostVO published = blogService.getBlogById(Long.valueOf(result.externalId()));
         task.setPublishedPostId(published.getId());
         task.setUpdatedAt(LocalDateTime.now());
         taskMapper.updateById(task);
