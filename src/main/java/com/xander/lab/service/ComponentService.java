@@ -1,7 +1,10 @@
 package com.xander.lab.service;
 
+import com.xander.lab.identity.infrastructure.UserMapper;
+import com.xander.lab.identity.domain.User;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.xander.lab.common.UserContext;
+import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.dto.*;
 import com.xander.lab.entity.*;
 import com.xander.lab.mapper.*;

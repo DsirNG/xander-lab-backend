@@ -1,5 +1,7 @@
 package com.xander.lab.config;
 
+import com.xander.lab.identity.security.AuthInterceptor;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;

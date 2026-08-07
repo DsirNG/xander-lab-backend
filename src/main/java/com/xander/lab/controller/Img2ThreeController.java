@@ -1,7 +1,7 @@
 package com.xander.lab.controller;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.common.UserContext;
+import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.dto.img2three.Img2ThreeTaskSummaryVO;
 import com.xander.lab.dto.img2three.Img2ThreeTaskVO;
 import com.xander.lab.service.Img2ThreeService;

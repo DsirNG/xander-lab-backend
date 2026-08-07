@@ -1,7 +1,7 @@
 package com.xander.lab.controller;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.common.UserContext;
+import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.dto.emailreminder.EmailReminderCreateRequest;
 import com.xander.lab.dto.emailreminder.EmailReminderListResult;
 import com.xander.lab.dto.emailreminder.EmailReminderStatusUpdateRequest;

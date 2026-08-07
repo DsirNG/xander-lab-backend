@@ -1,0 +1,8 @@
+package com.xander.lab.blogagent.infrastructure;
+
+import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.xander.lab.blogagent.domain.BlogAgentVersion;
+import org.apache.ibatis.annotations.Mapper;
+
+@Mapper
+public interface BlogAgentVersionMapper extends BaseMapper<BlogAgentVersion> { }

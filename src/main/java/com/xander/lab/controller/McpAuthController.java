@@ -1,8 +1,8 @@
 package com.xander.lab.controller;
 
-import com.xander.lab.dto.auth.LoginRequest;
-import com.xander.lab.dto.auth.TokenResponse;
-import com.xander.lab.service.AuthService;
+import com.xander.lab.identity.api.LoginRequest;
+import com.xander.lab.identity.api.TokenResponse;
+import com.xander.lab.identity.application.AuthService;
 import com.xander.lab.service.McpBlogService;
 import com.xander.lab.service.McpCredentialService;
 import lombok.RequiredArgsConstructor;

@@ -2,7 +2,7 @@ package com.xander.lab.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.config.BlogAgentProperties;
+import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.config.Img2ThreeProperties;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;

@@ -2,7 +2,7 @@ package com.xander.lab.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.config.McpBlogProperties;
-import com.xander.lab.dto.auth.TokenResponse;
+import com.xander.lab.identity.api.TokenResponse;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;

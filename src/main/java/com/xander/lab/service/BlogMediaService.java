@@ -3,6 +3,7 @@ package com.xander.lab.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xander.lab.dto.upload.UploadResponse;
 import com.xander.lab.entity.BlogMediaAsset;
+import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.mapper.BlogMediaAssetMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

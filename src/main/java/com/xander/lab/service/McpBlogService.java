@@ -1,10 +1,12 @@
 package com.xander.lab.service;
 
-import com.xander.lab.common.UserContext;
+import com.xander.lab.identity.application.AuthService;
+
+import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.dto.BlogPostDTO;
 import com.xander.lab.dto.BlogPostVO;
-import com.xander.lab.dto.auth.TokenResponse;
-import com.xander.lab.util.JwtUtil;
+import com.xander.lab.identity.api.TokenResponse;
+import com.xander.lab.identity.security.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
