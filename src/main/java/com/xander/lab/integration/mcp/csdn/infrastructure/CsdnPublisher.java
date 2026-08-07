@@ -49,7 +49,10 @@ public class CsdnPublisher implements BlogPublisher {
         String nonce = UUID.randomUUID().toString();
         String signature = sign(properties.getApiKey(), nonce);
         String htmlContent = CsdnMarkdownConverter.toHtml(command.content());
-        String originalUrl = "https://xander.dsircity.top/blog/" + command.taskId();
+        // CSDN sync uses a negative publication task id to isolate its record;
+        // the backlink must always point to the real positive blog post id.
+        long blogPostId = Math.abs(command.taskId());
+        String originalUrl = "https://xander.dsircity.top/blog/" + blogPostId;
         htmlContent = imageHtmlRewriter.rewrite(htmlContent, cookie, properties.getApiKey(), String.valueOf(command.taskId()), originalUrl);
         List<String> coverImages = resolveCoverImages(command.coverImage(), htmlContent);
         JsonNode response = client.post().uri(SAVE_PATH)
