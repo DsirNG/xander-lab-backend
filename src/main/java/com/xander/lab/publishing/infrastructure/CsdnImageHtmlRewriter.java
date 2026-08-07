@@ -19,11 +19,18 @@ final class CsdnImageHtmlRewriter {
         this.uploadClient = uploadClient;
     }
 
-    String rewrite(String html, String cookie, String apiKey, String articleId) {
+    String rewrite(String html, String cookie, String apiKey, String articleId, String originalUrl) {
         if (html == null || html.isBlank()) {
             return "";
         }
         Document document = Jsoup.parseBodyFragment(html);
+        if (originalUrl != null && !originalUrl.isBlank()) {
+            Element link = new Element("p").appendElement("a")
+                    .attr("href", originalUrl)
+                    .attr("target", "_blank")
+                    .text("原文链接");
+            document.body().prependChild(link);
+        }
         Elements images = document.select("img[src]");
         if (images.isEmpty()) {
             return document.body().html();

@@ -5,6 +5,7 @@ import com.xander.lab.publishing.domain.BlogPublisher;
 import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
 import com.xander.lab.publishing.application.CsdnCredentialService;
+import org.jsoup.Jsoup;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.UUID;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import javax.crypto.Mac;
@@ -47,7 +49,9 @@ public class CsdnPublisher implements BlogPublisher {
         String nonce = UUID.randomUUID().toString();
         String signature = sign(properties.getApiKey(), nonce);
         String htmlContent = CsdnMarkdownConverter.toHtml(command.content());
-        htmlContent = imageHtmlRewriter.rewrite(htmlContent, cookie, properties.getApiKey(), String.valueOf(command.taskId()));
+        String originalUrl = "https://xander.dsircity.top/blog/" + command.taskId();
+        htmlContent = imageHtmlRewriter.rewrite(htmlContent, cookie, properties.getApiKey(), String.valueOf(command.taskId()), originalUrl);
+        List<String> coverImages = extractCoverImages(htmlContent);
         JsonNode response = client.post().uri(SAVE_PATH)
                 .header("Accept", ACCEPT)
                 .header("Content-Type", CONTENT_TYPE)
@@ -72,7 +76,7 @@ public class CsdnPublisher implements BlogPublisher {
                         java.util.Map.entry("original_link", ""),
                         java.util.Map.entry("source", "pc_mdeditor"),
                         java.util.Map.entry("not_auto_saved", 0),
-                        java.util.Map.entry("cover_images", java.util.List.of()),
+                        java.util.Map.entry("cover_images", coverImages),
                         java.util.Map.entry("cover_type", 0),
                         java.util.Map.entry("vote_id", 0),
                         java.util.Map.entry("resource_id", ""),
@@ -95,6 +99,15 @@ public class CsdnPublisher implements BlogPublisher {
                     + response.path("msg").asText("no message"));
         }
         return new PublishResult(platform(), articleId, url);
+    }
+
+    static List<String> extractCoverImages(String htmlContent) {
+        if (htmlContent == null || htmlContent.isBlank()) {
+            return List.of();
+        }
+        var firstImageElement = Jsoup.parseBodyFragment(htmlContent).selectFirst("img[src]");
+        String firstImage = firstImageElement == null ? "" : firstImageElement.attr("src").trim();
+        return firstImage.isBlank() ? List.of() : List.of(firstImage);
     }
 
     private String sign(String apiKey, String nonce) {
