@@ -20,6 +20,9 @@ public class BlogPostDTO {
     /** 分类ID */
     private String categoryId;
 
+    /** Optional cover image URL for the blog post. */
+    private String coverImage;
+
     /** 标签列表 */
     private List<String> tags;
 

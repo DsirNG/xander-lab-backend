@@ -59,7 +59,7 @@ public class McpBlogService {
         if (accessToken == null) throw new McpAuthorizationRequiredException();
         try {
             UserContext.setUserId(Long.parseLong(jwtUtil.getSubject(accessToken)));
-            return blogService.updateBlog(id, title, summary, content, categoryId, tags);
+            return blogService.updateBlog(id, title, summary, content, categoryId, null, tags);
         } finally {
             UserContext.clear();
         }

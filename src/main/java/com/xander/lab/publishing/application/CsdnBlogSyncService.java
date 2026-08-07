@@ -21,7 +21,7 @@ public class CsdnBlogSyncService {
         }
         PublishCommand command = new PublishCommand(
                 -postId, userId, post.getTitle(), post.getSummary(), post.getContent(),
-                post.getCategoryName(), post.getTags());
+                post.getCategoryName(), post.getCoverImage(), post.getTags());
         return publicationService.publish(command, "csdn");
     }
 }

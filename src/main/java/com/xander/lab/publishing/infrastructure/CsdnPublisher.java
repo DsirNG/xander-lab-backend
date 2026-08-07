@@ -51,7 +51,7 @@ public class CsdnPublisher implements BlogPublisher {
         String htmlContent = CsdnMarkdownConverter.toHtml(command.content());
         String originalUrl = "https://xander.dsircity.top/blog/" + command.taskId();
         htmlContent = imageHtmlRewriter.rewrite(htmlContent, cookie, properties.getApiKey(), String.valueOf(command.taskId()), originalUrl);
-        List<String> coverImages = extractCoverImages(htmlContent);
+        List<String> coverImages = resolveCoverImages(command.coverImage(), htmlContent);
         JsonNode response = client.post().uri(SAVE_PATH)
                 .header("Accept", ACCEPT)
                 .header("Content-Type", CONTENT_TYPE)
@@ -99,6 +99,13 @@ public class CsdnPublisher implements BlogPublisher {
                     + response.path("msg").asText("no message"));
         }
         return new PublishResult(platform(), articleId, url);
+    }
+
+    static List<String> resolveCoverImages(String coverImage, String htmlContent) {
+        if (coverImage != null && !coverImage.isBlank()) {
+            return List.of(coverImage.trim());
+        }
+        return extractCoverImages(htmlContent);
     }
 
     static List<String> extractCoverImages(String htmlContent) {

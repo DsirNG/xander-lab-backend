@@ -5,8 +5,8 @@ import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
 import com.xander.lab.publishing.infrastructure.BlogPublishRecord;
 import com.xander.lab.publishing.infrastructure.BlogPublishRecordMapper;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -19,7 +19,8 @@ class PublicationServiceTest {
     private final BlogPublishRecordMapper records = mock(BlogPublishRecordMapper.class);
     private final BlogPublisher local = mock(BlogPublisher.class);
     private PublicationService service;
-    private final PublishCommand command = new PublishCommand(7L, 42L, "标题", "摘要", "正文", "backend", List.of("Java"));
+    private final PublishCommand command = new PublishCommand(
+            7L, 42L, "标题", "摘要", "正文", "backend", null, List.of("Java"));
 
     @BeforeEach
     void setUp() {
@@ -31,7 +32,10 @@ class PublicationServiceTest {
     @Test
     void successfulPublicationIsPersistedAndReturned() {
         when(records.selectOne(any())).thenReturn(null);
-        when(records.insert(any())).thenAnswer(invocation -> { invocation.<BlogPublishRecord>getArgument(0).setId(1L); return 1; });
+        when(records.insert(any())).thenAnswer(invocation -> {
+            invocation.<BlogPublishRecord>getArgument(0).setId(1L);
+            return 1;
+        });
 
         PublishResult result = service.publish(command, "local");
 
@@ -42,7 +46,9 @@ class PublicationServiceTest {
     @Test
     void successfulDuplicateDoesNotCallPublisherAgain() {
         BlogPublishRecord existing = new BlogPublishRecord();
-        existing.setStatus("SUCCEEDED"); existing.setExternalId("post-9"); existing.setUrl("/blog/9");
+        existing.setStatus("SUCCEEDED");
+        existing.setExternalId("post-9");
+        existing.setUrl("/blog/9");
         when(records.selectOne(any())).thenReturn(existing);
 
         PublishResult result = service.publish(command, "local");

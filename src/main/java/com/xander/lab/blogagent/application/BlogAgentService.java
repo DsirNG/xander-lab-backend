@@ -409,7 +409,7 @@ public class BlogAgentService {
         if (!"ready".equals(task.getStatus())) throw new IllegalStateException("文章尚未生成完成");
         if (task.getPublishedPostId() != null) return blogService.getBlogById(task.getPublishedPostId());
         var result = publicationService.publish(new PublishCommand(taskId, userId, task.getTitle(),
-                task.getSummary(), task.getContent(), task.getCategoryId(), readTags(task.getTagsJson())), "local");
+                task.getSummary(), task.getContent(), task.getCategoryId(), null, readTags(task.getTagsJson())), "local");
         BlogPostVO published = blogService.getBlogById(Long.valueOf(result.externalId()));
         task.setPublishedPostId(published.getId());
         task.setUpdatedAt(LocalDateTime.now());

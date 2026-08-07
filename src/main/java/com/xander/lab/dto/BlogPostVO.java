@@ -33,6 +33,9 @@ public class BlogPostVO {
     /** 分类名称（如 前端开发） */
     private String categoryName;
 
+    /** Optional cover image URL for the blog post. */
+    private String coverImage;
+
     /** 标签列表（字符串数组），序列化给前端 */
     private List<String> tags;
 

@@ -11,6 +11,7 @@
         <result property="summary"      column="summary"/>
         <result property="category"     column="category"/>
         <result property="categoryName" column="categoryName"/>
+        <result property="coverImage"   column="cover_image"/>
         <result property="userId"       column="user_id"/>
         <result property="author"       column="author"/>
         <result property="date"         column="date"/>
@@ -36,6 +37,7 @@
                p.summary,
                p.category_id                                    AS category,
                c.name                                           AS categoryName,
+               p.cover_image,
                 p.user_id,
                 p.author,
                 p.published_at                                   AS date,
@@ -87,6 +89,7 @@
                p.summary,
                p.category_id                                    AS category,
                c.name                                           AS categoryName,
+               p.cover_image,
                p.user_id,
                p.author,
                p.published_at                                   AS date,
@@ -117,6 +120,7 @@
                p.content,
                p.category_id                                    AS category,
                c.name                                           AS categoryName,
+               p.cover_image,
                p.user_id,
                p.author,
                p.published_at                                   AS date,
@@ -146,6 +150,7 @@
                p.content,
                p.category_id                                    AS category,
                c.name                                           AS categoryName,
+               p.cover_image,
                p.user_id,
                p.author,
                p.published_at                                   AS date,
@@ -174,6 +179,7 @@
                p.summary,
                p.category_id                                    AS category,
                c.name                                           AS categoryName,
+               p.cover_image,
                p.user_id,
                p.author,
                p.published_at                                   AS date,

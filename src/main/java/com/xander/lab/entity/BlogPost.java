@@ -30,6 +30,9 @@ public class BlogPost {
     /** 分类ID */
     private String categoryId;
 
+    /** Optional cover image URL owned by this blog post. */
+    private String coverImage;
+
     /** 作者用户ID */
     private Long userId;
 

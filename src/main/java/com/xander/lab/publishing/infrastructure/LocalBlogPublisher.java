@@ -17,6 +17,7 @@ public class LocalBlogPublisher implements BlogPublisher {
         BlogPostDTO post = new BlogPostDTO();
         post.setTitle(command.title()); post.setSummary(command.summary());
         post.setContent(command.content()); post.setCategoryId(command.categoryId());
+        post.setCoverImage(command.coverImage());
         post.setTags(command.tags()); post.setPublish(true);
         BlogPostVO result = blogService.createBlog(post, true, "agent-task-" + command.taskId());
         return new PublishResult("local", String.valueOf(result.getId()), "/blog/" + result.getId());

@@ -84,6 +84,7 @@ public class BlogService {
         post.setSummary(dto.getSummary());
         post.setContent(dto.getContent());
         post.setCategoryId(dto.getCategoryId());
+        post.setCoverImage(dto.getCoverImage());
         post.setUserId(UserContext.getUserId());
         post.setAuthor(resolveAuthor(UserContext.getUserId()));
         post.setReadTime(Math.max(1, dto.getContent().length() / 500) + " min");
@@ -131,9 +132,9 @@ public class BlogService {
     /** Updates only supplied fields. Passing tags replaces all existing tags for the post. */
     @Transactional
     public BlogPostVO updateBlog(Long id, String title, String summary, String content,
-                                 String categoryId, List<String> tags) {
+                                 String categoryId, String coverImage, List<String> tags) {
         BlogPost existing = requireOwnedPost(id, UserContext.getUserId());
-        if (title == null && summary == null && content == null && categoryId == null && tags == null) {
+        if (title == null && summary == null && content == null && categoryId == null && coverImage == null && tags == null) {
             throw new IllegalArgumentException("至少提供一个需要更新的字段");
         }
         BlogPost update = new BlogPost();
@@ -142,6 +143,7 @@ public class BlogService {
         update.setSummary(summary);
         update.setContent(content);
         update.setCategoryId(categoryId);
+        update.setCoverImage(coverImage);
         if (content != null && !content.isBlank()) {
             update.setReadTime(Math.max(1, content.length() / 500) + " min");
         }
@@ -174,7 +176,7 @@ public class BlogService {
             throw new IllegalArgumentException("请求体不能为空");
         }
         return updateBlog(id, dto.getTitle(), dto.getSummary(), dto.getContent(),
-                dto.getCategoryId(), dto.getTags());
+                dto.getCategoryId(), dto.getCoverImage(), dto.getTags());
     }
 
     /**
