@@ -10,7 +10,7 @@ class LoginVerificationMailTemplatesTest {
     void buildHtmlRendersSimpleCodeMail() {
         String html = LoginVerificationMailTemplates.buildHtml("384921");
 
-        assertThat(html).contains("XANDER LAB");
+        assertThat(html).contains("Xander Lab");
         assertThat(html).contains("登录验证码");
         assertThat(html).contains("长按或选中上方数字即可复制验证码");
         assertThat(html).doesNotContain("@keyframes");
