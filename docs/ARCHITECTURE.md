@@ -7,7 +7,7 @@ feature; deployment and database topology stay unchanged.
 
 - `identity` (migrated): owns users, login, token refresh, JWT validation and request authorization.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions.
-- `publishing`: owns blog posts and future multi-platform publication records.
+- `publishing`: owns blog posts, publication commands, platform adapters, and durable multi-platform publication records.
 - `automation`: will own recurring content plans and durable plan runs.
 - `integration`: will own MCP and external platform adapters.
 - `studio`: will group Flow and Img2Three creation tools.
@@ -34,7 +34,7 @@ configuration must remain compatible during package moves.
 ## Migration Order
 
 1. `identity` and `blogagent` establish the feature-first package pattern.
-2. Move blog posts, categories, tags and media into `publishing`.
+2. Move blog posts, categories, tags and media into `publishing`; the publication port and local adapter are now in place.
 3. Move MCP, CSDN, model, OSS and mail adapters into `integration`.
 4. Add recurring content plans and durable runs under `automation`.
 5. Group Flow and Img2Three under `studio` after their active changes settle.
