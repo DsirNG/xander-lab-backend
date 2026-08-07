@@ -11,8 +11,10 @@ import org.springframework.stereotype.Component;
 public class CsdnProperties {
     private boolean enabled;
     private String baseUrl = "https://bizapi.csdn.net";
-    private String cookie;
     private String apiKey = "203803574";
     private String signature;
     private String categories = "面试";
+    private String seleniumUrl = "http://selenium:4444/wd/hub";
+    private String credentialEncryptionKey;
+    private int authorizationTimeoutSeconds = 180;
 }

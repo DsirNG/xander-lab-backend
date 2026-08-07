@@ -114,10 +114,12 @@ publishing:
   csdn:
     enabled: ${CSDN_PUBLISH_ENABLED:false}
     base-url: ${CSDN_API_BASE_URL:https://bizapi.csdn.net}
-    cookie: ${CSDN_COOKIE:}
     api-key: ${CSDN_API_KEY:203803574}
     signature: ${CSDN_API_SIGNATURE:}
     categories: ${CSDN_CATEGORY:面试}
+    selenium-url: ${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}
+    credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
+    authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:180}
 
 # Image → procedural Three.js. Blank fields fall back to blog.agent credentials.
 img2three:

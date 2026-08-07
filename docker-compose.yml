@@ -41,6 +41,17 @@ services:
       - MCP_SERVER_TOKEN=${MCP_SERVER_TOKEN:-}
       - MCP_CREDENTIAL_ENCRYPTION_KEY=${MCP_CREDENTIAL_ENCRYPTION_KEY:-}
       - MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-http://localhost:30002}
+      - CSDN_PUBLISH_ENABLED=${CSDN_PUBLISH_ENABLED:-false}
+      - CSDN_API_BASE_URL=${CSDN_API_BASE_URL:-https://bizapi.csdn.net}
+      - CSDN_API_KEY=${CSDN_API_KEY:-203803574}
+      - CSDN_API_SIGNATURE=${CSDN_API_SIGNATURE:-}
+      - CSDN_CATEGORY=${CSDN_CATEGORY:-面试}
+      - CSDN_SELENIUM_URL=http://selenium:4444/wd/hub
+      - CSDN_CREDENTIAL_ENCRYPTION_KEY=${CSDN_CREDENTIAL_ENCRYPTION_KEY:-}
+      - CSDN_AUTHORIZATION_TIMEOUT_SECONDS=${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:-180}
+    depends_on:
+      selenium:
+        condition: service_healthy
     networks:
       - xander-network
     healthcheck:
@@ -53,6 +64,24 @@ services:
     labels:
       - "com.xander-lab.description=Xander Lab Backend Application"
       - "com.xander-lab.version=1.0.0"
+
+  selenium:
+    image: selenium/standalone-chromium:latest
+    container_name: xander-lab-selenium
+    restart: unless-stopped
+    shm_size: 2gb
+    environment:
+      - SE_NODE_MAX_SESSIONS=1
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=false
+      - SE_START_XVFB=false
+    networks:
+      - xander-network
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:4444/status"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
 networks:
   xander-network:

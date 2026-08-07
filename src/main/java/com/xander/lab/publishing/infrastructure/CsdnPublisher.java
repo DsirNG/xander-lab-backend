@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.xander.lab.publishing.domain.BlogPublisher;
 import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.publishing.application.CsdnCredentialService;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -15,10 +16,12 @@ import java.util.stream.Collectors;
 @Component
 public class CsdnPublisher implements BlogPublisher {
     private final CsdnProperties properties;
+    private final CsdnCredentialService credentials;
     private final RestClient client;
 
-    public CsdnPublisher(CsdnProperties properties) {
+    public CsdnPublisher(CsdnProperties properties, CsdnCredentialService credentials) {
         this.properties = properties;
+        this.credentials = credentials;
         this.client = RestClient.builder().baseUrl(properties.getBaseUrl()).build();
     }
 
@@ -26,13 +29,12 @@ public class CsdnPublisher implements BlogPublisher {
 
     @Override
     public PublishResult publish(PublishCommand command) {
-        if (!properties.isEnabled() || properties.getCookie() == null || properties.getCookie().isBlank()) {
-            throw new IllegalStateException("CSDN publisher is not configured");
-        }
+        if (!properties.isEnabled()) throw new IllegalStateException("CSDN publisher is disabled");
+        String cookie = credentials.requireCookie(command.userId());
         String nonce = UUID.randomUUID().toString();
         JsonNode response = client.post().uri("/blog-console-api/v1/postedit/saveArticle")
                 .contentType(MediaType.APPLICATION_JSON)
-                .header("Cookie", properties.getCookie())
+                .header("Cookie", cookie)
                 .header("origin", "https://mp.csdn.net")
                 .header("referer", "https://mp.csdn.net/")
                 .header("x-ca-key", properties.getApiKey())
