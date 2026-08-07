@@ -98,6 +98,10 @@ mcp:
     server-token: ${MCP_SERVER_TOKEN:}
     credential-encryption-key: ${MCP_CREDENTIAL_ENCRYPTION_KEY:}
     public-base-url: ${MCP_PUBLIC_BASE_URL:http://localhost:30002}
+  csdn:
+    enabled: ${MCP_CSDN_ENABLED:false}
+    server-token: ${MCP_CSDN_SERVER_TOKEN:}
+    public-base-url: ${MCP_CSDN_PUBLIC_BASE_URL:http://localhost:30002}
 
 # Leave credentials in application-local.yml or environment variables; never commit them.
 blog:
