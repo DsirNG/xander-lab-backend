@@ -3,6 +3,8 @@ package com.xander.lab.config;
 import com.xander.lab.dto.BlogPostDTO;
 import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.service.McpBlogService;
+import com.xander.lab.publishing.application.CsdnAuthorizationService;
+import com.xander.lab.publishing.application.CsdnBlogSyncService;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
@@ -31,6 +33,8 @@ import java.util.*;
 public class McpServerConfig {
     private final McpBlogProperties properties;
     private final McpBlogService blogService;
+    private final CsdnAuthorizationService csdnAuthorizationService;
+    private final CsdnBlogSyncService csdnBlogSyncService;
 
     @Bean
     HttpServletStreamableServerTransportProvider mcpTransport() {
@@ -48,7 +52,8 @@ public class McpServerConfig {
     McpSyncServer blogMcpServer(HttpServletStreamableServerTransportProvider transport) {
         return McpServer.sync(transport).serverInfo("xander-blog", "1.0.0")
                 .tools(authStatusTool(), startLoginTool(), listPostsTool(), getPostTool(), postTool("create_draft", false), postTool("publish_post", true),
-                        updatePostTool(), deletePostTool())
+                        updatePostTool(), deletePostTool(),
+                        csdnAuthStatusTool(), csdnStartLoginTool(), csdnSyncPostTool())
                 .build();
     }
 
@@ -141,6 +146,36 @@ public class McpServerConfig {
         });
     }
 
+    private McpServerFeatures.SyncToolSpecification csdnAuthStatusTool() {
+        return tool("get_csdn_auth_status", "Returns whether the current user has authorized CSDN sync.", emptySchema(),
+                ignored -> {
+                    Long userId = currentUserId();
+                    if (userId == null) return authRequired();
+                    return result(Map.of("ok", true, "authorized", csdnAuthorizationService.status(userId).status().equals("AUTHORIZED")));
+                });
+    }
+
+    private McpServerFeatures.SyncToolSpecification csdnStartLoginTool() {
+        return tool("start_csdn_login", "Starts CSDN QR authorization and returns the QR image data URL.", emptySchema(),
+                ignored -> {
+                    Long userId = currentUserId();
+                    if (userId == null) return authRequired();
+                    var view = csdnAuthorizationService.start(userId);
+                    return result(Map.of("ok", true, "status", view.status(), "qrCodeDataUrl", view.qrCodeDataUrl()));
+                });
+    }
+
+    private McpServerFeatures.SyncToolSpecification csdnSyncPostTool() {
+        return tool("sync_post_to_csdn", "Synchronizes one owned blog post to CSDN.", Map.of(
+                "type", "object", "properties", Map.of("postId", Map.of("type", "integer")), "required", List.of("postId")), args -> {
+            Long userId = currentUserId();
+            if (userId == null) return authRequired();
+            Long postId = longValue(args, "postId");
+            var result = csdnBlogSyncService.sync(userId, postId);
+            return result(Map.of("ok", true, "platform", result.platform(), "externalId", result.externalId(), "url", result.url()));
+        });
+    }
+
     private McpServerFeatures.SyncToolSpecification tool(String name, String description, Map<String, Object> schema,
                                                           java.util.function.Function<Map<String, Object>, McpSchema.CallToolResult> handler) {
         return new McpServerFeatures.SyncToolSpecification(McpSchema.Tool.builder(name).description(description).inputSchema(schema).build(),
@@ -212,4 +247,5 @@ public class McpServerConfig {
     }
     private String optionalValue(Map<String, Object> args, String key, String defaultValue) { return args.containsKey(key) && args.get(key) != null ? String.valueOf(args.get(key)) : defaultValue; }
     private String summarize(String content) { return content.length() <= 160 ? content : content.substring(0, 157) + "..."; }
+    private Long currentUserId() { return blogService.currentUserId(); }
 }

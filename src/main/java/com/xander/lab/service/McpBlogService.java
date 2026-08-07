@@ -75,6 +75,12 @@ public class McpBlogService {
         }
     }
 
+    public Long currentUserId() {
+        String accessToken = resolveAccessToken();
+        if (accessToken == null) return null;
+        return Long.parseLong(jwtUtil.getSubject(accessToken));
+    }
+
     private String requireAccessToken() {
         String accessToken = resolveAccessToken();
         if (accessToken == null) throw new McpAuthorizationRequiredException();
