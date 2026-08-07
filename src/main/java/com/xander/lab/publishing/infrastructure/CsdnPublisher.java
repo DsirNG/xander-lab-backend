@@ -9,9 +9,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /** Publishes an article through CSDN's web console API. */
 @Component
@@ -20,6 +24,8 @@ public class CsdnPublisher implements BlogPublisher {
     private static final String SAVE_PATH = "/blog-console-api/v1/postedit/saveArticle";
     private static final String ACCEPT = "application/json, text/plain, */*";
     private static final String CONTENT_TYPE = "application/json;";
+    // Public web-console signing secret embedded in CSDN's current mp_v3 frontend bundle.
+    private static final String WEB_CONSOLE_SECRET = "9znpamsyl2c7cdrr9sas0le9vbc3r6ba";
     private final CsdnProperties properties;
     private final CsdnCredentialService credentials;
     private final CsdnImageHtmlRewriter imageHtmlRewriter;
@@ -39,9 +45,7 @@ public class CsdnPublisher implements BlogPublisher {
         if (!properties.isEnabled()) throw new IllegalStateException("CSDN publisher is disabled");
         String cookie = credentials.requireCookie(command.userId());
         String nonce = UUID.randomUUID().toString();
-        String timestamp = String.valueOf(System.currentTimeMillis());
-        String signature = CsdnRequestSigner.sign("POST", ACCEPT, CONTENT_TYPE,
-                List.of("x-ca-key:" + properties.getApiKey(), "x-ca-nonce:" + nonce), SAVE_PATH);
+        String signature = sign(properties.getApiKey(), nonce);
         String htmlContent = CsdnMarkdownConverter.toHtml(command.content());
         htmlContent = imageHtmlRewriter.rewrite(htmlContent, cookie, properties.getApiKey(), String.valueOf(command.taskId()));
         JsonNode response = client.post().uri(SAVE_PATH)
@@ -52,9 +56,8 @@ public class CsdnPublisher implements BlogPublisher {
                 .header("referer", "https://mp.csdn.net/")
                 .header("x-ca-key", properties.getApiKey())
                 .header("x-ca-nonce", nonce)
-                .header("x-ca-signature-headers", "x-ca-key,x-ca-nonce,x-ca-timestamp")
+                .header("x-ca-signature-headers", "x-ca-key,x-ca-nonce")
                 .header("x-ca-signature", signature)
-                .header("x-ca-timestamp", timestamp)
                 .body(java.util.Map.ofEntries(
                         java.util.Map.entry("article_id", ""),
                         java.util.Map.entry("title", command.title()),
@@ -92,5 +95,19 @@ public class CsdnPublisher implements BlogPublisher {
                     + response.path("msg").asText("no message"));
         }
         return new PublishResult(platform(), articleId, url);
+    }
+
+    private String sign(String apiKey, String nonce) {
+        String canonical = "POST\n" + ACCEPT + "\n\n" + CONTENT_TYPE + "\n\n"
+                + "x-ca-key:" + apiKey + "\n"
+                + "x-ca-nonce:" + nonce + "\n"
+                + SAVE_PATH;
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(WEB_CONSOLE_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            return Base64.getEncoder().encodeToString(mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to sign CSDN request", e);
+        }
     }
 }

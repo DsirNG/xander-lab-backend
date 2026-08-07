@@ -6,7 +6,8 @@ import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 /** Rewrites article HTML image links to CSDN-hosted URLs before publish. */
@@ -27,25 +28,38 @@ final class CsdnImageHtmlRewriter {
         if (images.isEmpty()) {
             return document.body().html();
         }
-        String timestamp = String.valueOf(System.currentTimeMillis());
         for (Element image : images) {
             String src = image.attr("src").trim();
             if (src.isBlank() || src.startsWith("data:")) {
                 continue;
             }
             String nonce = UUID.randomUUID().toString();
-            String signature = CsdnRequestSigner.sign(
-                    "POST",
-                    "application/json, text/plain, */*",
-                    "application/json;charset=UTF-8",
-                    List.of(
-                            "x-ca-key:" + apiKey,
-                            "x-ca-nonce:" + nonce,
-                            "x-ca-timestamp:" + timestamp),
-                    "/resource-api/v1/image/external/storage");
+            String timestamp = String.valueOf(System.currentTimeMillis());
+            Map<String, String> signedHeaders = new LinkedHashMap<>();
+            signedHeaders.put("x-ca-key", apiKey);
+            signedHeaders.put("x-ca-nonce", nonce);
+            signedHeaders.put("x-ca-timestamp", timestamp);
+            String signature = signForImageUpload(apiKey, signedHeaders);
             String uploaded = uploadClient.upload(cookie, apiKey, nonce, signature, timestamp, src, articleId);
             image.attr("src", uploaded);
         }
         return document.body().html();
+    }
+
+    private String signForImageUpload(String apiKey, Map<String, String> signedHeaders) {
+        String canonical = "POST\napplication/json, text/plain, */*\n\napplication/json;charset=UTF-8\n\n"
+                + "x-ca-key:" + apiKey + "\n"
+                + "x-ca-nonce:" + signedHeaders.get("x-ca-nonce") + "\n"
+                + "x-ca-timestamp:" + signedHeaders.get("x-ca-timestamp") + "\n"
+                + "/resource-api/v1/image/external/storage";
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new javax.crypto.spec.SecretKeySpec(
+                    "9znpamsyl2c7cdrr9sas0le9vbc3r6ba".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    "HmacSHA256"));
+            return java.util.Base64.getEncoder().encodeToString(mac.doFinal(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to sign CSDN image upload request", e);
+        }
     }
 }
