@@ -116,7 +116,6 @@ publishing:
     base-url: ${CSDN_API_BASE_URL:https://bizapi.csdn.net}
     api-key: ${CSDN_API_KEY:203803574}
     signature: ${CSDN_API_SIGNATURE:}
-    categories: ${CSDN_CATEGORY:面试}
     selenium-url: ${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}
     credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
     authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:180}

@@ -43,7 +43,7 @@ public class CsdnPublisher implements BlogPublisher {
                 .header("x-ca-signature", properties.getSignature() == null ? "" : properties.getSignature())
                 .body(java.util.Map.of("title", command.title(), "description", command.summary() == null ? "" : command.summary(),
                         "content", command.content(), "tags", command.tags().stream().collect(Collectors.joining(",")),
-                        "categories", properties.getCategories(), "status", 1, "type", "original", "read_type", "public", "source", "pc_mdeditor"))
+                        "categories", command.categoryId() == null ? "" : command.categoryId(), "status", 1, "type", "original", "read_type", "public", "source", "pc_mdeditor"))
                 .retrieve().body(JsonNode.class);
         if (response == null || response.path("code").asInt(0) != 200) {
             throw new IllegalStateException("CSDN publish failed: " + (response == null ? "empty response" : response.path("msg").asText("unknown error")));
