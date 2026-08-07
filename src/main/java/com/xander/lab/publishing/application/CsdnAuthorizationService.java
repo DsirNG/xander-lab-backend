@@ -4,7 +4,6 @@ import com.xander.lab.publishing.infrastructure.CsdnProperties;
 import lombok.RequiredArgsConstructor;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Cookie;
-import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeOptions;
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Service;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.Comparator;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -42,8 +40,16 @@ public class CsdnAuthorizationService {
             driver.get("https://mp.csdn.net/");
             WebElement frame = new WebDriverWait(driver, Duration.ofSeconds(20))
                     .until(d -> d.findElement(By.cssSelector("iframe[src*='passport.csdn.net']")));
-            byte[] screenshot = frame.getScreenshotAs(OutputType.BYTES);
-            return new AuthorizationView("PENDING", "data:image/png;base64," + Base64.getEncoder().encodeToString(screenshot));
+            driver.switchTo().frame(frame);
+            String qrCodeDataUrl = new WebDriverWait(driver, Duration.ofSeconds(20)).until(d -> {
+                for (WebElement image : d.findElements(By.cssSelector(".public-code img[src^='data:image/']"))) {
+                    String source = image.getAttribute("src");
+                    if (image.isDisplayed() && source != null && source.startsWith("data:image/")) return source;
+                }
+                return null;
+            });
+            driver.switchTo().defaultContent();
+            return new AuthorizationView("PENDING", qrCodeDataUrl);
         } catch (Exception e) {
             closeSession();
             throw new IllegalStateException("Unable to start CSDN authorization", e);
@@ -56,7 +62,11 @@ public class CsdnAuthorizationService {
             return new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
         }
         Set<Cookie> cookies = session.driver().manage().getCookies();
-        boolean loggedIn = cookies.stream().anyMatch(c -> "UserToken".equals(c.getName()) || "SESSION".equals(c.getName()));
+        boolean loginFrameVisible = session.driver().findElements(By.cssSelector("iframe[src*='passport.csdn.net/account/login']"))
+                .stream().anyMatch(element -> {
+                    try { return element.isDisplayed(); } catch (Exception ignored) { return false; }
+                });
+        boolean loggedIn = !loginFrameVisible && cookies.stream().anyMatch(c -> "UserToken".equals(c.getName()));
         if (!loggedIn) return new AuthorizationView("PENDING", null);
         String header = cookies.stream().sorted(Comparator.comparing(Cookie::getName))
                 .map(c -> c.getName() + "=" + c.getValue()).collect(Collectors.joining("; "));

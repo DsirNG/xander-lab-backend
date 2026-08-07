@@ -31,7 +31,7 @@ public class CsdnPublisher implements BlogPublisher {
     public PublishResult publish(PublishCommand command) {
         if (!properties.isEnabled()) throw new IllegalStateException("CSDN publisher is disabled");
         String cookie = credentials.requireCookie(command.userId());
-        String nonce = UUID.randomUUID().toString();
+        String nonce = properties.getNonce();
         JsonNode response = client.post().uri("/blog-console-api/v1/postedit/saveArticle")
                 .contentType(MediaType.APPLICATION_JSON)
                 .header("Cookie", cookie)
@@ -40,7 +40,7 @@ public class CsdnPublisher implements BlogPublisher {
                 .header("x-ca-key", properties.getApiKey())
                 .header("x-ca-nonce", nonce)
                 .header("x-ca-signature-headers", "x-ca-key,x-ca-nonce")
-                .header("x-ca-signature", properties.getSignature() == null ? "" : properties.getSignature())
+                .header("x-ca-signature", properties.getSignature())
                 .body(java.util.Map.of("title", command.title(), "description", command.summary() == null ? "" : command.summary(),
                         "content", command.content(), "tags", command.tags().stream().collect(Collectors.joining(",")),
                         "categories", command.categoryId() == null ? "" : command.categoryId(), "status", 1, "type", "original", "read_type", "public", "source", "pc_mdeditor"))
