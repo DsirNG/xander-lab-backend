@@ -43,6 +43,7 @@ public class CsdnPublisher implements BlogPublisher {
         String cookie = credentials.requireCookie(command.userId());
         String nonce = UUID.randomUUID().toString();
         String signature = sign(properties.getApiKey(), nonce);
+        String htmlContent = CsdnMarkdownConverter.toHtml(command.content());
         JsonNode response = client.post().uri(SAVE_PATH)
                 .header("Accept", ACCEPT)
                 .header("Content-Type", CONTENT_TYPE)
@@ -53,9 +54,26 @@ public class CsdnPublisher implements BlogPublisher {
                 .header("x-ca-nonce", nonce)
                 .header("x-ca-signature-headers", "x-ca-key,x-ca-nonce")
                 .header("x-ca-signature", signature)
-                .body(java.util.Map.of("title", command.title(), "description", command.summary() == null ? "" : command.summary(),
-                        "content", command.content(), "tags", command.tags().stream().collect(Collectors.joining(",")),
-                        "categories", command.categoryId() == null ? "" : command.categoryId(), "status", 1, "type", "original", "read_type", "public", "source", "pc_mdeditor"))
+                .body(java.util.Map.ofEntries(
+                        java.util.Map.entry("article_id", ""),
+                        java.util.Map.entry("title", command.title()),
+                        java.util.Map.entry("description", command.summary() == null ? "" : command.summary()),
+                        java.util.Map.entry("content", htmlContent),
+                        java.util.Map.entry("tags", command.tags().stream().collect(Collectors.joining(","))),
+                        java.util.Map.entry("categories", command.categoryId() == null ? "" : command.categoryId()),
+                        java.util.Map.entry("type", "original"),
+                        java.util.Map.entry("status", 0),
+                        java.util.Map.entry("read_type", "public"),
+                        java.util.Map.entry("authorized_status", true),
+                        java.util.Map.entry("original_link", ""),
+                        java.util.Map.entry("source", "pc_mdeditor"),
+                        java.util.Map.entry("not_auto_saved", 0),
+                        java.util.Map.entry("cover_images", java.util.List.of()),
+                        java.util.Map.entry("cover_type", 0),
+                        java.util.Map.entry("vote_id", 0),
+                        java.util.Map.entry("resource_id", ""),
+                        java.util.Map.entry("is_new", 1),
+                        java.util.Map.entry("sync_git_code", 0)))
                 .retrieve().body(JsonNode.class);
         if (response == null || response.path("code").asInt(0) != 200) {
             throw new IllegalStateException("CSDN publish failed: " + (response == null ? "empty response" : response.path("msg").asText("unknown error")));
