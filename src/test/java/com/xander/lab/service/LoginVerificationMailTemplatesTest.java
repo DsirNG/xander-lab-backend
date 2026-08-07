@@ -7,14 +7,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class LoginVerificationMailTemplatesTest {
 
     @Test
-    void buildHtmlHighlightsPlatformAndCode() {
+    void buildHtmlRendersSimpleCodeMail() {
         String html = LoginVerificationMailTemplates.buildHtml("384921");
 
         assertThat(html).contains("XANDER LAB");
         assertThat(html).contains("登录验证码");
-        assertThat(html).contains("安全提示");
-        assertThat(html).contains("xl-code-float");
-        assertThat(html).contains("xl-digit");
+        assertThat(html).contains("长按或选中上方数字即可复制验证码");
+        assertThat(html).doesNotContain("@keyframes");
+        assertThat(html).doesNotContain("linear-gradient");
         assertThat(html).contains("3", "8", "4", "9", "2", "1");
         assertThat(LoginVerificationMailTemplates.buildSubject()).contains("Xander Lab");
         assertThat(LoginVerificationMailTemplates.buildPlainText("384921"))
