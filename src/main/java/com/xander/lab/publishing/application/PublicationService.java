@@ -25,13 +25,13 @@ public class PublicationService {
     }
 
     public PublishResult publish(PublishCommand command, String platform) {
+        BlogPublisher publisher = publishers.get(platform);
+        if (publisher == null) throw new IllegalArgumentException("Unsupported publishing platform: " + platform);
         BlogPublishRecord existing = recordMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<BlogPublishRecord>()
                 .eq("task_id", command.taskId()).eq("platform", platform));
         if (existing != null && "SUCCEEDED".equals(existing.getStatus())) {
             return new PublishResult(platform, existing.getExternalId(), existing.getUrl());
         }
-        BlogPublisher publisher = publishers.get(platform);
-        if (publisher == null) throw new IllegalArgumentException("Unsupported publishing platform: " + platform);
         BlogPublishRecord record = existing == null ? new BlogPublishRecord() : existing;
         record.setTaskId(command.taskId()); record.setUserId(command.userId()); record.setPlatform(platform);
         record.setStatus("PENDING"); record.setAttempts((record.getAttempts() == null ? 0 : record.getAttempts()) + 1);

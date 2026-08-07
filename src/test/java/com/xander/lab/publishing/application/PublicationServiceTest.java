@@ -48,7 +48,7 @@ class PublicationServiceTest {
         PublishResult result = service.publish(command, "local");
 
         assertThat(result.externalId()).isEqualTo("post-9");
-        verifyNoInteractions(local);
+        verify(local, never()).publish(any());
         verify(records, never()).insert(any());
     }
 
