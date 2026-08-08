@@ -55,6 +55,26 @@ public class CsdnAuthorizationService {
     }
 
     /**
+     * Returns true when the CSDN login page shows the expired-QR placeholder instead of a scannable image.
+     * Test seams override this and {@link #waitForQrCode(RemoteWebDriver)}.
+     */
+    protected boolean isQrExpired(RemoteWebDriver driver) {
+        try {
+            WebElement frame = new WebDriverWait(driver, Duration.ofSeconds(5))
+                    .until(d -> d.findElement(By.cssSelector("iframe[src*='passport.csdn.net']")));
+            driver.switchTo().frame(frame);
+            boolean expired = driver.findElements(By.cssSelector("span.fail-mark, .fail-mark")).stream()
+                    .anyMatch(element -> {
+                        try { return element.isDisplayed(); } catch (Exception ignored) { return false; }
+                    });
+            driver.switchTo().defaultContent();
+            return expired;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Places a placeholder slot, then starts the Selenium driver outside the slot monitor so a slow
      * driver setup never blocks other users. Only the last owner is accepted; a cancelled slot releases
      * the orphan driver.
@@ -125,7 +145,18 @@ public class CsdnAuthorizationService {
                 .stream().anyMatch(element -> {
                     try { return element.isDisplayed(); } catch (Exception ignored) { return false; }
                 });
-        if (loginFrameVisible) return new AuthorizationView("PENDING", null);
+        if (loginFrameVisible) {
+            // A .fail-mark placeholder means the current QR can no longer be scanned; reload so CSDN mints a fresh one.
+            if (isQrExpired(mine.driver())) {
+                try {
+                    return new AuthorizationView("PENDING", waitForQrCode(mine.driver()));
+                } catch (Exception ignored) {
+                    // CSDN may need another poll cycle to serve a fresh QR; keep the modal open.
+                    return new AuthorizationView("PENDING", null);
+                }
+            }
+            return new AuthorizationView("PENDING", null);
+        }
         mine.driver().navigate().refresh();
         new WebDriverWait(mine.driver(), Duration.ofSeconds(20)).until(driver ->
                 "complete".equals(((org.openqa.selenium.JavascriptExecutor) driver).executeScript("return document.readyState")));

@@ -7,8 +7,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebElement;
 import org.openqa.selenium.remote.RemoteWebDriver;
 
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,8 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /** Concurrency behavior of the CSDN authorization slot, without a real Selenium server. */
 @ExtendWith(MockitoExtension.class)
@@ -164,6 +169,56 @@ class CsdnAuthorizationServiceTest {
         assertEquals("PENDING", service.start(OWNER).status());
     }
 
+    @Test
+    void statusRefreshesExpiredQrAndReturnsFreshDataUrl() {
+        RemoteWebDriver driver = loginFrameVisibleDriver();
+        service.driver = driver;
+        service.qrExpired = true;
+        assertEquals("PENDING", service.start(OWNER).status());
+
+        CsdnAuthorizationService.AuthorizationView view = service.status(OWNER);
+
+        assertEquals("PENDING", view.status());
+        assertEquals("data:image/png;base64,abc", view.qrCodeDataUrl());
+        assertEquals(2, service.qrWaitCalls);
+    }
+
+    @Test
+    void statusKeepsPendingWithoutRefreshingWhenQrIsStillValid() {
+        RemoteWebDriver driver = loginFrameVisibleDriver();
+        service.driver = driver;
+        service.qrExpired = false;
+        assertEquals("PENDING", service.start(OWNER).status());
+
+        CsdnAuthorizationService.AuthorizationView view = service.status(OWNER);
+
+        assertEquals("PENDING", view.status());
+        assertNull(view.qrCodeDataUrl());
+        assertEquals(1, service.qrWaitCalls);
+    }
+
+    @Test
+    void statusKeepsModalOpenWhenRefreshingExpiredQrFails() {
+        RemoteWebDriver driver = loginFrameVisibleDriver();
+        service.driver = driver;
+        service.qrExpired = true;
+        service.failQrOnRefresh = true;
+        assertEquals("PENDING", service.start(OWNER).status());
+
+        CsdnAuthorizationService.AuthorizationView view = service.status(OWNER);
+
+        assertEquals("PENDING", view.status());
+        assertNull(view.qrCodeDataUrl());
+    }
+
+    private RemoteWebDriver loginFrameVisibleDriver() {
+        RemoteWebDriver driver = mock(RemoteWebDriver.class);
+        WebElement loginFrame = mock(WebElement.class);
+        when(loginFrame.isDisplayed()).thenReturn(true);
+        when(driver.findElements(any(By.class))).thenReturn(List.of(loginFrame));
+        return driver;
+    }
+
     private static void await(CountDownLatch latch) {
         try {
             if (!latch.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Test latch timed out");
@@ -190,6 +245,9 @@ class CsdnAuthorizationServiceTest {
         RemoteWebDriver driver;
         Runnable beforeNewDriver;
         boolean failQrCode;
+        boolean failQrOnRefresh;
+        boolean qrExpired;
+        int qrWaitCalls;
 
         TestableService(CsdnProperties properties, CsdnCredentialService credentials) {
             super(properties, credentials);
@@ -203,8 +261,14 @@ class CsdnAuthorizationServiceTest {
 
         @Override
         protected String waitForQrCode(RemoteWebDriver driver) {
-            if (failQrCode) throw new IllegalStateException("boom");
+            qrWaitCalls++;
+            if (failQrCode || (failQrOnRefresh && qrWaitCalls >= 2)) throw new IllegalStateException("boom");
             return "data:image/png;base64,abc";
+        }
+
+        @Override
+        protected boolean isQrExpired(RemoteWebDriver driver) {
+            return qrExpired;
         }
     }
 }
