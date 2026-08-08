@@ -1,4 +1,4 @@
-package com.xander.lab.dto.flow;
+package com.xander.lab.studio.api;
 
 import lombok.Data;
 

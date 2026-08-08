@@ -1,7 +1,7 @@
-package com.xander.lab.mapper;
+package com.xander.lab.studio.infrastructure;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.xander.lab.entity.FlowSnapshot;
+import com.xander.lab.studio.domain.FlowSnapshot;
 import org.apache.ibatis.annotations.Mapper;
 
 /**

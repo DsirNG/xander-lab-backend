@@ -1,4 +1,4 @@
-package com.xander.lab.entity;
+package com.xander.lab.studio.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -8,21 +8,20 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * FlowCraft 画布快照实体
- * 每个画布最多一条快照记录（UNIQUE canvas_id）
+ * FlowCraft 画布实体
  */
 @Data
-@TableName("flow_snapshot")
-public class FlowSnapshot {
+@TableName("flow_canvas")
+public class FlowCanvas {
 
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 所属画布ID */
-    private Long canvasId;
+    /** 所属项目ID */
+    private Long projectId;
 
-    /** 快照JSON数据 */
-    private String data;
+    /** 画布名称 */
+    private String name;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

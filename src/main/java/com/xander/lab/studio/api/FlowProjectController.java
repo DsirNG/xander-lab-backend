@@ -1,12 +1,12 @@
-package com.xander.lab.controller;
+package com.xander.lab.studio.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.dto.PageData;
-import com.xander.lab.dto.flow.FlowProjectCreateRequest;
-import com.xander.lab.dto.flow.FlowProjectUpdateRequest;
-import com.xander.lab.dto.flow.FlowProjectVO;
-import com.xander.lab.service.FlowProjectService;
+import com.xander.lab.studio.api.FlowProjectCreateRequest;
+import com.xander.lab.studio.api.FlowProjectUpdateRequest;
+import com.xander.lab.studio.api.FlowProjectVO;
+import com.xander.lab.studio.application.FlowProjectService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;

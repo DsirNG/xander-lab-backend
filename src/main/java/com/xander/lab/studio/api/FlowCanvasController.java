@@ -1,9 +1,9 @@
-package com.xander.lab.controller;
+package com.xander.lab.studio.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
-import com.xander.lab.dto.flow.FlowSnapshotRequest;
-import com.xander.lab.service.FlowCanvasService;
+import com.xander.lab.studio.api.FlowSnapshotRequest;
+import com.xander.lab.studio.application.FlowCanvasService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;

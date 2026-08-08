@@ -1,14 +1,14 @@
-package com.xander.lab.service;
+package com.xander.lab.studio.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.dto.PageData;
-import com.xander.lab.dto.flow.FlowCanvasVO;
-import com.xander.lab.dto.flow.FlowProjectVO;
-import com.xander.lab.entity.FlowCanvas;
-import com.xander.lab.entity.FlowProject;
-import com.xander.lab.mapper.FlowCanvasMapper;
-import com.xander.lab.mapper.FlowProjectMapper;
+import com.xander.lab.studio.api.FlowCanvasVO;
+import com.xander.lab.studio.api.FlowProjectVO;
+import com.xander.lab.studio.domain.FlowCanvas;
+import com.xander.lab.studio.domain.FlowProject;
+import com.xander.lab.studio.infrastructure.FlowCanvasMapper;
+import com.xander.lab.studio.infrastructure.FlowProjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

@@ -1,7 +1,7 @@
-package com.xander.lab.mapper;
+package com.xander.lab.studio.infrastructure;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.xander.lab.entity.FlowCanvas;
+import com.xander.lab.studio.domain.FlowCanvas;
 import org.apache.ibatis.annotations.Mapper;
 
 /**
