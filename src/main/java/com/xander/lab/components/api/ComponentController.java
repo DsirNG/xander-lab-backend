@@ -1,10 +1,10 @@
-package com.xander.lab.controller;
+package com.xander.lab.components.api;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.dto.ComponentCategoryVO;
-import com.xander.lab.dto.ComponentDetailVO;
-import com.xander.lab.dto.ComponentShareDTO;
-import com.xander.lab.service.ComponentService;
+import com.xander.lab.components.api.ComponentCategoryVO;
+import com.xander.lab.components.api.ComponentDetailVO;
+import com.xander.lab.components.api.ComponentShareDTO;
+import com.xander.lab.components.application.ComponentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 

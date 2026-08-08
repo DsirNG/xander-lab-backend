@@ -1,13 +1,24 @@
-package com.xander.lab.service;
+package com.xander.lab.components.application;
 
 import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.domain.User;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xander.lab.identity.security.UserContext;
-import com.xander.lab.dto.*;
-import com.xander.lab.entity.*;
-import com.xander.lab.mapper.*;
+import com.xander.lab.components.api.ComponentCategoryVO;
+import com.xander.lab.components.api.ComponentDetailPageVO;
+import com.xander.lab.components.api.ComponentDetailVO;
+import com.xander.lab.components.api.ComponentListVO;
+import com.xander.lab.components.api.ComponentScenarioVO;
+import com.xander.lab.components.api.ComponentShareDTO;
+import com.xander.lab.components.domain.ComponentCategory;
+import com.xander.lab.components.domain.ComponentDetailPage;
+import com.xander.lab.components.domain.ComponentItem;
+import com.xander.lab.components.domain.ComponentScenario;
+import com.xander.lab.components.infrastructure.ComponentCategoryMapper;
+import com.xander.lab.components.infrastructure.ComponentDetailPageMapper;
+import com.xander.lab.components.infrastructure.ComponentItemMapper;
+import com.xander.lab.components.infrastructure.ComponentScenarioMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

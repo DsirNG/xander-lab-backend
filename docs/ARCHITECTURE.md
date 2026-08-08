@@ -11,6 +11,7 @@ feature; deployment and database topology stay unchanged.
 - `automation`: will own recurring content plans and durable plan runs.
 - `integration`: owns MCP protocol adapters and vendor-specific integrations such as the complete CSDN MCP flow.
 - `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
+- `components` (migrated): owns the UI component library catalog, detail pages, and community-shared submissions.
 
 ## Module Documentation
 

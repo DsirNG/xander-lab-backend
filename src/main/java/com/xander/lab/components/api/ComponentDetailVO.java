@@ -1,4 +1,4 @@
-package com.xander.lab.dto;
+package com.xander.lab.components.api;
 
 import lombok.Data;
 

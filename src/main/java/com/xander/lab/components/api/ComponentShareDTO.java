@@ -1,4 +1,4 @@
-package com.xander.lab.dto;
+package com.xander.lab.components.api;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;

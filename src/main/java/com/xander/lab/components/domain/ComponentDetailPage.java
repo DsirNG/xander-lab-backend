@@ -1,4 +1,4 @@
-package com.xander.lab.entity;
+package com.xander.lab.components.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
