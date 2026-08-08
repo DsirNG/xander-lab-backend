@@ -3,6 +3,7 @@ package com.xander.lab.integration.mcp.blog.api;
 import com.xander.lab.dto.BlogPostDTO;
 import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
+import com.xander.lab.integration.mcp.security.McpScopeErrors;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
@@ -109,7 +110,7 @@ public class BlogMcpServerConfiguration {
     private McpServerFeatures.SyncToolSpecification tool(String name, String description, Map<String, Object> schema,
                                                           java.util.function.Function<Map<String, Object>, McpSchema.CallToolResult> handler) {
         return new McpServerFeatures.SyncToolSpecification(McpSchema.Tool.builder(name).description(description).inputSchema(schema).build(),
-                (exchange, request) -> handler.apply(request.arguments()));
+                (exchange, request) -> McpScopeErrors.guard(() -> handler.apply(request.arguments())));
     }
 
     private McpSchema.CallToolResult result(Map<String, Object> data) {

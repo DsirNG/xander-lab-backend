@@ -3,6 +3,7 @@ package com.xander.lab.integration.mcp.dual.api;
 import com.xander.lab.dto.BlogPostDTO;
 import com.xander.lab.integration.mcp.dual.application.DualPublishMcpApplicationService;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
+import com.xander.lab.integration.mcp.security.McpScopeErrors;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
@@ -81,7 +82,7 @@ public class DualPublishMcpServerConfiguration {
     private McpServerFeatures.SyncToolSpecification tool(String name, String description, Map<String, Object> schema,
                                                           java.util.function.Function<Map<String, Object>, McpSchema.CallToolResult> handler) {
         return new McpServerFeatures.SyncToolSpecification(McpSchema.Tool.builder(name).description(description).inputSchema(schema).build(),
-                (exchange, request) -> handler.apply(request.arguments()));
+                (exchange, request) -> McpScopeErrors.guard(() -> handler.apply(request.arguments())));
     }
 
     private McpSchema.CallToolResult result(Map<String, Object> data) {
