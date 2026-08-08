@@ -39,8 +39,13 @@ and `dual` MCP modules own only their transport contracts and application flows.
 
 ## Migration Order
 
+The migration is complete. Business code is grouped by capability and the
+global `controller`, `service`, `entity`, `mapper`, and `dto` packages are
+empty except for shared infrastructure:
+
 1. `identity` and `blogagent` establish the feature-first package pattern.
-2. Move blog posts, categories, tags and media into `publishing`; the publication port and local adapter are now in place.
-3. Move MCP, CSDN, model, OSS and mail adapters into `integration`.
-4. Add recurring content plans and durable runs under `automation`.
-5. Group Flow and Img2Three under `studio`.
+2. Blog posts, categories, tags, view records, and media moved into `publishing`; the publication port and local adapter are in place.
+3. MCP, CSDN, model, OSS, file, and mail adapters moved into `integration`.
+4. Recurring content plans and durable runs live under `automation`.
+5. FlowCraft and Img2Three live under `studio`; the UI component library lives under `components`.
+6. Shared cross-module contracts (`Result`, `PageData`, `HealthController`) live under `common`.
