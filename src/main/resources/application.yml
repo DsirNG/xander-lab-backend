@@ -113,7 +113,8 @@ mcp:
       api-key: ${CSDN_API_KEY:203803574}
       selenium-url: ${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}
       credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
-      authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:180}
+      # Hard session limit; the frontend shows the QR for a shorter window (minus a buffer) and cancels on its own.
+      authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:35}
   dual:
     enabled: ${MCP_DUAL_ENABLED:false}
 

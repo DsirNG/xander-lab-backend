@@ -30,11 +30,18 @@ public class CsdnAuthorizationService {
     public AuthorizationView start(Long userId) {
         RemoteWebDriver driver = claimPendingSession(userId);
         try {
-            return new AuthorizationView("PENDING", waitForQrCode(driver));
+            return new AuthorizationView("PENDING", waitForQrCode(driver), remainingSeconds());
         } catch (Exception e) {
             releasePendingSession(userId, driver);
             throw new IllegalStateException("Unable to start CSDN authorization", e);
         }
+    }
+
+    /** Seconds the current authorization slot still accepts a scan; null when no slot is held. */
+    private Integer remainingSeconds() {
+        Session current = session;
+        if (current == null) return null;
+        return (int) Math.max(1, Duration.between(Instant.now(), current.expiresAt()).getSeconds());
     }
 
     /** Navigates to the CSDN login frame and returns the QR code data URL. Test seams override this and {@link #newDriver()}. */
@@ -221,5 +228,7 @@ public class CsdnAuthorizationService {
     }
 
     private record Session(Long userId, RemoteWebDriver driver, Instant expiresAt) { }
-    public record AuthorizationView(String status, String qrCodeDataUrl) { }
+    public record AuthorizationView(String status, String qrCodeDataUrl, Integer expiresInSeconds) {
+        public AuthorizationView(String status, String qrCodeDataUrl) { this(status, qrCodeDataUrl, null); }
+    }
 }

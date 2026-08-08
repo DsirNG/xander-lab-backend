@@ -14,5 +14,5 @@ public class CsdnProperties {
     private String apiKey = "203803574";
     private String seleniumUrl = "http://selenium:4444/wd/hub";
     private String credentialEncryptionKey;
-    private int authorizationTimeoutSeconds = 180;
+    private int authorizationTimeoutSeconds = 35;
 }

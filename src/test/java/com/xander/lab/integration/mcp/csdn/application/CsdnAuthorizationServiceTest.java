@@ -62,6 +62,7 @@ class CsdnAuthorizationServiceTest {
 
         assertEquals("PENDING", view.status());
         assertEquals("data:image/png;base64,abc", view.qrCodeDataUrl());
+        assertTrue(view.expiresInSeconds() != null && view.expiresInSeconds() <= 10);
 
         service.cancel(OWNER);
         verify(service.driver).quit();
