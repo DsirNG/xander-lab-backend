@@ -110,7 +110,7 @@ mcp:
     platform:
       enabled: ${CSDN_PUBLISH_ENABLED:false}
       base-url: ${CSDN_API_BASE_URL:https://bizapi.csdn.net}
-      api-key: ${CSDN_API_KEY:203803574}
+      api-key: ${CSDN_API_KEY:}
       selenium-url: ${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}
       credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
       # Hard session limit; the frontend shows the QR for a shorter window (minus a buffer) and cancels on its own.
