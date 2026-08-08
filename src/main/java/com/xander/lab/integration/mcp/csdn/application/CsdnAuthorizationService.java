@@ -87,6 +87,12 @@ public class CsdnAuthorizationService {
         credentials.delete(userId);
     }
 
+    /** Closes the pending authorization session for this user without deleting stored credentials. */
+    public synchronized void cancel(Long userId) {
+        closeExpired();
+        if (session != null && session.userId().equals(userId)) closeSession();
+    }
+
     private void closeExpired() {
         if (session != null && Instant.now().isAfter(session.expiresAt())) closeSession();
     }

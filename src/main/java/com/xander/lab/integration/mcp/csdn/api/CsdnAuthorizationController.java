@@ -33,6 +33,12 @@ public class CsdnAuthorizationController {
         return Result.success(null);
     }
 
+    @PostMapping("/cancel")
+    public Result<Void> cancel() {
+        service.cancel(requireUserId());
+        return Result.success(null);
+    }
+
     private Long requireUserId() {
         Long userId = UserContext.getUserId();
         if (userId == null) throw new IllegalStateException("Authentication is required");
