@@ -143,8 +143,9 @@ public class AuthService {
                 // 从用户活跃 token 集合中移除
                 redisTemplate.opsForSet().remove(Constants.REDIS_USER_TOKENS_PREFIX + userId, accessToken);
             }
-        } catch (Exception ignored) {
-            // JWT 解析失败也要尝试删除 Redis key
+        } catch (Exception e) {
+            // JWT 解析失败也要尝试删除 Redis key；记录原因便于排查
+            log.warn("[Auth] 登出时移除用户活跃 token 失败: {}", e.getMessage());
         }
 
         // 删除 token 在 Redis 中的记录

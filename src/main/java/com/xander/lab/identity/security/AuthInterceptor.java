@@ -26,7 +26,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     private final JwtUtil jwtUtil;
     private final AuthService authService;
 
-    /** 需要登录的写操作路径 */
+    /** 需要登录的受保护路径（写操作 + 私有读操作） */
     private static final List<String> PROTECTED_WRITE_PATTERNS = List.of(
             "POST:/api/blog/posts",
             "GET:/api/blog/posts/publish-status",
@@ -49,7 +49,19 @@ public class AuthInterceptor implements HandlerInterceptor {
             "DELETE:/api/email-reminders/*",
             "POST:/api/component/items",
             "POST:/api/studio/upload",
-            "POST:/api/studio/save"
+            "POST:/api/studio/save",
+            // 工作流项目/画布属于用户私有内容，读与写都需要登录。
+            "GET:/api/flow/projects",
+            "GET:/api/flow/projects/*",
+            "POST:/api/flow/projects",
+            "PATCH:/api/flow/projects/*",
+            "DELETE:/api/flow/projects/*",
+            "PUT:/api/flow/canvases/*",
+            // CSDN 授权状态属于私有凭据信息，必须登录后才能读写。
+            "GET:/api/publishing/csdn/authorization/status",
+            "POST:/api/publishing/csdn/authorization/start",
+            "POST:/api/publishing/csdn/authorization/cancel",
+            "DELETE:/api/publishing/csdn/authorization"
     );
 
     /** 公开的读操作路径（支持通配符） */
@@ -60,6 +72,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             "GET:/api/blog/tags",
             "GET:/api/blog/tags/popular",
             "GET:/api/blog/posts/recent",
+            "GET:/api/components/menu",
+            "GET:/api/components/*",
             "GET:/api/component/items",
             "GET:/api/component/items/*",
             "GET:/api/component/categories",
@@ -68,9 +82,10 @@ public class AuthInterceptor implements HandlerInterceptor {
             "GET:/api/studio/project/*"
     );
 
-    /** 完全排除的路径 */
+    /** 完全排除的路径（独立鉴权体系，如 MCP 传输与 OAuth 端点） */
     private static final List<String> EXCLUDED_PATTERNS = List.of(
             "/api/auth/",
+            "/api/mcp",
             "/api/studio/preview/",
             "/swagger-ui",
             "/v3/api-docs"
@@ -101,6 +116,16 @@ public class AuthInterceptor implements HandlerInterceptor {
             return requireAuth(request, response);
         }
 
+        // 公开的写操作：文章浏览计数、组件分享，均无需登录。
+        if ("POST".equals(method) && path.startsWith("/api/blog/posts/") && path.endsWith("/view")) {
+            trySetUserContext(request);
+            return true;
+        }
+        if ("POST".equals(method) && "/api/components/share".equals(path)) {
+            trySetUserContext(request);
+            return true;
+        }
+
         for (String pattern : GET_PUBLIC_PATTERNS) {
             String[] parts = pattern.split(":", 2);
             if (parts[0].equals(method) && matchPath(parts[1], path)) {
@@ -118,9 +143,14 @@ public class AuthInterceptor implements HandlerInterceptor {
             }
         }
 
-        // 其他未匹配的路径默认放行
+        // 未匹配的路径：只读方法（GET/HEAD/OPTIONS）保持公开；其他写方法默认要求登录，
+        // 避免新增私有接口因忘记登记而静默公开。
+        if ("GET".equals(method) || "HEAD".equals(method) || "OPTIONS".equals(method)) {
+            trySetUserContext(request);
+            return true;
+        }
         trySetUserContext(request);
-        return true;
+        return requireAuth(request, response);
     }
 
     @Override

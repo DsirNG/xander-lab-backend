@@ -282,7 +282,12 @@ public class BlogAgentController {
                 && responseStatusException.getReason() != null) {
             return responseStatusException.getReason();
         }
-        return defaultErrorMessage(exception.getMessage());
+        if (exception instanceof IllegalArgumentException) {
+            return exception.getMessage();
+        }
+        // 其余异常（供应商、基础设施等）只记录日志，不向客户端透传内部细节。
+        log.error("blog agent task failed", exception);
+        return "博客智能体任务失败，请稍后重试";
     }
 
     private String defaultErrorMessage(String message) {

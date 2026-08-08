@@ -26,6 +26,7 @@ import com.xander.lab.service.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.publishing.domain.PublishCommand;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +41,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.BiConsumer;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BlogAgentService {
@@ -146,7 +148,9 @@ public class BlogAgentService {
             JsonNode reviewed = modelClient.reviewArticle(outcome.content(), request);
             String content = defaultText(reviewed.path("content").asText(), outcome.content());
             return new IllustrationOutcome(content, outcome.status(), outcome.error(), outcome.generated());
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            // 审校失败时保留原始稿件，属于有意的降级；记录原因便于排查。
+            log.warn("blog-agent review stage degraded, keeping original content: {}", e.getMessage());
             return outcome;
         }
     }
@@ -479,17 +483,17 @@ public class BlogAgentService {
 
     private List<String> readTags(String json) {
         try { return objectMapper.readValue(defaultText(json, "[]"), new TypeReference<List<String>>() {}); }
-        catch (Exception e) { return List.of(); }
+        catch (Exception e) { log.debug("blog-agent task tags are not a JSON array: {}", e.getMessage()); return List.of(); }
     }
 
     private java.util.Map<String, Object> readObject(String json) {
         try { return objectMapper.readValue(defaultText(json, "{}"), new TypeReference<java.util.Map<String, Object>>() {}); }
-        catch (Exception e) { return java.util.Map.of(); }
+        catch (Exception e) { log.debug("blog-agent task object payload is not valid JSON: {}", e.getMessage()); return java.util.Map.of(); }
     }
 
     private String writeNode(JsonNode node) {
         try { return node != null && node.isObject() ? objectMapper.writeValueAsString(node) : "{}"; }
-        catch (Exception e) { return "{}"; }
+        catch (Exception e) { log.debug("blog-agent task node serialization failed: {}", e.getMessage()); return "{}"; }
     }
 
     private List<String> readStringArray(JsonNode node) {

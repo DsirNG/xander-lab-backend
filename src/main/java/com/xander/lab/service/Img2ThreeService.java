@@ -378,7 +378,8 @@ public class Img2ThreeService {
             if (StringUtils.hasText(task.getSpecJson())) {
                 vo.setSceneSpec(objectMapper.readValue(task.getSpecJson(), Object.class));
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("img2three task {} analysis/spec JSON unreadable, exposing raw task only", task.getId(), e);
             vo.setAnalysis(null);
             vo.setSceneSpec(null);
         }
