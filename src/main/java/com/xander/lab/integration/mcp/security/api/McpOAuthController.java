@@ -3,6 +3,7 @@ package com.xander.lab.integration.mcp.security.api;
 import com.xander.lab.integration.mcp.security.McpOAuthException;
 import com.xander.lab.integration.mcp.security.McpOAuthProperties;
 import com.xander.lab.integration.mcp.security.application.McpOAuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -62,7 +63,8 @@ public class McpOAuthController {
     }
 
     @PostMapping(value = "/api/mcp/oauth/register", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, Object> request) {
+    public ResponseEntity<Map<String, Object>> register(@RequestBody Map<String, Object> request, HttpServletRequest servletRequest) {
+        oauthService.checkRateLimit("register", clientIp(servletRequest));
         String name = request.get("client_name") == null ? null : String.valueOf(request.get("client_name"));
         List<String> redirectUris = request.get("redirect_uris") instanceof List<?> values
                 ? values.stream().map(String::valueOf).toList() : List.of();
@@ -80,7 +82,9 @@ public class McpOAuthController {
                                           @RequestParam String state,
                                           @RequestParam("code_challenge") String codeChallenge,
                                           @RequestParam("code_challenge_method") String codeChallengeMethod,
-                                          @RequestParam(required = false) String resource) {
+                                          @RequestParam(required = false) String resource,
+                                          HttpServletRequest servletRequest) {
+        oauthService.checkRateLimit("authorize", clientIp(servletRequest));
         var authorization = oauthService.startAuthorization(responseType, clientId, redirectUri, scope, state,
                 codeChallenge, codeChallengeMethod, resource);
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(authorization.consentUrl())).build();
@@ -88,19 +92,25 @@ public class McpOAuthController {
 
     @GetMapping("/api/mcp/oauth/authorize/requests/{requestId}")
     public McpOAuthService.AuthorizationRequestView pending(@PathVariable String requestId,
-                                                             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+                                                             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+                                                             HttpServletRequest servletRequest) {
+        oauthService.checkRateLimit("consent", clientIp(servletRequest));
         return oauthService.pendingAuthorization(requestId, authorization);
     }
 
     @PostMapping("/api/mcp/oauth/authorize/requests/{requestId}/approve")
     public Map<String, String> approve(@PathVariable String requestId,
-                                       @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+                                       @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+                                       HttpServletRequest servletRequest) {
+        oauthService.checkRateLimit("approve", clientIp(servletRequest));
         return Map.of("redirectUrl", oauthService.approveAuthorization(requestId, authorization));
     }
 
     @PostMapping("/api/mcp/oauth/authorize/requests/{requestId}/deny")
     public Map<String, String> deny(@PathVariable String requestId,
-                                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
+                                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+                                    HttpServletRequest servletRequest) {
+        oauthService.checkRateLimit("deny", clientIp(servletRequest));
         return Map.of("redirectUrl", oauthService.denyAuthorization(requestId, authorization));
     }
 
@@ -110,7 +120,9 @@ public class McpOAuthController {
                                                       @RequestParam(value = "code", required = false) String code,
                                                       @RequestParam(value = "redirect_uri", required = false) String redirectUri,
                                                       @RequestParam(value = "code_verifier", required = false) String codeVerifier,
-                                                      @RequestParam(value = "refresh_token", required = false) String refreshToken) {
+                                                      @RequestParam(value = "refresh_token", required = false) String refreshToken,
+                                                      HttpServletRequest servletRequest) {
+        oauthService.checkRateLimit("token", clientIp(servletRequest));
         var tokens = oauthService.issueToken(grantType, clientId, code, redirectUri, codeVerifier, refreshToken);
         return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).body(Map.of(
                 "access_token", tokens.accessToken(), "token_type", "Bearer", "expires_in", tokens.expiresIn(),
@@ -118,7 +130,9 @@ public class McpOAuthController {
     }
 
     @PostMapping(value = "/api/mcp/oauth/revoke", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-    public ResponseEntity<Void> revoke(@RequestParam String token, @RequestParam("client_id") String clientId) {
+    public ResponseEntity<Void> revoke(@RequestParam String token, @RequestParam("client_id") String clientId,
+                                        HttpServletRequest servletRequest) {
+        oauthService.checkRateLimit("revoke", clientIp(servletRequest));
         oauthService.revokeToken(token, clientId);
         return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore()).build();
     }
@@ -139,5 +153,14 @@ public class McpOAuthController {
     public ResponseEntity<Map<String, String>> oauthError(McpOAuthException exception, HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
         return ResponseEntity.status(exception.status()).body(Map.of("error", exception.error(), "error_description", exception.getMessage()));
+    }
+
+    /** Client IP for per-caller rate limiting; prefers proxy-injected headers over the socket peer. */
+    private String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank() && !"unknown".equalsIgnoreCase(forwarded)) return forwarded.split(",")[0].strip();
+        String real = request.getHeader("X-Real-IP");
+        if (real != null && !real.isBlank() && !"unknown".equalsIgnoreCase(real)) return real.strip();
+        return request.getRemoteAddr();
     }
 }

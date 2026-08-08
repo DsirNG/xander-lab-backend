@@ -15,4 +15,6 @@ public class McpOAuthProperties {
     private int authorizationCodeTtlSeconds = 300;
     private int accessTokenTtlSeconds = 3600;
     private int refreshTokenTtlSeconds = 2592000;
+    private int rateLimitMaxRequests = 20;
+    private int rateLimitWindowSeconds = 60;
 }

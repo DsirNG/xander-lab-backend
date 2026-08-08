@@ -32,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -142,5 +143,52 @@ class McpOAuthServiceTest {
         return org.mockito.ArgumentMatchers.argThat(wrapper ->
                 wrapper instanceof LambdaUpdateWrapper<?>
                         && ((LambdaUpdateWrapper<?>) wrapper).getParamNameValuePairs().containsValue(expectedSetValue));
+    }
+
+    @Test
+    void rateLimitAllowsRequestsWithinWindow() {
+        when(properties.getRateLimitMaxRequests()).thenReturn(3);
+        when(properties.getRateLimitWindowSeconds()).thenReturn(60);
+        mockValueOperations(1L, 2L, 3L);
+
+        service.checkRateLimit("token", "127.0.0.1");
+        service.checkRateLimit("token", "127.0.0.1");
+        service.checkRateLimit("token", "127.0.0.1");
+
+        verify(redisTemplate).expire(any(), org.mockito.ArgumentMatchers.eq(60L),
+                org.mockito.ArgumentMatchers.eq(java.util.concurrent.TimeUnit.SECONDS));
+    }
+
+    @Test
+    void rateLimitRejectsRequestAboveTheWindowLimit() {
+        when(properties.getRateLimitMaxRequests()).thenReturn(2);
+        when(properties.getRateLimitWindowSeconds()).thenReturn(60);
+        mockValueOperations(1L, 2L, 3L);
+
+        service.checkRateLimit("token", "127.0.0.1");
+        service.checkRateLimit("token", "127.0.0.1");
+
+        McpOAuthException error = assertThrows(McpOAuthException.class, () -> service.checkRateLimit("token", "127.0.0.1"));
+        assertEquals("rate_limited", error.error());
+        assertEquals(429, error.status());
+    }
+
+@Test
+    void rateLimitSkipsBlankDiscriminators() {
+        service.checkRateLimit("register", " ");
+        verify(redisTemplate, org.mockito.Mockito.never()).opsForValue();
+    }
+
+    private org.springframework.data.redis.core.ValueOperations<String, String> mockValueOperations(Long... counts) {
+        org.springframework.data.redis.core.ValueOperations<String, String> ops =
+                org.mockito.Mockito.mock(org.springframework.data.redis.core.ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(ops);
+        if (counts.length == 1) {
+            when(ops.increment(anyString())).thenReturn(counts[0]);
+        } else {
+            Long[] rest = java.util.Arrays.copyOfRange(counts, 1, counts.length);
+            when(ops.increment(anyString())).thenReturn(counts[0], rest);
+        }
+        return ops;
     }
 }

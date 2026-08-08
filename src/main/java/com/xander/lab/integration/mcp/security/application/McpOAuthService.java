@@ -44,6 +44,7 @@ public class McpOAuthService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String AUTHORIZATION_REQUEST_PREFIX = "mcp:oauth:authorization-request:";
     private static final String AUTHORIZATION_CODE_PREFIX = "mcp:oauth:authorization-code:";
+    private static final String RATE_LIMIT_PREFIX = "mcp:oauth:rate:";
 
     private final McpOAuthProperties properties;
     private final McpOAuthClientMapper clientMapper;
@@ -350,6 +351,22 @@ public class McpOAuthService {
 
     private void requireEnabled() {
         if (!properties.isEnabled()) throw new McpOAuthException("temporarily_unavailable", 503, "MCP OAuth is disabled");
+    }
+
+    /**
+     * Fixed-window Redis rate limiter keyed by a per-caller discriminator (IP or IP+client). The counter is
+     * atomically incremented and expires with the window, then requests beyond the limit are rejected with 429.
+     */
+    public void checkRateLimit(String bucket, String discriminator) {
+        if (bucket == null || bucket.isBlank() || discriminator == null || discriminator.isBlank()) return;
+        String key = RATE_LIMIT_PREFIX + bucket + ":" + discriminator;
+        Long count = redisTemplate.opsForValue().increment(key);
+        if (count != null && count == 1) {
+            redisTemplate.expire(key, properties.getRateLimitWindowSeconds(), TimeUnit.SECONDS);
+        }
+        if (count != null && count > properties.getRateLimitMaxRequests()) {
+            throw new McpOAuthException("rate_limited", 429, "too many requests");
+        }
     }
 
     private McpOAuthException invalidRequest(String message) { return new McpOAuthException("invalid_request", 400, message); }
