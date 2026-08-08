@@ -32,6 +32,7 @@ class CsdnAuthorizationServiceTest {
 
     private static final Long OWNER = 1L;
     private static final Long OTHER = 2L;
+    private static final Long THIRD = 3L;
 
     @Mock CsdnCredentialService credentials;
 
@@ -115,7 +116,7 @@ class CsdnAuthorizationServiceTest {
     }
 
     @Test
-    void differentUserIsRejectedWhileAnotherUserIsStarting() throws Exception {
+    void differentUserIsQueuedWhileAnotherUserIsStarting() throws Exception {
         CountDownLatch enteredNewDriver = new CountDownLatch(1);
         CountDownLatch releaseNewDriver = new CountDownLatch(1);
         service.driver = mock(RemoteWebDriver.class);
@@ -128,8 +129,10 @@ class CsdnAuthorizationServiceTest {
         var future = executor.submit(() -> service.start(OWNER));
 
         assertTrue(enteredNewDriver.await(5, TimeUnit.SECONDS));
-        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.start(OTHER));
-        assertTrue(error.getMessage().contains("Another CSDN authorization is in progress"));
+        CsdnAuthorizationService.AuthorizationView view = service.start(OTHER);
+        assertEquals("QUEUED", view.status());
+        assertEquals(1, view.queuePosition());
+        assertTrue(view.estimatedWaitSeconds() != null && view.estimatedWaitSeconds() >= 0);
 
         releaseNewDriver.countDown();
         assertEquals("PENDING", future.get().status());
@@ -156,6 +159,54 @@ class CsdnAuthorizationServiceTest {
         releaseNewDriver.countDown();
         assertEquals("PENDING", future.get().status());
         service.cancel(OWNER);
+    }
+
+    @Test
+    void queuedUserTakesOverTheSlotWhenItFrees() {
+        service.driver = mock(RemoteWebDriver.class);
+        assertEquals("PENDING", service.start(OWNER).status());
+
+        assertEquals("QUEUED", service.start(OTHER).status());
+        service.cancel(OWNER);
+
+        CsdnAuthorizationService.AuthorizationView view = service.status(OTHER);
+        assertEquals("PENDING", view.status());
+        assertEquals("data:image/png;base64,abc", view.qrCodeDataUrl());
+        service.cancel(OTHER);
+    }
+
+    @Test
+    void cancelLeavesTheQueueAndAdvancesTheNextUser() {
+        service.driver = mock(RemoteWebDriver.class);
+        assertEquals("PENDING", service.start(OWNER).status());
+
+        assertEquals(1, service.start(OTHER).queuePosition());
+        assertEquals(2, service.start(THIRD).queuePosition());
+
+        service.cancel(OTHER);
+        assertEquals("QUEUED", service.status(THIRD).status());
+        assertEquals(1, service.status(THIRD).queuePosition());
+
+        service.cancel(OWNER);
+        assertEquals("PENDING", service.status(THIRD).status());
+        service.cancel(THIRD);
+    }
+
+    @Test
+    void failedTakeoverRequeuesAtTheFrontForTheNextPoll() {
+        service.driver = mock(RemoteWebDriver.class);
+        assertEquals("PENDING", service.start(OWNER).status());
+        assertEquals("QUEUED", service.start(OTHER).status());
+
+        service.cancel(OWNER);
+        service.failNewDriver = true;
+        CsdnAuthorizationService.AuthorizationView view = service.status(OTHER);
+        assertEquals("QUEUED", view.status());
+        assertEquals(1, view.queuePosition());
+
+        service.failNewDriver = false;
+        assertEquals("PENDING", service.status(OTHER).status());
+        service.cancel(OTHER);
     }
 
     @Test
@@ -245,6 +296,7 @@ class CsdnAuthorizationServiceTest {
     private static class TestableService extends CsdnAuthorizationService {
         RemoteWebDriver driver;
         Runnable beforeNewDriver;
+        boolean failNewDriver;
         boolean failQrCode;
         boolean failQrOnRefresh;
         boolean qrExpired;
@@ -257,6 +309,7 @@ class CsdnAuthorizationServiceTest {
         @Override
         protected RemoteWebDriver newDriver() {
             if (beforeNewDriver != null) beforeNewDriver.run();
+            if (failNewDriver) throw new IllegalStateException("selenium down");
             return driver;
         }
 
