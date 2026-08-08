@@ -206,7 +206,13 @@ public class CsdnAuthorizationService {
             }
             return startTakenOverSession(userId, mine.expiresAt());
         }
-        boolean loginFrameVisible = mine.driver().findElements(By.cssSelector("iframe[src*='passport.csdn.net/account/login']"))
+        // The UserToken cookie is the authoritative success signal; CSDN only sets it after a scan.
+        LoginHarvest harvest = harvestLogin(mine.driver());
+        if (harvest != null) {
+            return authorizeAndClose(userId, mine, harvest);
+        }
+        // Not logged in yet. While any passport login frame is shown, keep the QR fresh.
+        boolean loginFrameVisible = mine.driver().findElements(By.cssSelector("iframe[src*='passport.csdn.net']"))
                 .stream().anyMatch(element -> {
                     try { return element.isDisplayed(); } catch (Exception ignored) { return false; }
                 });
@@ -222,19 +228,32 @@ public class CsdnAuthorizationService {
             }
             return new AuthorizationView("PENDING", null);
         }
+        // No cookie and no login frame: the page may still be redirecting after a scan; reload once so the
+        // freshly set UserToken becomes visible.
         mine.driver().navigate().refresh();
         new WebDriverWait(mine.driver(), Duration.ofSeconds(20)).until(driver ->
                 "complete".equals(((org.openqa.selenium.JavascriptExecutor) driver).executeScript("return document.readyState")));
-        Set<Cookie> cookies = mine.driver().manage().getCookies();
+        LoginHarvest afterReload = harvestLogin(mine.driver());
+        if (afterReload == null) return new AuthorizationView("PENDING", null);
+        return authorizeAndClose(userId, mine, afterReload);
+    }
+
+    /** Reads the UserToken cookie and, when present, builds the header and username to persist. */
+    private LoginHarvest harvestLogin(RemoteWebDriver driver) {
+        Set<Cookie> cookies = driver.manage().getCookies();
         String token = cookies.stream().filter(cookie -> "UserToken".equals(cookie.getName()))
                 .map(Cookie::getValue).findFirst().orElse(null);
-        if (token == null || token.isBlank()) return new AuthorizationView("PENDING", null);
+        if (token == null || token.isBlank()) return null;
         String header = cookies.stream().sorted(Comparator.comparing(Cookie::getName))
                 .map(cookie -> cookie.getName() + "=" + cookie.getValue()).collect(Collectors.joining("; "));
         String username = cookies.stream().filter(cookie -> "UserName".equals(cookie.getName()))
                 .map(Cookie::getValue).findFirst().orElse(null);
-        credentials.save(userId, header, username);
-        closeOwnedSession(userId, mine);
+        return new LoginHarvest(header, username);
+    }
+
+    private AuthorizationView authorizeAndClose(Long userId, Session owned, LoginHarvest harvest) {
+        credentials.save(userId, harvest.header(), harvest.username());
+        closeOwnedSession(userId, owned);
         return new AuthorizationView("AUTHORIZED", null);
     }
 
@@ -390,6 +409,7 @@ public class CsdnAuthorizationService {
 
     private record Session(Long userId, RemoteWebDriver driver, Instant expiresAt) { }
     private record Queued(Long userId, Instant expiresAt) { }
+    private record LoginHarvest(String header, String username) { }
     public record AuthorizationView(String status, String qrCodeDataUrl, Integer expiresInSeconds,
                                     Integer queuePosition, Integer estimatedWaitSeconds) {
         public AuthorizationView(String status, String qrCodeDataUrl) { this(status, qrCodeDataUrl, null, null, null); }

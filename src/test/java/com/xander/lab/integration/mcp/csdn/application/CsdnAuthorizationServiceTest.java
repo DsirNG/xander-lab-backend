@@ -8,10 +8,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.openqa.selenium.By;
+import org.openqa.selenium.Cookie;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.remote.RemoteWebDriver;
 
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,6 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -289,11 +293,33 @@ class CsdnAuthorizationServiceTest {
         assertNull(view.qrCodeDataUrl());
     }
 
+    @Test
+    void statusAuthorizesWhenUserTokenCookieIsPresent() {
+        service.driver = mock(RemoteWebDriver.class);
+        RemoteWebDriver.Options options = mock(RemoteWebDriver.Options.class);
+        when(options.getCookies()).thenReturn(Set.of(
+                new Cookie("UserToken", "abc123"),
+                new Cookie("UserName", "tester"),
+                new Cookie("Other", "x")
+        ));
+        when(service.driver.manage()).thenReturn(options);
+        assertEquals("PENDING", service.start(OWNER).status());
+
+        CsdnAuthorizationService.AuthorizationView view = service.status(OWNER);
+
+        assertEquals("AUTHORIZED", view.status());
+        verify(credentials).save(eq(OWNER), anyString(), eq("tester"));
+        verify(service.driver).quit();
+    }
+
     private RemoteWebDriver loginFrameVisibleDriver() {
         RemoteWebDriver driver = mock(RemoteWebDriver.class);
         WebElement loginFrame = mock(WebElement.class);
         when(loginFrame.isDisplayed()).thenReturn(true);
         when(driver.findElements(any(By.class))).thenReturn(List.of(loginFrame));
+        RemoteWebDriver.Options options = mock(RemoteWebDriver.Options.class);
+        when(options.getCookies()).thenReturn(Set.of());
+        when(driver.manage()).thenReturn(options);
         return driver;
     }
 
