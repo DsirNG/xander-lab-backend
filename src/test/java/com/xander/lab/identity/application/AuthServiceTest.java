@@ -6,7 +6,7 @@ import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.security.JwtUtil;
-import com.xander.lab.service.MailService;
+import com.xander.lab.integration.mail.MailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

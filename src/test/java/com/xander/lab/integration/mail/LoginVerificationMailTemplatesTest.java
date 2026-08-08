@@ -1,4 +1,4 @@
-package com.xander.lab.service;
+package com.xander.lab.integration.mail;
 
 import org.junit.jupiter.api.Test;
 

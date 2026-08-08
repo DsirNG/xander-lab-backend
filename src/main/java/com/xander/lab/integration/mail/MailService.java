@@ -1,4 +1,4 @@
-package com.xander.lab.service;
+package com.xander.lab.integration.mail;
 
 import com.xander.lab.automation.domain.EmailReminderMailTemplates;
 import jakarta.mail.internet.MimeMessage;

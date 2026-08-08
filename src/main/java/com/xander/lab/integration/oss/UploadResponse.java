@@ -1,4 +1,4 @@
-package com.xander.lab.dto.upload;
+package com.xander.lab.integration.oss;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

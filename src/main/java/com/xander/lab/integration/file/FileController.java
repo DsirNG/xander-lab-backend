@@ -1,9 +1,9 @@
-package com.xander.lab.controller;
+package com.xander.lab.integration.file;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.dto.upload.UploadResponse;
-import com.xander.lab.service.FileService;
-import com.xander.lab.service.OssService;
+import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.integration.file.FileService;
+import com.xander.lab.integration.oss.OssService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;

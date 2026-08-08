@@ -9,7 +9,7 @@ feature; deployment and database topology stay unchanged.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions.
 - `publishing` (migrated): owns blog posts, categories, tags, view records, publication commands, generic publication contracts, durable publication records, and blog media uploads.
 - `automation`: will own recurring content plans and durable plan runs.
-- `integration`: owns MCP protocol adapters and vendor-specific integrations such as the complete CSDN MCP flow.
+- `integration` (migrated): owns MCP protocol adapters, OSS/file/mail delivery adapters, and vendor-specific integrations such as the complete CSDN MCP flow.
 - `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
 - `components` (migrated): owns the UI component library catalog, detail pages, and community-shared submissions.
 

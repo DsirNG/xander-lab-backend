@@ -2,7 +2,7 @@ package com.xander.lab.automation.infrastructure;
 
 import com.xander.lab.automation.domain.EmailReminderTask;
 import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
-import com.xander.lab.service.MailService;
+import com.xander.lab.integration.mail.MailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

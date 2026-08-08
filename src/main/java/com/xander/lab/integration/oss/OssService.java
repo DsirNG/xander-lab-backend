@@ -1,9 +1,9 @@
-package com.xander.lab.service;
+package com.xander.lab.integration.oss;
 
 import com.aliyun.oss.ClientBuilderConfiguration;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
-import com.xander.lab.dto.upload.UploadResponse;
+import com.xander.lab.integration.oss.UploadResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

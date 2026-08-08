@@ -7,7 +7,7 @@ import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.security.JwtUtil;
-import com.xander.lab.service.MailService;
+import com.xander.lab.integration.mail.MailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
