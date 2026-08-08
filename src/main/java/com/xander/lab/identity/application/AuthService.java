@@ -11,6 +11,7 @@ import com.xander.lab.service.MailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.security.SecureRandom;
@@ -32,6 +33,7 @@ public class AuthService {
     private final MailService mailService;
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * 发送登录验证码
@@ -79,8 +81,8 @@ public class AuthService {
                     .eq(User::getUsername, account)
                     .or()
                     .eq(User::getEmail, account));
-                    
-            if (user == null || !user.getPassword().equals(request.getPassword())) {
+
+            if (user == null || !matchesPassword(user, request.getPassword())) {
                 throw new IllegalArgumentException("用户名或密码错误");
             }
         }
@@ -93,12 +95,57 @@ public class AuthService {
     }
 
     /**
+     * 校验密码
+     * 兼容历史明文存储：若匹配成功且库中仍是明文，则原地升级为 BCrypt，避免明文长期留存
+     */
+    private boolean matchesPassword(User user, String rawPassword) {
+        String storedPassword = user.getPassword();
+        if (storedPassword == null) {
+            return false;
+        }
+        boolean matched;
+        if (isBcryptHash(storedPassword)) {
+            matched = passwordEncoder.matches(rawPassword, storedPassword);
+        } else {
+            // 历史明文兼容：仅当全部为明文时比对，保证旧账号可继续登录
+            matched = storedPassword.equals(rawPassword);
+        }
+        if (matched) {
+            upgradePasswordIfLegacy(user, rawPassword);
+        }
+        return matched;
+    }
+
+    private boolean isBcryptHash(String storedPassword) {
+        return storedPassword.startsWith("$2a$") || storedPassword.startsWith("$2b$") || storedPassword.startsWith("$2y$");
+    }
+
+    /**
+     * 若密码仍是历史明文，升级为 BCrypt 哈希存储（仅在登录成功后触发）
+     */
+    private void upgradePasswordIfLegacy(User user, String rawPassword) {
+        if (isBcryptHash(user.getPassword())) {
+            return;
+        }
+        try {
+            User update = new User();
+            update.setId(user.getId());
+            update.setPassword(passwordEncoder.encode(rawPassword));
+            userMapper.updateById(update);
+            log.info("[Auth] 用户 {} 的明文密码已升级为 BCrypt", user.getId());
+        } catch (Exception e) {
+            log.warn("[Auth] 升级历史明文密码失败，不影响本次登录: {}", e.getMessage());
+        }
+    }
+
+    /**
      * 自动注册用户
+     * 验证码登录注册的用户不知道登录密码，生成随机口令并哈希存储，避免明文默认密码
      */
     private User registerUser(String username, String password, String email, String role) {
         User user = new User();
         user.setUsername(username);
-        user.setPassword(password != null ? password : "123456");
+        user.setPassword(password != null ? passwordEncoder.encode(password) : generateRandomPassword());
         user.setNickname(username.contains("@") ? username.split("@")[0] : username);
         user.setEmail(email);
         user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + username);
@@ -108,6 +155,19 @@ public class AuthService {
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.insert(user);
         return user;
+    }
+
+    /**
+     * 生成长随机密码，用于验证码登录自动注册的账号（无明文，仅存 BCrypt 哈希）
+     */
+    private String generateRandomPassword() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        StringBuilder sb = new StringBuilder(bytes.length * 2);
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
     }
 
     /**
@@ -233,7 +293,7 @@ public class AuthService {
         }
         User user = new User();
         user.setUsername(email);
-        user.setPassword(password);
+        user.setPassword(passwordEncoder.encode(password));
         user.setNickname(name);
         user.setEmail(email);
         user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + email);

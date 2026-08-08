@@ -15,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -27,6 +29,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -38,10 +41,11 @@ class AuthServiceTest {
     @Mock private SetOperations<String, String> setOperations;
 
     private AuthService service;
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @BeforeEach
     void setUp() {
-        service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate);
+        service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate, passwordEncoder);
     }
 
     @Test
@@ -144,11 +148,49 @@ class AuthServiceTest {
         User user = new User();
         user.setId(id);
         user.setUsername(username);
-        user.setPassword(password);
+        user.setPassword(passwordEncoder.encode(password));
         user.setNickname(username);
         user.setAvatar("avatar");
         user.setRole("USER");
         user.setStatus(status);
         return user;
+    }
+
+    @Test
+    void legacyPlaintextPasswordStillLogsInAndUpgradesToBcrypt() {
+        User user = new User();
+        user.setId(9L);
+        user.setUsername("legacy");
+        user.setPassword("plain-secret");
+        user.setNickname("legacy");
+        user.setRole("USER");
+        user.setStatus(1);
+        LoginRequest request = new LoginRequest();
+        request.setType("password");
+        request.setAccount("legacy");
+        request.setPassword("plain-secret");
+        when(userMapper.selectOne(any())).thenReturn(user);
+        stubTokenIssuance();
+
+        TokenResponse response = service.login(request);
+
+        assertThat(response.getAccessToken()).isEqualTo("access-token");
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getPassword()).startsWith("$2");
+        assertThat(passwordEncoder.matches("plain-secret", captor.getValue().getPassword())).isTrue();
+    }
+
+    @Test
+    void passwordLoginRejectsIncorrectPasswordForHashedAccount() {
+        User user = user(11L, "hashed", "correct-horse", 1);
+        LoginRequest request = new LoginRequest();
+        request.setType("password");
+        request.setAccount("hashed");
+        request.setPassword("wrong");
+        when(userMapper.selectOne(any())).thenReturn(user);
+
+        assertThatThrownBy(() -> service.login(request)).isInstanceOf(IllegalArgumentException.class);
+        verify(jwtUtil, never()).generateAccessToken(anyString(), any(Map.class));
     }
 }

@@ -20,7 +20,7 @@ public class User {
     /** 用户名 */
     private String username;
 
-    /** 密码（加密存储，模拟环境先存明文） */
+    /** 密码（BCrypt 哈希，历史明文登录成功后自动升级） */
     private String password;
 
     /** 昵称 */

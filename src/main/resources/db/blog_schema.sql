@@ -14,7 +14,7 @@ USE `xander_lab`;
 CREATE TABLE `sys_user` (
                             `id` bigint NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
                             `username` varchar(50) NOT NULL COMMENT '用户名',
-                            `password` varchar(100) DEFAULT '123456' COMMENT '密码',
+                            `password` varchar(100) DEFAULT NULL COMMENT '密码（BCrypt 哈希，历史明文登录成功后自动升级）',
                             `nickname` varchar(50) DEFAULT NULL COMMENT '昵称',
                             `email` varchar(100) DEFAULT NULL COMMENT '邮箱',
                             `avatar` varchar(255) DEFAULT NULL COMMENT '头像URL',
