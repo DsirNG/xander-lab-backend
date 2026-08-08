@@ -7,30 +7,28 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import org.springframework.web.util.ContentCachingRequestWrapper;
-import org.springframework.web.util.ContentCachingResponseWrapper;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.Enumeration;
 
 /**
  * Global Request Logging Filter
- * Logs inbound requests and outbound responses, including headers, parameters, and status.
- * Helps in debugging 404s and monitoring API traffic.
+ * Logs request/response metadata only. Request and response bodies are never
+ * logged, because they may contain passwords, verification codes, refresh
+ * tokens or JWTs (e.g. /api/auth/login, /api/auth/refresh). Sensitive headers
+ * are fully redacted rather than partially truncated.
  */
 @Slf4j
 @Component
 public class RequestLoggingFilter extends OncePerRequestFilter {
 
-    private static final int MAX_PAYLOAD_LENGTH = 1000; // Truncate logs if body is too long
+    private static final String REDACTED = "[REDACTED]";
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        // SSE/event streams have no useful request body and produce noisier
+        // completion logs; skip them entirely.
         String uri = request.getRequestURI();
-        // ContentCachingResponseWrapper buffers output until the request returns,
-        // which prevents an SseEmitter from flushing events after the controller
-        // has switched to async processing.
         return (uri.startsWith("/api/blog-agent/tasks/")
                 && (uri.endsWith("/stream") || uri.endsWith("/events")))
                 || (uri.startsWith("/api/img2three/tasks/") && uri.endsWith("/run/stream"));
@@ -40,110 +38,51 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
-        // Wrap request and response to read body content (if needed) without consuming the stream
-        ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request);
-        ContentCachingResponseWrapper responseWrapper = new ContentCachingResponseWrapper(response);
-
         long startTime = System.currentTimeMillis();
         try {
-            // Log Request Basics
-            logRequest(requestWrapper);
-
-            // Proceed with the filter chain using wrappers
-            filterChain.doFilter(requestWrapper, responseWrapper);
+            filterChain.doFilter(request, response);
         } finally {
-            long duration = System.currentTimeMillis() - startTime;
-            
-            // Log Response Details
-            logResponse(requestWrapper, responseWrapper, duration);
-            
-            // IMPORTANT: Copy content back to the original response
-            responseWrapper.copyBodyToResponse();
+            logRequestMetadata(request, response, System.currentTimeMillis() - startTime);
         }
     }
 
-    private void logRequest(ContentCachingRequestWrapper request) {
-        StringBuilder msg = new StringBuilder();
-        msg.append("\n================ INCOMING REQUEST ================\n");
-        msg.append("Address: ").append(request.getRemoteAddr()).append("\n");
-        msg.append("Method : ").append(request.getMethod()).append("\n");
-        msg.append("URI    : ").append(request.getRequestURI()).append("\n");
-        
+    private void logRequestMetadata(HttpServletRequest request, HttpServletResponse response, long duration) {
+        String headers = collectHeaders(request);
         String queryString = request.getQueryString();
-        if (queryString != null) {
-            msg.append("Query  : ").append(queryString).append("\n");
-        }
-
-        // Log Headers (Optional, useful for auth/client info)
-        msg.append("Headers: [");
-        Enumeration<String> headerNames = request.getHeaderNames();
-        while (headerNames.hasMoreElements()) {
-            String headerName = headerNames.nextElement();
-            // Skip sensitive headers if necessary (e.g. Authorization, Cookie)? 
-            // Logging Authorization token might be useful for debugging but also security risk.
-            // Let's log keys for now or truncate.
-            msg.append(headerName).append(": ").append(maskSensitive(headerName, request.getHeader(headerName))).append(", ");
-        }
-        msg.append("]\n");
-
-        log.info(msg.toString());
-    }
-
-    private void logResponse(ContentCachingRequestWrapper request, ContentCachingResponseWrapper response, long duration) {
-        StringBuilder msg = new StringBuilder();
-        msg.append("\n================ OUTGOING RESPONSE ================\n");
-        msg.append("Method : ").append(request.getMethod()).append("\n");
-        msg.append("URI    : ").append(request.getRequestURI()).append("\n");
-        msg.append("Status : ").append(response.getStatus()).append("\n");
-        msg.append("Time   : ").append(duration).append(" ms\n");
-
-        // Log Request Body (read from wrapper buffer)
-        byte[] requestBody = request.getContentAsByteArray();
-        if (requestBody.length > 0 && !isSensitiveMcpRequest(request)) {
-            String bodyString = new String(requestBody, StandardCharsets.UTF_8);
-            msg.append("Req Body: ").append(truncate(bodyString)).append("\n");
-        }
-
-        // Log Response Body (read from wrapper buffer)
-        // Only log response body for non-success or specific content types (e.g. JSON)
-        // to avoid logging binary files or huge HTML.
-        String contentType = response.getContentType();
-        if (!isSensitiveMcpRequest(request) && contentType != null
-                && (contentType.contains("json") || contentType.contains("text") || contentType.contains("xml"))) {
-            byte[] responseBody = response.getContentAsByteArray();
-            if (responseBody.length > 0) {
-                String bodyString = new String(responseBody, StandardCharsets.UTF_8);
-                msg.append("Res Body: ").append(truncate(bodyString)).append("\n");
-            }
-        }
-        
-        msg.append("==================================================\n");
 
         if (response.getStatus() >= 400) {
-            log.warn(msg.toString());
+            log.warn("\nRequest: {} {} query={} status={} time={}ms headers={}",
+                    request.getMethod(), request.getRequestURI(),
+                    queryString == null ? "-" : queryString,
+                    response.getStatus(), duration, headers);
         } else {
-            log.info(msg.toString());
+            log.info("\nRequest: {} {} query={} status={} time={}ms headers={}",
+                    request.getMethod(), request.getRequestURI(),
+                    queryString == null ? "-" : queryString,
+                    response.getStatus(), duration, headers);
         }
     }
 
-    private String maskSensitive(String header, String value) {
-        if ("Authorization".equalsIgnoreCase(header)
-                || "Cookie".equalsIgnoreCase(header)) {
-            if (value != null && value.length() > 20) {
-                return value.substring(0, 15) + "...";
-            }
+    /**
+     * Collect safe headers, fully redacting any header that carries credentials.
+     * Never expose Authorization, Cookie or Set-Cookie values, not even partially.
+     */
+    private String collectHeaders(HttpServletRequest request) {
+        StringBuilder sb = new StringBuilder();
+        Enumeration<String> headerNames = request.getHeaderNames();
+        while (headerNames != null && headerNames.hasMoreElements()) {
+            String name = headerNames.nextElement();
+            sb.append(name).append('=')
+                    .append(isSensitiveHeader(name) ? REDACTED : request.getHeader(name))
+                    .append(' ');
         }
-        return value;
+        return sb.toString();
     }
 
-    private boolean isSensitiveMcpRequest(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/api/mcp");
-    }
-
-    private String truncate(String content) {
-        if (content.length() > MAX_PAYLOAD_LENGTH) {
-            return content.substring(0, MAX_PAYLOAD_LENGTH) + "... (truncated)";
-        }
-        return content;
+    private boolean isSensitiveHeader(String name) {
+        return "authorization".equalsIgnoreCase(name)
+                || "cookie".equalsIgnoreCase(name)
+                || "x-csrf-token".equalsIgnoreCase(name)
+                || "proxy-authorization".equalsIgnoreCase(name);
     }
 }

@@ -17,6 +17,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -26,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,6 +48,9 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate, passwordEncoder);
+        // 速率限制默认放行（increment 返回 1），只被涉及限流的用例使用
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(valueOperations.increment(anyString())).thenReturn(1L);
     }
 
     @Test
@@ -58,7 +63,7 @@ class AuthServiceTest {
         when(userMapper.selectOne(any())).thenReturn(user);
         stubTokenIssuance();
 
-        TokenResponse response = service.login(request);
+        TokenResponse response = service.login(request, "127.0.0.1");
 
         assertThat(response.getAccessToken()).isEqualTo("access-token");
         assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
@@ -75,7 +80,7 @@ class AuthServiceTest {
         request.setPassword("wrong");
         when(userMapper.selectOne(any())).thenReturn(null);
 
-        assertThatThrownBy(() -> service.login(request)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.login(request, "127.0.0.1")).isInstanceOf(IllegalArgumentException.class);
         verify(jwtUtil, never()).generateAccessToken(anyString(), any(Map.class));
     }
 
@@ -129,11 +134,32 @@ class AuthServiceTest {
     void verificationCodeIsStoredAndSent() {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
-        service.sendCode("alice@example.com");
+        service.sendCode("alice@example.com", "127.0.0.1");
 
         verify(valueOperations).set(eq(Constants.REDIS_CODE_PREFIX + "alice@example.com"), anyString(),
                 eq(Constants.CODE_EXPIRE_MINUTES), eq(TimeUnit.MINUTES));
         verify(mailService).sendVerificationCode(eq("alice@example.com"), anyString());
+    }
+
+    @Test
+    void sendCodeAndLoginAreRateLimitedPerAccountAndIp() {
+        // 验证码：同一邮箱限 1 次/分钟，超过后第二次触发 429
+        when(valueOperations.increment(anyString())).thenReturn(2L);
+        assertThatThrownBy(() -> service.sendCode("limited@example.com", "10.0.0.1"))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode().value())
+                .isEqualTo(429);
+
+        // 密码登录：同一账号尝试次数超过 5 次/分钟触发 429
+        LoginRequest request = new LoginRequest();
+        request.setType("password");
+        request.setAccount("bob");
+        request.setPassword("x");
+        when(valueOperations.increment(anyString())).thenReturn(6L);
+        assertThatThrownBy(() -> service.login(request, "10.0.0.1"))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode().value())
+                .isEqualTo(429);
     }
 
     private void stubTokenIssuance() {
@@ -172,7 +198,7 @@ class AuthServiceTest {
         when(userMapper.selectOne(any())).thenReturn(user);
         stubTokenIssuance();
 
-        TokenResponse response = service.login(request);
+        TokenResponse response = service.login(request, "127.0.0.1");
 
         assertThat(response.getAccessToken()).isEqualTo("access-token");
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
@@ -190,7 +216,7 @@ class AuthServiceTest {
         request.setPassword("wrong");
         when(userMapper.selectOne(any())).thenReturn(user);
 
-        assertThatThrownBy(() -> service.login(request)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.login(request, "127.0.0.1")).isInstanceOf(IllegalArgumentException.class);
         verify(jwtUtil, never()).generateAccessToken(anyString(), any(Map.class));
     }
 }

@@ -18,4 +18,6 @@ public class CsdnProperties {
     private int authorizationTimeoutSeconds = 35;
     /** How often the background sweep checks for expired authorization sessions, in milliseconds. */
     private long cleanupIntervalMs = 15_000;
+    /** Web-console HMAC signing secret embedded in CSDN's mp_v3 frontend; overridable so it can be rotated. */
+    private String webConsoleSecret = "9znpamsyl2c7cdrr9sas0le9vbc3r6ba";
 }

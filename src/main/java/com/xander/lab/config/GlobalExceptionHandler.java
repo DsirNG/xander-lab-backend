@@ -89,13 +89,13 @@ public class GlobalExceptionHandler {
 
     /**
      * 自定义运行时异常
-     * 对应业务抛出的 RuntimeException，保留原业务消息
+     * 服务端记录完整堆栈；客户端只返回通用错误，避免泄露供应商异常或内部细节
      */
     @ExceptionHandler(RuntimeException.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleRuntimeException(RuntimeException ex) {
         log.error("[Server] 运行时异常: {}", ex.getMessage(), ex);
-        return Result.error(ex.getMessage() != null ? ex.getMessage() : "服务器内部错误");
+        return Result.error("服务器内部错误，请稍后重试");
     }
 
     /**

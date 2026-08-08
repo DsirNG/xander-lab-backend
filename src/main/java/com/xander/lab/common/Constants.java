@@ -31,4 +31,7 @@ public interface Constants {
 
     /** 阅读去重冷却时间（小时） */
     long VIEW_DEDUP_HOURS = 24;
+
+    /** Redis 登录/验证码限流前缀: auth:rate:{bucket}:{discriminator} */
+    String REDIS_RATE_PREFIX = "auth:rate:";
 }

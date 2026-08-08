@@ -6,6 +6,7 @@ import com.xander.lab.identity.api.RefreshTokenRequest;
 import com.xander.lab.identity.api.RegisterRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.application.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,8 +46,8 @@ public class AuthController {
      * GET /api/auth/code?email=xxx@qq.com
      */
     @GetMapping("/code")
-    public Result<Void> sendCode(@RequestParam String email) {
-        authService.sendCode(email);
+    public Result<Void> sendCode(@RequestParam String email, HttpServletRequest request) {
+        authService.sendCode(email, clientIp(request));
         return Result.success();
     }
 
@@ -59,9 +60,9 @@ public class AuthController {
      * @return accessToken + refreshToken + 用户信息
      */
     @PostMapping("/login")
-    public Result<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
+    public Result<TokenResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         try {
-            TokenResponse response = authService.login(request);
+            TokenResponse response = authService.login(request, clientIp(httpRequest));
             return Result.success(response);
         } catch (IllegalArgumentException e) {
             // 对应前端 BIZ_ERROR_MAP[1001] = '用户名或密码错误'
@@ -134,9 +135,9 @@ public class AuthController {
      * POST /api/auth/register
      */
     @PostMapping("/register")
-    public Result<TokenResponse> register(@Valid @RequestBody RegisterRequest request) {
+    public Result<TokenResponse> register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
         try {
-            TokenResponse response = authService.register(request.getEmail(), request.getPassword(), request.getName());
+            TokenResponse response = authService.register(request.getEmail(), request.getPassword(), request.getName(), clientIp(httpRequest));
             return Result.success(response);
         } catch (IllegalArgumentException e) {
             return Result.badRequest(e.getMessage());
@@ -160,8 +161,23 @@ public class AuthController {
         return Result.success(authService.validateAccessToken(token));
     }
 
-    private static <T> ResponseEntity<Result<T>> unauthorizedResponse() {
+private static <T> ResponseEntity<Result<T>> unauthorizedResponse() {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Result.unauthorized("未登录或登录已过期"));
+    }
+
+    /**
+     * 提取客户端 IP，优先信任代理注入的 header，回退到 socket 对端
+     */
+    private String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) {
+            return realIp;
+        }
+        return request.getRemoteAddr();
     }
 }

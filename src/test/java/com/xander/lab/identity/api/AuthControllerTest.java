@@ -2,12 +2,16 @@ package com.xander.lab.identity.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.application.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -15,31 +19,33 @@ import static org.mockito.Mockito.when;
 class AuthControllerTest {
     private AuthService authService;
     private AuthController controller;
+    private HttpServletRequest httpRequest;
 
     @BeforeEach
     void setUp() {
         authService = mock(AuthService.class);
         controller = new AuthController(authService);
+        httpRequest = mock(HttpServletRequest.class);
     }
 
     @Test
     void loginReturnsTokenResponse() {
         LoginRequest request = new LoginRequest();
         TokenResponse token = TokenResponse.builder().accessToken("access").build();
-        when(authService.login(request)).thenReturn(token);
+        when(authService.login(eq(request), any())).thenReturn(token);
 
-        Result<TokenResponse> result = controller.login(request);
+        Result<TokenResponse> result = controller.login(request, httpRequest);
 
         assertThat(result.getData()).isSameAs(token);
-        verify(authService).login(request);
+        verify(authService).login(eq(request), any());
     }
 
     @Test
     void loginMapsCredentialFailureToBusinessError() {
         LoginRequest request = new LoginRequest();
-        when(authService.login(request)).thenThrow(new IllegalArgumentException("invalid credentials"));
+        when(authService.login(eq(request), any())).thenThrow(new IllegalArgumentException("invalid credentials"));
 
-        Result<TokenResponse> result = controller.login(request);
+        Result<TokenResponse> result = controller.login(request, httpRequest);
 
         assertThat(result.getCode()).isEqualTo(1001);
     }

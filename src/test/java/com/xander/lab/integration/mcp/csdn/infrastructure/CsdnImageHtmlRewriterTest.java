@@ -10,7 +10,9 @@ class CsdnImageHtmlRewriterTest {
     void rewriteReplacesRemoteImageSources() {
         CsdnImageStorageClient client = (cookie, apiKey, nonce, signature, timestamp, imageUrl, articleId) ->
                 "https://csdn.example.com/" + articleId + "/rewritten.png";
-        CsdnImageHtmlRewriter rewriter = new CsdnImageHtmlRewriter(client);
+        CsdnProperties properties = new CsdnProperties();
+        properties.setWebConsoleSecret("test-secret-that-is-long-enough");
+        CsdnImageHtmlRewriter rewriter = new CsdnImageHtmlRewriter(client, properties);
 
         String html = "<p>before</p><img src=\"https://example.com/a.png\" alt=\"a\"><p>after</p>";
 

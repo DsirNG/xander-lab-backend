@@ -26,8 +26,6 @@ public class CsdnPublisher implements BlogPublisher {
     private static final String SAVE_PATH = "/blog-console-api/v1/postedit/saveArticle";
     private static final String ACCEPT = "application/json, text/plain, */*";
     private static final String CONTENT_TYPE = "application/json;";
-    // Public web-console signing secret embedded in CSDN's current mp_v3 frontend bundle.
-    private static final String WEB_CONSOLE_SECRET = "9znpamsyl2c7cdrr9sas0le9vbc3r6ba";
     private final CsdnProperties properties;
     private final CsdnCredentialService credentials;
     private final CsdnImageHtmlRewriter imageHtmlRewriter;
@@ -127,7 +125,7 @@ public class CsdnPublisher implements BlogPublisher {
                 + SAVE_PATH;
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(WEB_CONSOLE_SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            mac.init(new SecretKeySpec(properties.getWebConsoleSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
             return Base64.getEncoder().encodeToString(mac.doFinal(canonical.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {
             throw new IllegalStateException("Unable to sign CSDN request", e);

@@ -41,7 +41,7 @@ public class FileService {
 
     /** 允许上传的文件类型 */
     private static final List<String> ALLOWED_TYPES = List.of(
-            "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+            "image/jpeg", "image/png", "image/gif", "image/webp",
             "application/pdf",
             "text/plain", "text/csv",
             "application/vnd.ms-excel",
@@ -99,12 +99,21 @@ public class FileService {
 
     /**
      * 获取文件的物理路径（供 Controller 读取文件流）
+     * 解析后必须仍位于上传根目录内，拒绝 ..\ 等目录穿越路径
      *
      * @param filename 存储文件名
      * @return 文件路径
      */
     public Path resolveFilePath(String filename) {
-        return Paths.get(uploadDir).toAbsolutePath().normalize().resolve(filename);
+        if (filename == null || filename.isBlank()) {
+            throw new IllegalArgumentException("文件名不能为空");
+        }
+        Path uploadPath = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path resolved = uploadPath.resolve(filename).normalize();
+        if (!resolved.startsWith(uploadPath)) {
+            throw new IllegalArgumentException("非法的文件路径");
+        }
+        return resolved;
     }
 
     /**

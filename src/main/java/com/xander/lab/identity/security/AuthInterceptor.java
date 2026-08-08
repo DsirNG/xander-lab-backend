@@ -57,6 +57,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             "PATCH:/api/flow/projects/*",
             "DELETE:/api/flow/projects/*",
             "PUT:/api/flow/canvases/*",
+            // 画布快照属于用户私有内容，读操作同样需要登录。
+            "GET:/api/flow/canvases/*",
             // CSDN 授权状态属于私有凭据信息，必须登录后才能读写。
             "GET:/api/publishing/csdn/authorization/status",
             "POST:/api/publishing/csdn/authorization/start",

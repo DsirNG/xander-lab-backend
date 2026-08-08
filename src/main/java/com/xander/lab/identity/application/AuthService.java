@@ -13,6 +13,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
@@ -35,28 +37,55 @@ public class AuthService {
     private final StringRedisTemplate redisTemplate;
     private final PasswordEncoder passwordEncoder;
 
-    /**
+/**
      * 发送登录验证码
+     * 限流：同一邮箱每 60 秒最多 1 次（验证码本身覆盖旧值），防止验证码轰炸
      */
-    public void sendCode(String email) {
+    public void sendCode(String email, String clientIp) {
+        checkRateLimit("code", email, 1, 60);
+        checkRateLimit("code:ip", sanitize(clientIp), 20, 60);
+
         // 生成 6 位随机验证码
         String code = String.valueOf(100000 + CODE_RANDOM.nextInt(900000));
-        
+
         // 存入 Redis (有效期 5 分钟)
         String key = Constants.REDIS_CODE_PREFIX + email;
         redisTemplate.opsForValue().set(key, code, Constants.CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
-        
+
         // 发送邮件
         mailService.sendVerificationCode(email, code);
-        
+
         log.info("[Auth] 验证码已发送至 {}", email);
     }
 
     /**
-     * 登录
+     * Fixed-window Redis rate limiter：窗口内原子递增，超限返回 HTTP 429
      */
-    public TokenResponse login(LoginRequest request) {
+    private void checkRateLimit(String bucket, String key, int limit, int windowSeconds) {
+        String redisKey = Constants.REDIS_RATE_PREFIX + bucket + ":" + key;
+        Long count = redisTemplate.opsForValue().increment(redisKey);
+        if (count != null && count == 1) {
+            redisTemplate.expire(redisKey, windowSeconds, TimeUnit.SECONDS);
+        }
+        if (count != null && count > limit) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "操作过于频繁，请稍后再试");
+        }
+    }
+
+    private String sanitize(String value) {
+        if (value == null) return "unknown";
+        return value.replaceAll("[^A-Za-z0-9._:-]", "");
+    }
+
+    /**
+     * 登录
+     * 限流：同一账号每 60 秒最多 5 次尝试，同一 IP 每 60 秒最多 20 次，防暴力枚举
+     */
+    public TokenResponse login(LoginRequest request, String clientIp) {
         String account = request.getAccount();
+        checkRateLimit("login", sanitize(account), 5, 60);
+        checkRateLimit("login:ip", sanitize(clientIp), 20, 60);
+
         User user;
 
         if ("code".equalsIgnoreCase(request.getType())) {
@@ -284,8 +313,12 @@ public class AuthService {
     /**
      * FlowCraft 注册（邮箱 + 密码 + 用户名）
      * 邮箱唯一，重复注册抛异常
+     * 限流：同一邮箱每 60 秒最多 1 次，同一 IP 每 60 秒最多 5 次
      */
-    public TokenResponse register(String email, String password, String name) {
+    public TokenResponse register(String email, String password, String name, String clientIp) {
+        checkRateLimit("register", sanitize(email), 1, 60);
+        checkRateLimit("register:ip", sanitize(clientIp), 5, 60);
+
         User existing = userMapper.selectOne(
                 new LambdaQueryWrapper<User>().eq(User::getEmail, email));
         if (existing != null) {

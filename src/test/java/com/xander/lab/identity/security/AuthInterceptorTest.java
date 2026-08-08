@@ -98,6 +98,15 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void canvasSnapshotReadRequiresAuthentication() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/flow/canvases/9/snapshot");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
     void readRoutesStayPublicWithoutToken() {
         MockHttpServletRequest menuRequest = new MockHttpServletRequest("GET", "/api/components/menu");
         MockHttpServletRequest detailRequest = new MockHttpServletRequest("GET", "/api/components/toast");

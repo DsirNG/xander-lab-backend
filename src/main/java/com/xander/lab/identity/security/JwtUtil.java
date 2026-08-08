@@ -4,6 +4,7 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -24,8 +25,8 @@ import java.util.Map;
 @Component
 public class JwtUtil {
 
-    /** 签名密钥（至少 32 字符），从配置文件读取 */
-    @Value("${jwt.secret:xander-lab-secret-key-must-be-at-least-32-chars}")
+    /** 签名密钥（至少 32 字节），必须从环境变量 JWT_SECRET 注入，不允许默认明文值 */
+    @Value("${jwt.secret:}")
     private String secret;
 
     /** Access Token 有效期（毫秒），默认 2 小时 */
@@ -35,6 +36,18 @@ public class JwtUtil {
     /** Refresh Token 有效期（毫秒），默认 7 天 */
     @Value("${jwt.refresh-token-expire:604800000}")
     private long refreshTokenExpire;
+
+    /**
+     * 启动时校验签名密钥：缺失或长度不足（HMAC-SHA 至少 32 字节）直接拒绝启动，
+     * 防止生产环境因未配置 JWT_SECRET 而使用已知默认密钥造成 Token 可被伪造
+     */
+    @PostConstruct
+    void validateSecret() {
+        if (secret == null || secret.isBlank() || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException(
+                    "jwt.secret 未配置或长度不足（至少 32 字节）。请通过环境变量 JWT_SECRET 注入，禁止使用默认密钥。");
+        }
+    }
 
     private SecretKey getSigningKey() {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);

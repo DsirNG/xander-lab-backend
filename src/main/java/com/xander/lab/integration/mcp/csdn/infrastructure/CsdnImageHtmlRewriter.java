@@ -14,9 +14,11 @@ import java.util.UUID;
 @Component
 final class CsdnImageHtmlRewriter {
     private final CsdnImageStorageClient uploadClient;
+    private final CsdnProperties properties;
 
-    CsdnImageHtmlRewriter(CsdnImageStorageClient uploadClient) {
+    CsdnImageHtmlRewriter(CsdnImageStorageClient uploadClient, CsdnProperties properties) {
         this.uploadClient = uploadClient;
+        this.properties = properties;
     }
 
     String rewrite(String html, String cookie, String apiKey, String articleId, String originalUrl) {
@@ -62,7 +64,7 @@ final class CsdnImageHtmlRewriter {
         try {
             javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
             mac.init(new javax.crypto.spec.SecretKeySpec(
-                    "9znpamsyl2c7cdrr9sas0le9vbc3r6ba".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    properties.getWebConsoleSecret().getBytes(java.nio.charset.StandardCharsets.UTF_8),
                     "HmacSHA256"));
             return java.util.Base64.getEncoder().encodeToString(mac.doFinal(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
         } catch (Exception e) {

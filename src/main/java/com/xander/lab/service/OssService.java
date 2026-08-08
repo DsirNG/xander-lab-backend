@@ -1,5 +1,6 @@
 package com.xander.lab.service;
 
+import com.aliyun.oss.ClientBuilderConfiguration;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
 import com.xander.lab.dto.upload.UploadResponse;
@@ -35,6 +36,27 @@ public class OssService {
     @Value("${aliyun.oss.domain}")
     private String domain;
 
+    /** OSS 客户端按需创建并复用，避免每次上传重建连接。 */
+    private volatile OSS ossClient;
+
+    private OSS client() {
+        OSS local = ossClient;
+        if (local == null) {
+            synchronized (this) {
+                local = ossClient;
+                if (local == null) {
+                    ClientBuilderConfiguration configuration = new ClientBuilderConfiguration();
+                    configuration.setConnectionTimeout(10_000);
+                    configuration.setSocketTimeout(30_000);
+                    configuration.setMaxErrorRetry(2);
+                    local = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret, configuration);
+                    ossClient = local;
+                }
+            }
+        }
+        return local;
+    }
+
     /**
      * 上传文件到 OSS
      *
@@ -43,23 +65,21 @@ public class OssService {
      * @return 上传结果
      */
     public UploadResponse upload(MultipartFile file, String pathPrefix) {
-        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
-        
         try {
             String originalName = file.getOriginalFilename();
             String extension = "";
             if (originalName != null && originalName.contains(".")) {
                 extension = originalName.substring(originalName.lastIndexOf('.') + 1).toLowerCase();
             }
-            
+
             String storedName = UUID.randomUUID().toString() + (extension.isEmpty() ? "" : "." + extension);
             String objectName = pathPrefix + storedName;
 
             InputStream inputStream = file.getInputStream();
-            ossClient.putObject(bucketName, objectName, inputStream);
+            client().putObject(bucketName, objectName, inputStream);
 
             String fileUrl = domain + "/" + objectName;
-            
+
             log.info("[OSS] 文件上传成功: {}", fileUrl);
 
             return UploadResponse.builder()
@@ -73,15 +93,10 @@ public class OssService {
         } catch (Exception e) {
             log.error("[OSS] 文件上传异常: {}", e.getMessage());
             throw new RuntimeException("文件上传至云存储失败");
-        } finally {
-            if (ossClient != null) {
-                ossClient.shutdown();
-            }
         }
     }
 
     public UploadResponse upload(byte[] bytes, String originalName, String contentType, String pathPrefix) {
-        OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
         try {
             String extension = originalName != null && originalName.contains(".")
                     ? originalName.substring(originalName.lastIndexOf('.') + 1).toLowerCase()
@@ -89,7 +104,7 @@ public class OssService {
             String storedName = UUID.randomUUID() + "." + extension;
             String objectName = pathPrefix + storedName;
             try (InputStream inputStream = new ByteArrayInputStream(bytes)) {
-                ossClient.putObject(bucketName, objectName, inputStream);
+                client().putObject(bucketName, objectName, inputStream);
             }
             return UploadResponse.builder()
                     .url(domain + "/" + objectName)
@@ -102,8 +117,6 @@ public class OssService {
         } catch (Exception e) {
             log.error("[OSS] 智能体图片上传失败: {}", e.getMessage());
             throw new IllegalStateException("智能体图片上传至云存储失败", e);
-        } finally {
-            ossClient.shutdown();
         }
     }
 }

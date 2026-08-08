@@ -81,7 +81,8 @@ public class FileController {
             UploadResponse response = ossService.upload(file, pathPrefix);
             return Result.success(response);
         } catch (Exception e) {
-            return Result.error("OSS上传失败: " + e.getMessage());
+            log.error("[Upload] OSS 上传失败", e);
+            return Result.error("文件上传失败，请稍后重试");
         }
     }
 
@@ -105,7 +106,7 @@ public class FileController {
             return Result.badRequest(e.getMessage());
         } catch (IOException e) {
             log.error("[Upload] 文件上传失败", e);
-            return Result.error("文件上传失败：" + e.getMessage());
+            return Result.error("文件上传失败，请稍后重试");
         }
     }
 
@@ -126,7 +127,7 @@ public class FileController {
             return Result.badRequest(e.getMessage());
         } catch (IOException e) {
             log.error("[Upload] 批量上传失败", e);
-            return Result.error("批量上传失败：" + e.getMessage());
+            return Result.error("批量上传失败，请稍后重试");
         }
     }
 
@@ -161,6 +162,9 @@ public class FileController {
                     .header(HttpHeaders.CONTENT_DISPOSITION,
                             "attachment; filename=\"" + filename + "\"")
                     .body(resource);
+        } catch (IllegalArgumentException e) {
+            // 目录穿越等非法路径
+            return ResponseEntity.badRequest().build();
         } catch (MalformedURLException e) {
             return ResponseEntity.badRequest().build();
         } catch (IOException e) {

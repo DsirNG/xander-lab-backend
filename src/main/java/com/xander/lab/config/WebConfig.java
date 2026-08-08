@@ -3,6 +3,7 @@ package com.xander.lab.config;
 import com.xander.lab.identity.security.AuthInterceptor;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
@@ -17,6 +18,13 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
 
     private final AuthInterceptor authInterceptor;
+
+    /**
+     * 允许跨域的前端来源，由环境变量 CORS_ALLOWED_ORIGINS 注入（逗号分隔）
+     * 禁止通配 + 携带凭据的组合；未显式配置时仅放行本地开发来源
+     */
+    @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173}")
+    private String[] allowedOrigins;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -33,7 +41,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addCorsMappings(CorsRegistry registry) {
         // 配置全局 CORS，确保前端 axios 跨域请求正常
         registry.addMapping("/**")
-                .allowedOriginPatterns("*")
+                .allowedOrigins(allowedOrigins)
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
                 .allowCredentials(true)
