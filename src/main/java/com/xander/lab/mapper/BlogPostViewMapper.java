@@ -1,7 +1,6 @@
 package com.xander.lab.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.xander.lab.entity.BlogPost;
 import com.xander.lab.entity.BlogPostView;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

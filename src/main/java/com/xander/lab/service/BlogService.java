@@ -9,7 +9,6 @@ import com.xander.lab.dto.BlogPostVO;
 import com.xander.lab.dto.CategoryVO;
 import com.xander.lab.dto.TagVO;
 import com.xander.lab.dto.PageData;
-import com.xander.lab.entity.BlogCategory;
 import com.xander.lab.entity.BlogPost;
 import com.xander.lab.entity.BlogPostView;
 import com.xander.lab.entity.BlogTag;
