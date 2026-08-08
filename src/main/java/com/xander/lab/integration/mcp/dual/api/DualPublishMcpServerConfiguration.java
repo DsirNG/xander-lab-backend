@@ -1,6 +1,6 @@
 package com.xander.lab.integration.mcp.dual.api;
 
-import com.xander.lab.dto.BlogPostDTO;
+import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.integration.mcp.dual.application.DualPublishMcpApplicationService;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.McpScopeErrors;

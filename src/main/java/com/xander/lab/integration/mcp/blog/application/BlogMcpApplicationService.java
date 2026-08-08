@@ -1,11 +1,11 @@
 package com.xander.lab.integration.mcp.blog.application;
 
-import com.xander.lab.dto.BlogPostDTO;
-import com.xander.lab.dto.BlogPostVO;
-import com.xander.lab.dto.PageData;
+import com.xander.lab.publishing.api.BlogPostDTO;
+import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.common.PageData;
 import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
-import com.xander.lab.service.BlogService;
+import com.xander.lab.publishing.application.BlogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

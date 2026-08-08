@@ -2,7 +2,7 @@ package com.xander.lab.integration.mcp.blog.application;
 
 import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
-import com.xander.lab.service.BlogService;
+import com.xander.lab.publishing.application.BlogService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

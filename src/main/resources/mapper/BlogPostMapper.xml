@@ -2,10 +2,10 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.xander.lab.mapper.BlogPostMapper">
+<mapper namespace="com.xander.lab.publishing.infrastructure.BlogPostMapper">
 
     <!-- 文章列表结果映射（不含 content） -->
-    <resultMap id="PostListRM" type="com.xander.lab.dto.BlogPostVO">
+    <resultMap id="PostListRM" type="com.xander.lab.publishing.api.BlogPostVO">
         <id     property="id"           column="id"/>
         <result property="title"        column="title"/>
         <result property="summary"      column="summary"/>
@@ -24,7 +24,7 @@
     </resultMap>
 
     <!-- 文章详情结果映射（含 content） -->
-    <resultMap id="PostDetailRM" type="com.xander.lab.dto.BlogPostVO" extends="PostListRM">
+    <resultMap id="PostDetailRM" type="com.xander.lab.publishing.api.BlogPostVO" extends="PostListRM">
         <result property="content" column="content"/>
     </resultMap>
 

@@ -1,9 +1,14 @@
-package com.xander.lab.controller;
+package com.xander.lab.publishing.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
-import com.xander.lab.dto.*;
-import com.xander.lab.service.BlogService;
+import com.xander.lab.publishing.api.BlogPostDTO;
+import com.xander.lab.publishing.api.BlogPostStatusUpdateRequest;
+import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.publishing.api.CategoryVO;
+import com.xander.lab.publishing.api.TagVO;
+import com.xander.lab.common.PageData;
+import com.xander.lab.publishing.application.BlogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;

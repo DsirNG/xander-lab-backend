@@ -1,11 +1,11 @@
 package com.xander.lab.publishing.infrastructure;
 
-import com.xander.lab.dto.BlogPostDTO;
-import com.xander.lab.dto.BlogPostVO;
+import com.xander.lab.publishing.api.BlogPostDTO;
+import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.domain.BlogPublisher;
 import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
-import com.xander.lab.service.BlogService;
 import org.springframework.stereotype.Component;
 
 @Component

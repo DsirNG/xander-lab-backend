@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.dual.application;
 
-import com.xander.lab.dto.BlogPostDTO;
-import com.xander.lab.dto.BlogPostVO;
+import com.xander.lab.publishing.api.BlogPostDTO;
+import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnMcpApplicationService;
 import com.xander.lab.publishing.domain.PublishResult;

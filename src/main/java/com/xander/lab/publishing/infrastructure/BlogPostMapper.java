@@ -1,10 +1,10 @@
-package com.xander.lab.mapper;
+package com.xander.lab.publishing.infrastructure;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xander.lab.dto.BlogPostVO;
-import com.xander.lab.entity.BlogPost;
+import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.publishing.domain.BlogPost;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

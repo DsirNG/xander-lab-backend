@@ -6,7 +6,7 @@ import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.blogagent.infrastructure.BlogAgentModelClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.publishing.application.BlogMediaService;
-import com.xander.lab.service.BlogService;
+import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.blogagent.infrastructure.BlogAgentMessageMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentSourceMapper;

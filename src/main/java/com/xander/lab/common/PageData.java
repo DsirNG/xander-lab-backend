@@ -1,4 +1,4 @@
-package com.xander.lab.dto;
+package com.xander.lab.common;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import lombok.Data;

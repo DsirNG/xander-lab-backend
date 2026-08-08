@@ -1,8 +1,8 @@
-package com.xander.lab.mapper;
+package com.xander.lab.publishing.infrastructure;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.xander.lab.dto.CategoryVO;
-import com.xander.lab.entity.BlogCategory;
+import com.xander.lab.publishing.api.CategoryVO;
+import com.xander.lab.publishing.domain.BlogCategory;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Select;
 

@@ -6,7 +6,7 @@ import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentMessageRequest;
 import com.xander.lab.blogagent.api.BlogAgentSessionVO;
-import com.xander.lab.dto.BlogPostVO;
+import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.blogagent.domain.BlogAgentEvent;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.blogagent.application.BlogAgentEventService;

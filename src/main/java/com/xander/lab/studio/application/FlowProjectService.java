@@ -2,7 +2,7 @@ package com.xander.lab.studio.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xander.lab.dto.PageData;
+import com.xander.lab.common.PageData;
 import com.xander.lab.studio.api.FlowCanvasVO;
 import com.xander.lab.studio.api.FlowProjectVO;
 import com.xander.lab.studio.domain.FlowCanvas;
