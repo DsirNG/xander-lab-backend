@@ -1,4 +1,4 @@
-package com.xander.lab.service;
+package com.xander.lab.automation.domain;
 
 import org.springframework.web.util.HtmlUtils;
 

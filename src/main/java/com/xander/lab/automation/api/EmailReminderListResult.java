@@ -1,4 +1,4 @@
-package com.xander.lab.dto.emailreminder;
+package com.xander.lab.automation.api;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import lombok.AllArgsConstructor;

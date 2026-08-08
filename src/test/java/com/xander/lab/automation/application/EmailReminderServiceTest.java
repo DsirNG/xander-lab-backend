@@ -1,11 +1,11 @@
-package com.xander.lab.service;
+package com.xander.lab.automation.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xander.lab.dto.emailreminder.EmailReminderCreateRequest;
-import com.xander.lab.dto.emailreminder.EmailReminderListResult;
-import com.xander.lab.entity.EmailReminderTask;
-import com.xander.lab.mapper.EmailReminderTaskMapper;
+import com.xander.lab.automation.api.EmailReminderCreateRequest;
+import com.xander.lab.automation.api.EmailReminderListResult;
+import com.xander.lab.automation.domain.EmailReminderTask;
+import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

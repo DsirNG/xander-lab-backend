@@ -1,13 +1,15 @@
-package com.xander.lab.service;
+package com.xander.lab.automation.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xander.lab.dto.emailreminder.EmailReminderCreateRequest;
-import com.xander.lab.dto.emailreminder.EmailReminderListResult;
-import com.xander.lab.dto.emailreminder.EmailReminderStatsVO;
-import com.xander.lab.dto.emailreminder.EmailReminderTaskVO;
-import com.xander.lab.entity.EmailReminderTask;
-import com.xander.lab.mapper.EmailReminderTaskMapper;
+import com.xander.lab.automation.api.EmailReminderCreateRequest;
+import com.xander.lab.automation.api.EmailReminderListResult;
+import com.xander.lab.automation.api.EmailReminderStatsVO;
+import com.xander.lab.automation.api.EmailReminderTaskVO;
+import com.xander.lab.automation.domain.EmailReminderTask;
+import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
+import com.xander.lab.automation.domain.EmailReminderMailTemplates;
+import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;

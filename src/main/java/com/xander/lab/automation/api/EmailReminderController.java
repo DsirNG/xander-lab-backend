@@ -1,12 +1,8 @@
-package com.xander.lab.controller;
+package com.xander.lab.automation.api;
 
+import com.xander.lab.automation.application.EmailReminderService;
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
-import com.xander.lab.dto.emailreminder.EmailReminderCreateRequest;
-import com.xander.lab.dto.emailreminder.EmailReminderListResult;
-import com.xander.lab.dto.emailreminder.EmailReminderStatusUpdateRequest;
-import com.xander.lab.dto.emailreminder.EmailReminderTaskVO;
-import com.xander.lab.service.EmailReminderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;

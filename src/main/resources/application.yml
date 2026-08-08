@@ -88,7 +88,7 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   mapper-locations: classpath*:/mapper/*.xml
-  type-aliases-package: com.xander.lab.entity
+  type-aliases-package: com.xander.lab.entity,com.xander.lab.automation.domain
 
 # JWT配置
 jwt:

@@ -1,7 +1,9 @@
-package com.xander.lab.service;
+package com.xander.lab.automation.infrastructure;
 
-import com.xander.lab.entity.EmailReminderTask;
-import com.xander.lab.mapper.EmailReminderTaskMapper;
+import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
+import com.xander.lab.automation.domain.EmailReminderTask;
+import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
+import com.xander.lab.service.MailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

@@ -1,5 +1,6 @@
 package com.xander.lab.service;
 
+import com.xander.lab.automation.domain.EmailReminderMailTemplates;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

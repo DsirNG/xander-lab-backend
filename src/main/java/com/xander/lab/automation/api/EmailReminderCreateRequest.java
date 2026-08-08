@@ -1,4 +1,4 @@
-package com.xander.lab.dto.emailreminder;
+package com.xander.lab.automation.api;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.Max;

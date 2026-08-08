@@ -1,7 +1,7 @@
-package com.xander.lab.mapper;
+package com.xander.lab.automation.infrastructure;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.xander.lab.entity.EmailReminderTask;
+import com.xander.lab.automation.domain.EmailReminderTask;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
