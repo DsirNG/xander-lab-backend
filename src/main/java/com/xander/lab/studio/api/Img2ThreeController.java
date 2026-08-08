@@ -1,10 +1,10 @@
-package com.xander.lab.controller;
+package com.xander.lab.studio.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
-import com.xander.lab.dto.img2three.Img2ThreeTaskSummaryVO;
-import com.xander.lab.dto.img2three.Img2ThreeTaskVO;
-import com.xander.lab.service.Img2ThreeService;
+import com.xander.lab.studio.api.Img2ThreeTaskSummaryVO;
+import com.xander.lab.studio.api.Img2ThreeTaskVO;
+import com.xander.lab.studio.application.Img2ThreeService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;

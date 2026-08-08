@@ -1,15 +1,18 @@
-package com.xander.lab.service;
+package com.xander.lab.studio.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.dto.img2three.Img2ThreeTaskVO;
-import com.xander.lab.dto.img2three.Img2ThreeTaskSummaryVO;
-import com.xander.lab.entity.BlogMediaAsset;
-import com.xander.lab.entity.Img2ThreeTask;
-import com.xander.lab.config.Img2ThreeProperties;
-import com.xander.lab.mapper.Img2ThreeTaskMapper;
+import com.xander.lab.publishing.application.BlogMediaService;
+import com.xander.lab.publishing.domain.BlogMediaAsset;
+import com.xander.lab.studio.api.Img2ThreeTaskVO;
+import com.xander.lab.studio.api.Img2ThreeTaskSummaryVO;
+import com.xander.lab.studio.domain.Img2ThreeTask;
+import com.xander.lab.studio.infrastructure.Img2ThreeProperties;
+import com.xander.lab.studio.infrastructure.Img2ThreeTaskMapper;
+import com.xander.lab.studio.infrastructure.Img2ThreeModelClient;
+import com.xander.lab.studio.infrastructure.Img2ThreePipeline;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

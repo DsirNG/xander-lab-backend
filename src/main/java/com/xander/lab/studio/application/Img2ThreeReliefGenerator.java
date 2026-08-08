@@ -1,4 +1,4 @@
-package com.xander.lab.service;
+package com.xander.lab.studio.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;

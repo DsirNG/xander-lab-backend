@@ -1,9 +1,9 @@
-package com.xander.lab.controller;
+package com.xander.lab.publishing.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
-import com.xander.lab.entity.BlogMediaAsset;
-import com.xander.lab.service.BlogMediaService;
+import com.xander.lab.publishing.application.BlogMediaService;
+import com.xander.lab.publishing.domain.BlogMediaAsset;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

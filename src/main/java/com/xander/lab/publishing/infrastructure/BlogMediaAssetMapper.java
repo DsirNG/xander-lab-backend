@@ -1,7 +1,7 @@
-package com.xander.lab.mapper;
+package com.xander.lab.publishing.infrastructure;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.xander.lab.entity.BlogMediaAsset;
+import com.xander.lab.publishing.domain.BlogMediaAsset;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper

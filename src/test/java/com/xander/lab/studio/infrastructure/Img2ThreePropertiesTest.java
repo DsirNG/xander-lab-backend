@@ -1,5 +1,6 @@
-package com.xander.lab.config;
+package com.xander.lab.studio.infrastructure;
 
+import com.xander.lab.studio.infrastructure.Img2ThreeProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;

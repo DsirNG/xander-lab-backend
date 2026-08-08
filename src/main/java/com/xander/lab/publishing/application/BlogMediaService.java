@@ -1,10 +1,11 @@
-package com.xander.lab.service;
+package com.xander.lab.publishing.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xander.lab.dto.upload.UploadResponse;
-import com.xander.lab.entity.BlogMediaAsset;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
-import com.xander.lab.mapper.BlogMediaAssetMapper;
+import com.xander.lab.publishing.domain.BlogMediaAsset;
+import com.xander.lab.publishing.infrastructure.BlogMediaAssetMapper;
+import com.xander.lab.service.OssService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;

@@ -7,10 +7,10 @@ feature; deployment and database topology stay unchanged.
 
 - `identity` (migrated): owns users, login, token refresh, JWT validation and request authorization.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions.
-- `publishing`: owns blog posts, publication commands, generic publication contracts, and durable publication records.
+- `publishing` (migrated): owns blog posts, publication commands, generic publication contracts, durable publication records, and blog media uploads.
 - `automation`: will own recurring content plans and durable plan runs.
 - `integration`: owns MCP protocol adapters and vendor-specific integrations such as the complete CSDN MCP flow.
-- `studio`: will group Flow and Img2Three creation tools.
+- `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
 
 ## Module Documentation
 
@@ -42,4 +42,4 @@ and `dual` MCP modules own only their transport contracts and application flows.
 2. Move blog posts, categories, tags and media into `publishing`; the publication port and local adapter are now in place.
 3. Move MCP, CSDN, model, OSS and mail adapters into `integration`.
 4. Add recurring content plans and durable runs under `automation`.
-5. Group Flow and Img2Three under `studio` after their active changes settle.
+5. Group Flow and Img2Three under `studio`.

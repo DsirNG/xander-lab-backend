@@ -1,10 +1,10 @@
-package com.xander.lab.service;
+package com.xander.lab.studio.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.config.Img2ThreeProperties;
+import com.xander.lab.studio.infrastructure.Img2ThreeProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;

@@ -1,4 +1,4 @@
-package com.xander.lab.config;
+package com.xander.lab.studio.infrastructure;
 
 import lombok.Data;
 import lombok.ToString;

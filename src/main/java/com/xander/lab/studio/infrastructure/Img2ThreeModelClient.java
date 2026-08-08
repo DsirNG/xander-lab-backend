@@ -1,9 +1,9 @@
-package com.xander.lab.service;
+package com.xander.lab.studio.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
-import com.xander.lab.config.Img2ThreeProperties;
+import com.xander.lab.studio.infrastructure.Img2ThreeProperties;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
