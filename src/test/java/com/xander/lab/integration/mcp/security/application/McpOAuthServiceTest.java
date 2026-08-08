@@ -7,6 +7,7 @@ import com.xander.lab.identity.application.AuthService;
 import com.xander.lab.identity.security.JwtUtil;
 import com.xander.lab.integration.mcp.security.McpOAuthException;
 import com.xander.lab.integration.mcp.security.McpOAuthProperties;
+import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.infrastructure.McpOAuthClient;
 import com.xander.lab.integration.mcp.security.infrastructure.McpOAuthClientMapper;
 import com.xander.lab.integration.mcp.security.infrastructure.McpOAuthGrant;
@@ -26,9 +27,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -78,6 +81,7 @@ class McpOAuthServiceTest {
         when(clientMapper.selectOne(any())).thenReturn(client);
         McpOAuthGrant grant = new McpOAuthGrant();
         grant.setId(1L);
+        grant.setUserId(123L);
         grant.setClientId(CLIENT_ID);
         grant.setStatus("ACTIVE");
         grant.setScopes("blog:read blog:write");
@@ -137,6 +141,73 @@ class McpOAuthServiceTest {
 
         assertEquals("invalid_grant", error.error());
         verify(tokenMapper, org.mockito.Mockito.never()).update(isNull(), any());
+    }
+
+    private McpOAuthToken accessToken(String status, boolean expired) {
+        McpOAuthToken token = new McpOAuthToken();
+        token.setId(20L);
+        token.setGrantId(1L);
+        token.setTokenHash("hash-of-access-token");
+        token.setTokenType("ACCESS");
+        token.setStatus(status);
+        token.setExpiresAt(LocalDateTime.now().plusSeconds(expired ? -1 : 3600));
+        return token;
+    }
+
+    @Test
+    void validAccessTokenResolvesPrincipalFromDatabase() {
+        when(tokenMapper.selectOne(any())).thenReturn(accessToken("ACTIVE", false));
+
+        McpOAuthRequestContext.Principal principal = service.authenticateBearer("Bearer some-access-token");
+
+        assertNotNull(principal);
+        assertEquals(123L, principal.userId());
+        assertEquals(CLIENT_ID, principal.clientId());
+        assertEquals(Set.of("blog:read", "blog:write"), principal.scopes());
+    }
+
+    @Test
+    void missingOrRevokedAccessTokenReturnsNull() {
+        when(tokenMapper.selectOne(any())).thenReturn(null);
+
+        assertNull(service.authenticateBearer("Bearer unknown-access-token"));
+    }
+
+    @Test
+    void expiredAccessTokenReturnsNull() {
+        when(tokenMapper.selectOne(any())).thenReturn(accessToken("ACTIVE", true));
+
+        assertNull(service.authenticateBearer("Bearer expired-access-token"));
+    }
+
+    @Test
+    void deactivatedGrantReturnsNull() {
+        when(tokenMapper.selectOne(any())).thenReturn(accessToken("ACTIVE", false));
+        McpOAuthGrant revoked = new McpOAuthGrant();
+        revoked.setId(1L);
+        revoked.setClientId(CLIENT_ID);
+        revoked.setStatus("REVOKED");
+        when(grantMapper.selectById(1L)).thenReturn(revoked);
+
+        assertNull(service.authenticateBearer("Bearer some-access-token"));
+    }
+
+    @Test
+    void deactivatedClientReturnsNull() {
+        when(tokenMapper.selectOne(any())).thenReturn(accessToken("ACTIVE", false));
+        McpOAuthClient deactivated = new McpOAuthClient();
+        deactivated.setClientId(CLIENT_ID);
+        deactivated.setStatus("DEACTIVATED");
+        when(clientMapper.selectOne(any())).thenReturn(deactivated);
+
+        assertNull(service.authenticateBearer("Bearer some-access-token"));
+    }
+
+    @Test
+    void malformedOrMissingAuthorizationReturnsNull() {
+        assertNull(service.authenticateBearer(null));
+        assertNull(service.authenticateBearer("Basic abc"));
+        assertNull(service.authenticateBearer("Bearer   "));
     }
 
     private Wrapper<McpOAuthToken> argWithSetValue(String expectedSetValue) {

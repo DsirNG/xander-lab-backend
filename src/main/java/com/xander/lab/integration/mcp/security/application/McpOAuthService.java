@@ -212,6 +212,10 @@ public class McpOAuthService {
         if (token == null || token.getExpiresAt().isBefore(LocalDateTime.now())) return null;
         McpOAuthGrant grant = grantMapper.selectById(token.getGrantId());
         if (grant == null || !"ACTIVE".equals(grant.getStatus())) return null;
+        // A deactivated client must not keep authenticating through its already-issued tokens.
+        McpOAuthClient client = clientMapper.selectOne(new LambdaQueryWrapper<McpOAuthClient>()
+                .eq(McpOAuthClient::getClientId, grant.getClientId()));
+        if (client == null || !"ACTIVE".equals(client.getStatus())) return null;
         return new McpOAuthRequestContext.Principal(grant.getUserId(), grant.getClientId(), splitScopes(grant.getScopes()));
     }
 
