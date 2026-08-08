@@ -54,12 +54,18 @@ public class CsdnCredentialService {
 
     public void save(Long userId, String cookie, String username) {
         try {
-            CsdnPlatformCredential value = find(userId);
+            CsdnPlatformCredential value = new CsdnPlatformCredential();
+            value.setUserId(userId);
+            value.setEncryptedCookie(encrypt(cookie));
+            value.setCsdnUsername(username);
+            value.setStatus("ACTIVE");
             LocalDateTime now = LocalDateTime.now();
-            if (value == null) { value = new CsdnPlatformCredential(); value.setUserId(userId); value.setCreatedAt(now); }
-            value.setEncryptedCookie(encrypt(cookie)); value.setCsdnUsername(username); value.setStatus("ACTIVE");
-            value.setAuthorizedAt(now); value.setLastValidatedAt(now); value.setUpdatedAt(now);
-            if (value.getId() == null) mapper.insert(value); else mapper.updateById(value);
+            value.setAuthorizedAt(now);
+            value.setLastValidatedAt(now);
+            value.setCreatedAt(now);
+            value.setUpdatedAt(now);
+            // Single-statement upsert; the user-scoped unique key makes concurrent saves converge.
+            mapper.upsert(value);
         } catch (Exception e) { throw new IllegalStateException("Unable to save CSDN authorization", e); }
     }
 
