@@ -23,19 +23,13 @@ import java.util.stream.Collectors;
 public class CsdnAuthorizationService {
     private final CsdnProperties properties;
     private final CsdnCredentialService credentials;
-    private Session session;
 
-    public synchronized AuthorizationView start(Long userId) {
-        closeExpired();
-        if (session != null && !session.userId().equals(userId)) {
-            throw new IllegalStateException("Another CSDN authorization is in progress");
-        }
-        closeSession();
+    /** The single authorization slot. Field mutations are guarded by {@code this}; Selenium calls never hold it. */
+    private volatile Session session;
+
+    public AuthorizationView start(Long userId) {
+        RemoteWebDriver driver = claimPendingSession(userId);
         try {
-            ChromeOptions options = new ChromeOptions();
-            options.addArguments("--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--window-size=1360,1020");
-            RemoteWebDriver driver = new RemoteWebDriver(URI.create(properties.getSeleniumUrl()).toURL(), options);
-            session = new Session(userId, driver, Instant.now().plusSeconds(properties.getAuthorizationTimeoutSeconds()));
             driver.get("https://mp.csdn.net/");
             WebElement frame = new WebDriverWait(driver, Duration.ofSeconds(20))
                     .until(d -> d.findElement(By.cssSelector("iframe[src*='passport.csdn.net']")));
@@ -50,26 +44,87 @@ public class CsdnAuthorizationService {
             driver.switchTo().defaultContent();
             return new AuthorizationView("PENDING", qrCodeDataUrl);
         } catch (Exception e) {
-            closeSession();
+            releasePendingSession(userId, driver);
             throw new IllegalStateException("Unable to start CSDN authorization", e);
         }
     }
 
-    public synchronized AuthorizationView status(Long userId) {
-        closeExpired();
-        if (session == null || !session.userId().equals(userId)) {
-            return new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
+    /**
+     * Places a placeholder slot, then starts the Selenium driver outside the slot monitor so a slow
+     * driver setup never blocks other users. Only the last owner is accepted; a cancelled slot releases
+     * the orphan driver.
+     */
+    private RemoteWebDriver claimPendingSession(Long userId) {
+        Instant expiry;
+        synchronized (this) {
+            closeExpired();
+            Session current = session;
+            if (current != null) {
+                if (!current.userId().equals(userId)) {
+                    throw new IllegalStateException("Another CSDN authorization is in progress");
+                }
+                if (current.driver() == null) {
+                    throw new IllegalStateException("CSDN authorization is already starting");
+                }
+                throw new IllegalStateException("CSDN authorization is already active");
+            }
+            expiry = Instant.now().plusSeconds(properties.getAuthorizationTimeoutSeconds());
+            session = new Session(userId, null, expiry);
         }
-        boolean loginFrameVisible = session.driver().findElements(By.cssSelector("iframe[src*='passport.csdn.net/account/login']"))
+        RemoteWebDriver driver;
+        try {
+            driver = newDriver();
+        } catch (Exception e) {
+            synchronized (this) {
+                if (session != null && session.userId().equals(userId) && session.driver() == null) session = null;
+            }
+            throw new IllegalStateException("Unable to start CSDN authorization", e);
+        }
+        synchronized (this) {
+            if (session == null || !session.userId().equals(userId) || session.driver() != null) {
+                try { driver.quit(); } catch (Exception ignored) { }
+                throw new IllegalStateException("CSDN authorization was cancelled while starting");
+            }
+            session = new Session(userId, driver, expiry);
+        }
+        return driver;
+    }
+
+    private void releasePendingSession(Long userId, RemoteWebDriver driver) {
+        boolean removed;
+        synchronized (this) {
+            removed = session != null && session.userId().equals(userId) && session.driver() == driver;
+            if (removed) session = null;
+        }
+        if (removed) dispose(driver);
+    }
+
+    public AuthorizationView status(Long userId) {
+        Session mine;
+        synchronized (this) {
+            closeExpired();
+            Session current = session;
+            if (current == null) {
+                return new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
+            }
+            if (!current.userId().equals(userId)) {
+                return new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
+            }
+            if (current.driver() == null) {
+                // Placeholder means the Selenium session is still being prepared.
+                return new AuthorizationView("PENDING", null);
+            }
+            mine = current;
+        }
+        boolean loginFrameVisible = mine.driver().findElements(By.cssSelector("iframe[src*='passport.csdn.net/account/login']"))
                 .stream().anyMatch(element -> {
                     try { return element.isDisplayed(); } catch (Exception ignored) { return false; }
                 });
-        boolean loggedIn = !loginFrameVisible;
-        if (!loggedIn) return new AuthorizationView("PENDING", null);
-        session.driver().navigate().refresh();
-        new WebDriverWait(session.driver(), Duration.ofSeconds(20)).until(driver ->
+        if (loginFrameVisible) return new AuthorizationView("PENDING", null);
+        mine.driver().navigate().refresh();
+        new WebDriverWait(mine.driver(), Duration.ofSeconds(20)).until(driver ->
                 "complete".equals(((org.openqa.selenium.JavascriptExecutor) driver).executeScript("return document.readyState")));
-        Set<Cookie> cookies = session.driver().manage().getCookies();
+        Set<Cookie> cookies = mine.driver().manage().getCookies();
         String token = cookies.stream().filter(cookie -> "UserToken".equals(cookie.getName()))
                 .map(Cookie::getValue).findFirst().orElse(null);
         if (token == null || token.isBlank()) return new AuthorizationView("PENDING", null);
@@ -78,29 +133,55 @@ public class CsdnAuthorizationService {
         String username = cookies.stream().filter(cookie -> "UserName".equals(cookie.getName()))
                 .map(Cookie::getValue).findFirst().orElse(null);
         credentials.save(userId, header, username);
-        closeSession();
+        closeOwnedSession(userId, mine);
         return new AuthorizationView("AUTHORIZED", null);
     }
 
-    public synchronized void disconnect(Long userId) {
-        if (session != null && session.userId().equals(userId)) closeSession();
+    public void disconnect(Long userId) {
+        closeSessionFor(userId);
         credentials.delete(userId);
     }
 
     /** Closes the pending authorization session for this user without deleting stored credentials. */
-    public synchronized void cancel(Long userId) {
-        closeExpired();
-        if (session != null && session.userId().equals(userId)) closeSession();
+    public void cancel(Long userId) {
+        closeSessionFor(userId);
+    }
+
+    private void closeOwnedSession(Long userId, Session owned) {
+        synchronized (this) {
+            if (session != null && session.userId().equals(userId) && session.driver() == owned.driver()) session = null;
+        }
+        dispose(owned.driver());
+    }
+
+    private void closeSessionFor(Long userId) {
+        Session gone;
+        synchronized (this) {
+            closeExpired();
+            if (session == null || !session.userId().equals(userId)) return;
+            gone = session;
+            session = null;
+        }
+        dispose(gone.driver());
     }
 
     private void closeExpired() {
-        if (session != null && Instant.now().isAfter(session.expiresAt())) closeSession();
+        if (session != null && Instant.now().isAfter(session.expiresAt())) {
+            Session gone = session;
+            session = null;
+            dispose(gone.driver());
+        }
     }
 
-    private void closeSession() {
-        if (session == null) return;
-        try { session.driver().quit(); } catch (Exception ignored) { }
-        session = null;
+    private RemoteWebDriver newDriver() throws Exception {
+        ChromeOptions options = new ChromeOptions();
+        options.addArguments("--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--window-size=1360,1020");
+        return new RemoteWebDriver(URI.create(properties.getSeleniumUrl()).toURL(), options);
+    }
+
+    private void dispose(RemoteWebDriver driver) {
+        if (driver == null) return;
+        try { driver.quit(); } catch (Exception ignored) { }
     }
 
     private record Session(Long userId, RemoteWebDriver driver, Instant expiresAt) { }

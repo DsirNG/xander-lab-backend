@@ -168,24 +168,32 @@ public class McpOAuthService {
         }
         if ("refresh_token".equals(grantType)) {
             if (refreshToken == null) throw invalidRequest("refresh_token is required");
+            String refreshHash = sha256(refreshToken);
             McpOAuthToken token = tokenMapper.selectOne(new LambdaQueryWrapper<McpOAuthToken>()
-                    .eq(McpOAuthToken::getTokenHash, sha256(refreshToken)).eq(McpOAuthToken::getTokenType, "REFRESH"));
+                    .eq(McpOAuthToken::getTokenHash, refreshHash).eq(McpOAuthToken::getTokenType, "REFRESH"));
             if (token == null || token.getExpiresAt().isBefore(LocalDateTime.now())) {
                 throw new McpOAuthException("invalid_grant", 400, "refresh token is invalid or expired");
             }
-            if (!"ACTIVE".equals(token.getStatus())) {
-                // A consumed rotating token is evidence of replay, so invalidate its complete token family.
-                tokenMapper.update(null, new LambdaUpdateWrapper<McpOAuthToken>()
-                        .eq(McpOAuthToken::getTokenFamilyId, token.getTokenFamilyId())
-                        .eq(McpOAuthToken::getStatus, "ACTIVE")
-                        .set(McpOAuthToken::getStatus, "REVOKED")
-                        .set(McpOAuthToken::getRevokedAt, LocalDateTime.now()));
-                throw new McpOAuthException("invalid_grant", 400, "refresh token was already used");
-            }
+            LocalDateTime now = LocalDateTime.now();
             McpOAuthGrant grant = requireActiveGrant(token.getGrantId(), clientId);
-            token.setStatus("USED");
-            token.setUsedAt(LocalDateTime.now());
-            tokenMapper.updateById(token);
+            // Atomically consume the refresh token exactly once; a concurrent replay loses this race.
+            int claimed = tokenMapper.update(null, new LambdaUpdateWrapper<McpOAuthToken>()
+                    .eq(McpOAuthToken::getTokenHash, refreshHash)
+                    .eq(McpOAuthToken::getTokenType, "REFRESH")
+                    .eq(McpOAuthToken::getStatus, "ACTIVE")
+                    .ge(McpOAuthToken::getExpiresAt, now)
+                    .set(McpOAuthToken::getStatus, "USED")
+                    .set(McpOAuthToken::getUsedAt, now));
+            if (claimed == 0) {
+                // A token that was already USED is evidence of replay, so revoke its complete token family.
+                McpOAuthToken rechecked = tokenMapper.selectOne(new LambdaQueryWrapper<McpOAuthToken>()
+                        .eq(McpOAuthToken::getTokenHash, refreshHash).eq(McpOAuthToken::getTokenType, "REFRESH"));
+                if (rechecked != null && "USED".equals(rechecked.getStatus())) {
+                    revokeTokenFamily(rechecked.getTokenFamilyId());
+                    throw new McpOAuthException("invalid_grant", 400, "refresh token was already used");
+                }
+                throw new McpOAuthException("invalid_grant", 400, "refresh token is invalid or expired");
+            }
             return createTokens(grant, token.getTokenFamilyId());
         }
         throw invalidRequest("grant_type must be authorization_code or refresh_token");
@@ -261,6 +269,14 @@ public class McpOAuthService {
         token.setExpiresAt(expiresAt);
         token.setCreatedAt(LocalDateTime.now());
         tokenMapper.insert(token);
+    }
+
+    private void revokeTokenFamily(String familyId) {
+        tokenMapper.update(null, new LambdaUpdateWrapper<McpOAuthToken>()
+                .eq(McpOAuthToken::getTokenFamilyId, familyId)
+                .eq(McpOAuthToken::getStatus, "ACTIVE")
+                .set(McpOAuthToken::getStatus, "REVOKED")
+                .set(McpOAuthToken::getRevokedAt, LocalDateTime.now()));
     }
 
     private Long requireWebUser(String authorization) {
