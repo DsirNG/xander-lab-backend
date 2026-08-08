@@ -1,0 +1,210 @@
+package com.xander.lab.integration.mcp.csdn.application;
+
+import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnProperties;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.openqa.selenium.remote.RemoteWebDriver;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+
+/** Concurrency behavior of the CSDN authorization slot, without a real Selenium server. */
+@ExtendWith(MockitoExtension.class)
+class CsdnAuthorizationServiceTest {
+
+    private static final Long OWNER = 1L;
+    private static final Long OTHER = 2L;
+
+    @Mock CsdnCredentialService credentials;
+
+    private ExecutorService executor;
+    private TestableService service;
+
+    @BeforeEach
+    void setUp() {
+        CsdnProperties properties = new CsdnProperties();
+        properties.setAuthorizationTimeoutSeconds(10);
+        service = new TestableService(properties, credentials);
+        service.driver = mock(RemoteWebDriver.class);
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (executor != null) {
+            executor.shutdownNow();
+            executor = null;
+        }
+    }
+
+    @Test
+    void successfulStartReturnsQrCodeAndCanBeRestartedAfterCancel() {
+        service.driver = mock(RemoteWebDriver.class);
+
+        CsdnAuthorizationService.AuthorizationView view = service.start(OWNER);
+
+        assertEquals("PENDING", view.status());
+        assertEquals("data:image/png;base64,abc", view.qrCodeDataUrl());
+
+        service.cancel(OWNER);
+        verify(service.driver).quit();
+        assertEquals("PENDING", service.start(OWNER).status());
+    }
+
+    @Test
+    void cancelWhileStartingDisposesOrphanDriverAndFailsTheStarter() throws Exception {
+        CountDownLatch enteredNewDriver = new CountDownLatch(1);
+        CountDownLatch releaseNewDriver = new CountDownLatch(1);
+        service.driver = mock(RemoteWebDriver.class);
+        service.beforeNewDriver = () -> {
+            enteredNewDriver.countDown();
+            await(releaseNewDriver);
+        };
+
+        executor = Executors.newSingleThreadExecutor();
+        var future = executor.submit(() -> service.start(OWNER));
+
+        assertTrue(enteredNewDriver.await(5, TimeUnit.SECONDS), "driver setup never started");
+        service.cancel(OWNER);
+        releaseNewDriver.countDown();
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> unwrap(future));
+        assertTrue(error.getMessage().contains("was cancelled while starting"));
+        verify(service.driver).quit();
+    }
+
+    @Test
+    void statusReportsPendingWhileSessionIsBeingPrepared() throws Exception {
+        CountDownLatch enteredNewDriver = new CountDownLatch(1);
+        CountDownLatch releaseNewDriver = new CountDownLatch(1);
+        service.driver = mock(RemoteWebDriver.class);
+        service.beforeNewDriver = () -> {
+            enteredNewDriver.countDown();
+            await(releaseNewDriver);
+        };
+
+        executor = Executors.newSingleThreadExecutor();
+        var future = executor.submit(() -> service.start(OWNER));
+
+        assertTrue(enteredNewDriver.await(5, TimeUnit.SECONDS));
+        CsdnAuthorizationService.AuthorizationView view = service.status(OWNER);
+        assertEquals("PENDING", view.status());
+        assertNull(view.qrCodeDataUrl());
+
+        releaseNewDriver.countDown();
+        assertEquals("PENDING", future.get().status());
+        service.cancel(OWNER);
+    }
+
+    @Test
+    void differentUserIsRejectedWhileAnotherUserIsStarting() throws Exception {
+        CountDownLatch enteredNewDriver = new CountDownLatch(1);
+        CountDownLatch releaseNewDriver = new CountDownLatch(1);
+        service.driver = mock(RemoteWebDriver.class);
+        service.beforeNewDriver = () -> {
+            enteredNewDriver.countDown();
+            await(releaseNewDriver);
+        };
+
+        executor = Executors.newSingleThreadExecutor();
+        var future = executor.submit(() -> service.start(OWNER));
+
+        assertTrue(enteredNewDriver.await(5, TimeUnit.SECONDS));
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.start(OTHER));
+        assertTrue(error.getMessage().contains("Another CSDN authorization is in progress"));
+
+        releaseNewDriver.countDown();
+        assertEquals("PENDING", future.get().status());
+        service.cancel(OWNER);
+    }
+
+    @Test
+    void statusOfDifferentUserIsNotBlockedWhileAnotherSessionIsStarting() throws Exception {
+        CountDownLatch enteredNewDriver = new CountDownLatch(1);
+        CountDownLatch releaseNewDriver = new CountDownLatch(1);
+        service.driver = mock(RemoteWebDriver.class);
+        service.beforeNewDriver = () -> {
+            enteredNewDriver.countDown();
+            await(releaseNewDriver);
+        };
+
+        executor = Executors.newSingleThreadExecutor();
+        var future = executor.submit(() -> service.start(OWNER));
+
+        assertTrue(enteredNewDriver.await(5, TimeUnit.SECONDS));
+        CsdnAuthorizationService.AuthorizationView view = service.status(OTHER);
+        assertEquals("NOT_AUTHORIZED", view.status());
+
+        releaseNewDriver.countDown();
+        assertEquals("PENDING", future.get().status());
+        service.cancel(OWNER);
+    }
+
+    @Test
+    void failedQrCodeWaitReleasesTheSlotForTheNextUser() {
+        service.driver = mock(RemoteWebDriver.class);
+        service.failQrCode = true;
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> service.start(OWNER));
+        assertTrue(error.getMessage().contains("Unable to start CSDN authorization"));
+
+        service.failQrCode = false;
+        assertEquals("PENDING", service.start(OWNER).status());
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Test latch timed out");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static Object unwrap(java.util.concurrent.Future<?> future) {
+        try {
+            return future.get();
+        } catch (java.util.concurrent.ExecutionException e) {
+            if (e.getCause() instanceof RuntimeException runtime) throw runtime;
+            throw new IllegalStateException(e.getCause());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** Service exposing seams around Selenium so tests never open a real driver connection. */
+    private static class TestableService extends CsdnAuthorizationService {
+        RemoteWebDriver driver;
+        Runnable beforeNewDriver;
+        boolean failQrCode;
+
+        TestableService(CsdnProperties properties, CsdnCredentialService credentials) {
+            super(properties, credentials);
+        }
+
+        @Override
+        protected RemoteWebDriver newDriver() {
+            if (beforeNewDriver != null) beforeNewDriver.run();
+            return driver;
+        }
+
+        @Override
+        protected String waitForQrCode(RemoteWebDriver driver) {
+            if (failQrCode) throw new IllegalStateException("boom");
+            return "data:image/png;base64,abc";
+        }
+    }
+}

@@ -30,23 +30,28 @@ public class CsdnAuthorizationService {
     public AuthorizationView start(Long userId) {
         RemoteWebDriver driver = claimPendingSession(userId);
         try {
-            driver.get("https://mp.csdn.net/");
-            WebElement frame = new WebDriverWait(driver, Duration.ofSeconds(20))
-                    .until(d -> d.findElement(By.cssSelector("iframe[src*='passport.csdn.net']")));
-            driver.switchTo().frame(frame);
-            String qrCodeDataUrl = new WebDriverWait(driver, Duration.ofSeconds(20)).until(d -> {
-                for (WebElement image : d.findElements(By.cssSelector(".public-code img[src^='data:image/']"))) {
-                    String source = image.getAttribute("src");
-                    if (image.isDisplayed() && source != null && source.startsWith("data:image/")) return source;
-                }
-                return null;
-            });
-            driver.switchTo().defaultContent();
-            return new AuthorizationView("PENDING", qrCodeDataUrl);
+            return new AuthorizationView("PENDING", waitForQrCode(driver));
         } catch (Exception e) {
             releasePendingSession(userId, driver);
             throw new IllegalStateException("Unable to start CSDN authorization", e);
         }
+    }
+
+    /** Navigates to the CSDN login frame and returns the QR code data URL. Test seams override this and {@link #newDriver()}. */
+    protected String waitForQrCode(RemoteWebDriver driver) {
+        driver.get("https://mp.csdn.net/");
+        WebElement frame = new WebDriverWait(driver, Duration.ofSeconds(20))
+                .until(d -> d.findElement(By.cssSelector("iframe[src*='passport.csdn.net']")));
+        driver.switchTo().frame(frame);
+        String qrCodeDataUrl = new WebDriverWait(driver, Duration.ofSeconds(20)).until(d -> {
+            for (WebElement image : d.findElements(By.cssSelector(".public-code img[src^='data:image/']"))) {
+                String source = image.getAttribute("src");
+                if (image.isDisplayed() && source != null && source.startsWith("data:image/")) return source;
+            }
+            return null;
+        });
+        driver.switchTo().defaultContent();
+        return qrCodeDataUrl;
     }
 
     /**
@@ -173,7 +178,7 @@ public class CsdnAuthorizationService {
         }
     }
 
-    private RemoteWebDriver newDriver() throws Exception {
+    protected RemoteWebDriver newDriver() throws Exception {
         ChromeOptions options = new ChromeOptions();
         options.addArguments("--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--window-size=1360,1020");
         return new RemoteWebDriver(URI.create(properties.getSeleniumUrl()).toURL(), options);
