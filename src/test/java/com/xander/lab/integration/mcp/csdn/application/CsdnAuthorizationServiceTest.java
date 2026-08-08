@@ -36,12 +36,13 @@ class CsdnAuthorizationServiceTest {
 
     @Mock CsdnCredentialService credentials;
 
+    private CsdnProperties properties;
     private ExecutorService executor;
     private TestableService service;
 
     @BeforeEach
     void setUp() {
-        CsdnProperties properties = new CsdnProperties();
+        properties = new CsdnProperties();
         properties.setAuthorizationTimeoutSeconds(10);
         service = new TestableService(properties, credentials);
         service.driver = mock(RemoteWebDriver.class);
@@ -190,6 +191,31 @@ class CsdnAuthorizationServiceTest {
         service.cancel(OWNER);
         assertEquals("PENDING", service.status(THIRD).status());
         service.cancel(THIRD);
+    }
+
+    @Test
+    void scheduledCleanupDisposesExpiredSessionAndFreesTheSlot() {
+        properties.setAuthorizationTimeoutSeconds(-5);
+        service.driver = mock(RemoteWebDriver.class);
+        assertEquals("PENDING", service.start(OWNER).status());
+
+        service.cleanupExpiredSessions();
+
+        verify(service.driver).quit();
+        assertEquals("NOT_AUTHORIZED", service.status(OWNER).status());
+        assertEquals("PENDING", service.start(OWNER).status());
+    }
+
+    @Test
+    void statusCleansExpiredSessionLazily() {
+        properties.setAuthorizationTimeoutSeconds(-5);
+        service.driver = mock(RemoteWebDriver.class);
+        assertEquals("PENDING", service.start(OWNER).status());
+
+        CsdnAuthorizationService.AuthorizationView view = service.status(OWNER);
+
+        verify(service.driver).quit();
+        assertEquals("NOT_AUTHORIZED", view.status());
     }
 
     @Test

@@ -15,4 +15,6 @@ public class CsdnProperties {
     private String seleniumUrl = "http://selenium:4444/wd/hub";
     private String credentialEncryptionKey;
     private int authorizationTimeoutSeconds = 35;
+    /** How often the background sweep checks for expired authorization sessions, in milliseconds. */
+    private long cleanupIntervalMs = 15_000;
 }

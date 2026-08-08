@@ -8,6 +8,7 @@ import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.remote.RemoteWebDriver;
 import org.openqa.selenium.support.ui.WebDriverWait;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -37,9 +38,11 @@ public class CsdnAuthorizationService {
      * their position and expected wait. Re-requesting while queued moves the user to the back of the queue.
      */
     public AuthorizationView start(Long userId) {
-        Instant expiry;
+        RemoteWebDriver discarded;
+        Instant expiry = null;
+        AuthorizationView busyView;
         synchronized (this) {
-            closeExpired();
+            discarded = closeExpired();
             Session current = session;
             if (current != null) {
                 if (current.userId().equals(userId)) {
@@ -48,11 +51,15 @@ public class CsdnAuthorizationService {
                     }
                     throw new IllegalStateException("CSDN authorization is already active");
                 }
-                return enqueue(userId);
+                busyView = enqueue(userId);
+            } else {
+                busyView = null;
+                expiry = Instant.now().plusSeconds(properties.getAuthorizationTimeoutSeconds());
+                session = new Session(userId, null, expiry);
             }
-            expiry = Instant.now().plusSeconds(properties.getAuthorizationTimeoutSeconds());
-            session = new Session(userId, null, expiry);
         }
+        dispose(discarded);
+        if (busyView != null) return busyView;
         RemoteWebDriver driver;
         try {
             driver = newDriver();
@@ -62,12 +69,18 @@ public class CsdnAuthorizationService {
             }
             throw new IllegalStateException("Unable to start CSDN authorization", e);
         }
+        RemoteWebDriver orphan;
         synchronized (this) {
             if (session == null || !session.userId().equals(userId) || session.driver() != null) {
-                try { driver.quit(); } catch (Exception ignored) { }
-                throw new IllegalStateException("CSDN authorization was cancelled while starting");
+                orphan = driver;
+            } else {
+                orphan = null;
+                session = new Session(userId, driver, expiry);
             }
-            session = new Session(userId, driver, expiry);
+        }
+        if (orphan != null) {
+            dispose(orphan);
+            throw new IllegalStateException("CSDN authorization was cancelled while starting");
         }
         try {
             return new AuthorizationView("PENDING", waitForQrCode(driver), remainingSeconds());
@@ -159,10 +172,12 @@ public class CsdnAuthorizationService {
      * users keep their queue entry alive while they poll; abandoned entries expire like sessions.
      */
     public AuthorizationView status(Long userId) {
-        Session mine;
+        RemoteWebDriver discarded;
+        Session mine = null;
+        AuthorizationView deferred = null;
         boolean tookOver;
         synchronized (this) {
-            closeExpired();
+            discarded = closeExpired();
             if (session == null && !queue.isEmpty() && queue.get(0).userId().equals(userId)) {
                 queue.remove(0);
                 session = new Session(userId, null, Instant.now().plusSeconds(properties.getAuthorizationTimeoutSeconds()));
@@ -174,12 +189,16 @@ public class CsdnAuthorizationService {
             if (current == null || !current.userId().equals(userId)) {
                 if (contains(userId)) {
                     refreshQueueEntry(userId);
-                    return queuedView(userId);
+                    deferred = queuedView(userId);
+                } else {
+                    deferred = new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
                 }
-                return new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
+            } else {
+                mine = current;
             }
-            mine = current;
         }
+        dispose(discarded);
+        if (deferred != null) return deferred;
         if (mine.driver() == null) {
             // A null driver means either our own start() is still preparing, or we just took over here.
             if (!tookOver) {
@@ -233,12 +252,18 @@ public class CsdnAuthorizationService {
             }
             return requeueAtFront(userId);
         }
+        RemoteWebDriver orphan;
         synchronized (this) {
             if (session == null || !session.userId().equals(userId) || session.driver() != null) {
-                try { driver.quit(); } catch (Exception ignored) { }
-                return requeueAtFront(userId);
+                orphan = driver;
+            } else {
+                orphan = null;
+                session = new Session(userId, driver, expiry);
             }
-            session = new Session(userId, driver, expiry);
+        }
+        if (orphan != null) {
+            dispose(orphan);
+            return requeueAtFront(userId);
         }
         try {
             return new AuthorizationView("PENDING", waitForQrCode(driver), remainingSeconds());
@@ -301,25 +326,46 @@ public class CsdnAuthorizationService {
     }
 
     private void closeSessionFor(Long userId) {
-        Session gone;
+        RemoteWebDriver discarded;
+        Session gone = null;
         synchronized (this) {
-            closeExpired();
-            if (session == null || !session.userId().equals(userId)) return;
-            gone = session;
-            session = null;
+            discarded = closeExpired();
+            if (session != null && session.userId().equals(userId)) {
+                gone = session;
+                session = null;
+            }
         }
-        dispose(gone.driver());
+        dispose(discarded);
+        if (gone != null) dispose(gone.driver());
     }
 
-    /** Drops expired sessions and abandoned queue entries; called only while holding {@code this}. */
-    private void closeExpired() {
+    /**
+     * Drops expired sessions and abandoned queue entries; called only while holding {@code this}.
+     * Returns the expired session's driver so the caller disposes it after releasing the lock, keeping
+     * Selenium calls (driver.quit) outside the shared monitor.
+     */
+    private RemoteWebDriver closeExpired() {
+        RemoteWebDriver expired = null;
         if (session != null && Instant.now().isAfter(session.expiresAt())) {
-            Session gone = session;
+            expired = session.driver();
             session = null;
-            dispose(gone.driver());
         }
         Instant now = Instant.now();
         queue.removeIf(queued -> now.isAfter(queued.expiresAt()));
+        return expired;
+    }
+
+    /**
+     * Background sweep that disposes expired sessions and abandoned queue entries even when no user
+     * polls, so a headless Chrome left behind by an abandoned authorization is never leaked forever.
+     */
+    @Scheduled(fixedDelayString = "${mcp.csdn.platform.cleanup-interval-ms:15000}")
+    public void cleanupExpiredSessions() {
+        RemoteWebDriver discarded;
+        synchronized (this) {
+            discarded = closeExpired();
+        }
+        dispose(discarded);
     }
 
     protected RemoteWebDriver newDriver() throws Exception {
