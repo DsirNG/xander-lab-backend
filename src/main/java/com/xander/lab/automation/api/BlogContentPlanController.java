@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/blog-plans")
@@ -36,8 +35,9 @@ public class BlogContentPlanController {
     }
 
     @GetMapping
-    public Result<List<BlogContentPlanVO>> list() {
-        return Result.success(planService.list(UserContext.getUserId()));
+    public Result<BlogContentPlansPage> list(@RequestParam(defaultValue = "1") long page,
+                                             @RequestParam(defaultValue = "10") long size) {
+        return Result.success(planService.list(UserContext.getUserId(), page, size));
     }
 
     @GetMapping("/{id}")

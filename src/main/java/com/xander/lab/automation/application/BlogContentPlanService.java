@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.automation.api.BlogContentPlanCreateRequest;
 import com.xander.lab.automation.api.BlogContentPlanUpdateRequest;
 import com.xander.lab.automation.api.BlogContentPlanVO;
+import com.xander.lab.automation.api.BlogContentPlansPage;
 import com.xander.lab.automation.api.BlogPlanRunVO;
 import com.xander.lab.automation.api.BlogPlanRunsPage;
 import com.xander.lab.automation.domain.BlogContentPlan;
@@ -24,7 +25,6 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
 import java.util.Locale;
 
 /** C-end use cases for daily content plans: CRUD, lifecycle transitions,
@@ -96,10 +96,19 @@ public class BlogContentPlanService {
     }
 
     @Transactional(readOnly = true)
-    public List<BlogContentPlanVO> list(Long userId) {
+    public BlogContentPlansPage list(Long userId, long page, long size) {
         requireUser(userId);
-        return planMapper.selectList(ownedWrapper(userId).orderByDesc(BlogContentPlan::getCreatedAt))
-                .stream().map(plan -> toVO(plan, userId)).toList();
+        long safeSize = Math.min(Math.max(size, 1), 50);
+        Page<BlogContentPlan> result = planMapper.selectPage(
+                new Page<>(Math.max(page, 1), safeSize),
+                ownedWrapper(userId).orderByDesc(BlogContentPlan::getCreatedAt)
+                        .orderByDesc(BlogContentPlan::getId));
+        return BlogContentPlansPage.builder()
+                .records(result.getRecords().stream().map(plan -> toVO(plan, userId)).toList())
+                .total(result.getTotal())
+                .page(result.getCurrent())
+                .size(result.getSize())
+                .build();
     }
 
     @Transactional(readOnly = true)
