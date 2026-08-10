@@ -85,39 +85,46 @@ public class BlogPlanRunService {
     public void executeRun(BlogPlanRun run, BlogContentPlan plan) {
         Long userId = plan.getUserId();
         UserContext.setUserId(userId);
+        String stage = BlogPlanRun.STAGE_GENERATE;
         try {
-            BlogAgentTask task = generateArticle(plan, userId);
+            BlogAgentTask task = createTask(plan, userId);
+            stage = BlogPlanRun.STAGE_GENERATE;
             markAgentTask(run.getId(), task.getId());
 
+            stage = BlogPlanRun.STAGE_GENERATE;
+            agentService.run(task.getId(), userId);
+
+            stage = BlogPlanRun.STAGE_REVIEW;
             ComplianceReview review = agentService.reviewCompliance(task.getId(), userId);
             if (!review.pass()) {
                 rejectRun(run, plan, review.reason());
                 return;
             }
 
+            stage = BlogPlanRun.STAGE_PUBLISH;
             BlogAgentTaskVO ready = agentService.get(task.getId(), userId);
-            long localPostId = publishLocal(run.getId(), plan, task, ready);
+            long localPostId = publishLocal(run.getId(), plan, ready);
             markLocalPost(run.getId(), localPostId);
 
             if (plan.getSyncCsdn() == Boolean.TRUE) {
-                publishCsdn(run.getId(), plan, task, ready);
+                publishCsdn(run.getId(), plan, ready);
             }
 
             finishSucceeded(run.getId());
         } catch (RuntimeException e) {
             String message = limit(rootMessage(e), 1000);
-            failRun(run.getId(), message);
+            failRun(run.getId(), stage, message);
             notifyUser(userId, BlogNotification.TYPE_RUN_FAILED,
                     "定时发文执行失败",
                     "计划《" + plan.getTopic() + "》本次执行失败：" + message,
                     plan.getId(), run.getId());
-            log.warn("[BlogPlan] plan={} run={} failed: {}", plan.getId(), run.getId(), message);
+            log.warn("[BlogPlan] plan={} run={} failed at stage={}: {}", plan.getId(), run.getId(), stage, message);
         } finally {
             UserContext.clear();
         }
     }
 
-    private BlogAgentTask generateArticle(BlogContentPlan plan, Long userId) {
+    private BlogAgentTask createTask(BlogContentPlan plan, Long userId) {
         StringBuilder input = new StringBuilder(plan.getTopic());
         if (StringUtils.hasText(plan.getAudience())) {
             input.append("\n目标读者：").append(plan.getAudience());
@@ -127,12 +134,11 @@ public class BlogPlanRunService {
         }
         BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
         request.setInput(input.toString());
-        BlogAgentTask task = agentService.create(userId, request);
-        agentService.run(task.getId(), userId);
-        return task;
+        return agentService.create(userId, request);
     }
 
-    private long publishLocal(Long runId, BlogContentPlan plan, BlogAgentTask task, BlogAgentTaskVO ready) {
+    private long publishLocal(Long runId, BlogContentPlan plan, BlogAgentTaskVO ready) {
+        BlogAgentTask task = ready.getTask();
         PublishCommand command = new PublishCommand(
                 -runId, plan.getUserId(), task.getTitle(), task.getSummary(), task.getContent(),
                 task.getCategoryId(), null, ready.getTags());
@@ -140,13 +146,14 @@ public class BlogPlanRunService {
         return Long.parseLong(result.externalId());
     }
 
-    private void publishCsdn(Long runId, BlogContentPlan plan, BlogAgentTask task, BlogAgentTaskVO ready) {
+    private void publishCsdn(Long runId, BlogContentPlan plan, BlogAgentTaskVO ready) {
         if (!csdnCredentialService.isAuthorized(plan.getUserId())) {
             updateCsdnFailure(runId, "AUTH_REQUIRED",
                     "CSDN 尚未授权，本次已跳过同步，请先在个人中心完成 CSDN 授权");
             return;
         }
         try {
+            BlogAgentTask task = ready.getTask();
             PublishCommand command = new PublishCommand(
                     -runId, plan.getUserId(), task.getTitle(), task.getSummary(), task.getContent(),
                     task.getCategoryId(), null, ready.getTags());
@@ -203,11 +210,11 @@ public class BlogPlanRunService {
         });
     }
 
-    private void failRun(Long runId, String errorMessage) {
+    private void failRun(Long runId, String stage, String errorMessage) {
         transactionTemplate.executeWithoutResult(status -> {
             BlogPlanRun run = requireRun(runId);
             run.setStatus(BlogPlanRun.STATUS_FAILED);
-            run.setStageError(BlogPlanRun.STAGE_PUBLISH);
+            run.setStageError(stage);
             run.setErrorMessage(limit(errorMessage, 1000));
             run.setFinishedAt(Instant.now());
             runMapper.updateById(run);

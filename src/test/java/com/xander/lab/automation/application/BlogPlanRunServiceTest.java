@@ -89,8 +89,7 @@ class BlogPlanRunServiceTest {
     void successfulRunPublishesLocallyAndSetsSucceeded() {
         mockRunRow();
         BlogAgentTask task = task(102L);
-        BlogAgentTaskVO ready = new BlogAgentTaskVO();
-        ready.setTags(List.of("k8s", "devops"));
+        BlogAgentTaskVO ready = readyVo(task);
         when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
                 .thenReturn(task);
         when(agentService.run(task.getId(), 7L)).thenReturn(ready);
@@ -114,8 +113,7 @@ class BlogPlanRunServiceTest {
     void csdnFailureAfterLocalPublishStillSucceedsButNotifies() {
         mockRunRow();
         BlogAgentTask task = task(103L);
-        BlogAgentTaskVO ready = new BlogAgentTaskVO();
-        ready.setTags(List.of("t1"));
+        BlogAgentTaskVO ready = readyVo(task);
         when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
                 .thenReturn(task);
         when(agentService.run(task.getId(), 7L)).thenReturn(ready);
@@ -181,6 +179,17 @@ class BlogPlanRunServiceTest {
         BlogAgentTask task = new BlogAgentTask();
         task.setId(id);
         return task;
+    }
+
+    private BlogAgentTaskVO readyVo(BlogAgentTask task) {
+        task.setTitle("Kubernetes 入门实践");
+        task.setSummary("从零开始理解 Kubernetes 的部署与调优");
+        task.setContent("这是一篇测试文章正文内容");
+        task.setCategoryId("66");
+        BlogAgentTaskVO ready = new BlogAgentTaskVO();
+        ready.setTask(task);
+        ready.setTags(List.of("k8s", "devops"));
+        return ready;
     }
 
     private BlogContentPlan plan(boolean syncCsdn) {
