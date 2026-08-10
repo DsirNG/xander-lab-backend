@@ -8,6 +8,7 @@ import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
 import com.xander.lab.automation.infrastructure.BlogContentPlanMapper;
 import com.xander.lab.automation.infrastructure.BlogNotificationMapper;
 import com.xander.lab.automation.infrastructure.BlogPlanRunMapper;
+import com.xander.lab.automation.infrastructure.BlogPlanSseService;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.application.BlogAgentService;
@@ -41,6 +42,7 @@ public class BlogPlanRunService {
     private final BlogAgentService agentService;
     private final PublicationService publicationService;
     private final CsdnCredentialService csdnCredentialService;
+    private final BlogPlanSseService sseService;
     private final TransactionTemplate transactionTemplate;
 
     /** Creates the run row for a due trigger and reschedules the plan atomically.
@@ -242,6 +244,7 @@ public class BlogPlanRunService {
         notification.setRunId(runId);
         notification.setIsRead(false);
         notificationMapper.insert(notification);
+        sseService.push(userId, type, title, notification.getMessage(), planId, runId);
     }
 
     private BlogPlanRun requireRun(Long runId) {

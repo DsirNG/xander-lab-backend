@@ -1,15 +1,18 @@
 package com.xander.lab.automation.api;
 
 import com.xander.lab.automation.application.BlogNotificationService;
+import com.xander.lab.automation.infrastructure.BlogPlanSseService;
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/notifications")
@@ -17,6 +20,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class BlogNotificationController {
 
     private final BlogNotificationService notificationService;
+    private final BlogPlanSseService sseService;
+
+    @GetMapping("/events")
+    public SseEmitter events() {
+        return sseService.subscribe(UserContext.getUserId());
+    }
 
     @GetMapping
     public Result<BlogNotificationListResult> list(@RequestParam(defaultValue = "1") long page,

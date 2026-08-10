@@ -43,12 +43,13 @@ class BlogPlanRunServiceTest {
     @Mock private PublicationService publicationService;
     @Mock private CsdnCredentialService csdnCredentialService;
     @Mock private BlogContentPlanMapper planMapper;
+    @Mock private com.xander.lab.automation.infrastructure.BlogPlanSseService sseService;
     @Mock private TransactionTemplate transactionTemplate;
 
     private BlogPlanRunService newService() {
         wireTransactionTemplate();
         return new BlogPlanRunService(runMapper, notificationMapper, agentService,
-                publicationService, csdnCredentialService, transactionTemplate);
+                publicationService, csdnCredentialService, sseService, transactionTemplate);
     }
 
     private void wireTransactionTemplate() {
