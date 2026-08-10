@@ -29,6 +29,13 @@ public class McpOAuthBearerFilterConfiguration {
     FilterRegistrationBean<OncePerRequestFilter> mcpOAuthBearerFilter() {
         OncePerRequestFilter filter = new OncePerRequestFilter() {
             @Override
+            protected boolean shouldNotFilterAsyncDispatch() {
+                // The MCP Streamable HTTP transport may invoke a tool on an async dispatch. Re-authenticate
+                // that dispatch so its thread has the OAuth principal and granted scopes.
+                return false;
+            }
+
+            @Override
             protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
                     throws IOException, ServletException {
                 try {
