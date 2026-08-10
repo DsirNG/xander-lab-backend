@@ -428,6 +428,32 @@ public class BlogAgentService {
         return task;
     }
 
+    /** Runs the compliance gate against a ready article. A model outage is
+     * treated as reject (fail closed) so scheduled auto-publishing never ships
+     * unvetted content. */
+    public ComplianceReview reviewCompliance(Long taskId, Long userId) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        if (!"ready".equals(task.getStatus())) {
+            throw new IllegalStateException("文章尚未生成完成，无法进行合规审核");
+        }
+        if (!StringUtils.hasText(task.getContent())) {
+            throw new IllegalStateException("文章内容为空，无法进行合规审核");
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode result = modelClient.reviewCompliance(
+                    defaultText(task.getTitle(), ""), task.getContent());
+            boolean pass = result.path("pass").asBoolean(false);
+            String reason = result.path("reasons").isArray()
+                    ? result.path("reasons").toString()
+                    : "";
+            return new ComplianceReview(pass, reason);
+        } catch (RuntimeException e) {
+            log.warn("blog-agent compliance review degraded to reject for task {}: {}",
+                    taskId, e.getMessage());
+            return new ComplianceReview(false, "合规审核服务暂不可用，本次未自动发布");
+        }
+    }
+
     private void applyResult(BlogAgentTask task, JsonNode result) {
         String title = required(result, "title");
         String content = required(result, "content");

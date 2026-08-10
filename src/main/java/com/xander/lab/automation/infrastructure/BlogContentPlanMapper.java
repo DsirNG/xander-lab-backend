@@ -13,6 +13,26 @@ import java.util.List;
 @Mapper
 public interface BlogContentPlanMapper extends BaseMapper<BlogContentPlan> {
 
+    @Select("SELECT id FROM sys_user WHERE id = #{userId} FOR UPDATE")
+    Long lockUserForPlanCreation(@Param("userId") Long userId);
+
+    @Select("""
+            SELECT COUNT(*)
+            FROM blog_content_plan
+            WHERE user_id = #{userId}
+              AND deleted_at IS NULL
+              AND status IN ('ACTIVE', 'RUNNING', 'PAUSED')
+            """)
+    long countActivePlans(@Param("userId") Long userId);
+
+    @Select("""
+            SELECT COUNT(*)
+            FROM blog_content_plan
+            WHERE user_id = #{userId}
+              AND created_at >= DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 1 DAY)
+            """)
+    long countCreatedInPastDay(@Param("userId") Long userId);
+
     @Select("""
             SELECT *
             FROM blog_content_plan
@@ -90,6 +110,22 @@ public interface BlogContentPlanMapper extends BaseMapper<BlogContentPlan> {
                         @Param("processingToken") String processingToken,
                         @Param("nextRunAt") Instant nextRunAt,
                         @Param("lastRunAt") Instant lastRunAt);
+
+    @Update("""
+            UPDATE blog_content_plan
+            SET status = 'ACTIVE',
+                next_run_at = #{nextRunAt},
+                error_message = NULL,
+                processing_token = NULL,
+                claimed_at = NULL
+            WHERE id = #{id}
+              AND user_id = #{userId}
+              AND deleted_at IS NULL
+              AND status IN ('PAUSED', 'FAILED')
+            """)
+    int resumeOwnedPlanAt(@Param("id") Long id,
+                          @Param("userId") Long userId,
+                          @Param("nextRunAt") Instant nextRunAt);
 
     @Update("""
             UPDATE blog_content_plan

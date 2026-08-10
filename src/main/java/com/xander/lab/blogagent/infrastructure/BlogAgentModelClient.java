@@ -53,6 +53,16 @@ public class BlogAgentModelClient {
                 "本轮用户要求：\n" + userRequest + "\n\n待审校文章：\n" + content, false);
     }
 
+    /** Compliance gate for auto-publishing: rejects forbidden or unsafe content. */
+    public JsonNode reviewCompliance(String title, String content) {
+        return requestJson(
+                "你是内容安全审核员。判断这篇文章是否包含色情、赌博、毒品、暴力仇恨、诈骗、违法违规等"
+                        + "不得发布的敏感违规内容，或极低质量的水文。不要修改正文。仅返回 JSON："
+                        + "{\"pass\":boolean,\"reasons\":[string]}。pass 表示可正常发布；"
+                        + "不通过时 reasons 给出具体理由，通过时返回空数组。",
+                "标题：\n" + title + "\n\n正文：\n" + content, false);
+    }
+
     public JsonNode reviseArticleStream(String currentArticle, String instruction, Consumer<String> onDelta) {
         Map<String, Object> payload = requestPayload(
                 "当前文章：\n" + currentArticle + "\n\n用户本轮修改要求：\n" + instruction);
