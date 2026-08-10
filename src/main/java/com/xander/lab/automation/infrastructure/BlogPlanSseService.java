@@ -39,6 +39,9 @@ public class BlogPlanSseService {
     /** Registers one connection and primes callbacks so per-user lists never
      * retain completed emitters. */
     public SseEmitter subscribe(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("SSE 连接需要已登录用户");
+        }
         SseEmitter emitter = new SseEmitter(0L);
         List<SseEmitter> userEmitters =
                 subscribers.computeIfAbsent(userId, key -> new CopyOnWriteArrayList<>());
@@ -46,6 +49,14 @@ public class BlogPlanSseService {
         emitter.onCompletion(() -> remove(userId, emitter));
         emitter.onTimeout(() -> remove(userId, emitter));
         emitter.onError(error -> remove(userId, emitter));
+        try {
+            // Flush headers immediately and give clients an explicit ready signal.
+            emitter.send(SseEmitter.event().name("connected").data("{\"status\":\"connected\"}"));
+            log.info("[SSE] 已连接 userId={}, activeConnections={}", userId, userEmitters.size());
+        } catch (IOException | IllegalStateException exception) {
+            log.warn("[SSE] 建立连接失败 userId={}: {}", userId, exception.getMessage());
+            remove(userId, emitter);
+        }
         return emitter;
     }
 
@@ -75,6 +86,18 @@ public class BlogPlanSseService {
         }
     }
 
+    /** Broadcasts a live-only diagnostic message and returns its recipient count. */
+    public int broadcast(String type, String title, String message, Long planId, Long runId) {
+        int recipients = 0;
+        for (Long userId : subscribers.keySet()) {
+            List<SseEmitter> userEmitters = subscribers.get(userId);
+            if (userEmitters != null) recipients += userEmitters.size();
+            push(userId, type, title, message, planId, runId);
+        }
+        log.info("[SSE] 广播测试已发送 activeConnections={}", recipients);
+        return recipients;
+    }
+
     private void beatAll() {
         for (Map.Entry<Long, List<SseEmitter>> entry : subscribers.entrySet()) {
             for (SseEmitter emitter : entry.getValue()) {
@@ -100,5 +123,6 @@ public class BlogPlanSseService {
         } catch (IllegalStateException ignored) {
             // Connection already closed.
         }
+        log.info("[SSE] 已断开 userId={}", userId);
     }
 }
