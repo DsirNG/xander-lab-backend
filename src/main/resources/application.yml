@@ -126,6 +126,18 @@ mcp:
   dual:
     enabled: ${MCP_DUAL_ENABLED:false}
 
+# Blog HTML preview sandbox. The page is hosted on its own origin (production:
+# per-session subdomain of the preview domain) and embedded via iframe src;
+# sessions expire via Redis TTL.
+blog-html:
+  preview:
+    page-url-pattern: ${BLOG_HTML_PAGE_URL_PATTERN:https://%s.blogHTML.xander.dsircity.top/raw}
+    frame-ancestors: ${BLOG_HTML_FRAME_ANCESTORS:https://xander.dsircity.top}
+    ttl-seconds: ${BLOG_HTML_PREVIEW_TTL_SECONDS:1800}
+    max-code-bytes: ${BLOG_HTML_PREVIEW_MAX_CODE_BYTES:262144}
+    rate-limit-max-requests: ${BLOG_HTML_PREVIEW_RATE_LIMIT_MAX_REQUESTS:10}
+    rate-limit-window-seconds: ${BLOG_HTML_PREVIEW_RATE_LIMIT_WINDOW_SECONDS:60}
+
 # Leave credentials in application-local.yml or environment variables; never commit them.
 blog:
   agent:

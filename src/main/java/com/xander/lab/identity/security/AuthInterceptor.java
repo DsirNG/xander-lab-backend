@@ -135,6 +135,11 @@ public class AuthInterceptor implements HandlerInterceptor {
             trySetUserContext(request);
             return true;
         }
+        if ("POST".equals(method) && "/api/blog-html/previews".equals(path)) {
+            // 匿名 HTML 预览会话创建：无需登录，由服务端按 IP 限流。
+            trySetUserContext(request);
+            return true;
+        }
 
         for (String pattern : GET_PUBLIC_PATTERNS) {
             String[] parts = pattern.split(":", 2);

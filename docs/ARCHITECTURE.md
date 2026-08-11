@@ -12,6 +12,7 @@ feature; deployment and database topology stay unchanged.
 - `integration` (migrated): owns MCP protocol adapters, OSS/file/mail delivery adapters, and vendor-specific integrations such as the complete CSDN MCP flow.
 - `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
 - `components` (migrated): owns the UI component library catalog, detail pages, and community-shared submissions.
+- `bloghtml` (new): owns short-lived blog HTML preview sessions. Session creation (`POST /api/blog-html/previews`) is public with per-IP Redis fixed-window rate limiting; code is stored in Redis with a TTL and served as a standalone sandbox page (`GET /blog-html/{id}/raw`) outside `/api` so iframes load it without auth, CORS or cookies. The page runs on an independent origin (per-session subdomain in production, a different port locally) and carries a strict CSP with `frame-ancestors` restricting embedders; this is the preview isolation pattern used by ChatGPT for its artifact pages.
 
 ## Module Documentation
 
@@ -49,3 +50,27 @@ empty except for shared infrastructure:
 4. Recurring content plans, durable runs, and the daily trigger pipeline live under `automation`; the poller claims due plans atomically and recovers stale claims so multiple instances cannot double-execute.
 5. FlowCraft and Img2Three live under `studio`; the UI component library lives under `components`.
 6. Shared cross-module contracts (`Result`, `PageData`, `HealthController`) live under `common`.
+
+## Blog HTML Preview Deployment
+
+Production serves preview pages on a dedicated wildcard domain so every session
+is an independent origin. Example nginx server block (DNS must map
+`*.blogHTML.xander.dsircity.top` to the host):
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name ~^(?<sid>[0-9a-f]{16})\.blogHTML\.xander\.dsircity\.top$;
+    # existing TLS config ...
+
+    location /raw {
+        proxy_pass http://127.0.0.1:30002/blog-html/$sid/raw;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+The blog site must allow embedding the preview origin, e.g. CSP
+`frame-src 'self' https://*.blogHTML.xander.dsircity.top`; the sandbox page
+itself restricts embedders via its own `frame-ancestors` header
+(`BLOG_HTML_FRAME_ANCESTORS`).
