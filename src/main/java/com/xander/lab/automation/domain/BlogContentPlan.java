@@ -24,6 +24,8 @@ public class BlogContentPlan {
     public static final String STATUS_RUNNING = "RUNNING";
     public static final String STATUS_PAUSED = "PAUSED";
     public static final String STATUS_CANCELLED = "CANCELLED";
+    /** Terminal state for one-shot plans: their single scheduled trigger ran. */
+    public static final String STATUS_FINISHED = "FINISHED";
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -42,6 +44,9 @@ public class BlogContentPlan {
     /** Index of the next topic from `topicsJson` to use (0-based) */
     private Integer nextTopicIndex;
     private Boolean syncCsdn;
+    /** True for one-shot plans (AI 生成计划): the plan fires exactly once at
+     * `nextRunAt` and auto-finishes instead of rescheduling daily. */
+    private Boolean runOnce;
     private Instant nextRunAt;
     private Instant lastRunAt;
     private String status;

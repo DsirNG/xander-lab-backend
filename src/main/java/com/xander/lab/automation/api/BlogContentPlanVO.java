@@ -21,6 +21,8 @@ public class BlogContentPlanVO {
     private String timezone;
     private String triggerTime;
     private Boolean syncCsdn;
+    /** True for one-shot plans: fires exactly once, then auto-finishes. */
+    private Boolean runOnce;
     private Instant nextRunAt;
     private Instant lastRunAt;
     private String status;

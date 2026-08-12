@@ -16,6 +16,7 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -99,6 +100,46 @@ class BlogPlanRunDispatcherTest {
 
         assertThat(enqueued).isFalse();
         verify(planMapper).recoverStaleClaim(eq(1L), eq(NOW.plusSeconds(86400)), any(String.class));
+    }
+
+    /** One-shot plans finish (FINISHED, no next run) after their single run
+     * instead of rescheduling the next daily trigger. */
+    @Test
+    void oneShotPlanFinishesInsteadOfRescheduling() {
+        when(planMapper.claimPlan(eq(1L), any(String.class))).thenReturn(1);
+        BlogPlanRun run = run(11L, 1L, NOW);
+        when(runService.createScheduledRun(any(), eq(NOW), any(String.class))).thenReturn(run);
+        BlogContentPlan snapshot = plan(1L);
+        snapshot.setRunOnce(true);
+        when(planMapper.selectById(1L)).thenReturn(snapshot);
+        when(planMapper.finishOneShotPlan(eq(1L), any(String.class), eq(NOW))).thenReturn(1);
+
+        BlogContentPlan plan = plan(1L);
+        plan.setRunOnce(true);
+        plan.setNextRunAt(NOW);
+        boolean enqueued = dispatcher.dispatchDue(plan);
+
+        assertThat(enqueued).isTrue();
+        verify(runService).executeRun(run, snapshot);
+        verify(planMapper).finishOneShotPlan(eq(1L), any(String.class), eq(NOW));
+        verify(planMapper, never()).markRunFinished(any(), any(), any(), any());
+    }
+
+    /** When the run row already exists for a one-shot plan's fixed trigger,
+     * the plan ends in FINISHED rather than being re-enqueued or rescheduled. */
+    @Test
+    void oneShotDuplicateRunFinishesPlan() {
+        when(planMapper.claimPlan(eq(1L), any(String.class))).thenReturn(1);
+        when(runService.createScheduledRun(any(), eq(NOW), any(String.class))).thenReturn(null);
+
+        BlogContentPlan plan = plan(1L);
+        plan.setRunOnce(true);
+        plan.setNextRunAt(NOW);
+        boolean enqueued = dispatcher.dispatchDue(plan);
+
+        assertThat(enqueued).isFalse();
+        verify(planMapper).finishOneShotPlan(eq(1L), any(String.class), isNull());
+        verify(planMapper, never()).recoverStaleClaim(any(), any(), any());
     }
 
     private BlogContentPlan plan(Long id) {

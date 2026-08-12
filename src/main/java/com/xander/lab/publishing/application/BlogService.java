@@ -52,6 +52,24 @@ public class BlogService {
     private final StringRedisTemplate redisTemplate;
 
     /**
+     * 根据 ID 批量查询当前用户的文章标题（仅已发布，用于定时发文计划
+     * 让 AI 避开与已发布文章的标题/角度重复）
+     */
+    public List<String> getTitlesByIds(Long userId, List<Long> ids) {
+        if (userId == null || ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return blogPostMapper.selectList(new LambdaQueryWrapper<BlogPost>()
+                        .eq(BlogPost::getUserId, userId)
+                        .eq(BlogPost::getStatus, STATUS_PUBLISHED)
+                        .in(BlogPost::getId, ids))
+                .stream()
+                .map(BlogPost::getTitle)
+                .filter(title -> title != null && !title.isBlank())
+                .toList();
+    }
+
+    /**
      * 创建博客
      * 自动计算阅读时间、处理标签关联
      *

@@ -35,6 +35,13 @@ public class BlogContentPlanController {
         return Result.success(planService.create(UserContext.getUserId(), request));
     }
 
+    /** AI 生成计划: creates `days` one-shot plans, one per day from tomorrow. */
+    @PostMapping("/ai-generate")
+    public Result<List<BlogContentPlanVO>> aiGenerate(
+            @Valid @RequestBody BlogContentPlanAiGenerateRequest request) {
+        return Result.success(planService.aiGenerate(UserContext.getUserId(), request));
+    }
+
     @GetMapping
     public Result<BlogContentPlansPage> list(@RequestParam(defaultValue = "1") long page,
                                              @RequestParam(defaultValue = "10") long size) {

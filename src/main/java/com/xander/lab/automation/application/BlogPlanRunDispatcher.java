@@ -36,18 +36,27 @@ public class BlogPlanRunDispatcher {
         try {
             run = runService.createScheduledRun(plan, scheduledAt, token);
         } catch (RuntimeException e) {
-            planMapper.recoverStaleClaim(plan.getId(),
-                    runService.resolveNextRun(plan, Instant.now()),
-                    rootMessage(e));
+            // One-shot plans never reschedule: end them so they cannot fire daily.
+            if (Boolean.TRUE.equals(plan.getRunOnce())) {
+                planMapper.finishOneShotPlan(plan.getId(), token, null);
+            } else {
+                planMapper.recoverStaleClaim(plan.getId(),
+                        runService.resolveNextRun(plan, Instant.now()),
+                        rootMessage(e));
+            }
             log.warn("[BlogPlan] create run failed for plan={}: {}", plan.getId(), rootMessage(e));
             return false;
         }
         if (run == null) {
             // Duplicate run row already exists; hand the plan back to ACTIVE
             // without creating another run for this trigger.
-            planMapper.recoverStaleClaim(plan.getId(),
-                    runService.resolveNextRun(plan, Instant.now()),
-                    "同一次触发已存在执行记录，已跳过");
+            if (Boolean.TRUE.equals(plan.getRunOnce())) {
+                planMapper.finishOneShotPlan(plan.getId(), token, null);
+            } else {
+                planMapper.recoverStaleClaim(plan.getId(),
+                        runService.resolveNextRun(plan, Instant.now()),
+                        "同一次触发已存在执行记录，已跳过");
+            }
             return false;
         }
 
@@ -58,8 +67,12 @@ public class BlogPlanRunDispatcher {
                     return;
                 }
                 runService.executeRun(run, snapshot);
-                Instant next = runService.resolveNextRun(snapshot, Instant.now());
-                planMapper.markRunFinished(snapshot.getId(), token, next, run.getScheduledAt());
+                if (Boolean.TRUE.equals(snapshot.getRunOnce())) {
+                    planMapper.finishOneShotPlan(snapshot.getId(), token, run.getScheduledAt());
+                } else {
+                    Instant next = runService.resolveNextRun(snapshot, Instant.now());
+                    planMapper.markRunFinished(snapshot.getId(), token, next, run.getScheduledAt());
+                }
             });
             return true;
         } catch (RuntimeException e) {

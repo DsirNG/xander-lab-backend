@@ -2,6 +2,7 @@ package com.xander.lab.automation.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.xander.lab.automation.api.BlogContentPlanAiGenerateRequest;
 import com.xander.lab.automation.api.BlogContentPlanCreateRequest;
 import com.xander.lab.automation.api.BlogContentPlanTopicsGenerateRequest;
 import com.xander.lab.automation.api.BlogContentPlanUpdateRequest;
@@ -24,8 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -98,6 +101,76 @@ public class BlogContentPlanService {
         return toVO(planMapper.selectById(plan.getId()), userId);
     }
 
+    /** AI 生成计划: refines the seed into one topic per day (model call, kept
+     * outside any transaction) and then creates that many one-shot plans firing
+     * tomorrow + i days at the same local time. Each plan runs exactly once. */
+    public List<BlogContentPlanVO> aiGenerate(Long userId, BlogContentPlanAiGenerateRequest request) {
+        requireUser(userId);
+        String seed = request.getTopic().strip();
+        int days = request.getDays() == null ? 7 : request.getDays();
+        ZoneId zone = EmailReminderScheduleCalculator.resolveZone(request.getTimezone());
+        LocalTime time = request.getTime() == null || request.getTime().isBlank()
+                ? LocalTime.of(9, 0)
+                : EmailReminderScheduleCalculator.parseSendTime(request.getTime());
+
+        List<String> excludeTitles = new ArrayList<>();
+        excludeTitles.add(seed);
+        planMapper.selectList(ownedWrapper(userId)).forEach(plan -> excludeTitles.addAll(plan.topics()));
+        List<String> topics = agentService.generateTopicSeries(
+                userId, seed, request.getAudience(), request.getTone(), days, excludeTitles);
+        if (topics.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "AI 主题生成失败，请稍后重试");
+        }
+        return createOneShotPlans(userId, request, zone, time, topics);
+    }
+
+    /** Inserts one one-shot plan per generated topic, tomorrow + i days at the
+     * same local `time`. Quota is checked against the whole batch up front. */
+    @Transactional
+    public List<BlogContentPlanVO> createOneShotPlans(Long userId, BlogContentPlanAiGenerateRequest request,
+                                                      ZoneId zone, LocalTime time, List<String> topics) {
+        if (planMapper.lockUserForPlanCreation(userId) == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, UNAUTHORIZED_MESSAGE);
+        }
+        int days = topics.size();
+        long activeCount = planMapper.countActivePlans(userId);
+        if (activeCount + days > maxActivePerUser) {
+            throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "定时发文计划数量已达到上限，请先暂停或删除部分计划");
+        }
+        long createdPastDay = planMapper.countCreatedInPastDay(userId);
+        if (createdPastDay + days > maxCreatedPerDay) {
+            throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "过去 24 小时创建的定时发文计划已达到上限");
+        }
+
+        LocalDate startDate = LocalDate.now(zone).plusDays(1);
+        String timeText = time.format(DateTimeFormatter.ofPattern("HH:mm"));
+        List<BlogContentPlanVO> created = new ArrayList<>();
+        for (int i = 0; i < topics.size(); i++) {
+            BlogContentPlan plan = new BlogContentPlan();
+            plan.setUserId(userId);
+            plan.setTopic(topics.get(i));
+            plan.setAudience(strip(request.getAudience()));
+            plan.setTone(strip(request.getTone()));
+            plan.setTimezone(zone.getId());
+            plan.setTriggerTime(timeText);
+            plan.setTriggerTimesJson(BlogContentPlan.toJson(List.of(timeText)));
+            plan.setTopicsJson(BlogContentPlan.toJson(List.of()));
+            plan.setNextTopicIndex(0);
+            plan.setRunOnce(true);
+            plan.setSyncCsdn(request.getSyncCsdn() == null ? Boolean.FALSE : request.getSyncCsdn());
+            plan.setNextRunAt(ZonedDateTime.of(startDate.plusDays(i), time, zone).toInstant());
+            plan.setStatus(BlogContentPlan.STATUS_ACTIVE);
+            planMapper.insert(plan);
+            created.add(toVO(planMapper.selectById(plan.getId()), userId));
+        }
+        return created;
+    }
+
     @Transactional(readOnly = true)
     public BlogContentPlansPage list(Long userId, long page, long size) {
         requireUser(userId);
@@ -125,9 +198,10 @@ public class BlogContentPlanService {
         requireUser(userId);
         BlogContentPlan plan = requireOwnedPlan(planId, userId);
         if (BlogContentPlan.STATUS_RUNNING.equals(plan.getStatus())
-                || BlogContentPlan.STATUS_CANCELLED.equals(plan.getStatus())) {
+                || BlogContentPlan.STATUS_CANCELLED.equals(plan.getStatus())
+                || BlogContentPlan.STATUS_FINISHED.equals(plan.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "计划执行中或已取消，暂不能修改");
+                    "计划执行中、已取消或已完结，暂不能修改");
         }
 
         String topic = request.getTopic();
@@ -204,13 +278,17 @@ public class BlogContentPlanService {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "当前状态无法恢复");
                 }
                 Instant now = Instant.now();
-                if (plan.getNextRunAt() == null || !plan.getNextRunAt().isAfter(now)) {
+                if (Boolean.TRUE.equals(plan.getRunOnce())
+                        || (plan.getNextRunAt() != null && plan.getNextRunAt().isAfter(now))) {
+                    // One-shot plans keep their fixed trigger instant; if it
+                    // already passed while paused, the poller fires it once
+                    // on resume and the plan then auto-finishes.
+                    updated = planMapper.resumeOwnedPlan(planId, userId);
+                } else {
                     ZoneId zone = EmailReminderScheduleCalculator.resolveZone(plan.getTimezone());
                     List<LocalTime> times = EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes());
                     Instant next = EmailReminderScheduleCalculator.resolveNextDailyAfter(zone, times, now);
                     updated = planMapper.resumeOwnedPlanAt(planId, userId, next);
-                } else {
-                    updated = planMapper.resumeOwnedPlan(planId, userId);
                 }
             }
             case "CANCELLED" -> updated = planMapper.cancelOwnedPlan(planId, userId);
@@ -242,6 +320,10 @@ public class BlogContentPlanService {
         BlogContentPlan plan = requireOwnedPlan(planId, userId);
         if (BlogContentPlan.STATUS_RUNNING.equals(plan.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "计划正在执行，请稍后再试");
+        }
+        if (Boolean.TRUE.equals(plan.getRunOnce())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "一次性计划不支持手动触发，将在计划时间自动执行一次");
         }
         return runService.createManualRun(plan);
     }
@@ -331,6 +413,7 @@ public class BlogContentPlanService {
                 .timezone(plan.getTimezone())
                 .triggerTime(plan.getTriggerTime())
                 .syncCsdn(plan.getSyncCsdn())
+                .runOnce(plan.getRunOnce())
                 .nextRunAt(plan.getNextRunAt())
                 .lastRunAt(plan.getLastRunAt())
                 .status(plan.getStatus())

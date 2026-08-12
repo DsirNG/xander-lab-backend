@@ -12,6 +12,7 @@ import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
+import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
@@ -42,6 +43,7 @@ class BlogPlanRunServiceTest {
     @Mock private BlogNotificationMapper notificationMapper;
     @Mock private BlogAgentService agentService;
     @Mock private PublicationService publicationService;
+    @Mock private BlogService blogService;
     @Mock private CsdnCredentialService csdnCredentialService;
     @Mock private BlogContentPlanMapper planMapper;
     @Mock private com.xander.lab.automation.infrastructure.BlogPlanSseService sseService;
@@ -50,7 +52,7 @@ class BlogPlanRunServiceTest {
     private BlogPlanRunService newService() {
         wireTransactionTemplate();
         return new BlogPlanRunService(runMapper, planMapper, notificationMapper, agentService,
-                publicationService, csdnCredentialService, sseService, transactionTemplate);
+                publicationService, blogService, csdnCredentialService, sseService, transactionTemplate);
     }
 
     private void wireTransactionTemplate() {
@@ -118,6 +120,39 @@ class BlogPlanRunServiceTest {
         assertThat(created).isSameAs(task);
         verify(planMapper).updateById(org.mockito.ArgumentMatchers.argThat(
                 saved -> saved.getNextTopicIndex() == 2));
+    }
+
+    /** A recurring single-topic plan must not repeat itself: the agent input
+     * lists titles this plan already published so content stays fresh. */
+    @Test
+    void createTaskListsPreviouslyPublishedTitlesToAvoidRepeats() {
+        BlogContentPlan plan = plan(false);
+        plan.setRunOnce(false);
+        when(planMapper.selectByIdForUpdate(1L)).thenReturn(plan);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            org.springframework.transaction.support.TransactionCallback<Object> callback =
+                    (org.springframework.transaction.support.TransactionCallback<Object>) invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        }).when(transactionTemplate).execute(org.mockito.ArgumentMatchers.any());
+        when(runMapper.selectRecentLocalPostIds(1L, 10)).thenReturn(List.of(88L, 89L));
+        when(blogService.getTitlesByIds(7L, List.of(88L, 89L))).thenReturn(List.of("K8s 入门", "K8s 网络实战"));
+
+        BlogAgentTask task = task(106L);
+        when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
+                .thenAnswer(invocation -> {
+                    BlogAgentTaskCreateRequest request = invocation.getArgument(1);
+                    assertThat(request.getInput())
+                            .contains("K8s 入门、K8s 网络实战")
+                            .contains("标题不要与下列标题重复")
+                            .doesNotContain("K8s 网络实战请从全新角度");
+                    return task;
+                });
+
+        BlogPlanRunService service = newService();
+        BlogAgentTask created = service.createTask(plan, 7L);
+
+        assertThat(created).isSameAs(task);
     }
 
     @Test

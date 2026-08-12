@@ -30,6 +30,11 @@ state through infrastructure adapters. Scheduling and publishing may invoke the
 blog-agent application API, but the blog agent must not own schedules or
 platform credentials.
 
+`automation` consumes `publishing` only through application services
+(`PublicationService` for publishing, `BlogService` for reading back titles of
+published posts) and never through publishing mappers. `automation` owns
+schedules, runs, and notifications; `publishing` owns articles.
+
 The migration is incremental. Existing public HTTP routes, tables and runtime
 configuration must remain compatible during package moves.
 

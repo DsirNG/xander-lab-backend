@@ -55,10 +55,19 @@ public class BlogContentPlanScheduler {
     }
 
     /** Fails plans claimed by a crashed instance and fails their in-flight runs
-     * so history shows a terminal state instead of a forever-GENERATING row. */
+     * so history shows a terminal state instead of a forever-GENERATING row.
+     * One-shot plans end in FINISHED (their single trigger already fired). */
     private void recoverStaleClaims() {
         List<BlogContentPlan> stale = planMapper.selectStaleClaims(Math.max(1, claimTimeoutMs), Math.max(1, batchSize));
         for (BlogContentPlan plan : stale) {
+            if (Boolean.TRUE.equals(plan.getRunOnce())) {
+                int recovered = planMapper.recoverStaleOneShot(plan.getId(), STALE_CLAIM_ERROR);
+                if (recovered == 1) {
+                    runMapper.failInFlightRunsForPlan(plan.getId(), STALE_CLAIM_ERROR);
+                    log.warn("[BlogPlan] recovered stale one-shot plan={} -> FINISHED", plan.getId());
+                }
+                continue;
+            }
             var next = com.xander.lab.automation.domain.EmailReminderScheduleCalculator.resolveNextDailyAfter(
                     com.xander.lab.automation.domain.EmailReminderScheduleCalculator.resolveZone(plan.getTimezone()),
                     com.xander.lab.automation.domain.EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes()),

@@ -121,6 +121,41 @@ public interface BlogContentPlanMapper extends BaseMapper<BlogContentPlan> {
                         @Param("nextRunAt") Instant nextRunAt,
                         @Param("lastRunAt") Instant lastRunAt);
 
+    /** Terminal state for a one-shot plan whose single run completed: FINISHED,
+     * no next run. `lastRunAt` carries the trigger instant of the finished run. */
+    @Update("""
+            UPDATE blog_content_plan
+            SET status = 'FINISHED',
+                next_run_at = NULL,
+                last_run_at = #{lastRunAt},
+                processing_token = NULL,
+                claimed_at = NULL,
+                error_message = NULL
+            WHERE id = #{id}
+              AND deleted_at IS NULL
+              AND status = 'RUNNING'
+              AND processing_token = #{processingToken}
+            """)
+    int finishOneShotPlan(@Param("id") Long id,
+                          @Param("processingToken") String processingToken,
+                          @Param("lastRunAt") Instant lastRunAt);
+
+    /** Stale-claim recovery for one-shot plans: the single trigger already
+     * fired, so the plan ends in FINISHED instead of rescheduling a daily run. */
+    @Update("""
+            UPDATE blog_content_plan
+            SET status = 'FINISHED',
+                next_run_at = NULL,
+                processing_token = NULL,
+                claimed_at = NULL,
+                error_message = #{errorMessage}
+            WHERE id = #{id}
+              AND deleted_at IS NULL
+              AND status = 'RUNNING'
+            """)
+    int recoverStaleOneShot(@Param("id") Long id,
+                            @Param("errorMessage") String errorMessage);
+
     @Update("""
             UPDATE blog_content_plan
             SET status = 'ACTIVE',

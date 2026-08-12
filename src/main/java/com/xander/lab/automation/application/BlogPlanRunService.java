@@ -16,6 +16,7 @@ import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
@@ -43,6 +44,7 @@ public class BlogPlanRunService {
     private final BlogNotificationMapper notificationMapper;
     private final BlogAgentService agentService;
     private final PublicationService publicationService;
+    private final BlogService blogService;
     private final CsdnCredentialService csdnCredentialService;
     private final BlogPlanSseService sseService;
     private final TransactionTemplate transactionTemplate;
@@ -137,9 +139,27 @@ public class BlogPlanRunService {
         if (StringUtils.hasText(plan.getTone())) {
             input.append("\n文风语气：").append(plan.getTone());
         }
+        // Recurring single-topic plans must not repeat themselves: tell the
+        // agent which titles this plan already published so it picks a fresh
+        // angle and a different title (no need to repeat the topic keyword).
+        List<String> previousTitles = previousPublishedTitles(plan.getId(), userId);
+        if (!previousTitles.isEmpty()) {
+            input.append("\n本计划之前已发布过以下标题，请从全新角度撰写一篇内容不重复的文章，")
+                    .append("标题不要与下列标题重复，也不一定要包含主题关键词：\n")
+                    .append(String.join("、", previousTitles));
+        }
         BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
         request.setInput(input.toString());
         return agentService.create(userId, request);
+    }
+
+    /** Titles this plan already published locally, used to deduplicate content. */
+    private List<String> previousPublishedTitles(Long planId, Long userId) {
+        List<Long> postIds = runMapper.selectRecentLocalPostIds(planId, 10);
+        if (postIds.isEmpty()) {
+            return List.of();
+        }
+        return blogService.getTitlesByIds(userId, postIds);
     }
 
     /** Locks the plan row, returns the next queued topic, and advances the

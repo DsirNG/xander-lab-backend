@@ -9,6 +9,7 @@
 --   RUNNING   -> claimed and being executed, discovered by stale-claim recovery
 --   PAUSED    -> user paused, poller skips it
 --   CANCELLED -> user cancelled, never scheduled again
+--   FINISHED  -> one-shot plan (run_once=1) executed its single trigger, done
 CREATE TABLE IF NOT EXISTS `blog_content_plan` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '内容计划主键',
   `user_id` BIGINT NOT NULL COMMENT '所属用户ID，关联 sys_user.id',
@@ -21,9 +22,10 @@ CREATE TABLE IF NOT EXISTS `blog_content_plan` (
   `topics_json` TEXT NULL COMMENT 'JSON 数组：多天主题队列，依次使用，最后一个后回到第一个',
   `next_topic_index` INT NULL DEFAULT 0 COMMENT '主题队列下一个待用下标（0 起，循环使用）',
   `sync_csdn` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否同步发布到 CSDN（0 否 / 1 是）',
+  `run_once` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '一次性计划：到点只执行一次，执行完自动完结（0 每日循环 / 1 一次性）',
   `next_run_at` TIMESTAMP(3) NOT NULL COMMENT '下次计划触发时间（UTC 绝对时刻）',
   `last_run_at` TIMESTAMP(3) NULL COMMENT '最近一次触发时间（UTC）',
-  `status` VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '计划状态：ACTIVE/RUNNING/PAUSED/CANCELLED',
+  `status` VARCHAR(16) NOT NULL DEFAULT 'ACTIVE' COMMENT '计划状态：ACTIVE/RUNNING/PAUSED/CANCELLED/FINISHED（一次性计划执行完毕自动进入 FINISHED）',
   `error_message` VARCHAR(1000) NULL COMMENT '最近一次执行失败原因',
   `processing_token` CHAR(36) NULL COMMENT '执行认领令牌，防止多实例重复执行',
   `claimed_at` TIMESTAMP(3) NULL COMMENT '执行认领时间（UTC）',

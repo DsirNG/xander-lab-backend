@@ -7,6 +7,8 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
+import java.util.List;
+
 @Mapper
 public interface BlogPlanRunMapper extends BaseMapper<BlogPlanRun> {
 
@@ -36,4 +38,18 @@ public interface BlogPlanRunMapper extends BaseMapper<BlogPlanRun> {
             """)
     int failInFlightRunsForPlan(@Param("planId") Long planId,
                                 @Param("errorMessage") String errorMessage);
+
+    /** Local post IDs this plan already published successfully, newest first.
+     * Feeds the "avoid repeating published articles" hint for the next run. */
+    @Select("""
+            SELECT local_post_id
+            FROM blog_plan_run
+            WHERE plan_id = #{planId}
+              AND status = 'SUCCEEDED'
+              AND local_post_id IS NOT NULL
+            ORDER BY finished_at DESC, id DESC
+            LIMIT #{limit}
+            """)
+    List<Long> selectRecentLocalPostIds(@Param("planId") Long planId,
+                                        @Param("limit") int limit);
 }
