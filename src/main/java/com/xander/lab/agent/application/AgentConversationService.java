@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.application.AgentTool.ProgressListener;
 import com.xander.lab.agent.domain.AgentConversation;
+import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
@@ -23,7 +24,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.function.BiConsumer;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -35,6 +39,9 @@ import java.util.function.Consumer;
 @Service
 @RequiredArgsConstructor
 public class AgentConversationService {
+    private static final int TOOL_DELTA_FLUSH_CHARS = 256;
+    private static final int ANSWER_DELTA_FLUSH_CHARS = 16;
+    private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
 
     private final AgentConversationMapper conversationMapper;
     private final AgentMessageMapper messageMapper;
@@ -43,68 +50,160 @@ public class AgentConversationService {
     private final AgentConversationProperties properties;
     private final TransactionTemplate transactionTemplate;
     private final AgentEventService eventService;
+    private final ScheduledExecutorService agentLeaseRenewer;
 
     @Transactional
     public AgentConversation create(Long userId, String message) {
+        String initialMessage = defaultText(message, "").trim();
+        if (!StringUtils.hasText(initialMessage)) {
+            throw new IllegalArgumentException("消息内容不能为空");
+        }
         AgentConversation conversation = new AgentConversation();
         conversation.setUserId(userId);
-        conversation.setTitle(excerpt(defaultText(message, "新对话"), 40));
-        conversation.setStatus("ready");
+        conversation.setTitle(excerpt(initialMessage, 40));
+        // The initial user message and running intent commit together; the controller only starts the claimed worker.
+        conversation.setStatus("running");
+        conversation.setRunVersion(1L);
         conversation.setCancelRequested(0);
         conversation.setCreatedAt(LocalDateTime.now());
         conversation.setUpdatedAt(LocalDateTime.now());
         conversationMapper.insert(conversation);
+        saveMessage(conversation.getId(), "user", "message", null, initialMessage);
         return conversation;
     }
 
-    /** Runs one full turn: user message → agent loop → final reply. */
-    public AgentConversation executeTurn(Long conversationId, Long userId, String message,
-                                         BiConsumer<String, String> onEvent) {
-        transactionTemplate.executeWithoutResult(status -> claimConversation(conversationId, userId));
-        try {
-            if (StringUtils.hasText(message)) {
-                saveMessage(conversationId, "user", "message", null, message.trim());
+    /** Atomically claims and records a subsequent turn before an async worker is scheduled. */
+    public AgentConversation prepareTurn(Long conversationId, Long userId, String message) {
+        String userMessage = defaultText(message, "").trim();
+        if (!StringUtils.hasText(userMessage)) {
+            throw new IllegalArgumentException("消息内容不能为空");
+        }
+        return transactionTemplate.execute(status -> {
+            long runVersion = claimConversation(conversationId, userId);
+            saveMessage(conversationId, "user", "message", null, userMessage);
+            AgentConversation claimed = requireOwned(conversationId, userId);
+            if (!Long.valueOf(runVersion).equals(claimed.getRunVersion())) {
+                throw new AgentRunSupersededException(conversationId, runVersion);
             }
-            return runLoop(conversationId, userId, onEvent);
-        } catch (RuntimeException e) {
-            transactionTemplate.executeWithoutResult(status -> markFailed(conversationId, userId, e.getMessage()));
-            throw e;
+            return claimed;
+        });
+    }
+
+    /** Runs one already-claimed turn; all model and tool network calls remain outside transactions. */
+    public AgentConversation executeClaimedTurn(Long conversationId, Long userId, long runVersion,
+                                                Consumer<AgentEvent> onEvent) {
+        ScheduledFuture<?> leaseRenewal;
+        try {
+            leaseRenewal = startLeaseRenewal(conversationId, userId, runVersion);
+        } catch (RuntimeException exception) {
+            failClaimedTurn(conversationId, userId, runVersion,
+                    "智能体执行租约服务繁忙，请稍后重试", onEvent);
+            throw exception;
+        }
+        try {
+            return runLoop(conversationId, userId, runVersion, onEvent);
+        } catch (AgentRunSupersededException exception) {
+            log.info("agent worker generation superseded for conversation {} and run {}",
+                    conversationId, runVersion);
+            return requireOwned(conversationId, userId);
+        } catch (RuntimeException exception) {
+            AgentEvent errorEvent = null;
+            try {
+                errorEvent = markFailed(conversationId, userId, runVersion, safeMessage(exception));
+            } catch (AgentRunSupersededException superseded) {
+                log.info("agent failure ignored for superseded conversation {} and run {}",
+                        conversationId, runVersion);
+                return requireOwned(conversationId, userId);
+            } catch (RuntimeException persistenceFailure) {
+                exception.addSuppressed(persistenceFailure);
+                log.error("agent terminal failure could not be persisted for conversation {}",
+                        conversationId, persistenceFailure);
+            }
+            if (errorEvent != null) {
+                eventService.deliver(errorEvent, onEvent);
+            }
+            throw exception;
+        } finally {
+            leaseRenewal.cancel(false);
         }
     }
 
-    /** Converts an SSE writer into an event listener that replays stored events. */
-    private Consumer<com.xander.lab.agent.domain.AgentEvent> live(BiConsumer<String, String> onEvent) {
-        return event -> onEvent.accept(event.getEventType(), event.getDataContent());
+    /** Persists a terminal error when a claimed turn cannot be submitted to the worker pool. */
+    public void failClaimedTurn(Long conversationId, Long userId, long runVersion, String message) {
+        failClaimedTurn(conversationId, userId, runVersion, message, null);
     }
 
-    private AgentConversation runLoop(Long conversationId, Long userId, BiConsumer<String, String> onEvent) {
-        Consumer<com.xander.lab.agent.domain.AgentEvent> listener = live(onEvent);
+    private void failClaimedTurn(Long conversationId, Long userId, long runVersion, String message,
+                                 Consumer<AgentEvent> onEvent) {
+        try {
+            AgentEvent errorEvent = markFailed(conversationId, userId, runVersion, message);
+            log.info("agent claimed turn failed before worker execution for conversation {} and event {}",
+                    conversationId, errorEvent.getId());
+            if (onEvent != null) {
+                eventService.deliver(errorEvent, onEvent);
+            }
+        } catch (AgentRunSupersededException ignored) {
+            log.info("agent queue rejection ignored for superseded conversation {} and run {}",
+                    conversationId, runVersion);
+        }
+    }
+
+    /** Convenience entry point used by non-HTTP callers: claim, persist input, then execute. */
+    public AgentConversation executeTurn(Long conversationId, Long userId, String message,
+        Consumer<AgentEvent> onEvent) {
+        AgentConversation claimed = prepareTurn(conversationId, userId, message);
+        return executeClaimedTurn(conversationId, userId, claimed.getRunVersion(), onEvent);
+    }
+
+    private AgentConversation runLoop(Long conversationId, Long userId, long runVersion,
+                                      Consumer<AgentEvent> listener) {
         int maxSteps = Math.max(1, properties.getMaxSteps());
         int failures = 0;
         JsonNode lastError = null;
 
         for (int step = 0; step < maxSteps; step++) {
             // 用户取消请求优先于模型调用，工具执行结束后下一轮即退出。
-            if (isCancelRequested(conversationId)) {
+            if (isCancelRequested(conversationId, userId, runVersion)) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
-                saveMessage(conversationId, "assistant", "answer", null, stopped);
-                eventService.append(conversationId, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, onEvent);
+                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
+                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
+                return finalizeReady(conversationId, userId, runVersion, listener);
             }
             String context = buildContext(conversationId, userId, lastError);
-            JsonNode decision = modelClient.decideNextStep(context, toolRegistry.describeTools());
+            AnswerProgress answerProgress = new AnswerProgress(conversationId, userId, runVersion, listener);
+            JsonNode decision;
+            try {
+                try {
+                    decision = modelClient.decideNextStepStream(
+                            context, toolRegistry.describeTools(), answerProgress::accept,
+                            () -> isCancelRequested(conversationId, userId, runVersion));
+                } finally {
+                    answerProgress.flush();
+                }
+            } catch (CancellationException exception) {
+                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
+                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
+                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
+                return finalizeReady(conversationId, userId, runVersion, listener);
+            }
+            if (isCancelRequested(conversationId, userId, runVersion)) {
+                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
+                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
+                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
+                return finalizeReady(conversationId, userId, runVersion, listener);
+            }
 
             String thought = decision.path("thought").asText("");
-            if (StringUtils.hasText(thought)) {
-                saveMessage(conversationId, "assistant", "thought", null, thought);
-                eventService.append(conversationId, "thought", thought, listener);
+            if (!decision.path("done").asBoolean(false) && StringUtils.hasText(thought)) {
+                saveActiveMessage(conversationId, userId, runVersion, "assistant", "thought", null, thought);
+                appendActive(conversationId, userId, runVersion, "thought", thought, listener);
             }
 
             if (decision.path("done").asBoolean(false)) {
                 String reply = defaultText(decision.path("reply").asText(), "已完成你的请求。");
-                saveMessage(conversationId, "assistant", "answer", null, reply);
-                eventService.append(conversationId, "answer", reply, listener);
-                return finalizeReady(conversationId, userId, onEvent);
+                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
+                appendActive(conversationId, userId, runVersion, "answer", reply, listener);
+                return finalizeReady(conversationId, userId, runVersion, listener);
             }
 
             JsonNode action = decision.path("action");
@@ -121,33 +220,51 @@ public class AgentConversationService {
             ObjectNode call = JsonNodeFactory.instance.objectNode();
             call.put("tool", toolName);
             call.set("args", args);
-            saveMessage(conversationId, "tool", "tool_call", toolName, call.toString());
-            eventService.append(conversationId, "tool_start", call, listener);
+            saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_call", toolName, call.toString());
+            appendActive(conversationId, userId, runVersion, "tool_start", call, listener);
 
+            ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, toolName, listener);
             try {
-                ProgressListener progress = message ->
-                        eventService.append(conversationId, "tool_progress",
-                                progressPayload(toolName, message), listener);
                 JsonNode result = tool.execute(userId, args, progress);
-                saveMessage(conversationId, "tool", "tool_result", toolName, result.toString());
-                eventService.append(conversationId, "tool_end",
+                progress.flushToolDelta();
+                saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName, result.toString());
+                appendActive(conversationId, userId, runVersion, "tool_end",
                         JsonNodeFactory.instance.objectNode().put("tool", toolName).set("result", result),
                         listener);
                 failures = 0;
                 lastError = null;
+            } catch (CancellationException exception) {
+                progress.flushToolDelta();
+                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
+                saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName,
+                        JsonNodeFactory.instance.objectNode()
+                                .put("tool", toolName)
+                                .put("cancelled", true)
+                                .put("error", "已停止")
+                                .toString());
+                appendActive(conversationId, userId, runVersion, "tool_error",
+                        JsonNodeFactory.instance.objectNode()
+                                .put("tool", toolName)
+                                .put("cancelled", true)
+                                .put("error", "已停止"),
+                        listener);
+                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
+                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
+                return finalizeReady(conversationId, userId, runVersion, listener);
             } catch (Exception e) {
+                progress.flushToolDelta();
                 failures++;
                 ObjectNode errorNode = JsonNodeFactory.instance.objectNode();
                 errorNode.put("tool", toolName);
                 errorNode.put("error", safeMessage(e));
-                saveMessage(conversationId, "tool", "tool_result", toolName, errorNode.toString());
-                eventService.append(conversationId, "tool_error", errorNode, listener);
+                saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName, errorNode.toString());
+                appendActive(conversationId, userId, runVersion, "tool_error", errorNode, listener);
                 if (failures >= Math.max(1, properties.getMaxToolFailures())) {
                     String reply = "很抱歉，连续多次尝试后仍然失败：" + safeMessage(e)
                             + "。请换个说法重试，或调整你的需求。";
-                    saveMessage(conversationId, "assistant", "answer", null, reply);
-                    eventService.append(conversationId, "answer", reply, listener);
-                    return finalizeReady(conversationId, userId, onEvent);
+                    saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
+                    appendActive(conversationId, userId, runVersion, "answer", reply, listener);
+                    return finalizeReady(conversationId, userId, runVersion, listener);
                 }
                 lastError = errorNode;
             }
@@ -155,51 +272,105 @@ public class AgentConversationService {
 
         String exhausted = "这一步的推理步数已达上限，为避免资源消耗我先在这里暂停。"
                 + "你可以继续补充信息或换一个更具体的需求。";
-        saveMessage(conversationId, "assistant", "answer", null, exhausted);
-        eventService.append(conversationId, "answer", exhausted, listener);
-        return finalizeReady(conversationId, userId, onEvent);
+        saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, exhausted);
+        appendActive(conversationId, userId, runVersion, "answer", exhausted, listener);
+        return finalizeReady(conversationId, userId, runVersion, listener);
     }
 
     private JsonNode progressPayload(String tool, String message) {
-        return JsonNodeFactory.instance.objectNode()
-                .put("tool", tool)
-                .put("message", message);
+        ObjectNode payload = JsonNodeFactory.instance.objectNode().put("tool", tool);
+        String raw = defaultText(message, "");
+        int separator = raw.indexOf('|');
+        if (separator > 0) {
+            payload.put("stage", raw.substring(0, separator));
+            payload.put("message", raw.substring(separator + 1));
+        } else {
+            payload.put("message", raw);
+        }
+        return payload;
     }
 
-    private AgentConversation finalizeReady(Long conversationId, Long userId,
-                                            BiConsumer<String, String> onEvent) {
-        AgentConversation conversation = transactionTemplate.execute(status -> {
+    private AgentConversation finalizeReady(Long conversationId, Long userId, long runVersion,
+                                            Consumer<AgentEvent> onEvent) {
+        TerminalResult terminal = transactionTemplate.execute(status -> {
+            LocalDateTime now = LocalDateTime.now();
             AgentConversation current = requireOwned(conversationId, userId);
+            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversationId)
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "running")
+                    .eq(AgentConversation::getRunVersion, runVersion)
+                    .set(AgentConversation::getStatus, "ready")
+                    .set(AgentConversation::getErrorMessage, null)
+                    .set(AgentConversation::getCancelRequested, 0)
+                    .set(AgentConversation::getUpdatedAt, now));
+            if (updated != 1) {
+                throw new AgentRunSupersededException(conversationId, runVersion);
+            }
             current.setStatus("ready");
             current.setErrorMessage(null);
             current.setCancelRequested(0);
-            current.setUpdatedAt(LocalDateTime.now());
-            conversationMapper.updateById(current);
-            return current;
+            current.setUpdatedAt(now);
+            AgentEvent event = eventService.storeForRun(
+                    conversationId, userId, runVersion, "complete", current, false);
+            return new TerminalResult(current, event);
         });
-        eventService.append(conversationId, "complete", conversation, live(onEvent));
-        return conversation;
+        eventService.deliver(terminal.event(), onEvent);
+        return terminal.conversation();
     }
 
     /** 请求停止当前正在执行的一轮；会话空闲时幂等返回。 */
     public AgentConversation cancel(Long conversationId, Long userId) {
-        requireOwned(conversationId, userId);
+        AgentConversation current = requireOwned(conversationId, userId);
+        long runVersion = current.getRunVersion() == null ? 0L : current.getRunVersion();
         transactionTemplate.executeWithoutResult(status -> conversationMapper.update(
                 null, new LambdaUpdateWrapper<AgentConversation>()
                         .eq(AgentConversation::getId, conversationId)
                         .eq(AgentConversation::getUserId, userId)
                         .eq(AgentConversation::getStatus, "running")
+                        .eq(AgentConversation::getRunVersion, runVersion)
                         .set(AgentConversation::getCancelRequested, 1)
                         .set(AgentConversation::getUpdatedAt, LocalDateTime.now())));
         return requireOwned(conversationId, userId);
     }
 
-    private boolean isCancelRequested(Long conversationId) {
+    private boolean isCancelRequested(Long conversationId, Long userId, long runVersion) {
         AgentConversation conversation = conversationMapper.selectById(conversationId);
-        return conversation != null && Integer.valueOf(1).equals(conversation.getCancelRequested());
+        if (conversation == null || !userId.equals(conversation.getUserId())
+                || !Long.valueOf(runVersion).equals(conversation.getRunVersion())
+                || !"running".equals(conversation.getStatus())) {
+            throw new AgentRunSupersededException(conversationId, runVersion);
+        }
+        return Integer.valueOf(1).equals(conversation.getCancelRequested());
     }
 
-    private void claimConversation(Long conversationId, Long userId) {
+    /** Keeps a claimed worker alive even while a model or tool call emits no durable progress. */
+    private ScheduledFuture<?> startLeaseRenewal(Long conversationId, Long userId, long runVersion) {
+        long staleSeconds = Math.max(60L, Math.max(1, properties.getStaleConversationMinutes()) * 60L);
+        long intervalSeconds = Math.max(1L, Math.min(MAX_LEASE_RENEW_INTERVAL_SECONDS, staleSeconds / 3L));
+        return agentLeaseRenewer.scheduleAtFixedRate(() -> {
+            try {
+                int renewed = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                        .eq(AgentConversation::getId, conversationId)
+                        .eq(AgentConversation::getUserId, userId)
+                        .eq(AgentConversation::getStatus, "running")
+                        .eq(AgentConversation::getRunVersion, runVersion)
+                        .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                if (renewed != 1) {
+                    throw new AgentRunSupersededException(conversationId, runVersion);
+                }
+            } catch (AgentRunSupersededException superseded) {
+                log.debug("agent lease renewal stopped for superseded conversation {} and run {}",
+                        conversationId, runVersion);
+                throw superseded;
+            } catch (RuntimeException exception) {
+                log.warn("agent lease renewal failed for conversation {} and run {}: {}",
+                        conversationId, runVersion, exception.getClass().getSimpleName());
+            }
+        }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+    }
+
+    private long claimConversation(Long conversationId, Long userId) {
         int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
                 .eq(AgentConversation::getId, conversationId)
                 .eq(AgentConversation::getUserId, userId)
@@ -208,12 +379,16 @@ public class AgentConversationService {
                         .or()
                         .eq(AgentConversation::getStatus, "failed"))
                 .set(AgentConversation::getStatus, "running")
+                .setSql("run_version = run_version + 1")
                 .set(AgentConversation::getErrorMessage, null)
                 .set(AgentConversation::getCancelRequested, 0)
                 .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
         if (updated == 1) {
-            eventService.clearConversationEvents(conversationId);
-            return;
+            AgentConversation claimed = requireOwned(conversationId, userId);
+            if (claimed.getRunVersion() == null) {
+                throw new IllegalStateException("智能体执行代次缺失");
+            }
+            return claimed.getRunVersion();
         }
         AgentConversation conversation = requireOwned(conversationId, userId);
         if ("running".equals(conversation.getStatus())) {
@@ -222,15 +397,26 @@ public class AgentConversationService {
         throw new ResponseStatusException(HttpStatus.CONFLICT, "当前会话状态不能继续对话");
     }
 
-    private void markFailed(Long conversationId, Long userId, String errorMessage) {
-        AgentConversation conversation = requireOwned(conversationId, userId);
-        conversation.setStatus("failed");
-        conversation.setErrorMessage(limit(errorMessage, 1000));
-        conversation.setUpdatedAt(LocalDateTime.now());
-        conversationMapper.updateById(conversation);
+    private AgentEvent markFailed(Long conversationId, Long userId, long runVersion, String errorMessage) {
+        return transactionTemplate.execute(status -> {
+            String safeError = limit(defaultText(errorMessage, "智能体任务失败，请稍后重试"), 1000);
+            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversationId)
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "running")
+                    .eq(AgentConversation::getRunVersion, runVersion)
+                    .set(AgentConversation::getStatus, "failed")
+                    .set(AgentConversation::getErrorMessage, safeError)
+                    .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+            if (updated != 1) {
+                throw new AgentRunSupersededException(conversationId, runVersion);
+            }
+            return eventService.storeForRun(
+                    conversationId, userId, runVersion, "error", safeError, false);
+        });
     }
 
-    /** 中断(超过 stale 分钟仍 running)的会话恢复为 ready，允许继续对话。 */
+    /** 中断(超过 stale 分钟仍 running)的会话恢复为 failed，保留可重试语义与错误终态。 */
     public AgentConversation resolveStale(AgentConversation conversation, Long userId) {
         if (!"running".equals(conversation.getStatus()) || conversation.getUpdatedAt() == null) {
             return conversation;
@@ -239,15 +425,26 @@ public class AgentConversationService {
         if (conversation.getUpdatedAt().isAfter(LocalDateTime.now().minusMinutes(staleMinutes))) {
             return conversation;
         }
-        int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                .eq(AgentConversation::getId, conversation.getId())
-                .eq(AgentConversation::getUserId, userId)
-                .eq(AgentConversation::getStatus, "running")
-                .le(AgentConversation::getUpdatedAt, LocalDateTime.now().minusMinutes(staleMinutes))
-                .set(AgentConversation::getStatus, "ready")
-                .set(AgentConversation::getErrorMessage, "上一轮执行中断，可继续对话")
-                .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
-        return updated == 1 ? requireOwned(conversation.getId(), userId) : conversation;
+        int updated = transactionTemplate.execute(status -> {
+            String interrupted = "上一轮执行中断，可继续对话";
+            int changed = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversation.getId())
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "running")
+                    .eq(AgentConversation::getRunVersion, conversation.getRunVersion())
+                    .le(AgentConversation::getUpdatedAt, LocalDateTime.now().minusMinutes(staleMinutes))
+                    .set(AgentConversation::getStatus, "failed")
+                    .set(AgentConversation::getErrorMessage, interrupted)
+                    .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+            long runVersion = conversation.getRunVersion() == null ? 0L : conversation.getRunVersion();
+            if (changed == 1 && eventService.latestTerminal(conversation.getId(), runVersion) == null) {
+                eventService.storeForRun(
+                        conversation.getId(), userId, runVersion, "error", interrupted, false);
+            }
+            return changed;
+        });
+        // A zero-row stale transition means another worker/request won the race; return current durable state.
+        return requireOwned(conversation.getId(), userId);
     }
 
     public AgentConversation get(Long conversationId, Long userId) {
@@ -278,6 +475,35 @@ public class AgentConversationService {
         message.setContent(content);
         message.setCreatedAt(LocalDateTime.now());
         messageMapper.insert(message);
+    }
+
+    private void saveActiveMessage(Long conversationId, Long userId, long runVersion,
+                                   String role, String kind, String toolName, String content) {
+        AgentMessage message = new AgentMessage();
+        message.setConversationId(conversationId);
+        message.setRole(role);
+        message.setKind(kind);
+        message.setToolName(toolName);
+        message.setContent(content);
+        message.setCreatedAt(LocalDateTime.now());
+        transactionTemplate.executeWithoutResult(status -> {
+            int touched = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversationId)
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "running")
+                    .eq(AgentConversation::getRunVersion, runVersion)
+                    .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+            if (touched != 1 || messageMapper.insertForActiveRun(message, userId, runVersion) != 1) {
+                throw new AgentRunSupersededException(conversationId, runVersion);
+            }
+        });
+    }
+
+    private AgentEvent appendActive(Long conversationId, Long userId, long runVersion,
+                                    String eventType, Object data, Consumer<AgentEvent> listener) {
+        AgentEvent event = eventService.storeActive(conversationId, userId, runVersion, eventType, data);
+        eventService.deliver(event, listener);
+        return event;
     }
 
     /** Builds the model context from the recent message history, dropping tool payload noise. */
@@ -319,7 +545,7 @@ public class AgentConversationService {
     private AgentConversation requireOwned(Long conversationId, Long userId) {
         AgentConversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null || userId == null || !userId.equals(conversation.getUserId())) {
-            throw new IllegalArgumentException("智能体会话不存在");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "智能体会话不存在");
         }
         return conversation;
     }
@@ -328,8 +554,14 @@ public class AgentConversationService {
         if (e instanceof ResponseStatusException response && response.getReason() != null) {
             return response.getReason();
         }
-        String message = e.getMessage();
-        return StringUtils.hasText(message) ? message : e.getClass().getSimpleName();
+        if (e instanceof IllegalArgumentException || e instanceof CancellationException) {
+            return StringUtils.hasText(e.getMessage()) ? e.getMessage() : "请求未完成";
+        }
+        if (e instanceof IllegalStateException && StringUtils.hasText(e.getMessage())
+                && !e.getMessage().contains("http") && !e.getMessage().contains("HTTP")) {
+            return e.getMessage();
+        }
+        return "智能体任务失败，请稍后重试";
     }
 
     private String defaultText(String value, String fallback) {
@@ -343,5 +575,89 @@ public class AgentConversationService {
     private String limit(String value, int maxLength) {
         String safe = value == null ? "" : value;
         return safe.length() <= maxLength ? safe : safe.substring(0, maxLength);
+    }
+
+    /** Coalesces model token callbacks into bounded durable tool events and preserves event order. */
+    private final class ToolProgress implements ProgressListener {
+        private final Long conversationId;
+        private final Long userId;
+        private final long runVersion;
+        private final String toolName;
+        private final Consumer<AgentEvent> listener;
+        private final StringBuilder deltaBuffer = new StringBuilder();
+
+        private ToolProgress(Long conversationId, Long userId, long runVersion,
+                             String toolName, Consumer<AgentEvent> listener) {
+            this.conversationId = conversationId;
+            this.userId = userId;
+            this.runVersion = runVersion;
+            this.toolName = toolName;
+            this.listener = listener;
+        }
+
+        @Override
+        public void onProgress(String message) {
+            flushToolDelta();
+            appendActive(conversationId, userId, runVersion, "tool_progress",
+                    progressPayload(toolName, message), listener);
+        }
+
+        @Override
+        public void onToolDelta(String delta) {
+            if (delta == null || delta.isEmpty()) return;
+            deltaBuffer.append(delta);
+            if (deltaBuffer.length() >= TOOL_DELTA_FLUSH_CHARS) {
+                flushToolDelta();
+            }
+        }
+
+        @Override
+        public boolean isCancellationRequested() {
+            return AgentConversationService.this.isCancelRequested(conversationId, userId, runVersion);
+        }
+
+        private void flushToolDelta() {
+            if (deltaBuffer.isEmpty()) return;
+            ObjectNode payload = JsonNodeFactory.instance.objectNode();
+            payload.put("tool", toolName);
+            payload.put("delta", deltaBuffer.toString());
+            deltaBuffer.setLength(0);
+            appendActive(conversationId, userId, runVersion, "tool_delta", payload, listener);
+        }
+    }
+
+    /** Coalesces streamed natural-language reply text into small replayable chunks. */
+    private final class AnswerProgress {
+        private final Long conversationId;
+        private final Long userId;
+        private final long runVersion;
+        private final Consumer<AgentEvent> listener;
+        private final StringBuilder buffer = new StringBuilder();
+
+        private AnswerProgress(Long conversationId, Long userId, long runVersion,
+                               Consumer<AgentEvent> listener) {
+            this.conversationId = conversationId;
+            this.userId = userId;
+            this.runVersion = runVersion;
+            this.listener = listener;
+        }
+
+        private void accept(String delta) {
+            if (delta == null || delta.isEmpty()) return;
+            buffer.append(delta);
+            if (buffer.codePointCount(0, buffer.length()) >= ANSWER_DELTA_FLUSH_CHARS) {
+                flush();
+            }
+        }
+
+        private void flush() {
+            if (buffer.isEmpty()) return;
+            String delta = buffer.toString();
+            buffer.setLength(0);
+            appendActive(conversationId, userId, runVersion, "answer_delta", delta, listener);
+        }
+    }
+
+    private record TerminalResult(AgentConversation conversation, AgentEvent event) {
     }
 }

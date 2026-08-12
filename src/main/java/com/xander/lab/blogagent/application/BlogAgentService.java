@@ -16,6 +16,7 @@ import com.xander.lab.publishing.domain.BlogMediaAsset;
 import com.xander.lab.blogagent.domain.BlogAgentMessage;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
+import com.xander.lab.blogagent.infrastructure.BlogAgentLeaseScheduler;
 import com.xander.lab.blogagent.infrastructure.BlogAgentModelClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentSourceMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentTaskMapper;
@@ -38,6 +39,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ScheduledFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.BiConsumer;
 
@@ -45,6 +49,8 @@ import java.util.function.BiConsumer;
 @Service
 @RequiredArgsConstructor
 public class BlogAgentService {
+    private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
+
     private final BlogAgentTaskMapper taskMapper;
     private final BlogAgentSourceMapper sourceMapper;
     private final BlogAgentVersionMapper versionMapper;
@@ -58,6 +64,7 @@ public class BlogAgentService {
     private final BlogAgentProperties properties;
     private final BlogAgentMessageMapper messageMapper;
     private final BlogAgentEventService eventService;
+    private final BlogAgentLeaseScheduler leaseScheduler;
 
     @Autowired
     void setPublicationService(PublicationService publicationService) {
@@ -118,50 +125,86 @@ public class BlogAgentService {
     }
 
     public BlogAgentTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
-        return execute(taskId, userId, true, onEvent);
+        return runStream(taskId, userId, onEvent, () -> false);
+    }
+
+    /** Runs the pipeline with cooperative cancellation checks between remote stages and streamed deltas. */
+    public BlogAgentTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent,
+                                     BooleanSupplier cancellationRequested) {
+        return execute(taskId, userId, true, onEvent, cancellationRequested);
     }
 
     private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming, Consumer<String> onDelta) {
         return execute(taskId, userId, streaming, (event, data) -> {
             if ("delta".equals(event)) onDelta.accept(data);
-        });
+        }, () -> false);
     }
 
     private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming, BiConsumer<String, String> onEvent) {
-        transactionTemplate.executeWithoutResult(status -> claimInitialRun(taskId, userId));
+        return execute(taskId, userId, streaming, onEvent, () -> false);
+    }
 
+    private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming,
+                                    BiConsumer<String, String> onEvent,
+                                    BooleanSupplier cancellationRequested) {
+        transactionTemplate.executeWithoutResult(status -> claimInitialRun(taskId, userId));
+        ScheduledFuture<?> leaseRenewal;
         try {
+            leaseRenewal = startLeaseRenewal(taskId, userId);
+        } catch (RuntimeException exception) {
+            transactionTemplate.executeWithoutResult(status -> markFailed(
+                    taskId, userId, "博客生成助手执行服务繁忙，请稍后重试"));
+            throw exception;
+        }
+        try {
+            checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "analyze", "正在理解你的目标和文章边界", onEvent);
             JsonNode analysis = modelClient.analyze(getInput(taskId, userId));
+            checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "research", "正在联网查找并核验相关资料", onEvent);
             JsonNode research = modelClient.research(getInput(taskId, userId), analysis);
+            checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "write", "正在根据策划和调研结果撰写文章草稿", onEvent);
             String writingInput = getInput(taskId, userId)
                     + "\n\n策划结果：\n" + analysis
                     + "\n\n调研结果：\n" + research;
             JsonNode result = streaming
-                    ? modelClient.createArticleStream(writingInput, delta -> onEvent.accept("delta", delta))
+                    ? modelClient.createArticleStream(writingInput, delta -> {
+                        checkCancellation(cancellationRequested);
+                        onEvent.accept("delta", delta);
+                    })
                     : modelClient.createArticle(writingInput);
-            transactionTemplate.executeWithoutResult(status -> persistArticleDraft(taskId, userId, result));
+            checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "illustrate", "正在按需生成并保存知识插图", onEvent);
-            IllustrationOutcome outcome = generateIllustrations(taskId, userId, result.path("illustrations"));
+            IllustrationOutcome outcome = generateIllustrations(
+                    taskId, userId, result.path("content").asText(),
+                    result.path("illustrations"), cancellationRequested);
+            checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "review", "正在进行最终逻辑与表达审校", onEvent);
             IllustrationOutcome reviewed = reviewOutcome(outcome, getInput(taskId, userId));
-            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, reviewed));
+            checkCancellation(cancellationRequested);
+            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, result, reviewed));
+        } catch (CancellationException exception) {
+            transactionTemplate.executeWithoutResult(status -> markCancelled(taskId, userId));
+            throw exception;
         } catch (RuntimeException e) {
             transactionTemplate.executeWithoutResult(status -> markFailed(taskId, userId, e.getMessage()));
             throw e;
+        } finally {
+            leaseRenewal.cancel(false);
         }
     }
 
     private void updateStage(Long taskId, Long userId, String stage, String message,
                              BiConsumer<String, String> onEvent) {
         transactionTemplate.executeWithoutResult(status -> {
-            BlogAgentTask task = requireOwnedTask(taskId, userId);
-            task.setStatus("running");
-            task.setStage(stage);
-            task.setUpdatedAt(LocalDateTime.now());
-            taskMapper.updateById(task);
+            int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                    .eq(BlogAgentTask::getId, taskId)
+                    .eq(BlogAgentTask::getUserId, userId)
+                    .eq(BlogAgentTask::getStatus, "running")
+                    .set(BlogAgentTask::getStage, stage)
+                    .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+            requireActiveRun(taskId, userId, updated);
             saveMessage(taskId, "assistant", "process", stage, message);
         });
         onEvent.accept("stage", stage + "|" + message);
@@ -170,6 +213,7 @@ public class BlogAgentService {
     private IllustrationOutcome reviewOutcome(IllustrationOutcome outcome, String request) {
         try {
             JsonNode reviewed = modelClient.reviewArticle(outcome.content(), request);
+            if (reviewed == null) return outcome;
             String content = defaultText(reviewed.path("content").asText(), outcome.content());
             return new IllustrationOutcome(content, outcome.status(), outcome.error(), outcome.generated());
         } catch (Exception e) {
@@ -204,41 +248,94 @@ public class BlogAgentService {
         return requireOwnedTask(taskId, userId).getInput();
     }
 
-    private void persistArticleDraft(Long taskId, Long userId, JsonNode result) {
+    private BlogAgentTaskVO finalizeResult(Long taskId, Long userId, JsonNode result,
+                                           IllustrationOutcome outcome) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
+        if (!"running".equals(task.getStatus())) {
+            throw new IllegalStateException("博客生成助手任务执行权已失效");
+        }
         applyResult(task, result);
-        saveSources(task.getId(), result.path("sources"));
-        task.setStatus("running");
-        task.setStage("illustrate");
-        task.setIllustrationStatus(imageClient.isEnabled() ? "running" : "disabled");
-        task.setIllustrationError(null);
-        task.setUpdatedAt(LocalDateTime.now());
-        taskMapper.updateById(task);
-    }
-
-    private BlogAgentTaskVO finalizeResult(Long taskId, Long userId, IllustrationOutcome outcome) {
-        BlogAgentTask task = requireOwnedTask(taskId, userId);
         task.setContent(outcome.content());
         task.setIllustrationStatus(outcome.status());
         task.setIllustrationError(limit(outcome.error(), 1000));
-        saveVersion(task, outcome.generated() > 0
-                ? "博客生成助手完成调研、写作、插图与审校"
-                : "博客生成助手完成调研、写作与审校");
         task.setStatus("ready");
         task.setStage("review");
         task.setUpdatedAt(LocalDateTime.now());
-        taskMapper.updateById(task);
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, taskId)
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "running")
+                .set(BlogAgentTask::getInputType, task.getInputType())
+                .set(BlogAgentTask::getAudience, task.getAudience())
+                .set(BlogAgentTask::getTone, task.getTone())
+                .set(BlogAgentTask::getTitle, task.getTitle())
+                .set(BlogAgentTask::getSummary, task.getSummary())
+                .set(BlogAgentTask::getContent, task.getContent())
+                .set(BlogAgentTask::getOutline, task.getOutline())
+                .set(BlogAgentTask::getContentBoundary, task.getContentBoundary())
+                .set(BlogAgentTask::getKnowledgeGraphJson, task.getKnowledgeGraphJson())
+                .set(BlogAgentTask::getCategoryId, task.getCategoryId())
+                .set(BlogAgentTask::getTagsJson, task.getTagsJson())
+                .set(BlogAgentTask::getReview, task.getReview())
+                .set(BlogAgentTask::getIllustrationStatus, task.getIllustrationStatus())
+                .set(BlogAgentTask::getIllustrationError, task.getIllustrationError())
+                .set(BlogAgentTask::getStatus, "ready")
+                .set(BlogAgentTask::getStage, "review")
+                .set(BlogAgentTask::getErrorMessage, null)
+                .set(BlogAgentTask::getUpdatedAt, task.getUpdatedAt()));
+        requireActiveRun(taskId, userId, updated);
+        saveSources(task.getId(), result.path("sources"));
+        saveVersion(task, outcome.generated() > 0
+                ? "博客生成助手完成调研、写作、插图与审校"
+                : "博客生成助手完成调研、写作与审校");
         saveMessage(taskId, "assistant", "result", "review", task.getTitle());
         return get(taskId, userId);
     }
 
     private void markFailed(Long taskId, Long userId, String errorMessage) {
-        BlogAgentTask task = requireOwnedTask(taskId, userId);
-        task.setStatus("failed");
-        task.setStage("analyze");
-        task.setErrorMessage(limit(errorMessage, 1000));
-        task.setUpdatedAt(LocalDateTime.now());
-        taskMapper.updateById(task);
+        taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, taskId)
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "running")
+                .set(BlogAgentTask::getStatus, "failed")
+                .set(BlogAgentTask::getStage, "analyze")
+                .set(BlogAgentTask::getErrorMessage, limit(errorMessage, 1000))
+                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+    }
+
+    private void markCancelled(Long taskId, Long userId) {
+        taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, taskId)
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "running")
+                .set(BlogAgentTask::getStatus, "failed")
+                .set(BlogAgentTask::getErrorMessage, "已由智能体会话停止")
+                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+    }
+
+    /** Marks an initial task failed when its stream cannot enter the bounded worker pool. */
+    public void failQueuedInitialRun(Long taskId, Long userId, String errorMessage) {
+        taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, taskId)
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "created")
+                .set(BlogAgentTask::getStatus, "failed")
+                .set(BlogAgentTask::getStage, "analyze")
+                .set(BlogAgentTask::getErrorMessage, limit(errorMessage, 1000))
+                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+    }
+
+    /** Records a rejected revision without changing the last verified article. */
+    public void failQueuedRevision(Long taskId, Long userId, String errorMessage) {
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, taskId)
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "ready")
+                .set(BlogAgentTask::getErrorMessage, limit(errorMessage, 1000))
+                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+        if (updated == 1) {
+            saveMessage(taskId, "assistant", "process", "review", "修改请求排队失败，已保留上一版文章");
+        }
     }
 
     public BlogAgentTaskVO get(Long taskId, Long userId) {
@@ -264,10 +361,11 @@ public class BlogAgentService {
         LocalDateTime staleBefore = LocalDateTime.now().minusMinutes(staleMinutes);
         if (task.getUpdatedAt().isAfter(staleBefore)) return task;
 
-        boolean hasDraft = StringUtils.hasText(task.getContent());
-        String status = hasDraft ? "ready" : "failed";
-        String message = hasDraft
-                ? "任务执行中断，已保留当前文章草稿"
+        boolean hasVerifiedVersion = versionMapper.selectCount(new LambdaQueryWrapper<BlogAgentVersion>()
+                .eq(BlogAgentVersion::getTaskId, task.getId())) > 0;
+        String status = hasVerifiedVersion ? "ready" : "failed";
+        String message = hasVerifiedVersion
+                ? "任务执行中断，已恢复到上一版已完成文章"
                 : "任务执行中断，请重新创建任务";
         int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
                 .eq(BlogAgentTask::getId, task.getId())
@@ -302,20 +400,30 @@ public class BlogAgentService {
     public BlogAgentTaskVO reviseStream(Long taskId, Long userId, String instruction,
                                         BiConsumer<String, String> onEvent) {
         transactionTemplate.executeWithoutResult(status -> claimRevision(taskId, userId, instruction));
+        ScheduledFuture<?> leaseRenewal;
+        try {
+            leaseRenewal = startLeaseRenewal(taskId, userId);
+        } catch (RuntimeException exception) {
+            transactionTemplate.executeWithoutResult(status -> markRevisionFailed(
+                    taskId, userId, "博客生成助手执行服务繁忙，请稍后重试"));
+            throw exception;
+        }
         try {
             updateStage(taskId, userId, "write", "正在根据你的新要求修改文章", onEvent);
             JsonNode result = modelClient.reviseArticleStream(
                     requireOwnedTask(taskId, userId).getContent(), instruction,
                     delta -> onEvent.accept("delta", delta));
-            transactionTemplate.executeWithoutResult(status -> persistArticleDraft(taskId, userId, result));
             updateStage(taskId, userId, "illustrate", "正在同步调整文章插图", onEvent);
-            IllustrationOutcome outcome = generateIllustrations(taskId, userId, result.path("illustrations"));
+            IllustrationOutcome outcome = generateIllustrations(
+                    taskId, userId, result.path("content").asText(), result.path("illustrations"));
             updateStage(taskId, userId, "review", "正在检查本轮修改", onEvent);
             IllustrationOutcome reviewed = reviewOutcome(outcome, instruction);
-            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, reviewed));
+            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, result, reviewed));
         } catch (RuntimeException e) {
             transactionTemplate.executeWithoutResult(status -> markRevisionFailed(taskId, userId, e.getMessage()));
             throw e;
+        } finally {
+            leaseRenewal.cancel(false);
         }
     }
 
@@ -342,13 +450,17 @@ public class BlogAgentService {
     }
 
     private void markRevisionFailed(Long taskId, Long userId, String errorMessage) {
-        BlogAgentTask task = requireOwnedTask(taskId, userId);
-        task.setStatus("ready");
-        task.setStage("review");
-        task.setErrorMessage(limit(errorMessage, 1000));
-        task.setUpdatedAt(LocalDateTime.now());
-        taskMapper.updateById(task);
-        saveMessage(taskId, "assistant", "process", "review", "本轮修改失败，已保留上一版文章");
+        int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getId, taskId)
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getStatus, "running")
+                .set(BlogAgentTask::getStatus, "ready")
+                .set(BlogAgentTask::getStage, "review")
+                .set(BlogAgentTask::getErrorMessage, limit(errorMessage, 1000))
+                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+        if (updated == 1) {
+            saveMessage(taskId, "assistant", "process", "review", "本轮修改失败，已保留上一版文章");
+        }
     }
 
     private void saveMessage(Long taskId, String role, String kind, String stage, String content) {
@@ -362,9 +474,16 @@ public class BlogAgentService {
         messageMapper.insert(message);
     }
 
-    private IllustrationOutcome generateIllustrations(Long taskId, Long userId, JsonNode plans) {
-        BlogAgentTask task = requireOwnedTask(taskId, userId);
-        String content = task.getContent();
+    private IllustrationOutcome generateIllustrations(Long taskId, Long userId,
+                                                       String articleContent, JsonNode plans) {
+        return generateIllustrations(taskId, userId, articleContent, plans, () -> false);
+    }
+
+    private IllustrationOutcome generateIllustrations(Long taskId, Long userId,
+                                                       String articleContent, JsonNode plans,
+                                                       BooleanSupplier cancellationRequested) {
+        requireRunningTask(taskId, userId);
+        String content = articleContent;
         if (!plans.isArray() || plans.isEmpty()) {
             return new IllustrationOutcome(removeIllustrationPlaceholders(content), "none", "", 0);
         }
@@ -377,6 +496,8 @@ public class BlogAgentService {
         List<String> errors = new ArrayList<>();
         int limit = Math.max(0, Math.min(properties.getMaxIllustrations(), 3));
         for (int index = 0; index < Math.min(plans.size(), limit); index++) {
+            // Image/model calls are not forcibly interrupted; stop at the next safe stage boundary.
+            checkCancellation(cancellationRequested);
             JsonNode plan = plans.get(index);
             String placeholder = normalizePlaceholder(plan.path("placeholder").asText(), index);
             String title = defaultText(plan.path("title").asText(), "知识插图 " + (index + 1));
@@ -417,6 +538,51 @@ public class BlogAgentService {
         content = removeIllustrationPlaceholders(content);
         String status = errors.isEmpty() ? "complete" : generatedCount > 0 ? "partial" : "failed";
         return new IllustrationOutcome(content, status, String.join("；", errors), generatedCount);
+    }
+
+    /** Keeps long remote stages from being mistaken for abandoned work. */
+    private ScheduledFuture<?> startLeaseRenewal(Long taskId, Long userId) {
+        long staleSeconds = Math.max(60L, Math.max(1, properties.getStaleTaskMinutes()) * 60L);
+        long intervalSeconds = Math.max(1L, Math.min(MAX_LEASE_RENEW_INTERVAL_SECONDS, staleSeconds / 3L));
+        return leaseScheduler.scheduleAtFixedRate(() -> {
+            try {
+                int renewed = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
+                        .eq(BlogAgentTask::getId, taskId)
+                        .eq(BlogAgentTask::getUserId, userId)
+                        .eq(BlogAgentTask::getStatus, "running")
+                        .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                if (renewed != 1) {
+                    log.debug("blog-agent lease renewal stopped for inactive task {}", taskId);
+                    throw new BlogAgentRunSupersededException(taskId);
+                }
+            } catch (BlogAgentRunSupersededException exception) {
+                throw exception;
+            } catch (RuntimeException exception) {
+                log.warn("blog-agent lease renewal failed for task {}: {}",
+                        taskId, exception.getClass().getSimpleName());
+            }
+        }, intervalSeconds);
+    }
+
+    private BlogAgentTask requireRunningTask(Long taskId, Long userId) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        if (!"running".equals(task.getStatus())) {
+            throw new BlogAgentRunSupersededException(taskId);
+        }
+        return task;
+    }
+
+    private void requireActiveRun(Long taskId, Long userId, int updated) {
+        if (updated != 1) {
+            requireOwnedTask(taskId, userId);
+            throw new BlogAgentRunSupersededException(taskId);
+        }
+    }
+
+    private void checkCancellation(BooleanSupplier cancellationRequested) {
+        if (cancellationRequested != null && cancellationRequested.getAsBoolean()) {
+            throw new CancellationException("用户已停止当前智能体任务");
+        }
     }
 
     private String normalizePlaceholder(String value, int index) {
@@ -583,4 +749,10 @@ public class BlogAgentService {
     private String excerpt(String content, int length) { return content.length() <= length ? content : content.substring(0, length - 1) + "…"; }
 
     private record IllustrationOutcome(String content, String status, String error, int generated) {}
+
+    private static final class BlogAgentRunSupersededException extends IllegalStateException {
+        private BlogAgentRunSupersededException(Long taskId) {
+            super("博客生成助手任务执行权已失效：task=" + taskId);
+        }
+    }
 }

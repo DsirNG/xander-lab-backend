@@ -29,5 +29,21 @@ public interface AgentTool {
     /** Receives human-readable progress hints during a long-running tool call. */
     interface ProgressListener {
         void onProgress(String message);
+
+        /** Streams tool-owned draft/output text without pretending it is the agent's final answer. */
+        default void onToolDelta(String delta) {
+        }
+
+        /** Lets a long-running tool cooperatively stop between remote stages. */
+        default boolean isCancellationRequested() {
+            return false;
+        }
+
+        /** Throws at cooperative cancellation checkpoints. */
+        default void checkCancellation() {
+            if (isCancellationRequested()) {
+                throw new java.util.concurrent.CancellationException("用户已停止当前智能体任务");
+            }
+        }
     }
 }

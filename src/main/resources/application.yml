@@ -140,15 +140,33 @@ blog-html:
     rate-limit-window-seconds: ${BLOG_HTML_PREVIEW_RATE_LIMIT_WINDOW_SECONDS:60}
 
 # Leave credentials in application-local.yml or environment variables; never commit them.
+agent:
+  conversation:
+    max-steps: ${AGENT_CONVERSATION_MAX_STEPS:20}
+    max-tool-failures: ${AGENT_CONVERSATION_MAX_TOOL_FAILURES:2}
+    stale-conversation-minutes: ${AGENT_CONVERSATION_STALE_MINUTES:30}
+    context-message-limit: ${AGENT_CONVERSATION_CONTEXT_MESSAGE_LIMIT:30}
+  model:
+    # Dedicated variables take precedence; blog-agent variables remain a deployment-compatible fallback.
+    base-url: ${AGENT_MODEL_BASE_URL:${BLOG_AGENT_BASE_URL:https://api.openai.com/v1}}
+    api-key: ${AGENT_MODEL_API_KEY:${BLOG_AGENT_API_KEY:}}
+    model: ${AGENT_MODEL:${BLOG_AGENT_MODEL:}}
+    web-search-enabled: ${AGENT_MODEL_WEB_SEARCH_ENABLED:${BLOG_AGENT_WEB_SEARCH_ENABLED:true}}
+    connect-timeout-millis: ${AGENT_MODEL_CONNECT_TIMEOUT_MILLIS:15000}
+    read-timeout-millis: ${AGENT_MODEL_READ_TIMEOUT_MILLIS:300000}
+
 blog:
   agent:
     base-url: ${BLOG_AGENT_BASE_URL:https://api.openai.com/v1}
     api-key: ${BLOG_AGENT_API_KEY:}
     model: ${BLOG_AGENT_MODEL:}
     web-search-enabled: ${BLOG_AGENT_WEB_SEARCH_ENABLED:true}
+    connect-timeout-millis: ${BLOG_AGENT_CONNECT_TIMEOUT_MILLIS:15000}
+    read-timeout-millis: ${BLOG_AGENT_READ_TIMEOUT_MILLIS:300000}
     image-model: ${BLOG_AGENT_IMAGE_MODEL:}
     image-size: ${BLOG_AGENT_IMAGE_SIZE:1536x1024}
     max-illustrations: ${BLOG_AGENT_MAX_ILLUSTRATIONS:3}
+    stale-task-minutes: ${BLOG_AGENT_STALE_TASK_MINUTES:30}
 
 # Image → procedural Three.js. Blank fields fall back to blog.agent credentials.
 img2three:

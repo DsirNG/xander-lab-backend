@@ -1,0 +1,152 @@
+package com.xander.lab.blogagent.infrastructure;
+
+import org.junit.jupiter.api.Test;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.URI;
+import java.net.http.HttpHeaders;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** Security-boundary tests for model-provided image download URLs and bodies. */
+class BlogAgentImageClientTest {
+
+    @Test
+    void clampsNonPositiveTimeouts() {
+        assertThat(BlogAgentImageClient.positiveTimeoutMillis(0)).isEqualTo(1);
+        assertThat(BlogAgentImageClient.positiveTimeoutMillis(-500)).isEqualTo(1);
+        assertThat(BlogAgentImageClient.positiveTimeoutMillis(2500)).isEqualTo(2500);
+    }
+
+    @Test
+    void acceptsOnlyCredentialFreeHttpsUrlsWhoseEveryAddressIsPublic() throws Exception {
+        InetAddress publicAddress = InetAddress.getByAddress(new byte[]{8, 8, 8, 8});
+
+        URI accepted = BlogAgentImageClient.validateDownloadUri(
+                "https://images.example.test/result.png", ignored -> new InetAddress[]{publicAddress});
+
+        assertThat(accepted.getScheme()).isEqualTo("https");
+        assertThatThrownBy(() -> BlogAgentImageClient.validateDownloadUri(
+                "http://images.example.test/result.png", ignored -> new InetAddress[]{publicAddress}))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("HTTPS");
+        assertThatThrownBy(() -> BlogAgentImageClient.validateDownloadUri(
+                "https://user:secret@images.example.test/result.png", ignored -> new InetAddress[]{publicAddress}))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("HTTPS");
+    }
+
+    @Test
+    void rejectsEveryBlockedAddressAndMixedDnsAnswers() throws Exception {
+        List<InetAddress> blocked = List.of(
+                InetAddress.getByAddress(new byte[]{0, 0, 0, 0}),
+                InetAddress.getByAddress(new byte[]{127, 0, 0, 1}),
+                InetAddress.getByAddress(new byte[]{(byte) 169, (byte) 254, 1, 1}),
+                InetAddress.getByAddress(new byte[]{10, 0, 0, 1}),
+                InetAddress.getByAddress(new byte[]{(byte) 224, 0, 0, 1}),
+                InetAddress.getByAddress(new byte[]{(byte) 100, 64, 0, 1}),
+                InetAddress.getByAddress(new byte[]{(byte) 198, 18, 0, 1}),
+                InetAddress.getByAddress(new byte[]{
+                        (byte) 0xfc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}));
+
+        for (InetAddress address : blocked) {
+            assertThatThrownBy(() -> BlogAgentImageClient.validateDownloadUri(
+                    "https://images.example.test/result.png", ignored -> new InetAddress[]{address}))
+                    .as("address %s", address.getHostAddress())
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("非公网");
+        }
+
+        InetAddress publicAddress = InetAddress.getByAddress(new byte[]{8, 8, 8, 8});
+        InetAddress privateAddress = InetAddress.getByAddress(new byte[]{(byte) 192, (byte) 168, 1, 2});
+        assertThatThrownBy(() -> BlogAgentImageClient.validateDownloadUri(
+                "https://images.example.test/result.png",
+                ignored -> new InetAddress[]{publicAddress, privateAddress}))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("非公网");
+    }
+
+    @Test
+    void rejectsNonImageAndRedirectResponses() {
+        HttpHeaders textHeaders = headers(Map.of("Content-Type", "text/html"));
+        assertThatThrownBy(() -> BlogAgentImageClient.readDownloadedImage(
+                200, textHeaders, new ByteArrayInputStream("not an image".getBytes())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("不是图片类型");
+
+        HttpHeaders redirectHeaders = headers(Map.of(
+                "Content-Type", "image/png",
+                "Location", "https://other.example.test/image.png"));
+        assertThatThrownBy(() -> BlogAgentImageClient.readDownloadedImage(
+                302, redirectHeaders, new ByteArrayInputStream(new byte[]{1})))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("HTTP 302");
+    }
+
+    @Test
+    void rejectsDeclaredAndStreamingBodiesAboveTenMegabytes() {
+        HttpHeaders declaredTooLarge = headers(Map.of(
+                "Content-Type", "image/png",
+                "Content-Length", Integer.toString(BlogAgentImageClient.MAX_IMAGE_BYTES + 1)));
+        assertThatThrownBy(() -> BlogAgentImageClient.readDownloadedImage(
+                200, declaredTooLarge, new ByteArrayInputStream(new byte[]{1})))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("超过 10MB");
+
+        HttpHeaders chunkedImage = headers(Map.of("Content-Type", "image/png"));
+        InputStream oversizedStream = new RepeatingInputStream(BlogAgentImageClient.MAX_IMAGE_BYTES + 1L);
+        assertThatThrownBy(() -> BlogAgentImageClient.readDownloadedImage(
+                200, chunkedImage, oversizedStream))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("超过 10MB");
+    }
+
+    @Test
+    void readsAValidBoundedImageResponse() {
+        byte[] bytes = new byte[]{(byte) 0x89, 'P', 'N', 'G'};
+        HttpHeaders headers = headers(Map.of(
+                "Content-Type", "image/png; charset=binary",
+                "Content-Length", Integer.toString(bytes.length)));
+
+        BlogAgentImageClient.GeneratedImage image = BlogAgentImageClient.readDownloadedImage(
+                200, headers, new ByteArrayInputStream(bytes));
+
+        assertThat(image.bytes()).containsExactly(bytes);
+        assertThat(image.contentType()).isEqualTo("image/png");
+        assertThat(image.extension()).isEqualTo("png");
+    }
+
+    private HttpHeaders headers(Map<String, String> values) {
+        return HttpHeaders.of(values.entrySet().stream().collect(
+                java.util.stream.Collectors.toMap(Map.Entry::getKey, entry -> List.of(entry.getValue()))),
+                (name, value) -> true);
+    }
+
+    private static final class RepeatingInputStream extends InputStream {
+        private long remaining;
+
+        private RepeatingInputStream(long remaining) {
+            this.remaining = remaining;
+        }
+
+        @Override
+        public int read() {
+            if (remaining == 0) return -1;
+            remaining--;
+            return 0;
+        }
+
+        @Override
+        public int read(byte[] target, int offset, int length) {
+            if (remaining == 0) return -1;
+            int count = (int) Math.min(length, remaining);
+            java.util.Arrays.fill(target, offset, offset + count, (byte) 0);
+            remaining -= count;
+            return count;
+        }
+    }
+}

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.blogagent.infrastructure.BlogAgentModelClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
+import com.xander.lab.blogagent.infrastructure.BlogAgentLeaseScheduler;
 import com.xander.lab.publishing.application.BlogMediaService;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
@@ -24,6 +25,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.concurrent.ScheduledFuture;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,6 +48,10 @@ class BlogAgentServiceIdempotencyTest {
     private TransactionTemplate transactionTemplate;
     @Mock
     private BlogAgentProperties properties;
+    @Mock
+    private BlogAgentVersionMapper versionMapper;
+    @Mock
+    private BlogAgentLeaseScheduler leaseScheduler;
 
     private BlogAgentService service;
 
@@ -61,7 +67,7 @@ class BlogAgentServiceIdempotencyTest {
         service = new BlogAgentService(
                 taskMapper,
                 mock(BlogAgentSourceMapper.class),
-                mock(BlogAgentVersionMapper.class),
+                versionMapper,
                 modelClient,
                 mock(com.fasterxml.jackson.databind.ObjectMapper.class),
                 transactionTemplate,
@@ -70,7 +76,11 @@ class BlogAgentServiceIdempotencyTest {
                 mock(BlogMediaService.class),
                 properties,
                 mock(BlogAgentMessageMapper.class),
-                mock(BlogAgentEventService.class));
+                mock(BlogAgentEventService.class),
+                leaseScheduler);
+        ScheduledFuture<?> renewal = mock(ScheduledFuture.class);
+        org.mockito.Mockito.lenient().doReturn(renewal).when(leaseScheduler).scheduleAtFixedRate(
+                any(Runnable.class), any(Long.class));
     }
 
     @Test
@@ -100,14 +110,15 @@ class BlogAgentServiceIdempotencyTest {
     }
 
     @Test
-    void staleRunningTaskWithDraftReturnsToReady() {
+    void staleRunningTaskWithVerifiedVersionReturnsToReady() {
         BlogAgentTask stale = task(7L, 42L, "running");
         stale.setContent("已生成的文章草稿");
         stale.setUpdatedAt(LocalDateTime.now().minusMinutes(31));
         BlogAgentTask recovered = task(7L, 42L, "ready");
         recovered.setContent(stale.getContent());
-        recovered.setErrorMessage("任务执行中断，已保留当前文章草稿");
+        recovered.setErrorMessage("任务执行中断，已恢复到上一版已完成文章");
         when(properties.getStaleTaskMinutes()).thenReturn(30);
+        when(versionMapper.selectCount(any())).thenReturn(1L);
         when(taskMapper.update(isNull(), any())).thenReturn(1);
         when(taskMapper.selectById(7L)).thenReturn(recovered);
 
@@ -115,7 +126,7 @@ class BlogAgentServiceIdempotencyTest {
 
         assertThat(result.getStatus()).isEqualTo("ready");
         assertThat(result.getContent()).isEqualTo("已生成的文章草稿");
-        assertThat(result.getErrorMessage()).contains("已保留");
+        assertThat(result.getErrorMessage()).contains("已恢复");
     }
 
     @Test
@@ -125,6 +136,7 @@ class BlogAgentServiceIdempotencyTest {
         BlogAgentTask failed = task(8L, 42L, "failed");
         failed.setErrorMessage("任务执行中断，请重新创建任务");
         when(properties.getStaleTaskMinutes()).thenReturn(30);
+        when(versionMapper.selectCount(any())).thenReturn(0L);
         when(taskMapper.update(isNull(), any())).thenReturn(1);
         when(taskMapper.selectById(8L)).thenReturn(failed);
 
@@ -133,6 +145,25 @@ class BlogAgentServiceIdempotencyTest {
         assertThat(result.getStatus()).isEqualTo("failed");
         assertThat(result.getErrorMessage()).contains("重新创建");
     }
+
+    @Test
+    void staleInitialDraftWithoutVerifiedVersionBecomesFailed() {
+        BlogAgentTask stale = task(9L, 42L, "running");
+        stale.setContent("未完成审校、没有版本记录的半成品");
+        stale.setUpdatedAt(LocalDateTime.now().minusMinutes(31));
+        BlogAgentTask failed = task(9L, 42L, "failed");
+        failed.setContent(stale.getContent());
+        failed.setErrorMessage("任务执行中断，请重新创建任务");
+        when(properties.getStaleTaskMinutes()).thenReturn(30);
+        when(versionMapper.selectCount(any())).thenReturn(0L);
+        when(taskMapper.update(isNull(), any())).thenReturn(1);
+        when(taskMapper.selectById(9L)).thenReturn(failed);
+
+        BlogAgentTask result = service.resolveStaleTask(stale, 42L);
+
+        assertThat(result.getStatus()).isEqualTo("failed");
+    }
+
 
     private void stubTransaction() {
         doAnswer(invocation -> {

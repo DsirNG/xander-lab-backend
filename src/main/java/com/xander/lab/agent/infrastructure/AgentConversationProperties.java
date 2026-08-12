@@ -12,7 +12,7 @@ public class AgentConversationProperties {
     private int maxSteps = 20;
     /** 同一工具连续失败多少次后不再重试并结束本轮。 */
     private int maxToolFailures = 2;
-    /** 会话执行中断超过该分钟数后视为中断，允许重试。 */
+/** 会话执行中断超过该分钟数后视为中断，允许重试。 */
     private int staleConversationMinutes = 30;
     /** 构建模型上下文时保留的最近消息条数。 */
     private int contextMessageLimit = 30;

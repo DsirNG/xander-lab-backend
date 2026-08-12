@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.domain.AgentConversation;
+import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
@@ -25,7 +26,11 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,9 +51,15 @@ class AgentConversationServiceTest {
     @Mock
     private AgentModelClient modelClient;
     @Mock
+    private AgentEventMapper eventMapper;
+    @Mock
     private AgentConversationProperties properties;
     @Mock
     private TransactionTemplate transactionTemplate;
+    @Mock
+    private ScheduledExecutorService agentLeaseRenewer;
+    @Mock
+    private ScheduledFuture<?> leaseRenewal;
 
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper =
             new com.fasterxml.jackson.databind.ObjectMapper()
@@ -66,15 +77,29 @@ class AgentConversationServiceTest {
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), ""),
                 AgentMessage.class);
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), ""),
+                AgentEvent.class);
     }
 
     @BeforeEach
     void setUp() {
         registry = new AgentToolRegistry(List.of(new StubTool()));
-        eventService = new AgentEventService(mock(AgentEventMapper.class), objectMapper);
+        AtomicInteger eventIds = new AtomicInteger();
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
+            AgentEvent event = invocation.getArgument(0);
+            event.setId((long) eventIds.incrementAndGet());
+            return 1;
+        }).when(eventMapper).insertForRun(any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+        org.mockito.Mockito.lenient().when(messageMapper.insertForActiveRun(any(), any(), any(Long.class)))
+                .thenReturn(1);
+        org.mockito.Mockito.lenient().when(eventMapper.selectList(any())).thenReturn(List.of());
+        eventService = new AgentEventService(eventMapper, conversationMapper, objectMapper);
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService);
+                transactionTemplate, eventService, agentLeaseRenewer);
+        org.mockito.Mockito.lenient().doReturn(leaseRenewal).when(agentLeaseRenewer)
+                .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
         org.mockito.Mockito.lenient().when(properties.getMaxSteps()).thenReturn(10);
         org.mockito.Mockito.lenient().when(properties.getMaxToolFailures()).thenReturn(2);
         org.mockito.Mockito.lenient().when(properties.getContextMessageLimit()).thenReturn(30);
@@ -87,21 +112,29 @@ class AgentConversationServiceTest {
         ObjectNode first = decisionNode(false, "需要调用博客生成工具", "blog_generate", "帮我写博客");
         ObjectNode second = decisionNode(true, "文章已生成", null, null);
         second.put("reply", "已完成，博客文章已生成");
-        when(modelClient.decideNextStep(any(), any())).thenReturn(first, second);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(first, second);
 
         AtomicInteger progressEvents = new AtomicInteger();
-        AgentConversation ready = conversation("ready");
+        AtomicInteger deltaEvents = new AtomicInteger();
+        AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(ready);
 
-        AgentConversation result = service.executeTurn(7L, 42L, "帮我写一篇博客", (event, data) -> {
-            if ("tool_progress".equals(event)) progressEvents.incrementAndGet();
+        AgentConversation result = service.executeTurn(7L, 42L, "帮我写一篇博客", event -> {
+            if ("tool_progress".equals(event.getEventType())) progressEvents.incrementAndGet();
+            if ("tool_delta".equals(event.getEventType())) {
+                deltaEvents.incrementAndGet();
+                assertThat(event.getDataContent()).contains("draft-tail");
+            }
         });
 
         assertThat(result.getStatus()).isEqualTo("ready");
         assertThat(progressEvents.get()).isEqualTo(1);
-        verify(messageMapper).insert(argThatMessage("tool", "tool_call", "blog_generate"));
-        verify(messageMapper).insert(argThatMessage("assistant", "answer", null));
+        assertThat(deltaEvents.get()).isEqualTo(1);
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("tool", "tool_call", "blog_generate"), eq(42L), eq(1L));
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
     }
 
     @Test
@@ -109,58 +142,60 @@ class AgentConversationServiceTest {
         stubTransactions();
         org.mockito.Mockito.when(properties.getMaxToolFailures()).thenReturn(1);
         ObjectNode failing = decisionNode(false, "调用工具", "failing_tool", null);
-        when(modelClient.decideNextStep(any(), any())).thenReturn(failing);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(failing);
         AgentToolRegistry failingRegistry = new AgentToolRegistry(
                 List.of(new FailingTool("failing_tool")));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, failingRegistry, properties,
-                transactionTemplate, eventService);
-        AgentConversation ready = conversation("ready");
+                transactionTemplate, eventService, agentLeaseRenewer);
+        AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(ready);
 
-        AgentConversation result = service.executeTurn(7L, 42L, "触发失败", (event, data) -> { });
+        AgentConversation result = service.executeTurn(7L, 42L, "触发失败", ignored -> { });
 
         assertThat(result.getStatus()).isEqualTo("ready");
-        verify(modelClient).decideNextStep(any(), any());
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
     }
 
     @Test
     void duplicateTurnWhileRunningIsRejected() {
-        stubClaimTransaction();
+        stubTransactions();
         when(conversationMapper.update(any(), any())).thenReturn(0);
         AgentConversation running = conversation("running");
         when(conversationMapper.selectById(7L)).thenReturn(running);
 
-        assertThatThrownBy(() -> service.executeTurn(7L, 42L, "再来一轮", (event, data) -> { }))
+        assertThatThrownBy(() -> service.executeTurn(7L, 42L, "再来一轮", ignored -> { }))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("执行中");
         org.mockito.Mockito.verifyNoInteractions(modelClient);
     }
 
     @Test
-    void staleRunningConversationIsRestoredToReady() {
+    void staleRunningConversationIsRestoredToFailed() {
+        stubTransactions();
         AgentConversation stale = conversation("running");
         stale.setUpdatedAt(LocalDateTime.now().minusMinutes(31));
-        AgentConversation recovered = conversation("ready");
+        AgentConversation recovered = conversation("failed");
         recovered.setErrorMessage("上一轮执行中断，可继续对话");
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(recovered);
 
         AgentConversation result = service.resolveStale(stale, 42L);
 
-        assertThat(result.getStatus()).isEqualTo("ready");
+        assertThat(result.getStatus()).isEqualTo("failed");
         assertThat(result.getErrorMessage()).contains("中断");
     }
 
     @Test
-    void createKeepsTitleButDoesNotPersistUserMessage() {
+    void createAtomicallyStartsAndPersistsUserMessage() {
         when(conversationMapper.insert(any())).thenReturn(1);
 
         AgentConversation result = service.create(42L, "你好");
 
         assertThat(result.getTitle()).isEqualTo("你好");
-        org.mockito.Mockito.verifyNoInteractions(messageMapper);
+        assertThat(result.getStatus()).isEqualTo("running");
+        verify(messageMapper).insert(argThatMessage("user", "message", null));
     }
 
     @Test
@@ -168,15 +203,15 @@ class AgentConversationServiceTest {
         stubTransactions();
         ObjectNode decision = decisionNode(true, "重试成功", null, null);
         decision.put("reply", "好的，重试完成了");
-        when(modelClient.decideNextStep(any(), any())).thenReturn(decision);
-        AgentConversation failed = conversation("failed");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(decision);
+        AgentConversation failed = conversation("running");
         when(conversationMapper.selectById(7L)).thenReturn(failed);
         when(conversationMapper.update(any(), any())).thenReturn(1);
 
-        AgentConversation result = service.executeTurn(7L, 42L, "重试", (event, data) -> { });
+        AgentConversation result = service.executeTurn(7L, 42L, "重试", ignored -> { });
 
         assertThat(result.getStatus()).isEqualTo("ready");
-        verify(modelClient).decideNextStep(any(), any());
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
     }
 
     @Test
@@ -187,11 +222,155 @@ class AgentConversationServiceTest {
         when(conversationMapper.selectById(7L)).thenReturn(running);
         when(conversationMapper.update(any(), any())).thenReturn(1);
 
-        AgentConversation result = service.executeTurn(7L, 42L, "继续", (event, data) -> { });
+        AgentConversation result = service.executeClaimedTurn(7L, 42L, 1L, ignored -> { });
 
         assertThat(result.getStatus()).isEqualTo("ready");
         org.mockito.Mockito.verifyNoInteractions(modelClient);
-        verify(messageMapper).insert(argThatMessage("assistant", "answer", null));
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
+    }
+
+    @Test
+    void modelCancellationPersistsStoppedAnswerAndCompletesWithoutFailure() {
+        stubTransactions();
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Consumer<String> deltas = invocation.getArgument(2);
+            deltas.accept("partial reply");
+            throw new CancellationException("cancelled");
+        });
+        List<String> eventTypes = new java.util.ArrayList<>();
+
+        AgentConversation result = service.executeClaimedTurn(
+                7L, 42L, 1L, event -> eventTypes.add(event.getEventType()));
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        assertThat(eventTypes).containsExactly("answer_delta", "answer", "complete");
+        verify(messageMapper).insertForActiveRun(
+                org.mockito.ArgumentMatchers.argThat(message ->
+                        "assistant".equals(message.getRole())
+                                && "answer".equals(message.getKind())
+                                && message.getContent().contains("已停止")),
+                eq(42L), eq(1L));
+        verify(eventMapper, org.mockito.Mockito.never()).insertForRun(
+                org.mockito.ArgumentMatchers.argThat(event -> "error".equals(event.getEventType())),
+                eq(42L), eq(false));
+    }
+
+    @Test
+    void modelFailurePersistsAndDeliversDurableErrorEvent() {
+        stubTransactions();
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("model down"));
+        AtomicReference<AgentEvent> delivered = new AtomicReference<>();
+
+        service.prepareTurn(7L, 42L, "失败测试");
+        assertThatThrownBy(() -> service.executeClaimedTurn(7L, 42L, 1L, delivered::set))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("model down");
+
+        assertThat(delivered.get()).isNotNull();
+        assertThat(delivered.get().getId()).isPositive();
+        assertThat(delivered.get().getEventType()).isEqualTo("error");
+        assertThat(delivered.get().getDataContent()).contains("model down");
+    }
+
+    @Test
+    void answerDeltaTailIsFlushedBeforeFinalAnswer() {
+        stubTransactions();
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "短回复");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Consumer<String> deltas = invocation.getArgument(2);
+            deltas.accept("短");
+            deltas.accept("回复");
+            return decision;
+        });
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> eventTypes = new java.util.ArrayList<>();
+
+        service.executeTurn(7L, 42L, "你好", event -> eventTypes.add(event.getEventType()));
+
+        assertThat(eventTypes).containsSubsequence("answer_delta", "answer", "complete");
+    }
+
+    @Test
+    void oldWorkerCannotPublishAfterANewerRunWasClaimed() {
+        ObjectNode decision = decisionNode(true, "不应公开的旧轮思考", null, null);
+        decision.put("reply", "旧轮迟到回复");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(decision);
+        AgentConversation oldRun = conversation("running");
+        AgentConversation newRun = conversation("running");
+        newRun.setRunVersion(2L);
+        when(conversationMapper.selectById(7L)).thenReturn(oldRun, newRun, newRun);
+
+        AgentConversation result = service.executeClaimedTurn(7L, 42L, 1L, ignored -> { });
+
+        assertThat(result.getRunVersion()).isEqualTo(2L);
+        assertThat(result.getStatus()).isEqualTo("running");
+        org.mockito.Mockito.verify(messageMapper, org.mockito.Mockito.never())
+                .insertForActiveRun(any(), any(), any(Long.class));
+    }
+
+    @Test
+    void claimedWorkerSchedulesAndCancelsIndependentLeaseRenewal() {
+        AgentConversation running = conversation("running");
+        running.setCancelRequested(1);
+        when(conversationMapper.selectById(7L)).thenReturn(running);
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        stubTransactions();
+
+        service.executeClaimedTurn(7L, 42L, 1L, ignored -> { });
+
+        verify(agentLeaseRenewer).scheduleAtFixedRate(
+                any(Runnable.class), eq(60L), eq(60L), eq(java.util.concurrent.TimeUnit.SECONDS));
+        verify(leaseRenewal).cancel(false);
+    }
+
+    @Test
+    void leaseRenewalFencesTheClaimedRunAndStopsWhenSuperseded() {
+        AgentConversation running = conversation("running");
+        running.setCancelRequested(1);
+        when(conversationMapper.selectById(7L)).thenReturn(running);
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        stubTransactions();
+        AtomicReference<Runnable> renewal = new AtomicReference<>();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            renewal.set(invocation.getArgument(0));
+            return leaseRenewal;
+        }).when(agentLeaseRenewer).scheduleAtFixedRate(
+                any(Runnable.class), any(Long.class), any(Long.class), any());
+
+        service.executeClaimedTurn(7L, 42L, 1L, ignored -> { });
+        when(conversationMapper.update(any(), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> renewal.get().run())
+                .isInstanceOf(AgentRunSupersededException.class);
+    }
+
+    @Test
+    void leaseSchedulerRejectionFailsTheClaimedRunBeforeRemoteWork() {
+        stubTransactions();
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("shutdown"))
+                .when(agentLeaseRenewer).scheduleAtFixedRate(
+                        any(Runnable.class), any(Long.class), any(Long.class), any());
+        AtomicReference<AgentEvent> delivered = new AtomicReference<>();
+
+        assertThatThrownBy(() -> service.executeClaimedTurn(7L, 42L, 1L, delivered::set))
+                .isInstanceOf(java.util.concurrent.RejectedExecutionException.class);
+
+        org.mockito.Mockito.verifyNoInteractions(modelClient);
+        assertThat(delivered.get()).isNotNull();
+        assertThat(delivered.get().getEventType()).isEqualTo("error");
+        assertThat(delivered.get().getId()).isPositive();
+        verify(eventMapper).insertForRun(
+                org.mockito.ArgumentMatchers.argThat(event -> "error".equals(event.getEventType())),
+                eq(42L), eq(false));
     }
 
     private AgentMessage argThatMessage(String role, String kind, String toolName) {
@@ -202,19 +381,15 @@ class AgentConversationServiceTest {
     }
 
     private void stubTransactions() {
-        stubClaimTransaction();
-        doAnswer(invocation -> {
-            org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
-            return callback.doInTransaction(mock(TransactionStatus.class));
-        }).when(transactionTemplate).execute(any());
-    }
-
-    private void stubClaimTransaction() {
-        doAnswer(invocation -> {
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
             java.util.function.Consumer<TransactionStatus> callback = invocation.getArgument(0);
             callback.accept(mock(TransactionStatus.class));
             return null;
         }).when(transactionTemplate).executeWithoutResult(any());
+        doAnswer(invocation -> {
+            org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(mock(TransactionStatus.class));
+        }).when(transactionTemplate).execute(any());
     }
 
     private AgentConversation conversation(String status) {
@@ -222,6 +397,7 @@ class AgentConversationServiceTest {
         conversation.setId(7L);
         conversation.setUserId(42L);
         conversation.setStatus(status);
+        conversation.setRunVersion(1L);
         conversation.setUpdatedAt(LocalDateTime.now());
         return conversation;
     }
@@ -258,6 +434,7 @@ class AgentConversationServiceTest {
                                                                com.fasterxml.jackson.databind.JsonNode args,
                                                                ProgressListener onProgress) {
             onProgress.onProgress("开始生成");
+            onProgress.onToolDelta("draft-tail");
             return JsonNodeFactory.instance.objectNode().put("ok", true);
         }
     }

@@ -16,6 +16,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.web.bind.annotation.*;
@@ -27,14 +28,18 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 @Slf4j
 @RestController
 @RequestMapping("/api/blog-agent/tasks")
 public class BlogAgentController {
     private static final Duration HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
+    private static final String TASK_QUEUE_BUSY_MESSAGE = "博客生成助手执行队列繁忙，请稍后重试";
+    private static final String SUBSCRIPTION_QUEUE_BUSY_MESSAGE = "博客生成助手事件订阅繁忙，请稍后重试";
 
     private final BlogAgentService service;
     private final BlogAgentEventService eventService;
@@ -82,25 +87,14 @@ public class BlogAgentController {
     @PostMapping(value = "/{id}/run/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter runStream(@PathVariable Long id, HttpServletResponse response) {
         Long userId = UserContext.getUserId();
-        SseEmitter emitter = createEmitter(id, response);
-        AtomicBoolean subscriberOpen = new AtomicBoolean(true);
-        ScheduledFuture<?> heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
-        registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
-        CompletableFuture.runAsync(() -> {
-            try (BlogAgentEventService.EventSession events = eventService.openSession(
-                    id, event -> send(id, emitter, subscriberOpen, event))) {
-                try {
+        return submitTaskStream(
+                id,
+                response,
+                events -> {
                     BlogAgentTaskVO task = service.runStream(id, userId, events::accept);
                     events.accept("complete", task);
-                } catch (Exception exception) {
-                    events.accept("error", safeMessage(exception));
-                }
-            } finally {
-                heartbeat.cancel(false);
-                completeSubscriber(emitter, subscriberOpen);
-            }
-        }, blogAgentTaskExecutor);
-        return emitter;
+                },
+                message -> service.failQueuedInitialRun(id, userId, message));
     }
 
     @PostMapping(value = "/{id}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -108,26 +102,15 @@ public class BlogAgentController {
                                    @Valid @RequestBody BlogAgentMessageRequest request,
                                    HttpServletResponse response) {
         Long userId = UserContext.getUserId();
-        SseEmitter emitter = createEmitter(id, response);
-        AtomicBoolean subscriberOpen = new AtomicBoolean(true);
-        ScheduledFuture<?> heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
-        registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
-        CompletableFuture.runAsync(() -> {
-            try (BlogAgentEventService.EventSession events = eventService.openSession(
-                    id, event -> send(id, emitter, subscriberOpen, event))) {
-                try {
+        return submitTaskStream(
+                id,
+                response,
+                events -> {
                     BlogAgentTaskVO task = service.reviseStream(
                             id, userId, request.getContent(), events::accept);
                     events.accept("complete", task);
-                } catch (Exception exception) {
-                    events.accept("error", safeMessage(exception));
-                }
-            } finally {
-                heartbeat.cancel(false);
-                completeSubscriber(emitter, subscriberOpen);
-            }
-        }, blogAgentTaskExecutor);
-        return emitter;
+                },
+                message -> service.failQueuedRevision(id, userId, message));
     }
 
     @GetMapping(value = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -140,15 +123,103 @@ public class BlogAgentController {
         long cursor = resolveCursor(lastEventId, afterEventId);
         SseEmitter emitter = createEmitter(id, response);
         AtomicBoolean subscriberOpen = new AtomicBoolean(true);
-        ScheduledFuture<?> heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
+        ScheduledFuture<?> heartbeat;
+        try {
+            heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
+        } catch (RejectedExecutionException exception) {
+            completeSubscriber(emitter, subscriberOpen);
+            throw subscriptionUnavailable(exception);
+        }
         registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
-        CompletableFuture.runAsync(
-                () -> followEvents(id, userId, cursor, emitter, subscriberOpen, heartbeat),
-                blogAgentSseExecutor);
+        try {
+            CompletableFuture.runAsync(
+                    () -> followEvents(id, userId, cursor, emitter, subscriberOpen, heartbeat),
+                    blogAgentSseExecutor);
+        } catch (RejectedExecutionException exception) {
+            closeSubscriber(emitter, subscriberOpen, heartbeat);
+            throw subscriptionUnavailable(exception);
+        }
         return emitter;
     }
 
-    private SseEmitter createEmitter(Long taskId, HttpServletResponse response) {
+    SseEmitter submitTaskStream(Long taskId,
+                                HttpServletResponse response,
+                                StreamWork work,
+                                Consumer<String> failQueued) {
+        SseEmitter emitter = createEmitter(taskId, response);
+        AtomicBoolean subscriberOpen = new AtomicBoolean(true);
+        ScheduledFuture<?> heartbeat;
+        try {
+            heartbeat = scheduleHeartbeat(taskId, emitter, subscriberOpen);
+        } catch (RejectedExecutionException exception) {
+            failRejectedTaskStream(
+                    taskId, emitter, subscriberOpen, null, failQueued, exception);
+            return emitter;
+        }
+        registerSubscriberCallbacks(taskId, emitter, subscriberOpen, heartbeat);
+        try {
+            CompletableFuture.runAsync(() -> {
+                try (BlogAgentEventService.EventSession events = eventService.openSession(
+                        taskId, event -> send(taskId, emitter, subscriberOpen, event))) {
+                    try {
+                        work.execute(events);
+                    } catch (Exception exception) {
+                        events.accept("error", safeMessage(exception));
+                    }
+                } finally {
+                    closeSubscriber(emitter, subscriberOpen, heartbeat);
+                }
+            }, blogAgentTaskExecutor);
+        } catch (RejectedExecutionException exception) {
+            failRejectedTaskStream(
+                    taskId, emitter, subscriberOpen, heartbeat, failQueued, exception);
+        }
+        return emitter;
+    }
+
+    private void failRejectedTaskStream(Long taskId,
+                                        SseEmitter emitter,
+                                        AtomicBoolean subscriberOpen,
+                                        ScheduledFuture<?> heartbeat,
+                                        Consumer<String> failQueued,
+                                        RejectedExecutionException rejection) {
+        if (heartbeat != null) heartbeat.cancel(false);
+        try {
+            failQueued.accept(TASK_QUEUE_BUSY_MESSAGE);
+        } catch (RuntimeException exception) {
+            log.error("blog-agent rejected task {} could not be marked failed", taskId, exception);
+        }
+        try (BlogAgentEventService.EventSession events = eventService.openSession(
+                taskId, event -> send(taskId, emitter, subscriberOpen, event))) {
+            events.accept("error", TASK_QUEUE_BUSY_MESSAGE);
+        } catch (RuntimeException exception) {
+            log.error("blog-agent rejected task {} error event could not be persisted", taskId, exception);
+        } finally {
+            completeSubscriber(emitter, subscriberOpen);
+        }
+        log.warn("blog-agent task executor rejected task {}", taskId, rejection);
+    }
+
+    private void closeSubscriber(SseEmitter emitter,
+                                 AtomicBoolean subscriberOpen,
+                                 ScheduledFuture<?> heartbeat) {
+        heartbeat.cancel(false);
+        completeSubscriber(emitter, subscriberOpen);
+    }
+
+    private ResponseStatusException subscriptionUnavailable(RejectedExecutionException cause) {
+        return new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE,
+                SUBSCRIPTION_QUEUE_BUSY_MESSAGE,
+                cause);
+    }
+
+    @FunctionalInterface
+    interface StreamWork {
+        void execute(BlogAgentEventService.EventSession events);
+    }
+
+    SseEmitter createEmitter(Long taskId, HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-cache, no-transform");
         response.setHeader("X-Accel-Buffering", "no");
         log.debug("blog-agent SSE subscriber opened for task {}", taskId);

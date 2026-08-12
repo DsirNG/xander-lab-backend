@@ -107,6 +107,26 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void agentConversationEventRecoveryRequiresAuthentication() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "GET", "/api/agent/conversations/9/events");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void agentConversationMessageStreamRequiresAuthentication() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/agent/conversations/9/messages/stream");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
     void readRoutesStayPublicWithoutToken() {
         MockHttpServletRequest menuRequest = new MockHttpServletRequest("GET", "/api/components/menu");
         MockHttpServletRequest detailRequest = new MockHttpServletRequest("GET", "/api/components/toast");

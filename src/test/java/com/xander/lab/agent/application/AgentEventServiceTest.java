@@ -1,11 +1,11 @@
 package com.xander.lab.agent.application;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
+import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentEventMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
@@ -16,90 +16,75 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class AgentEventServiceTest {
-
-    @Mock
-    private AgentEventMapper eventMapper;
-
+    @Mock private AgentEventMapper eventMapper;
+    @Mock private AgentConversationMapper conversationMapper;
     private AgentEventService service;
 
     @BeforeAll
-    static void initializeMybatisMetadata() {
-        TableInfoHelper.initTableInfo(
-                new MapperBuilderAssistant(new MybatisConfiguration(), ""),
-                AgentEvent.class);
+    static void metadata() {
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), AgentEvent.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), ""), AgentConversation.class);
     }
 
     @BeforeEach
     void setUp() {
-        service = new AgentEventService(eventMapper, new ObjectMapper());
+        service = new AgentEventService(eventMapper, conversationMapper, new ObjectMapper());
     }
 
     @Test
-    void appendStoresEventAndDeliversItToLiveListener() {
-        AtomicReference<AgentEvent> delivered = new AtomicReference<>();
+    void activeEventIsPersistedBeforeDeliveryAndCarriesRunVersion() {
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(eventMapper.insertForRun(any(), eq(42L), eq(true))).thenAnswer(invocation -> {
+            AgentEvent event = invocation.getArgument(0);
+            event.setId(9L);
+            return 1;
+        });
+        AgentEvent event = service.storeActive(7L, 42L, 3L, "answer", "hello");
 
-        service.append(7L, "tool_start", JsonNodeFactory.instance.objectNode().put("tool", "blog_generate"),
-                delivered::set);
-
-        org.mockito.ArgumentCaptor<AgentEvent> captor =
-                org.mockito.ArgumentCaptor.forClass(AgentEvent.class);
-        verify(eventMapper).insert(captor.capture());
-        AgentEvent stored = captor.getValue();
-        assertThat(stored.getConversationId()).isEqualTo(7L);
-        assertThat(stored.getEventType()).isEqualTo("tool_start");
-        assertThat(stored.getDataContent()).contains("blog_generate");
-        assertThat(delivered.get()).isSameAs(stored);
+        assertThat(event.getId()).isEqualTo(9L);
+        assertThat(event.getRunVersion()).isEqualTo(3L);
+        assertThat(event.getDataContent()).isEqualTo("hello");
+        verify(eventMapper).insertForRun(event, 42L, true);
     }
 
     @Test
-    void appendPersistsPlainStringDataVerbatim() {
-        service.append(7L, "answer", "hello world", ignored -> { });
+    void structuredPayloadIsStillStoredAsJson() {
+        when(eventMapper.insertForRun(any(), eq(42L), eq(false))).thenAnswer(invocation -> {
+            AgentEvent event = invocation.getArgument(0);
+            event.setId(10L);
+            return 1;
+        });
 
-        org.mockito.ArgumentCaptor<AgentEvent> captor =
-                org.mockito.ArgumentCaptor.forClass(AgentEvent.class);
-        verify(eventMapper).insert(captor.capture());
-        assertThat(captor.getValue().getDataContent()).isEqualTo("hello world");
+        AgentEvent event = service.storeForRun(
+                7L, 42L, 3L, "complete", java.util.Map.of("status", "ready"), false);
+
+        assertThat(event.getDataContent()).isEqualTo("{\"status\":\"ready\"}");
     }
 
     @Test
-    void listAfterReturnsOnlyNewerEvents() {
-        AgentEvent event = new AgentEvent();
-        event.setId(6L);
-        when(eventMapper.selectList(any())).thenReturn(List.of(event));
-
-        List<AgentEvent> events = service.listAfter(7L, 5L);
-
-        assertThat(events).hasSize(1);
-        assertThat(events.get(0).getId()).isEqualTo(6L);
+    void staleGenerationCannotPersistOrDeliverAnEvent() {
+        when(conversationMapper.update(any(), any())).thenReturn(0);
+        assertThatThrownBy(() -> service.storeActive(7L, 42L, 2L, "answer", "late"))
+                .isInstanceOf(AgentRunSupersededException.class);
     }
 
     @Test
-    void clearDeletesAllEventsOfConversation() {
-        service.clearConversationEvents(7L);
+    void replayAndTerminalQueriesAreScopedToRunVersion() {
+        AgentEvent error = new AgentEvent();
+        error.setId(10L);
+        when(eventMapper.selectList(any())).thenReturn(List.of(error));
 
-        org.mockito.ArgumentCaptor<LambdaQueryWrapper<AgentEvent>> captor =
-                org.mockito.ArgumentCaptor.forClass(LambdaQueryWrapper.class);
-        verify(eventMapper).delete(captor.capture());
-        assertThat(captor.getValue().getSqlSegment()).contains("conversation_id");
-    }
-
-    @Test
-    void appendKeepsWorkingWhenPersistenceFails() {
-        when(eventMapper.insert(any())).thenThrow(new RuntimeException("db down"));
-        AtomicReference<AgentEvent> delivered = new AtomicReference<>();
-
-        service.append(7L, "answer", "still delivered", delivered::set);
-
-        assertThat(delivered.get()).isNotNull();
-        assertThat(delivered.get().getDataContent()).isEqualTo("still delivered");
+        assertThat(service.listAfter(7L, 3L, 8L)).containsExactly(error);
+        assertThat(service.latestTerminal(7L, 3L)).isSameAs(error);
     }
 }

@@ -2,27 +2,55 @@ package com.xander.lab.blogagent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 @Component
-@RequiredArgsConstructor
 public class BlogAgentImageClient {
+    static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
     private final BlogAgentProperties properties;
     private final ObjectMapper objectMapper;
+    private final RestClient generationClient;
+    private final HttpClient downloadClient;
+
+    public BlogAgentImageClient(BlogAgentProperties properties, ObjectMapper objectMapper) {
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(positiveTimeoutMillis(properties.getConnectTimeoutMillis()));
+        requestFactory.setReadTimeout(positiveTimeoutMillis(properties.getReadTimeoutMillis()));
+        this.generationClient = RestClient.builder()
+                .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
+                .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
+                .requestFactory(requestFactory)
+                .build();
+        this.downloadClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(positiveTimeoutMillis(properties.getConnectTimeoutMillis())))
+                // Redirect targets must never bypass the address validation below.
+                .followRedirects(HttpClient.Redirect.NEVER)
+                .build();
+    }
 
     public boolean isEnabled() {
         return StringUtils.hasText(properties.getApiKey()) && StringUtils.hasText(properties.getImageModel());
@@ -37,11 +65,7 @@ public class BlogAgentImageClient {
         payload.put("size", properties.getImageSize());
         payload.put("n", 1);
 
-        JsonNode response = RestClient.builder()
-                .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
-                .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
-                .build()
-                .post()
+        JsonNode response = generationClient.post()
                 .uri("/images/generations")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(payload)
@@ -51,7 +75,15 @@ public class BlogAgentImageClient {
         JsonNode image = response == null ? objectMapper.createObjectNode() : response.path("data").path(0);
         String base64 = image.path("b64_json").asText();
         if (StringUtils.hasText(base64)) {
-            return new GeneratedImage(Base64.getDecoder().decode(base64), "image/png", "png");
+            long maximumEncodedLength = ((long) MAX_IMAGE_BYTES + 2L) / 3L * 4L;
+            if (base64.length() > maximumEncodedLength) {
+                throw new IllegalStateException("图片模型返回的图片超过 10MB 限制");
+            }
+            byte[] bytes = Base64.getDecoder().decode(base64);
+            if (bytes.length > MAX_IMAGE_BYTES) {
+                throw new IllegalStateException("图片模型返回的图片超过 10MB 限制");
+            }
+            return new GeneratedImage(bytes, "image/png", "png");
         }
         String url = image.path("url").asText();
         if (!StringUtils.hasText(url)) throw new IllegalStateException("图片模型没有返回可读取的图片");
@@ -59,32 +91,126 @@ public class BlogAgentImageClient {
     }
 
     private GeneratedImage download(String url) {
+        URI uri = validateDownloadUri(url, InetAddress::getAllByName);
         try {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
-                    .timeout(Duration.ofMinutes(3))
+            HttpRequest request = HttpRequest.newBuilder(uri)
+                    .timeout(Duration.ofMillis(positiveTimeoutMillis(properties.getReadTimeoutMillis())))
                     .GET()
                     .build();
-            HttpResponse<byte[]> response = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(15))
-                    .followRedirects(HttpClient.Redirect.NORMAL)
-                    .build()
-                    .send(request, HttpResponse.BodyHandlers.ofByteArray());
-            if (response.statusCode() < 200 || response.statusCode() >= 300 || response.body().length == 0) {
-                throw new IllegalStateException("下载生成图片失败（HTTP " + response.statusCode() + "）");
-            }
-            String contentType = response.headers().firstValue("Content-Type").orElse("image/png").split(";")[0];
-            String extension = contentType.contains("jpeg") ? "jpg" : contentType.contains("webp") ? "webp" : "png";
-            return new GeneratedImage(response.body(), contentType, extension);
+            HttpResponse<InputStream> response = downloadClient.send(
+                    request, HttpResponse.BodyHandlers.ofInputStream());
+            return readDownloadedImage(response.statusCode(), response.headers(), response.body());
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("下载生成图片被中断", e);
-        } catch (Exception e) {
-            throw new IllegalStateException("下载生成图片失败：" + e.getMessage(), e);
+        } catch (IOException e) {
+            throw new IllegalStateException("下载生成图片连接失败", e);
         }
+    }
+
+    static URI validateDownloadUri(String rawUrl, HostResolver resolver) {
+        URI uri;
+        try {
+            uri = URI.create(rawUrl);
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("图片模型返回的下载地址无效", exception);
+        }
+        if (!"https".equalsIgnoreCase(uri.getScheme())
+                || !StringUtils.hasText(uri.getHost())
+                || uri.getRawUserInfo() != null
+                || uri.getRawFragment() != null) {
+            throw new IllegalStateException("图片模型返回的下载地址必须是无凭据的 HTTPS 地址");
+        }
+
+        InetAddress[] addresses;
+        try {
+            addresses = resolver.resolve(uri.getHost());
+        } catch (UnknownHostException exception) {
+            throw new IllegalStateException("图片模型返回的下载地址无法解析", exception);
+        }
+        if (addresses == null || addresses.length == 0) {
+            throw new IllegalStateException("图片模型返回的下载地址无法解析");
+        }
+        for (InetAddress address : addresses) {
+            if (address == null || isBlockedAddress(address)) {
+                throw new IllegalStateException("图片模型返回的下载地址指向非公网地址");
+            }
+        }
+        return uri;
+    }
+
+    private static boolean isBlockedAddress(InetAddress address) {
+        if (address.isAnyLocalAddress()
+                || address.isLoopbackAddress()
+                || address.isLinkLocalAddress()
+                || address.isSiteLocalAddress()
+                || address.isMulticastAddress()) {
+            return true;
+        }
+        byte[] bytes = address.getAddress();
+        if (bytes.length == 16) {
+            // Java's site-local check does not include IPv6 unique-local fc00::/7.
+            return (bytes[0] & 0xfe) == 0xfc;
+        }
+        if (bytes.length != 4) return true;
+        int first = Byte.toUnsignedInt(bytes[0]);
+        int second = Byte.toUnsignedInt(bytes[1]);
+        // Reject IPv4 special-use ranges commonly routed inside hosting networks.
+        return first == 0
+                || (first == 100 && second >= 64 && second <= 127)
+                || (first == 198 && (second == 18 || second == 19))
+                || first >= 224;
+    }
+
+    static GeneratedImage readDownloadedImage(int statusCode, HttpHeaders headers, InputStream body) {
+        try (InputStream input = body) {
+            if (statusCode < 200 || statusCode >= 300) {
+                throw new IllegalStateException("下载生成图片失败（HTTP " + statusCode + "）");
+            }
+            String contentType = headers.firstValue("Content-Type")
+                    .map(value -> value.split(";", 2)[0].trim().toLowerCase(Locale.ROOT))
+                    .orElse("");
+            if (!contentType.startsWith("image/")) {
+                throw new IllegalStateException("生成图片下载响应不是图片类型");
+            }
+            long declaredLength = headers.firstValueAsLong("Content-Length").orElse(-1L);
+            if (declaredLength > MAX_IMAGE_BYTES) {
+                throw new IllegalStateException("生成图片下载响应超过 10MB 限制");
+            }
+
+            ByteArrayOutputStream output = new ByteArrayOutputStream(
+                    declaredLength > 0 ? (int) declaredLength : 8192);
+            byte[] buffer = new byte[8192];
+            int total = 0;
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                if (total > MAX_IMAGE_BYTES - read) {
+                    throw new IllegalStateException("生成图片下载响应超过 10MB 限制");
+                }
+                output.write(buffer, 0, read);
+                total += read;
+            }
+            if (total == 0) throw new IllegalStateException("生成图片下载响应为空");
+            String extension = contentType.contains("jpeg") ? "jpg"
+                    : contentType.contains("webp") ? "webp"
+                    : contentType.contains("gif") ? "gif" : "png";
+            return new GeneratedImage(output.toByteArray(), contentType, extension);
+        } catch (IOException exception) {
+            throw new IllegalStateException("读取生成图片下载响应失败", exception);
+        }
+    }
+
+    static int positiveTimeoutMillis(int configured) {
+        return Math.max(1, configured);
     }
 
     private String trimTrailingSlash(String value) {
         return value != null && value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    @FunctionalInterface
+    interface HostResolver {
+        InetAddress[] resolve(String host) throws UnknownHostException;
     }
 
     public record GeneratedImage(byte[] bytes, String contentType, String extension) {}

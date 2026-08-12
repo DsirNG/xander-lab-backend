@@ -18,6 +18,8 @@ public class AgentConversation {
     /** 会话状态：ready/failed 表示空闲可继续对话，running 表示一轮执行进行中。 */
     private String status;
     private String errorMessage;
+    /** 当前执行代次；每次成功 claim 后递增，用于隔离旧 worker 的迟到写入。 */
+    private Long runVersion;
     /** 用户取消请求标记：0=未请求，1=执行中轮询到后立即停止；新一轮开始时复位。 */
     private Integer cancelRequested;
     private LocalDateTime createdAt;

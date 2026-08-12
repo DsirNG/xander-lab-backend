@@ -51,6 +51,7 @@ public class BlogGenerationTool implements AgentTool {
 
     @Override
     public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+        onProgress.checkCancellation();
         String input = args.path("input").asText("");
         if (!StringUtils.hasText(input)) {
             throw new IllegalArgumentException("博客生成工具缺少参数 input");
@@ -60,10 +61,13 @@ public class BlogGenerationTool implements AgentTool {
         var task = blogAgentService.create(userId, request);
         onProgress.onProgress("收到，开始处理你的主题…");
         BlogAgentTaskVO result = blogAgentService.runStream(task.getId(), userId, (event, data) -> {
-            if ("stage".equals(event)) {
-                onProgress.onProgress(prettyStage(String.valueOf(data)));
-            }
-        });
+                    if ("stage".equals(event)) {
+                        onProgress.onProgress(prettyStage(String.valueOf(data)));
+                    } else if ("delta".equals(event) && StringUtils.hasText(data)) {
+                        onProgress.onToolDelta(data);
+                    }
+                }, onProgress::isCancellationRequested);
+        onProgress.checkCancellation();
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
@@ -80,7 +84,7 @@ public class BlogGenerationTool implements AgentTool {
         return StringUtils.hasText(value) ? value.trim() : fallback;
     }
 
-    /** 把流水线 stage 事件（stage|中文文案）转成用户友好的进度文案。 */
+    /** 把流水线 stage 事件（stage|中文文案）转成用户友好的进度文案，保留 stage 供前端分段渲染。 */
     private String prettyStage(String raw) {
         int separator = raw.indexOf('|');
         if (separator < 0) {
@@ -88,7 +92,7 @@ public class BlogGenerationTool implements AgentTool {
         }
         String stage = raw.substring(0, separator);
         String message = raw.substring(separator + 1);
-        return switch (stage) {
+        String friendly = switch (stage) {
             case "analyze" -> "正在分析你的主题和文章定位…";
             case "research" -> "正在联网搜索相关资料…";
             case "write" -> "开始写作正文…";
@@ -96,5 +100,6 @@ public class BlogGenerationTool implements AgentTool {
             case "review" -> "正在做发布前审校…";
             default -> StringUtils.hasText(message) ? message : raw;
         };
+        return stage + "|" + friendly;
     }
 }

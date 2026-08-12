@@ -82,6 +82,17 @@ class BlogAgentModelClientTest {
         };
     }
 
+    private Responder respondTruncatedStream(String body, int advertisedExtraBytes) {
+        return exchange -> {
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, bytes.length + advertisedExtraBytes);
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(bytes);
+            }
+        };
+    }
+
     private String streamBody() throws IOException {
         String delta = objectMapper.writeValueAsString(
                 Map.of("type", "response.output_text.delta", "delta", "{\"angle\":\"深度优先\"}"));
@@ -93,6 +104,12 @@ class BlogAgentModelClientTest {
         String event = objectMapper.writeValueAsString(
                 Map.of("type", "error", "error", Map.of("message", "Upstream request failed", "type", "upstream_error")));
         return "data: " + event + "\n\n";
+    }
+
+    private String streamDeltaThenError() throws IOException {
+        String delta = objectMapper.writeValueAsString(
+                Map.of("type", "response.output_text.delta", "delta", "{\"angle\":"));
+        return "data: " + delta + "\n\n" + streamErrorEvent();
     }
 
     @Test
@@ -144,5 +161,46 @@ class BlogAgentModelClientTest {
         JsonNode result = client.createArticleStream("测试主题", deltas::append);
         assertEquals("{\"angle\":\"深度优先\"}", result.toString());
         assertEquals(2, requests.get());
+    }
+
+    @Test
+    void doesNotRetrySseErrorAfterVisibleDelta() throws Exception {
+        startServer(List.of(respondStream(streamDeltaThenError()), respondStream(streamBody())));
+        StringBuilder deltas = new StringBuilder();
+
+        assertThrows(RuntimeException.class,
+                () -> client.createArticleStream("测试主题", deltas::append));
+
+        assertEquals("{\"angle\":", deltas.toString());
+        assertEquals(1, requests.get());
+    }
+
+    @Test
+    void doesNotRetryTruncatedConnectionAfterVisibleDelta() throws Exception {
+        String stream = streamDeltaThenError();
+        String deltaOnly = stream.substring(0, stream.indexOf("data: ", 1));
+        startServer(List.of(respondTruncatedStream(deltaOnly, 64), respondStream(streamBody())));
+        StringBuilder deltas = new StringBuilder();
+
+        assertThrows(RuntimeException.class,
+                () -> client.createArticleStream("测试主题", deltas::append));
+
+        assertEquals("{\"angle\":", deltas.toString());
+        assertEquals(1, requests.get());
+    }
+
+    @Test
+    void doesNotRetryTransientConsumerFailureAfterVisibleDelta() throws Exception {
+        startServer(List.of(respondStream(streamBody()), respondStream(streamBody())));
+        AtomicInteger delivered = new AtomicInteger();
+
+        assertThrows(BlogAgentModelClient.ModelGatewayException.class,
+                () -> client.createArticleStream("测试主题", delta -> {
+                    delivered.incrementAndGet();
+                    throw new BlogAgentModelClient.ModelGatewayException(502, "consumer failed");
+                }));
+
+        assertEquals(1, delivered.get());
+        assertEquals(1, requests.get());
     }
 }

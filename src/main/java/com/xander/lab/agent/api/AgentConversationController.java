@@ -54,6 +54,13 @@ public class AgentConversationController {
     public Result<AgentConversationVO> create(@Valid @RequestBody AgentConversationMessageRequest request) {
         Long userId = UserContext.getUserId();
         var conversation = service.create(userId, request.getContent());
+        try {
+            startClaimedTurn(conversation.getId(), userId, conversation.getRunVersion());
+        } catch (RuntimeException exception) {
+            // The durable conversation id is returned even when scheduling fails, avoiding duplicate retry-created sessions.
+            service.failClaimedTurn(conversation.getId(), userId, conversation.getRunVersion(),
+                    "智能体执行队列繁忙，请稍后重试");
+        }
         return Result.success(buildVO(conversation.getId(), userId));
     }
 
@@ -82,21 +89,35 @@ public class AgentConversationController {
                                   @Valid @RequestBody AgentConversationMessageRequest request,
                                   HttpServletResponse response) {
         Long userId = UserContext.getUserId();
+        // Claim and persist the user message before committing an SSE 200 response.
+        AgentConversation claimed = service.prepareTurn(id, userId, request.getContent());
+        long runVersion = claimed.getRunVersion();
         SseEmitter emitter = createEmitter(id, response);
         AtomicBoolean subscriberOpen = new AtomicBoolean(true);
-        ScheduledFuture<?> heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
+        ScheduledFuture<?> heartbeat;
+        try {
+            heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
+        } catch (RuntimeException exception) {
+            failClaimedStream(id, userId, runVersion, emitter, subscriberOpen, null);
+            return emitter;
+        }
         registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
-        CompletableFuture.runAsync(() -> {
-            try {
-                service.executeTurn(id, userId, request.getContent(),
-                        (event, data) -> send(id, emitter, subscriberOpen, event, data));
-            } catch (Exception exception) {
-                send(id, emitter, subscriberOpen, "error", safeMessage(exception));
-            } finally {
-                heartbeat.cancel(false);
-                completeSubscriber(emitter, subscriberOpen);
-            }
-        }, agentTaskExecutor);
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    service.executeClaimedTurn(id, userId, runVersion,
+                            event -> send(id, emitter, subscriberOpen, event));
+                } catch (Exception exception) {
+                    // executeClaimedTurn persists and delivers the durable error event.
+                    log.debug("agent claimed turn ended exceptionally for conversation {}", id);
+                } finally {
+                    heartbeat.cancel(false);
+                    completeSubscriber(emitter, subscriberOpen);
+                }
+            }, agentTaskExecutor);
+        } catch (RuntimeException exception) {
+            failClaimedStream(id, userId, runVersion, emitter, subscriberOpen, heartbeat);
+        }
         return emitter;
     }
 
@@ -106,15 +127,29 @@ public class AgentConversationController {
                                 @RequestParam(value = "afterEventId", required = false) Long afterEventId,
                                 HttpServletResponse response) {
         Long userId = UserContext.getUserId();
-        service.get(id, userId);
+        AgentConversation snapshot = service.get(id, userId);
+        long runVersion = snapshot.getRunVersion() == null ? 0L : snapshot.getRunVersion();
         long cursor = resolveCursor(lastEventId, afterEventId);
         SseEmitter emitter = createEmitter(id, response);
         AtomicBoolean subscriberOpen = new AtomicBoolean(true);
-        ScheduledFuture<?> heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
+        ScheduledFuture<?> heartbeat;
+        try {
+            heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
+        } catch (RuntimeException exception) {
+            completeSubscriber(emitter, subscriberOpen);
+            throw serviceUnavailable(exception);
+        }
         registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
-        CompletableFuture.runAsync(
-                () -> followEvents(id, userId, cursor, emitter, subscriberOpen, heartbeat),
-                agentSseExecutor);
+        try {
+            CompletableFuture.runAsync(
+                    () -> followEvents(id, userId, runVersion, cursor,
+                            emitter, subscriberOpen, heartbeat),
+                    agentSseExecutor);
+        } catch (RuntimeException exception) {
+            heartbeat.cancel(false);
+            completeSubscriber(emitter, subscriberOpen);
+            throw serviceUnavailable(exception);
+        }
         return emitter;
     }
 
@@ -123,6 +158,16 @@ public class AgentConversationController {
                 .conversation(service.get(conversationId, userId))
                 .messages(service.listMessages(conversationId, userId))
                 .build();
+    }
+
+    private void startClaimedTurn(Long conversationId, Long userId, long runVersion) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                service.executeClaimedTurn(conversationId, userId, runVersion, ignored -> { });
+            } catch (RuntimeException exception) {
+                log.debug("initial agent turn ended exceptionally for conversation {}", conversationId);
+            }
+        }, agentTaskExecutor);
     }
 
     private SseEmitter createEmitter(Long conversationId, HttpServletResponse response) {
@@ -154,11 +199,6 @@ public class AgentConversationController {
     }
 
     private void send(Long conversationId, SseEmitter emitter, AtomicBoolean subscriberOpen,
-                      String event, Object data) {
-        send(conversationId, emitter, subscriberOpen, null, event, data);
-    }
-
-    private void send(Long conversationId, SseEmitter emitter, AtomicBoolean subscriberOpen,
                       AgentEvent event) {
         send(conversationId, emitter, subscriberOpen, event.getId(),
                 event.getEventType(), event.getDataContent());
@@ -178,17 +218,21 @@ public class AgentConversationController {
         }
     }
 
-    private void followEvents(Long conversationId, Long userId, long initialCursor,
+    private void followEvents(Long conversationId, Long userId, long runVersion, long initialCursor,
                               SseEmitter emitter, AtomicBoolean subscriberOpen,
                               ScheduledFuture<?> heartbeat) {
         long cursor = initialCursor;
         try {
             while (subscriberOpen.get()) {
-                List<AgentEvent> events = eventService.listAfter(conversationId, cursor);
+                List<AgentEvent> events = eventService.listAfter(conversationId, runVersion, cursor);
                 if (events.isEmpty()) {
                     var snapshot = service.get(conversationId, userId);
-                    if (!"running".equals(snapshot.getStatus())) {
-                        send(conversationId, emitter, subscriberOpen, "complete", snapshot);
+                    boolean sameRun = Long.valueOf(runVersion).equals(snapshot.getRunVersion());
+                    if (!sameRun || !"running".equals(snapshot.getStatus())) {
+                        AgentEvent terminal = eventService.latestTerminal(conversationId, runVersion);
+                        if (terminal != null && terminal.getId() != null && terminal.getId() > cursor) {
+                            send(conversationId, emitter, subscriberOpen, terminal);
+                        }
                         return;
                     }
                     Thread.sleep(500);
@@ -206,7 +250,8 @@ public class AgentConversationController {
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         } catch (RuntimeException exception) {
-            send(conversationId, emitter, subscriberOpen, "error", safeMessage(exception));
+            log.warn("agent event recovery failed for conversation {}: {}",
+                    conversationId, exception.getMessage());
         } finally {
             heartbeat.cancel(false);
             completeSubscriber(emitter, subscriberOpen);
@@ -245,15 +290,21 @@ public class AgentConversationController {
         }
     }
 
-    private String safeMessage(Exception exception) {
-        if (exception instanceof org.springframework.web.server.ResponseStatusException response
-                && response.getReason() != null) {
-            return response.getReason();
-        }
-        if (exception instanceof IllegalArgumentException) {
-            return exception.getMessage();
-        }
-        log.error("agent conversation turn failed", exception);
-        return "智能体任务失败，请稍后重试";
+    private void failClaimedStream(Long conversationId, Long userId, long runVersion,
+                                   SseEmitter emitter, AtomicBoolean subscriberOpen,
+                                   ScheduledFuture<?> heartbeat) {
+        if (heartbeat != null) heartbeat.cancel(false);
+        service.failClaimedTurn(conversationId, userId, runVersion,
+                "智能体执行队列繁忙，请稍后重试");
+        AgentEvent terminal = eventService.latestTerminal(conversationId, runVersion);
+        if (terminal != null) send(conversationId, emitter, subscriberOpen, terminal);
+        completeSubscriber(emitter, subscriberOpen);
     }
+
+    private org.springframework.web.server.ResponseStatusException serviceUnavailable(RuntimeException cause) {
+        return new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
+                "智能体事件订阅繁忙，请稍后重试", cause);
+    }
+
 }

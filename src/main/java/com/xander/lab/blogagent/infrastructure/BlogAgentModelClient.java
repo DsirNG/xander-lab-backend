@@ -9,6 +9,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -20,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -40,9 +42,13 @@ public class BlogAgentModelClient {
     public BlogAgentModelClient(BlogAgentProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(properties.getConnectTimeoutMillis());
+        requestFactory.setReadTimeout(properties.getReadTimeoutMillis());
         this.restClient = RestClient.builder()
                 .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
                 .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
+                .requestFactory(requestFactory)
                 .build();
     }
 
@@ -165,12 +171,20 @@ public class BlogAgentModelClient {
 
     private JsonNode streamJson(Map<String, Object> payload, Consumer<String> onDelta) {
         payload.put("stream", true);
+        boolean[] visibleDeltaDelivered = {false};
+        Consumer<String> trackedOnDelta = delta -> {
+            if (delta != null && !delta.isEmpty()) {
+                visibleDeltaDelivered[0] = true;
+            }
+            onDelta.accept(delta);
+        };
         int attempt = 0;
         while (true) {
             attempt++;
             try {
-                return streamOnce(payload, onDelta);
+                return streamOnce(payload, trackedOnDelta);
             } catch (RuntimeException e) {
+                if (visibleDeltaDelivered[0]) throw e;
                 if (!isTransient(e)) throw e;
                 if (attempt >= MAX_ATTEMPTS) {
                     log.warn("模型流式调用重试耗尽，共 {} 次尝试", attempt);
@@ -193,8 +207,8 @@ public class BlogAgentModelClient {
             connection.setRequestProperty("Content-Type", MediaType.APPLICATION_JSON_VALUE);
             connection.setRequestProperty("Accept", MediaType.TEXT_EVENT_STREAM_VALUE);
             connection.setDoOutput(true);
-            connection.setConnectTimeout(15_000);
-            connection.setReadTimeout(0);
+            connection.setConnectTimeout(Math.max(1, properties.getConnectTimeoutMillis()));
+            connection.setReadTimeout(Math.max(1, properties.getReadTimeoutMillis()));
             connection.getOutputStream().write(objectMapper.writeValueAsBytes(payload));
 
             int status = connection.getResponseCode();
@@ -247,6 +261,8 @@ public class BlogAgentModelClient {
                 throw new ModelGatewayException(503, "模型服务连接中断，请稍后再试");
             }
             throw new IllegalStateException("读取模型流式结果失败：" + e.getMessage(), e);
+        } catch (CancellationException e) {
+            throw e;
         } catch (IllegalStateException | ModelGatewayException e) {
             throw e;
         } catch (Exception e) {
