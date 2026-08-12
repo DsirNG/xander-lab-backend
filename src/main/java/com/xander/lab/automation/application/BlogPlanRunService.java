@@ -27,6 +27,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.UUID;
 
 /** Executes one plan trigger: headless generation, compliance gate, local and
@@ -38,6 +39,7 @@ import java.util.UUID;
 public class BlogPlanRunService {
 
     private final BlogPlanRunMapper runMapper;
+    private final BlogContentPlanMapper planMapper;
     private final BlogNotificationMapper notificationMapper;
     private final BlogAgentService agentService;
     private final PublicationService publicationService;
@@ -124,8 +126,11 @@ public class BlogPlanRunService {
         }
     }
 
-    private BlogAgentTask createTask(BlogContentPlan plan, Long userId) {
-        StringBuilder input = new StringBuilder(plan.getTopic());
+    BlogAgentTask createTask(BlogContentPlan plan, Long userId) {
+        // Consume the next topic from the queue atomically so concurrent runs
+        // of the same plan never use the same topic twice.
+        String topic = consumeNextTopic(plan.getId());
+        StringBuilder input = new StringBuilder(topic == null ? plan.getTopic() : topic);
         if (StringUtils.hasText(plan.getAudience())) {
             input.append("\n目标读者：").append(plan.getAudience());
         }
@@ -135,6 +140,22 @@ public class BlogPlanRunService {
         BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
         request.setInput(input.toString());
         return agentService.create(userId, request);
+    }
+
+    /** Locks the plan row, returns the next queued topic, and advances the
+     * queue index. Returns null when the plan has no multi-day topic queue. */
+    private String consumeNextTopic(Long planId) {
+        return transactionTemplate.execute(status -> {
+            BlogContentPlan locked = planMapper.selectByIdForUpdate(planId);
+            if (locked == null) return null;
+            List<String> queue = locked.topics();
+            if (queue.isEmpty()) return null;
+            int index = locked.getNextTopicIndex() == null ? 0 : locked.getNextTopicIndex();
+            String topic = queue.get(index % queue.size());
+            locked.setNextTopicIndex(index + 1);
+            planMapper.updateById(locked);
+            return topic;
+        });
     }
 
     private long publishLocal(Long runId, BlogContentPlan plan, BlogAgentTaskVO ready) {
@@ -154,8 +175,11 @@ public class BlogPlanRunService {
         }
         try {
             BlogAgentTask task = ready.getTask();
+            // CSDN 原文链接按 -taskId 的绝对值生成，必须用本地文章ID（localPostId），
+            // 否则回链指向 /blog/{runId}；同时 publish_record.task_id = -postId 才能被 csdnSynced 识别为已同步
+            long localPostId = requireRun(runId).getLocalPostId();
             PublishCommand command = new PublishCommand(
-                    -runId, plan.getUserId(), task.getTitle(), task.getSummary(), task.getContent(),
+                    -localPostId, plan.getUserId(), task.getTitle(), task.getSummary(), task.getContent(),
                     task.getCategoryId(), null, ready.getTags());
             PublishResult result = publicationService.publish(command, "csdn");
             transactionTemplate.executeWithoutResult(status -> {
@@ -279,14 +303,10 @@ public class BlogPlanRunService {
     /** Computes the next daily trigger after the given reference instant. */
     public Instant resolveNextRun(BlogContentPlan plan, Instant reference) {
         ZoneId zone = EmailReminderScheduleCalculator.resolveZone(plan.getTimezone());
-        return EmailReminderScheduleCalculator.resolveNextAfterSend(
-                EmailReminderScheduleCalculator.FREQ_DAILY,
+        return EmailReminderScheduleCalculator.resolveNextDailyAfter(
                 zone,
-                plan.getTriggerTime(),
-                null,
-                null,
-                reference,
-                Instant.now()
+                EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes()),
+                reference
         );
     }
 

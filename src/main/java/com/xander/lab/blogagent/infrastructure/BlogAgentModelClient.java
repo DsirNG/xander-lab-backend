@@ -63,6 +63,24 @@ public class BlogAgentModelClient {
                 "标题：\n" + title + "\n\n正文：\n" + content, false);
     }
 
+    /** Generates a series of distinct article topics for a scheduled plan run. */
+    public JsonNode planTopicSeries(String seed, String audience, String tone,
+                                    int count, List<String> excludeTitles) {
+        String excludeText = excludeTitles == null || excludeTitles.isEmpty()
+                ? ""
+                : "\n以下主题已使用过，禁止重复：\n" + String.join("\n", excludeTitles);
+        return requestJson(
+                "你是知识博客策划编辑。围绕用户给出的主题种子，细化出 " + count
+                        + " 个彼此独立、具体可写、适合定时发布的中文知识博客标题。"
+                        + "每个标题必须与主题种子高度相关但角度不同，避免空洞泛题。"
+                        + excludeText
+                        + "不要写文章。仅返回 JSON：{\"topics\":[string]，数量严格等于要求}。",
+                "主题种子：\n" + seed
+                        + (audience == null || audience.isBlank() ? "" : "\n目标读者：\n" + audience)
+                        + (tone == null || tone.isBlank() ? "" : "\n文风语气：\n" + tone),
+                false);
+    }
+
     public JsonNode reviseArticleStream(String currentArticle, String instruction, Consumer<String> onDelta) {
         Map<String, Object> payload = requestPayload(
                 "当前文章：\n" + currentArticle + "\n\n用户本轮修改要求：\n" + instruction);

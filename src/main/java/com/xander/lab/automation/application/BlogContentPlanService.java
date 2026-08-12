@@ -3,6 +3,7 @@ package com.xander.lab.automation.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.automation.api.BlogContentPlanCreateRequest;
+import com.xander.lab.automation.api.BlogContentPlanTopicsGenerateRequest;
 import com.xander.lab.automation.api.BlogContentPlanUpdateRequest;
 import com.xander.lab.automation.api.BlogContentPlanVO;
 import com.xander.lab.automation.api.BlogContentPlansPage;
@@ -13,6 +14,7 @@ import com.xander.lab.automation.domain.BlogPlanRun;
 import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
 import com.xander.lab.automation.infrastructure.BlogContentPlanMapper;
 import com.xander.lab.automation.infrastructure.BlogPlanRunMapper;
+import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +27,8 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /** C-end use cases for daily content plans: CRUD, lifecycle transitions,
@@ -39,6 +43,7 @@ public class BlogContentPlanService {
     private final BlogPlanRunMapper runMapper;
     private final BlogPlanRunService runService;
     private final CsdnCredentialService csdnCredentialService;
+    private final BlogAgentService agentService;
 
     @Value("${blog-content-plan.max-active-per-user:50}")
     private long maxActivePerUser;
@@ -55,7 +60,7 @@ public class BlogContentPlanService {
 
         String topic = request.getTopic().strip();
         ZoneId zone = EmailReminderScheduleCalculator.resolveZone(request.getTimezone());
-        LocalTime time = EmailReminderScheduleCalculator.parseSendTime(request.getTriggerTime());
+        List<LocalTime> times = resolveTriggerTimes(request.getTriggerTimes(), request.getTriggerTime());
 
         long activeCount = planMapper.countActivePlans(userId);
         if (activeCount >= maxActivePerUser) {
@@ -72,14 +77,8 @@ public class BlogContentPlanService {
         }
 
         Instant now = Instant.now();
-        Instant nextRun = EmailReminderScheduleCalculator.resolveFirstFire(
-                EmailReminderScheduleCalculator.FREQ_DAILY,
-                zone,
-                null,
-                time.format(DateTimeFormatter.ofPattern("HH:mm")),
-                null,
-                null,
-                now);
+        Instant nextRun = EmailReminderScheduleCalculator.resolveNextDailyAfter(zone, times, now);
+        List<String> topics = normalizeTopics(request.getTopics());
 
         BlogContentPlan plan = new BlogContentPlan();
         plan.setUserId(userId);
@@ -87,7 +86,11 @@ public class BlogContentPlanService {
         plan.setAudience(strip(request.getAudience()));
         plan.setTone(strip(request.getTone()));
         plan.setTimezone(zone.getId());
-        plan.setTriggerTime(time.format(DateTimeFormatter.ofPattern("HH:mm")));
+        plan.setTriggerTime(times.get(0).format(DateTimeFormatter.ofPattern("HH:mm")));
+        plan.setTriggerTimesJson(BlogContentPlan.toJson(times.stream()
+                .map(t -> t.format(DateTimeFormatter.ofPattern("HH:mm"))).toList()));
+        plan.setTopicsJson(BlogContentPlan.toJson(topics));
+        plan.setNextTopicIndex(0);
         plan.setSyncCsdn(request.getSyncCsdn() == null ? Boolean.FALSE : request.getSyncCsdn());
         plan.setNextRunAt(nextRun);
         plan.setStatus(BlogContentPlan.STATUS_ACTIVE);
@@ -142,12 +145,26 @@ public class BlogContentPlanService {
         if (request.getTone() != null) {
             plan.setTone(strip(request.getTone()));
         }
+        if (request.getTopics() != null) {
+            plan.setTopicsJson(BlogContentPlan.toJson(normalizeTopics(request.getTopics())));
+            plan.setNextTopicIndex(0);
+        }
 
         boolean scheduleChanged = false;
-        if (triggerTime != null && !triggerTime.isBlank()
+        if (request.getTriggerTimes() != null) {
+            List<LocalTime> times = EmailReminderScheduleCalculator.parseSendTimes(request.getTriggerTimes());
+            String timesJson = BlogContentPlan.toJson(times.stream()
+                    .map(t -> t.format(DateTimeFormatter.ofPattern("HH:mm"))).toList());
+            if (!timesJson.equals(plan.getTriggerTimesJson())) {
+                plan.setTriggerTimesJson(timesJson);
+                plan.setTriggerTime(times.get(0).format(DateTimeFormatter.ofPattern("HH:mm")));
+                scheduleChanged = true;
+            }
+        } else if (triggerTime != null && !triggerTime.isBlank()
                 && !triggerTime.equals(plan.getTriggerTime())) {
             LocalTime time = EmailReminderScheduleCalculator.parseSendTime(triggerTime);
             plan.setTriggerTime(time.format(DateTimeFormatter.ofPattern("HH:mm")));
+            plan.setTriggerTimesJson(null);
             scheduleChanged = true;
         }
         if (timezone != null && !timezone.isBlank()) {
@@ -161,14 +178,8 @@ public class BlogContentPlanService {
         // edit can never leave the plan stuck in the past.
         if (scheduleChanged) {
             ZoneId zone = EmailReminderScheduleCalculator.resolveZone(plan.getTimezone());
-            plan.setNextRunAt(EmailReminderScheduleCalculator.resolveFirstFire(
-                    EmailReminderScheduleCalculator.FREQ_DAILY,
-                    zone,
-                    null,
-                    plan.getTriggerTime(),
-                    null,
-                    null,
-                    Instant.now()));
+            List<LocalTime> times = EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes());
+            plan.setNextRunAt(EmailReminderScheduleCalculator.resolveNextDailyAfter(zone, times, Instant.now()));
         }
         planMapper.updateById(plan);
         return toVO(planMapper.selectById(plan.getId()), userId);
@@ -195,14 +206,8 @@ public class BlogContentPlanService {
                 Instant now = Instant.now();
                 if (plan.getNextRunAt() == null || !plan.getNextRunAt().isAfter(now)) {
                     ZoneId zone = EmailReminderScheduleCalculator.resolveZone(plan.getTimezone());
-                    Instant next = EmailReminderScheduleCalculator.resolveFirstFire(
-                            EmailReminderScheduleCalculator.FREQ_DAILY,
-                            zone,
-                            null,
-                            plan.getTriggerTime(),
-                            null,
-                            null,
-                            now);
+                    List<LocalTime> times = EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes());
+                    Instant next = EmailReminderScheduleCalculator.resolveNextDailyAfter(zone, times, now);
                     updated = planMapper.resumeOwnedPlanAt(planId, userId, next);
                 } else {
                     updated = planMapper.resumeOwnedPlan(planId, userId);
@@ -271,21 +276,30 @@ public class BlogContentPlanService {
         return runService.toRunVO(run);
     }
 
+    /** Refines a seed topic into a deduplicated topic series for a plan's
+     * multi-day queue. Excludes the seed, the requester's already-published
+     * posts, and existing queue topics so generated titles stay fresh. */
+    @Transactional(readOnly = true)
+    public List<String> generateTopics(Long userId, BlogContentPlanTopicsGenerateRequest request) {
+        requireUser(userId);
+        String seed = request.getTopic().strip();
+        List<String> excludeTitles = new ArrayList<>();
+        excludeTitles.add(seed);
+        planMapper.selectList(ownedWrapper(userId)).forEach(plan -> excludeTitles.addAll(plan.topics()));
+        return agentService.generateTopicSeries(
+                userId, seed, request.getAudience(), request.getTone(),
+                request.getCount(), excludeTitles);
+    }
+
     @Transactional(readOnly = true)
     public Instant nextRunAfter(Long userId, Long planId, long count) {
         requireUser(userId);
         BlogContentPlan plan = requireOwnedPlan(planId, userId);
         ZoneId zone = EmailReminderScheduleCalculator.resolveZone(plan.getTimezone());
+        List<LocalTime> times = EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes());
         Instant cursor = Instant.now();
         for (long i = 0; i < Math.max(1, count); i++) {
-            cursor = EmailReminderScheduleCalculator.resolveNextAfterSend(
-                    EmailReminderScheduleCalculator.FREQ_DAILY,
-                    zone,
-                    plan.getTriggerTime(),
-                    null,
-                    null,
-                    cursor,
-                    Instant.now());
+            cursor = EmailReminderScheduleCalculator.resolveNextDailyAfter(zone, times, cursor);
         }
         return cursor;
     }
@@ -309,6 +323,9 @@ public class BlogContentPlanService {
         return BlogContentPlanVO.builder()
                 .id(plan.getId())
                 .topic(plan.getTopic())
+                .triggerTimes(plan.allTriggerTimes())
+                .topics(plan.topics())
+                .nextTopicIndex(plan.getNextTopicIndex() == null ? 0 : plan.getNextTopicIndex())
                 .audience(plan.getAudience())
                 .tone(plan.getTone())
                 .timezone(plan.getTimezone())
@@ -322,6 +339,26 @@ public class BlogContentPlanService {
                 .updatedAt(plan.getUpdatedAt())
                 .csdnAuthorized(csdnCredentialService.isAuthorized(userId))
                 .build();
+    }
+
+    private List<LocalTime> resolveTriggerTimes(List<String> triggerTimes, String triggerTime) {
+        if (triggerTimes != null && !triggerTimes.isEmpty()) {
+            return EmailReminderScheduleCalculator.parseSendTimes(triggerTimes);
+        }
+        if (triggerTime == null || triggerTime.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请设置每日触发时间");
+        }
+        return List.of(EmailReminderScheduleCalculator.parseSendTime(triggerTime));
+    }
+
+    private List<String> normalizeTopics(List<String> topics) {
+        if (topics == null) return List.of();
+        return topics.stream()
+                .filter(t -> t != null && !t.isBlank())
+                .map(String::strip)
+                .distinct()
+                .limit(30)
+                .toList();
     }
 
     private String strip(String value) {

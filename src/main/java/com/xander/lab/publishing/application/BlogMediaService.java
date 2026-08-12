@@ -1,6 +1,7 @@
 package com.xander.lab.publishing.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.integration.oss.OssService;
 import com.xander.lab.integration.oss.UploadResponse;
@@ -98,6 +99,31 @@ public class BlogMediaService {
                 .eq(BlogMediaAsset::getUserId, userId)
                 .eq(BlogMediaAsset::getAgentTaskId, taskId)
                 .orderByAsc(BlogMediaAsset::getId));
+    }
+
+    /** Returns the most recent agent-generated image of this user whose
+     * illustration title matches `title`, so a repeated illustration for a
+     * related article is reused instead of regenerated. Never returns assets
+     * owned by another user. */
+    public BlogMediaAsset findReusableAgentImage(Long userId, String title) {
+        requireUser(userId);
+        if (title == null || title.isBlank()) return null;
+        List<BlogMediaAsset> recent = assetMapper.selectList(new LambdaQueryWrapper<BlogMediaAsset>()
+                .eq(BlogMediaAsset::getUserId, userId)
+                .eq(BlogMediaAsset::getSourceType, "agent_generated")
+                .orderByDesc(BlogMediaAsset::getId)
+                .last("LIMIT 100"));
+        for (BlogMediaAsset asset : recent) {
+            String meta = asset.getGenerationMeta();
+            if (meta == null || meta.isBlank()) continue;
+            try {
+                var node = new ObjectMapper().readTree(meta);
+                if (title.equals(node.path("title").asText())) return asset;
+            } catch (Exception ignored) {
+                // Corrupt or legacy meta: skip and keep scanning.
+            }
+        }
+        return null;
     }
 
     public List<BlogMediaAsset> getImages(Long userId, String scope, String keyword) {

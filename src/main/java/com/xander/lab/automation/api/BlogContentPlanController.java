@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/blog-plans")
@@ -89,5 +90,12 @@ public class BlogContentPlanController {
     public Result<Instant> nextRun(@PathVariable Long id,
                                    @RequestParam(defaultValue = "1") long count) {
         return Result.success(planService.nextRunAfter(UserContext.getUserId(), id, count));
+    }
+
+    /** Asks the agent to refine a seed topic into a multi-day topic series. */
+    @PostMapping("/topics/generate")
+    public Result<List<String>> generateTopics(
+            @Valid @RequestBody BlogContentPlanTopicsGenerateRequest request) {
+        return Result.success(planService.generateTopics(UserContext.getUserId(), request));
     }
 }

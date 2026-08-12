@@ -13,6 +13,7 @@ import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.publishing.application.PublicationService;
+import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -48,17 +49,75 @@ class BlogPlanRunServiceTest {
 
     private BlogPlanRunService newService() {
         wireTransactionTemplate();
-        return new BlogPlanRunService(runMapper, notificationMapper, agentService,
+        return new BlogPlanRunService(runMapper, planMapper, notificationMapper, agentService,
                 publicationService, csdnCredentialService, sseService, transactionTemplate);
     }
 
     private void wireTransactionTemplate() {
-        org.mockito.Mockito.doAnswer(invocation -> {
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             Consumer<Void> callback = (Consumer<Void>) invocation.getArgument(0);
             callback.accept(null);
             return null;
         }).when(transactionTemplate).executeWithoutResult(org.mockito.ArgumentMatchers.any());
+    }
+
+    /** Regression: the CSDN backlink is built from -taskId, so the CSDN publish
+     * must carry -localPostId (never -runId), otherwise the original link
+     * points at /blog/{runId} and the post reads as unsynced. */
+    @Test
+    void csdnPublishUsesNegativeLocalPostIdAsTaskId() {
+        mockRunRow();
+        BlogAgentTask task = task(104L);
+        BlogAgentTaskVO ready = readyVo(task);
+        when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
+                .thenReturn(task);
+        when(agentService.run(task.getId(), 7L)).thenReturn(ready);
+        when(agentService.reviewCompliance(task.getId(), 7L))
+                .thenReturn(new ComplianceReview(true, null));
+        when(agentService.get(task.getId(), 7L)).thenReturn(ready);
+        when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
+                .thenReturn(new PublishResult("local", "45", null));
+        when(csdnCredentialService.isAuthorized(7L)).thenReturn(true);
+        when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("csdn")))
+                .thenReturn(new PublishResult("csdn", "csdn-45", "https://blog.csdn.net/x/45"));
+
+        BlogPlanRunService service = newService();
+        service.executeRun(runRow(), plan(true));
+
+        ArgumentCaptor<PublishCommand> command = ArgumentCaptor.forClass(PublishCommand.class);
+        verify(publicationService).publish(command.capture(), org.mockito.ArgumentMatchers.eq("csdn"));
+        assertThat(command.getValue().taskId()).isEqualTo(-45L);
+    }
+
+    /** A plan topic queue consumes the next topic per run and advances the index. */
+    @Test
+    void topicQueueConsumesNextTopicAndAdvancesIndex() {
+        BlogContentPlan queued = plan(false);
+        queued.setTopicsJson(BlogContentPlan.toJson(List.of("K8s 调度器", "K8s 网络", "K8s 存储")));
+        queued.setNextTopicIndex(1);
+        when(planMapper.selectByIdForUpdate(1L)).thenReturn(queued);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            org.springframework.transaction.support.TransactionCallback<Object> callback =
+                    (org.springframework.transaction.support.TransactionCallback<Object>) invocation.getArgument(0);
+            return callback.doInTransaction(null);
+        }).when(transactionTemplate).execute(org.mockito.ArgumentMatchers.any());
+
+        BlogAgentTask task = task(105L);
+        when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
+                .thenAnswer(invocation -> {
+                    BlogAgentTaskCreateRequest request = invocation.getArgument(1);
+                    assertThat(request.getInput()).contains("K8s 网络");
+                    return task;
+                });
+
+        BlogPlanRunService service = newService();
+        BlogAgentTask created = service.createTask(plan(false), 7L);
+
+        assertThat(created).isSameAs(task);
+        verify(planMapper).updateById(org.mockito.ArgumentMatchers.argThat(
+                saved -> saved.getNextTopicIndex() == 2));
     }
 
     @Test

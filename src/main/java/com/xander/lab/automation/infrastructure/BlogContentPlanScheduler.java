@@ -59,14 +59,10 @@ public class BlogContentPlanScheduler {
     private void recoverStaleClaims() {
         List<BlogContentPlan> stale = planMapper.selectStaleClaims(Math.max(1, claimTimeoutMs), Math.max(1, batchSize));
         for (BlogContentPlan plan : stale) {
-            var next = com.xander.lab.automation.domain.EmailReminderScheduleCalculator.resolveNextAfterSend(
-                    com.xander.lab.automation.domain.EmailReminderScheduleCalculator.FREQ_DAILY,
+            var next = com.xander.lab.automation.domain.EmailReminderScheduleCalculator.resolveNextDailyAfter(
                     com.xander.lab.automation.domain.EmailReminderScheduleCalculator.resolveZone(plan.getTimezone()),
-                    plan.getTriggerTime(),
-                    null,
-                    null,
-                    plan.getNextRunAt() == null ? java.time.Instant.now() : plan.getNextRunAt(),
-                    java.time.Instant.now()
+                    com.xander.lab.automation.domain.EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes()),
+                    plan.getNextRunAt() == null ? java.time.Instant.now() : plan.getNextRunAt()
             );
             int recovered = planMapper.recoverStaleClaim(plan.getId(), next, STALE_CLAIM_ERROR);
             if (recovered == 1) {

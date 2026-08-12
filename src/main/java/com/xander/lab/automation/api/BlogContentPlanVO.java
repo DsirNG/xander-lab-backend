@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.Instant;
+import java.util.List;
 
 /** View of a daily content plan for C-end APIs. `nextRunAt` is the absolute
  * UTC instant; the frontend renders it after converting to the plan timezone. */
@@ -12,6 +13,9 @@ import java.time.Instant;
 public class BlogContentPlanVO {
     private Long id;
     private String topic;
+    private List<String> triggerTimes;
+    private List<String> topics;
+    private Integer nextTopicIndex;
     private String audience;
     private String tone;
     private String timezone;

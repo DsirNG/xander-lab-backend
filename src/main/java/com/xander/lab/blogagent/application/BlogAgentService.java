@@ -82,6 +82,30 @@ public class BlogAgentService {
         return task;
     }
 
+    /** Generates a deduplicated topic series for a scheduled plan's topic queue.
+     * Synchronous model call, no durable task is created; the caller owns
+     * rate limiting and any persistence of the returned topics. */
+    public List<String> generateTopicSeries(Long userId, String seed, String audience, String tone,
+                                            int count, List<String> excludeTitles) {
+        if (count < 1 || count > 30) {
+            throw new IllegalArgumentException("主题数量需在 1-30 之间");
+        }
+        JsonNode response = modelClient.planTopicSeries(seed, audience, tone, count, excludeTitles);
+        List<String> topics = new ArrayList<>();
+        JsonNode topicNodes = response.path("topics");
+        if (topicNodes.isArray()) {
+            topicNodes.forEach(node -> {
+                if (StringUtils.hasText(node.asText())) topics.add(node.asText().trim());
+            });
+        }
+        return topics.stream()
+                .filter(title -> excludeTitles == null || excludeTitles.stream().noneMatch(excluded ->
+                        excluded != null && title.equalsIgnoreCase(excluded.strip())))
+                .distinct()
+                .limit(count)
+                .toList();
+    }
+
     /** Executes analyze → research → write → review as one durable task run. */
     public BlogAgentTaskVO run(Long taskId, Long userId) {
         return execute(taskId, userId, false, ignored -> { });
@@ -363,18 +387,26 @@ public class BlogAgentService {
                 continue;
             }
             try {
-                BlogAgentImageClient.GeneratedImage generated = imageClient.generate(
-                        "为中文知识博客生成一张准确、克制、专业的知识插图。画面必须服务于理解，不要添加水印。"
-                                + "如果包含文字，确保文字简短清晰。插图要求：" + prompt);
-                String fileName = "agent-" + taskId + "-" + (index + 1) + "." + generated.extension();
-                String meta = objectMapper.writeValueAsString(java.util.Map.of(
-                        "title", title,
-                        "alt", alt,
-                        "prompt", prompt,
-                        "model", properties.getImageModel(),
-                        "size", properties.getImageSize()));
-                BlogMediaAsset asset = mediaService.saveAgentImage(userId, taskId, fileName, generated, meta);
-                String markdown = "![" + alt + "](" + asset.getUrl() + ")";
+                // Reuse an existing agent image with the same illustration
+                // title before spending another model generation on it.
+                BlogMediaAsset reused = mediaService.findReusableAgentImage(userId, title);
+                String markdown;
+                if (reused != null) {
+                    markdown = "![" + alt + "](" + reused.getUrl() + ")";
+                } else {
+                    BlogAgentImageClient.GeneratedImage generated = imageClient.generate(
+                            "为中文知识博客生成一张准确、克制、专业的知识插图。画面必须服务于理解，不要添加水印。"
+                                    + "如果包含文字，确保文字简短清晰。插图要求：" + prompt);
+                    String fileName = "agent-" + taskId + "-" + (index + 1) + "." + generated.extension();
+                    String meta = objectMapper.writeValueAsString(java.util.Map.of(
+                            "title", title,
+                            "alt", alt,
+                            "prompt", prompt,
+                            "model", properties.getImageModel(),
+                            "size", properties.getImageSize()));
+                    BlogMediaAsset asset = mediaService.saveAgentImage(userId, taskId, fileName, generated, meta);
+                    markdown = "![" + alt + "](" + asset.getUrl() + ")";
+                }
                 content = replaceOrAppend(content, placeholder, markdown);
                 generatedCount++;
             } catch (Exception e) {

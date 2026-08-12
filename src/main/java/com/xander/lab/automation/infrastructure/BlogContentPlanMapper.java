@@ -16,6 +16,16 @@ public interface BlogContentPlanMapper extends BaseMapper<BlogContentPlan> {
     @Select("SELECT id FROM sys_user WHERE id = #{userId} FOR UPDATE")
     Long lockUserForPlanCreation(@Param("userId") Long userId);
 
+    /** Locks one plan row for topic-queue consumption inside a run transaction. */
+    @Select("""
+            SELECT *
+            FROM blog_content_plan
+            WHERE id = #{id}
+              AND deleted_at IS NULL
+            FOR UPDATE
+            """)
+    BlogContentPlan selectByIdForUpdate(@Param("id") Long id);
+
     @Select("""
             SELECT COUNT(*)
             FROM blog_content_plan

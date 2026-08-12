@@ -10,8 +10,10 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Computes the next fire Instant for email reminder recurrence rules.
@@ -62,6 +64,32 @@ public final class EmailReminderScheduleCalculator {
         } catch (DateTimeParseException ex) {
             throw new IllegalArgumentException("发送时间格式应为 HH:mm");
         }
+    }
+
+    public static List<LocalTime> parseSendTimes(List<String> times) {
+        if (times == null || times.isEmpty()) {
+            throw new IllegalArgumentException("请设置至少一个发送时间");
+        }
+        if (times.size() > 5) {
+            throw new IllegalArgumentException("每天最多设置 5 个发送时间");
+        }
+        return times.stream()
+                .map(EmailReminderScheduleCalculator::parseSendTime)
+                .distinct()
+                .sorted()
+                .collect(Collectors.toList());
+    }
+
+    /** Next daily fire among several local trigger times: the earliest
+     * occurrence of any listed time that is strictly after `after`. */
+    public static Instant resolveNextDailyAfter(ZoneId zone, List<LocalTime> times, Instant after) {
+        if (times == null || times.isEmpty()) {
+            throw new IllegalArgumentException("请设置至少一个发送时间");
+        }
+        return times.stream()
+                .map(time -> nextDaily(zone, time, after))
+                .min(Instant::compareTo)
+                .orElseThrow(() -> new IllegalArgumentException("请设置至少一个发送时间"));
     }
 
     public static Instant resolveFirstFire(

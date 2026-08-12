@@ -18,8 +18,8 @@ import java.util.Map;
  * 对应前端 axios 封装中的 Token 自动携带 & 无感刷新机制
  *
  * <pre>
- * Access Token  有效期：2 小时（前端自动刷新）
- * Refresh Token 有效期：7 天
+ * Access Token  有效期：7 天（前端自动刷新）
+ * Refresh Token 有效期：30 天
  * </pre>
  */
 @Component
@@ -29,8 +29,8 @@ public class JwtUtil {
     @Value("${jwt.secret:}")
     private String secret;
 
-    /** Access Token 有效期（毫秒），默认 2 小时 */
-    @Value("${jwt.access-token-expire:7200000}")
+    /** Access Token 有效期（毫秒），默认 7 天 */
+    @Value("${jwt.access-token-expire:604800000}")
     private long accessTokenExpire;
 
     /** Refresh Token 有效期（毫秒），默认 7 天 */
