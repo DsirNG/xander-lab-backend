@@ -312,6 +312,17 @@ class CsdnAuthorizationServiceTest {
         verify(service.driver).quit();
     }
 
+    @Test
+    void statusReportsExpiredWhenStoredCredentialLostValidity() {
+        when(credentials.isAuthorized(OWNER)).thenReturn(false);
+        when(credentials.isExpired(OWNER)).thenReturn(true);
+
+        CsdnAuthorizationService.AuthorizationView view = service.status(OWNER);
+
+        assertEquals("EXPIRED", view.status());
+        assertNull(view.qrCodeDataUrl());
+    }
+
     private RemoteWebDriver loginFrameVisibleDriver() {
         RemoteWebDriver driver = mock(RemoteWebDriver.class);
         WebElement loginFrame = mock(WebElement.class);

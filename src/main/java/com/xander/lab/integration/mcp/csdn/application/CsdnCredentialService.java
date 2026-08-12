@@ -1,6 +1,7 @@
 package com.xander.lab.integration.mcp.csdn.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnPlatformCredential;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnPlatformCredentialMapper;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnProperties;
@@ -39,13 +40,32 @@ public class CsdnCredentialService {
     public boolean isAuthorized(Long userId) {
         CsdnPlatformCredential credential = find(userId);
         return credential != null
+                && "ACTIVE".equals(credential.getStatus())
                 && hasText(credential.getEncryptedCookie())
                 && hasText(credential.getCsdnUsername());
     }
 
+    /** True when the stored credential was active but CSDN rejected it (session expired), so a re-authorization is required. */
+    public boolean isExpired(Long userId) {
+        CsdnPlatformCredential credential = find(userId);
+        return credential != null && "EXPIRED".equals(credential.getStatus());
+    }
+
+    /** Marks an ACTIVE credential EXPIRED when CSDN reports an invalid session (HTTP/body 401). */
+    public void markExpired(Long userId) {
+        // Conditional update: only a currently ACTIVE credential may move to EXPIRED. String columns keep
+        // the update valid without a MyBatis table-info context (usable in lightweight unit tests).
+        mapper.update(null, new UpdateWrapper<CsdnPlatformCredential>()
+                .eq("user_id", userId)
+                .eq("status", "ACTIVE")
+                .set("status", "EXPIRED")
+                .set("updated_at", LocalDateTime.now()));
+    }
+
     public String requireCookie(Long userId) {
         CsdnPlatformCredential credential = find(userId);
-        if (credential == null || !hasText(credential.getEncryptedCookie()) || !hasText(credential.getCsdnUsername())) {
+        if (credential == null || !"ACTIVE".equals(credential.getStatus())
+                || !hasText(credential.getEncryptedCookie()) || !hasText(credential.getCsdnUsername())) {
             throw new IllegalStateException("CSDN authorization is required");
         }
         try { return decrypt(credential.getEncryptedCookie()); }
@@ -74,8 +94,9 @@ public class CsdnCredentialService {
     }
 
     private CsdnPlatformCredential find(Long userId) {
+        // No status filter here: callers decide between ACTIVE (authorized) and EXPIRED (pending re-authorization).
         return mapper.selectOne(new LambdaQueryWrapper<CsdnPlatformCredential>()
-                .eq(CsdnPlatformCredential::getUserId, userId).eq(CsdnPlatformCredential::getStatus, "ACTIVE"));
+                .eq(CsdnPlatformCredential::getUserId, userId));
     }
 
     private boolean hasText(String value) {

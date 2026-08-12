@@ -8,6 +8,7 @@ import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.charset.StandardCharsets;
@@ -53,53 +54,74 @@ public class CsdnPublisher implements BlogPublisher {
         String originalUrl = "https://xander.dsircity.top/blog/" + blogPostId;
         htmlContent = imageHtmlRewriter.rewrite(htmlContent, cookie, properties.getApiKey(), String.valueOf(command.taskId()), originalUrl);
         List<String> coverImages = resolveCoverImages(command.coverImage(), htmlContent);
-        JsonNode response = client.post().uri(SAVE_PATH)
-                .header("Accept", ACCEPT)
-                .header("Content-Type", CONTENT_TYPE)
-                .header("Cookie", cookie)
-                .header("origin", "https://mp.csdn.net")
-                .header("referer", "https://mp.csdn.net/")
-                .header("x-ca-key", properties.getApiKey())
-                .header("x-ca-nonce", nonce)
-                .header("x-ca-signature-headers", "x-ca-key,x-ca-nonce")
-                .header("x-ca-signature", signature)
-                .body(java.util.Map.ofEntries(
-                        java.util.Map.entry("article_id", ""),
-                        java.util.Map.entry("title", command.title()),
-                        java.util.Map.entry("description", command.summary() == null ? "" : command.summary()),
-                        java.util.Map.entry("content", htmlContent),
-                        java.util.Map.entry("tags", command.tags().stream().collect(Collectors.joining(","))),
-                        java.util.Map.entry("categories", command.categoryId() == null ? "" : command.categoryId()),
-                        java.util.Map.entry("type", "original"),
-                        java.util.Map.entry("status", 0),
-                        java.util.Map.entry("read_type", "public"),
-                        java.util.Map.entry("authorized_status", true),
-                        java.util.Map.entry("original_link", ""),
-                        java.util.Map.entry("source", "pc_mdeditor"),
-                        java.util.Map.entry("not_auto_saved", 0),
-                        java.util.Map.entry("cover_images", coverImages),
-                        java.util.Map.entry("cover_type", 0),
-                        java.util.Map.entry("vote_id", 0),
-                        java.util.Map.entry("resource_id", ""),
-                        java.util.Map.entry("is_new", 1),
-                        java.util.Map.entry("sync_git_code", 0)))
-                .retrieve().body(JsonNode.class);
-        if (response == null || response.path("code").asInt(0) != 200) {
-            throw new IllegalStateException("CSDN publish failed: " + (response == null ? "empty response" : response.path("msg").asText("unknown error")));
+        try {
+            JsonNode response = client.post().uri(SAVE_PATH)
+                    .header("Accept", ACCEPT)
+                    .header("Content-Type", CONTENT_TYPE)
+                    .header("Cookie", cookie)
+                    .header("origin", "https://mp.csdn.net")
+                    .header("referer", "https://mp.csdn.net/")
+                    .header("x-ca-key", properties.getApiKey())
+                    .header("x-ca-nonce", nonce)
+                    .header("x-ca-signature-headers", "x-ca-key,x-ca-nonce")
+                    .header("x-ca-signature", signature)
+                    .body(java.util.Map.ofEntries(
+                            java.util.Map.entry("article_id", ""),
+                            java.util.Map.entry("title", command.title()),
+                            java.util.Map.entry("description", command.summary() == null ? "" : command.summary()),
+                            java.util.Map.entry("content", htmlContent),
+                            java.util.Map.entry("tags", command.tags().stream().collect(Collectors.joining(","))),
+                            java.util.Map.entry("categories", command.categoryId() == null ? "" : command.categoryId()),
+                            java.util.Map.entry("type", "original"),
+                            java.util.Map.entry("status", 0),
+                            java.util.Map.entry("read_type", "public"),
+                            java.util.Map.entry("authorized_status", true),
+                            java.util.Map.entry("original_link", ""),
+                            java.util.Map.entry("source", "pc_mdeditor"),
+                            java.util.Map.entry("not_auto_saved", 0),
+                            java.util.Map.entry("cover_images", coverImages),
+                            java.util.Map.entry("cover_type", 0),
+                            java.util.Map.entry("vote_id", 0),
+                            java.util.Map.entry("resource_id", ""),
+                            java.util.Map.entry("is_new", 1),
+                            java.util.Map.entry("sync_git_code", 0)))
+                    .retrieve().body(JsonNode.class);
+            if (response == null || response.path("code").asInt(0) != 200) {
+                markExpiredIfSessionInvalid(command.userId(), 200, response);
+                throw new IllegalStateException("CSDN publish failed: " + (response == null ? "empty response" : response.path("msg").asText("unknown error")));
+            }
+            JsonNode data = response.path("data");
+            if (data.isTextual() && "成功".equals(data.asText())) {
+                return new PublishResult(platform(), "accepted:" + command.taskId(), "");
+            }
+            String articleId = data.path("article_id").asText("");
+            String url = data.path("url").asText("");
+            if (articleId.isBlank() || url.isBlank()) {
+                log.warn("[CSDN] Publish returned incomplete result: code={}, msg={}, data={}",
+                        response.path("code").asText(), response.path("msg").asText(), data);
+                throw new IllegalStateException("CSDN publish returned no article result: "
+                        + response.path("msg").asText("no message"));
+            }
+            return new PublishResult(platform(), articleId, url);
+        } catch (RestClientResponseException ex) {
+            markExpiredIfSessionInvalid(command.userId(), ex.getStatusCode().value(), null);
+            throw ex;
         }
-        JsonNode data = response.path("data");
-        if (data.isTextual() && "成功".equals(data.asText())) {
-            return new PublishResult(platform(), "accepted:" + command.taskId(), "");
-        }
-        String articleId = data.path("article_id").asText("");
-        String url = data.path("url").asText("");
-        if (articleId.isBlank() || url.isBlank()) {
-            log.warn("[CSDN] Publish returned incomplete result: code={}, msg={}, data={}",
-                    response.path("code").asText(), response.path("msg").asText(), data);
-            throw new IllegalStateException("CSDN publish returned no article result: "
-                    + response.path("msg").asText("no message"));
-        }
-        return new PublishResult(platform(), articleId, url);
+    }
+
+    /**
+     * CSDN 返回登录态失效（HTTP 401 或响应体 code=401）时，把该用户授权标记为 EXPIRED，
+     * 前端授权面板据此展示「待重新授权」；其余错误不改变授权状态。
+     */
+    void markExpiredIfSessionInvalid(Long userId, int httpStatus, JsonNode body) {
+        if (!isSessionExpired(httpStatus, body)) return;
+        credentials.markExpired(userId);
+        log.warn("[CSDN] CSDN 会话已失效（HTTP {}），用户 {} 的授权被标记为待重新授权", httpStatus, userId);
+    }
+
+    static boolean isSessionExpired(int httpStatus, JsonNode body) {
+        if (httpStatus == 401) return true;
+        return body != null && body.path("code").asInt(0) == 401;
     }
 
     static List<String> resolveCoverImages(String coverImage, String htmlContent) {

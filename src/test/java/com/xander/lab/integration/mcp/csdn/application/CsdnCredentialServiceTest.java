@@ -1,5 +1,6 @@
 package com.xander.lab.integration.mcp.csdn.application;
 
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnPlatformCredential;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnPlatformCredentialMapper;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnProperties;
@@ -18,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -68,7 +70,7 @@ class CsdnCredentialServiceTest {
     @Test
     void isAuthorizedRequiresCookieAndUsername() {
         CsdnPlatformCredential full = new CsdnPlatformCredential();
-        full.setEncryptedCookie("x"); full.setCsdnUsername("u");
+        full.setEncryptedCookie("x"); full.setCsdnUsername("u"); full.setStatus("ACTIVE");
         when(mapper.selectOne(any())).thenReturn(full);
         assertTrue(service.isAuthorized(1L));
 
@@ -76,6 +78,26 @@ class CsdnCredentialServiceTest {
         partial.setEncryptedCookie("x");
         when(mapper.selectOne(any())).thenReturn(partial);
         assertFalse(service.isAuthorized(1L));
+    }
+
+    @Test
+    void expiredCredentialIsNotAuthorizedButReportedAsExpired() {
+        CsdnPlatformCredential expired = new CsdnPlatformCredential();
+        expired.setEncryptedCookie("x"); expired.setCsdnUsername("u"); expired.setStatus("EXPIRED");
+        when(mapper.selectOne(any())).thenReturn(expired);
+
+        assertFalse(service.isAuthorized(1L));
+        assertTrue(service.isExpired(1L));
+
+        when(mapper.selectOne(any())).thenReturn(new CsdnPlatformCredential());
+        assertFalse(service.isExpired(1L));
+    }
+
+    @Test
+    void markExpiredIssuesConditionalStatusUpdate() {
+        service.markExpired(7L);
+
+        verify(mapper).update(isNull(), any(Wrapper.class));
     }
 
     @Test

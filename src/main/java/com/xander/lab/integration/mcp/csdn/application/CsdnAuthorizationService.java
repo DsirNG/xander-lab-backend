@@ -161,9 +161,16 @@ public class CsdnAuthorizationService {
         }
         if (position == 0) {
             // Not queued anymore (the slot likely just freed); report plain authorization state.
-            return new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
+            return authorizationState(userId);
         }
         return new AuthorizationView("QUEUED", null, null, position, (int) waitSeconds);
+    }
+
+    /** AUTHORIZED 已授权；EXPIRED 曾授权但 CSDN 登录态已失效（待重新授权）；其余 NOT_AUTHORIZED。 */
+    private AuthorizationView authorizationState(Long userId) {
+        if (credentials.isAuthorized(userId)) return new AuthorizationView("AUTHORIZED", null);
+        if (credentials.isExpired(userId)) return new AuthorizationView("EXPIRED", null);
+        return new AuthorizationView("NOT_AUTHORIZED", null);
     }
 
     /**
@@ -191,7 +198,7 @@ public class CsdnAuthorizationService {
                     refreshQueueEntry(userId);
                     deferred = queuedView(userId);
                 } else {
-                    deferred = new AuthorizationView(credentials.isAuthorized(userId) ? "AUTHORIZED" : "NOT_AUTHORIZED", null);
+                    deferred = authorizationState(userId);
                 }
             } else {
                 mine = current;
