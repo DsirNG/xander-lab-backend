@@ -9,6 +9,13 @@ class PreviewPageBuilderTest {
     private final PreviewPageBuilder builder = new PreviewPageBuilder();
 
     @Test
+    void containsPreviewScrollingSoAnchorsDoNotScrollTheHostPage() {
+        String page = builder.buildPage("<!doctype html><html><head></head><body></body></html>");
+
+        assertThat(page).contains("overscroll-behavior: contain");
+    }
+
+    @Test
     void fragmentIsWrappedInSkeletonWithCspAndReporter() {
         String page = builder.buildPage("<p>hello &amp; bye</p>");
 

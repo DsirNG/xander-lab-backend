@@ -25,6 +25,10 @@ public class PreviewPageBuilder {
     private static final String CSP_META =
             "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; base-uri 'none'; form-action 'none'\">";
 
+    /** Keeps scrolling and anchor navigation inside the embedded preview. */
+    private static final String SCROLL_CONTAINMENT_STYLE =
+            "<style>html, body { overscroll-behavior: contain; }</style>";
+
     private static final String HEIGHT_REPORTER =
             "<script>\n"
                     + "(function () {\n"
@@ -56,6 +60,7 @@ public class PreviewPageBuilder {
                     + "  <meta charset=\"UTF-8\">\n"
                     + "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
                     + CSP_META + "\n"
+                    + SCROLL_CONTAINMENT_STYLE + "\n"
                     + HEIGHT_REPORTER + "\n"
                     + FRAGMENT_STYLE + "\n"
                     + "</head>\n"
@@ -88,7 +93,7 @@ public class PreviewPageBuilder {
         var closingHead = CLOSING_HEAD.matcher(raw);
         if (closingHead.find()) {
             return raw.substring(0, closingHead.start())
-                    + CSP_META + "\n" + HEIGHT_REPORTER
+                    + CSP_META + "\n" + SCROLL_CONTAINMENT_STYLE + "\n" + HEIGHT_REPORTER
                     + raw.substring(closingHead.start());
         }
         var openingHead = OPENING_HEAD.matcher(raw);
@@ -96,15 +101,15 @@ public class PreviewPageBuilder {
             // Unclosed <head>: inject the hardening fragment and close the tag so
             // the code that follows is parsed as body content, not head content.
             return raw.substring(0, openingHead.end())
-                    + "\n" + CSP_META + HEIGHT_REPORTER + "</head>"
+                    + "\n" + CSP_META + SCROLL_CONTAINMENT_STYLE + HEIGHT_REPORTER + "</head>"
                     + raw.substring(openingHead.end());
         }
         var openingHtml = OPENING_HTML.matcher(raw);
         if (openingHtml.find()) {
             return raw.substring(0, openingHtml.end())
-                    + "\n<head>" + CSP_META + HEIGHT_REPORTER + "</head>"
+                    + "\n<head>" + CSP_META + SCROLL_CONTAINMENT_STYLE + HEIGHT_REPORTER + "</head>"
                     + raw.substring(openingHtml.end());
         }
-        return CSP_META + HEIGHT_REPORTER + raw;
+        return CSP_META + SCROLL_CONTAINMENT_STYLE + HEIGHT_REPORTER + raw;
     }
 }
