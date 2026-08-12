@@ -2,30 +2,49 @@ package com.xander.lab.blogagent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
-import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.io.BufferedReader;
-import java.io.InputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.util.function.Consumer;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /** Calls a Responses-compatible model endpoint. Model credentials are configuration only. */
+@Slf4j
 @Component
-@RequiredArgsConstructor
 public class BlogAgentModelClient {
+    /** Gateway statuses meaning the upstream model provider is temporarily unavailable.
+     * 认证/校验类错误（400/401/422 等）不重试；仅对分类出的瞬态失败做有界重试。 */
+    private static final Set<Integer> TRANSIENT_STATUS = Set.of(429, 500, 502, 503, 504);
+    private static final int MAX_ATTEMPTS = 3;
+    private static final long RETRY_BACKOFF_MILLIS = 500L;
+
     private final BlogAgentProperties properties;
     private final ObjectMapper objectMapper;
+    private final RestClient restClient;
+
+    public BlogAgentModelClient(BlogAgentProperties properties, ObjectMapper objectMapper) {
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+        this.restClient = RestClient.builder()
+                .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
+                .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
+                .build();
+    }
 
     public JsonNode analyze(String input) {
         return requestJson(
@@ -91,7 +110,7 @@ public class BlogAgentModelClient {
     }
 
     public JsonNode createArticle(String input) {
-        if (!StringUtils.hasText(properties.getApiKey()) || !StringUtils.hasText(properties.getModel())) {
+        if (!configured()) {
             throw new IllegalStateException("博客智能体尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
         }
 
@@ -104,17 +123,7 @@ public class BlogAgentModelClient {
             payload.put("tools", List.of(Map.of("type", "web_search")));
         }
 
-        JsonNode response = RestClient.builder()
-                .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
-                .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
-                .build()
-                .post()
-                .uri("/responses")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(payload)
-                .retrieve()
-                .body(JsonNode.class);
-
+        JsonNode response = executeWithRetry("article", () -> postJson(payload));
         String text = extractOutputText(response);
         if (!StringUtils.hasText(text)) {
             throw new IllegalStateException("模型没有返回可读取的文章结果");
@@ -132,8 +141,49 @@ public class BlogAgentModelClient {
         return streamJson(payload, onDelta);
     }
 
+    /** Retries classified transient failures (gateway 429/5xx、连接超时/中断、SSE 上游错误) with
+     * bounded backoff. Deltas already delivered to the UI are never re-sent, so stream calls only
+     * retry while nothing has been emitted. */
+    private JsonNode executeWithRetry(String description, Supplier<JsonNode> call) {
+        int attempt = 0;
+        while (true) {
+            attempt++;
+            try {
+                return call.get();
+            } catch (RuntimeException e) {
+                if (!isTransient(e)) throw e;
+                if (attempt >= MAX_ATTEMPTS) {
+                    log.warn("模型调用（{}）重试耗尽，共 {} 次尝试", description, attempt);
+                    throw new ModelGatewayException(transientStatus(e), exhaustedMessage(e));
+                }
+                log.warn("模型调用（{}）瞬态失败（第 {} 次尝试）：{}，{}ms 后重试",
+                        description, attempt, safeError(e), RETRY_BACKOFF_MILLIS * attempt);
+                sleepBackoff(attempt);
+            }
+        }
+    }
+
     private JsonNode streamJson(Map<String, Object> payload, Consumer<String> onDelta) {
         payload.put("stream", true);
+        int attempt = 0;
+        while (true) {
+            attempt++;
+            try {
+                return streamOnce(payload, onDelta);
+            } catch (RuntimeException e) {
+                if (!isTransient(e)) throw e;
+                if (attempt >= MAX_ATTEMPTS) {
+                    log.warn("模型流式调用重试耗尽，共 {} 次尝试", attempt);
+                    throw new ModelGatewayException(transientStatus(e), exhaustedMessage(e));
+                }
+                log.warn("模型流式调用瞬态失败（第 {} 次尝试）：{}，{}ms 后重试",
+                        attempt, safeError(e), RETRY_BACKOFF_MILLIS * attempt);
+                sleepBackoff(attempt);
+            }
+        }
+    }
+
+    private JsonNode streamOnce(Map<String, Object> payload, Consumer<String> onDelta) {
         HttpURLConnection connection = null;
         StringBuilder output = new StringBuilder();
         try {
@@ -149,7 +199,7 @@ public class BlogAgentModelClient {
 
             int status = connection.getResponseCode();
             if (status < 200 || status >= 300) {
-                throw new IllegalStateException("模型服务请求失败（HTTP " + status + "）：" + readError(connection.getErrorStream()));
+                throw new ModelGatewayException(status, "模型服务请求失败（HTTP " + status + "）");
             }
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
@@ -177,13 +227,27 @@ public class BlogAgentModelClient {
                         // indefinitely for the provider to close the socket.
                         break;
                     } else if ("error".equals(type)) {
-                        throw new IllegalStateException("模型服务返回错误：" + streamErrorMessage(event));
+                        // 上游网关通过 SSE 事件而非 HTTP 状态码报告失败（如 Upstream request failed），
+                        // 同样按瞬态失败重试；其余错误码保留给上层。
+                        String code = streamErrorCode(event);
+                        if ("upstream_error".equals(code) || "server_error".equals(code) || "overloaded".equals(code)) {
+                            throw new ModelGatewayException(502, "模型服务暂时不可用，请稍后再试");
+                        }
+                        throw new IllegalStateException(StringUtils.hasText(code)
+                                ? "模型服务返回错误（" + code + "）"
+                                : "模型服务返回未知错误");
                     }
                 }
             }
             if (!StringUtils.hasText(output)) throw new IllegalStateException("模型没有返回可读取的文章结果");
             return objectMapper.readTree(stripCodeFence(output.toString()));
-        } catch (IllegalStateException e) {
+        } catch (IOException e) {
+            // 流在产出任何 delta 前中断视为可重试的瞬态失败；已有输出时重试会重复推送内容，直接失败。
+            if (output.isEmpty()) {
+                throw new ModelGatewayException(503, "模型服务连接中断，请稍后再试");
+            }
+            throw new IllegalStateException("读取模型流式结果失败：" + e.getMessage(), e);
+        } catch (IllegalStateException | ModelGatewayException e) {
             throw e;
         } catch (Exception e) {
             throw new IllegalStateException("读取模型流式结果失败：" + e.getMessage(), e);
@@ -193,7 +257,7 @@ public class BlogAgentModelClient {
     }
 
     private JsonNode requestJson(String instruction, String input, boolean webSearch) {
-        if (!StringUtils.hasText(properties.getApiKey()) || !StringUtils.hasText(properties.getModel())) {
+        if (!configured()) {
             throw new IllegalStateException("博客智能体尚未配置模型服务");
         }
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -204,16 +268,7 @@ public class BlogAgentModelClient {
         if (webSearch && properties.isWebSearchEnabled()) {
             payload.put("tools", List.of(Map.of("type", "web_search")));
         }
-        JsonNode response = RestClient.builder()
-                .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
-                .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
-                .build()
-                .post()
-                .uri("/responses")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(payload)
-                .retrieve()
-                .body(JsonNode.class);
+        JsonNode response = executeWithRetry("stage", () -> postJson(payload));
         String text = extractOutputText(response);
         if (!StringUtils.hasText(text)) throw new IllegalStateException("模型没有返回可读取的阶段结果");
         try {
@@ -223,8 +278,23 @@ public class BlogAgentModelClient {
         }
     }
 
+    private JsonNode postJson(Map<String, Object> payload) {
+        try {
+            return restClient.post()
+                    .uri("/responses")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(payload)
+                    .retrieve()
+                    .body(JsonNode.class);
+        } catch (RestClientResponseException e) {
+            // 不把供应商原始响应体透传给用户，仅保留状态码并给出友好提示。
+            int status = e.getStatusCode().value();
+            throw new ModelGatewayException(status, "模型服务请求失败（HTTP " + status + "）");
+        }
+    }
+
     private Map<String, Object> requestPayload(String input) {
-        if (!StringUtils.hasText(properties.getApiKey()) || !StringUtils.hasText(properties.getModel())) {
+        if (!configured()) {
             throw new IllegalStateException("博客智能体尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
         }
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -236,8 +306,17 @@ public class BlogAgentModelClient {
         return payload;
     }
 
+    private boolean configured() {
+        return StringUtils.hasText(properties.getApiKey()) && StringUtils.hasText(properties.getModel());
+    }
+
     private String extractOutputText(JsonNode response) {
         if (response == null || response.isMissingNode()) return null;
+        // 部分网关对上游失败返回 HTTP 200 但 body 带 error 对象，按瞬态失败处理。
+        JsonNode error = response.path("error");
+        if (error.isObject() && StringUtils.hasText(error.path("message").asText())) {
+            throw new ModelGatewayException(502, "模型服务暂时不可用，请稍后再试");
+        }
         String direct = response.path("output_text").asText();
         if (StringUtils.hasText(direct)) return direct;
         for (JsonNode output : response.path("output")) {
@@ -250,20 +329,46 @@ public class BlogAgentModelClient {
         return StringUtils.hasText(chatContent) ? chatContent : null;
     }
 
-    private String readError(InputStream stream) {
-        if (stream == null) return "未知错误";
-        try (stream; BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            return reader.readLine();
-        } catch (Exception ignored) { return "未知错误"; }
+    private String streamErrorCode(JsonNode event) {
+        JsonNode error = event.path("error");
+        String code = error.path("type").asText();
+        if (!StringUtils.hasText(code)) code = error.path("code").asText();
+        if (!StringUtils.hasText(code)) code = event.path("code").asText();
+        return code;
     }
 
-    private String streamErrorMessage(JsonNode event) {
-        JsonNode error = event.path("error");
-        String message = error.path("message").asText();
-        if (!StringUtils.hasText(message)) message = event.path("message").asText();
-        if (!StringUtils.hasText(message)) message = error.path("code").asText();
-        if (!StringUtils.hasText(message)) message = event.path("code").asText();
-        return StringUtils.hasText(message) ? message : "未知错误";
+    private boolean isTransient(RuntimeException e) {
+        if (e instanceof ModelGatewayException gateway) return TRANSIENT_STATUS.contains(gateway.status);
+        if (e instanceof RestClientResponseException response) {
+            return TRANSIENT_STATUS.contains(response.getStatusCode().value());
+        }
+        return e instanceof ResourceAccessException;
+    }
+
+    private int transientStatus(RuntimeException e) {
+        if (e instanceof ModelGatewayException gateway) return gateway.status;
+        if (e instanceof RestClientResponseException response) return response.getStatusCode().value();
+        return -1;
+    }
+
+    private String safeError(RuntimeException e) {
+        int status = transientStatus(e);
+        return e.getClass().getSimpleName() + (status > 0 ? "（HTTP " + status + "）" : "");
+    }
+
+    private String exhaustedMessage(RuntimeException e) {
+        int status = transientStatus(e);
+        String base = status > 0 ? "模型服务暂时不可用（HTTP " + status + "）" : "模型服务连接失败";
+        return base + "，已自动重试 " + (MAX_ATTEMPTS - 1) + " 次仍失败，请稍后再试";
+    }
+
+    private void sleepBackoff(int attempt) {
+        try {
+            Thread.sleep(RETRY_BACKOFF_MILLIS * attempt);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("模型调用已被中断", interrupted);
+        }
     }
 
     private String instructions() {
@@ -295,5 +400,15 @@ public class BlogAgentModelClient {
 
     private String trimTrailingSlash(String value) {
         return value != null && value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
+    }
+
+    /** Gateway failure carrying a stable HTTP status; used to classify transient upstream failures. */
+    static class ModelGatewayException extends RuntimeException {
+        private final int status;
+
+        ModelGatewayException(int status, String message) {
+            super(message);
+            this.status = status;
+        }
     }
 }
