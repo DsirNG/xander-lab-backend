@@ -16,6 +16,17 @@ class PreviewPageBuilderTest {
     }
 
     @Test
+    void injectsSandboxDiagnosticsForAnchorAndScrollEvents() {
+        String page = builder.buildPage("<!doctype html><html><head></head><body></body></html>");
+
+        assertThat(page)
+                .contains("__sandboxDebug")
+                .contains("anchor-click:")
+                .contains("focusin")
+                .contains("hashchange");
+    }
+
+    @Test
     void fragmentIsWrappedInSkeletonWithCspAndReporter() {
         String page = builder.buildPage("<p>hello &amp; bye</p>");
 
