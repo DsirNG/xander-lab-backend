@@ -50,10 +50,10 @@ public class AgentConversationService {
         conversation.setUserId(userId);
         conversation.setTitle(excerpt(defaultText(message, "新对话"), 40));
         conversation.setStatus("ready");
+        conversation.setCancelRequested(0);
         conversation.setCreatedAt(LocalDateTime.now());
         conversation.setUpdatedAt(LocalDateTime.now());
         conversationMapper.insert(conversation);
-        saveMessage(conversation.getId(), "user", "message", null, message);
         return conversation;
     }
 
@@ -84,6 +84,13 @@ public class AgentConversationService {
         JsonNode lastError = null;
 
         for (int step = 0; step < maxSteps; step++) {
+            // 用户取消请求优先于模型调用，工具执行结束后下一轮即退出。
+            if (isCancelRequested(conversationId)) {
+                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
+                saveMessage(conversationId, "assistant", "answer", null, stopped);
+                eventService.append(conversationId, "answer", stopped, listener);
+                return finalizeReady(conversationId, userId, onEvent);
+            }
             String context = buildContext(conversationId, userId, lastError);
             JsonNode decision = modelClient.decideNextStep(context, toolRegistry.describeTools());
 
@@ -165,6 +172,7 @@ public class AgentConversationService {
             AgentConversation current = requireOwned(conversationId, userId);
             current.setStatus("ready");
             current.setErrorMessage(null);
+            current.setCancelRequested(0);
             current.setUpdatedAt(LocalDateTime.now());
             conversationMapper.updateById(current);
             return current;
@@ -173,13 +181,35 @@ public class AgentConversationService {
         return conversation;
     }
 
+    /** 请求停止当前正在执行的一轮；会话空闲时幂等返回。 */
+    public AgentConversation cancel(Long conversationId, Long userId) {
+        requireOwned(conversationId, userId);
+        transactionTemplate.executeWithoutResult(status -> conversationMapper.update(
+                null, new LambdaUpdateWrapper<AgentConversation>()
+                        .eq(AgentConversation::getId, conversationId)
+                        .eq(AgentConversation::getUserId, userId)
+                        .eq(AgentConversation::getStatus, "running")
+                        .set(AgentConversation::getCancelRequested, 1)
+                        .set(AgentConversation::getUpdatedAt, LocalDateTime.now())));
+        return requireOwned(conversationId, userId);
+    }
+
+    private boolean isCancelRequested(Long conversationId) {
+        AgentConversation conversation = conversationMapper.selectById(conversationId);
+        return conversation != null && Integer.valueOf(1).equals(conversation.getCancelRequested());
+    }
+
     private void claimConversation(Long conversationId, Long userId) {
         int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
                 .eq(AgentConversation::getId, conversationId)
                 .eq(AgentConversation::getUserId, userId)
-                .eq(AgentConversation::getStatus, "ready")
+                // failed 是上一轮模型/工具失败留下的状态，允许用户重试新一轮。
+                .and(wrapper -> wrapper.eq(AgentConversation::getStatus, "ready")
+                        .or()
+                        .eq(AgentConversation::getStatus, "failed"))
                 .set(AgentConversation::getStatus, "running")
                 .set(AgentConversation::getErrorMessage, null)
+                .set(AgentConversation::getCancelRequested, 0)
                 .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
         if (updated == 1) {
             eventService.clearConversationEvents(conversationId);

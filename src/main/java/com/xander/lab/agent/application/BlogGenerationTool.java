@@ -58,10 +58,10 @@ public class BlogGenerationTool implements AgentTool {
         BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
         request.setInput(input);
         var task = blogAgentService.create(userId, request);
-        onProgress.onProgress("博客生成助手已开始处理你的主题…");
+        onProgress.onProgress("收到，开始处理你的主题…");
         BlogAgentTaskVO result = blogAgentService.runStream(task.getId(), userId, (event, data) -> {
             if ("stage".equals(event)) {
-                onProgress.onProgress(String.valueOf(data));
+                onProgress.onProgress(prettyStage(String.valueOf(data)));
             }
         });
 
@@ -78,5 +78,23 @@ public class BlogGenerationTool implements AgentTool {
 
     private String defaultText(String value, String fallback) {
         return StringUtils.hasText(value) ? value.trim() : fallback;
+    }
+
+    /** 把流水线 stage 事件（stage|中文文案）转成用户友好的进度文案。 */
+    private String prettyStage(String raw) {
+        int separator = raw.indexOf('|');
+        if (separator < 0) {
+            return raw;
+        }
+        String stage = raw.substring(0, separator);
+        String message = raw.substring(separator + 1);
+        return switch (stage) {
+            case "analyze" -> "正在分析你的主题和文章定位…";
+            case "research" -> "正在联网搜索相关资料…";
+            case "write" -> "开始写作正文…";
+            case "illustrate" -> "正在生成知识插图…";
+            case "review" -> "正在做发布前审校…";
+            default -> StringUtils.hasText(message) ? message : raw;
+        };
     }
 }

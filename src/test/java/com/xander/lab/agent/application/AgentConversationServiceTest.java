@@ -153,6 +153,47 @@ class AgentConversationServiceTest {
         assertThat(result.getErrorMessage()).contains("中断");
     }
 
+    @Test
+    void createKeepsTitleButDoesNotPersistUserMessage() {
+        when(conversationMapper.insert(any())).thenReturn(1);
+
+        AgentConversation result = service.create(42L, "你好");
+
+        assertThat(result.getTitle()).isEqualTo("你好");
+        org.mockito.Mockito.verifyNoInteractions(messageMapper);
+    }
+
+    @Test
+    void failedConversationCanBeRetried() {
+        stubTransactions();
+        ObjectNode decision = decisionNode(true, "重试成功", null, null);
+        decision.put("reply", "好的，重试完成了");
+        when(modelClient.decideNextStep(any(), any())).thenReturn(decision);
+        AgentConversation failed = conversation("failed");
+        when(conversationMapper.selectById(7L)).thenReturn(failed);
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+
+        AgentConversation result = service.executeTurn(7L, 42L, "重试", (event, data) -> { });
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        verify(modelClient).decideNextStep(any(), any());
+    }
+
+    @Test
+    void cancelRequestStopsLoopBeforeModelCall() {
+        stubTransactions();
+        AgentConversation running = conversation("running");
+        running.setCancelRequested(1);
+        when(conversationMapper.selectById(7L)).thenReturn(running);
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+
+        AgentConversation result = service.executeTurn(7L, 42L, "继续", (event, data) -> { });
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        org.mockito.Mockito.verifyNoInteractions(modelClient);
+        verify(messageMapper).insert(argThatMessage("assistant", "answer", null));
+    }
+
     private AgentMessage argThatMessage(String role, String kind, String toolName) {
         return org.mockito.ArgumentMatchers.argThat(message ->
                 role.equals(message.getRole())

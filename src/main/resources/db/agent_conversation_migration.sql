@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS `agent_conversation` (
   `title` VARCHAR(120) NOT NULL COMMENT '会话标题，取自首条用户输入摘要',
   `status` VARCHAR(16) NOT NULL DEFAULT 'ready' COMMENT '会话状态：ready（空闲可对话）/running（一轮执行中）/failed',
   `error_message` VARCHAR(1000) NULL COMMENT '最近一轮失败原因',
+  `cancel_requested` TINYINT NOT NULL DEFAULT 0 COMMENT '用户取消请求标记：0=未请求，1=执行中轮询到后立即停止；新一轮执行开始时复位',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
