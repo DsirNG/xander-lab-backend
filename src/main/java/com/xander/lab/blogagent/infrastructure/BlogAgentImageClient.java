@@ -29,7 +29,7 @@ public class BlogAgentImageClient {
     }
 
     public GeneratedImage generate(String prompt) {
-        if (!isEnabled()) throw new IllegalStateException("博客智能体图片模型尚未配置");
+        if (!isEnabled()) throw new IllegalStateException("博客生成助手图片模型尚未配置");
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", properties.getImageModel());

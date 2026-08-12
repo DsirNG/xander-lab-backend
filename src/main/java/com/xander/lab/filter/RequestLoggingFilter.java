@@ -31,6 +31,8 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         String uri = request.getRequestURI();
         return (uri.startsWith("/api/blog-agent/tasks/")
                 && (uri.endsWith("/stream") || uri.endsWith("/events")))
+                || (uri.startsWith("/api/agent/conversations/")
+                && (uri.endsWith("/stream") || uri.endsWith("/events")))
                 || (uri.startsWith("/api/img2three/tasks/") && uri.endsWith("/run/stream"));
     }
 

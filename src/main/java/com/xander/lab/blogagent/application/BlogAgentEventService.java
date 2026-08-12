@@ -67,7 +67,7 @@ public class BlogAgentEventService {
         try {
             return objectMapper.writeValueAsString(data);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("博客智能体事件序列化失败", exception);
+            throw new IllegalStateException("博客生成助手事件序列化失败", exception);
         }
     }
 

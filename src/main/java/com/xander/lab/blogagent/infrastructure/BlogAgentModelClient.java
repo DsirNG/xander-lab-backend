@@ -111,7 +111,7 @@ public class BlogAgentModelClient {
 
     public JsonNode createArticle(String input) {
         if (!configured()) {
-            throw new IllegalStateException("博客智能体尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
+            throw new IllegalStateException("博客生成助手尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
         }
 
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -258,7 +258,7 @@ public class BlogAgentModelClient {
 
     private JsonNode requestJson(String instruction, String input, boolean webSearch) {
         if (!configured()) {
-            throw new IllegalStateException("博客智能体尚未配置模型服务");
+            throw new IllegalStateException("博客生成助手尚未配置模型服务");
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", properties.getModel());
@@ -295,7 +295,7 @@ public class BlogAgentModelClient {
 
     private Map<String, Object> requestPayload(String input) {
         if (!configured()) {
-            throw new IllegalStateException("博客智能体尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
+            throw new IllegalStateException("博客生成助手尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", properties.getModel());
@@ -372,7 +372,7 @@ public class BlogAgentModelClient {
     }
 
     private String instructions() {
-        return "你是 Xander Lab 的知识博客编辑智能体。把用户给出的主题、日记或项目问题，写成可发布的中文 Markdown 知识博客。"
+        return "你是 Xander Lab 的知识博客生成助手。把用户给出的主题、日记或项目问题，写成可发布的中文 Markdown 知识博客。"
                 + "文章主干必须来自用户明确提到的主题、问题、场景与目标；你必须自行判断输入性质、合适读者与写作语气，用户不需要填写这些设置。输入形式只影响是否保留作者经历，不得改变文章主线。"
                 + "只扩展直接帮助理解、验证或解决用户核心问题的知识。不要为了套模板强行加入因果链、知识图谱、对比、案例或排障清单；这些仅在用户提出、或它们能直接解释核心主题时才加入。"
                 + "如用户提到原因、影响、机制、为什么、导致等关系，才应建立清晰的因果链。只有知识节点之间存在多个关键关系且图谱能提升理解时，才启用知识图谱。"

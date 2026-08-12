@@ -222,8 +222,8 @@ public class BlogAgentService {
         task.setIllustrationStatus(outcome.status());
         task.setIllustrationError(limit(outcome.error(), 1000));
         saveVersion(task, outcome.generated() > 0
-                ? "智能体完成调研、写作、插图与审校"
-                : "智能体完成调研、写作与审校");
+                ? "博客生成助手完成调研、写作、插图与审校"
+                : "博客生成助手完成调研、写作与审校");
         task.setStatus("ready");
         task.setStage("review");
         task.setUpdatedAt(LocalDateTime.now());
@@ -455,7 +455,7 @@ public class BlogAgentService {
     private BlogAgentTask requireOwnedTask(Long taskId, Long userId) {
         BlogAgentTask task = taskMapper.selectById(taskId);
         if (task == null || userId == null || !userId.equals(task.getUserId())) {
-            throw new IllegalArgumentException("智能体任务不存在");
+            throw new IllegalArgumentException("博客生成助手任务不存在");
         }
         return task;
     }

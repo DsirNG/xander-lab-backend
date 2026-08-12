@@ -287,10 +287,10 @@ public class BlogAgentController {
         }
         // 其余异常（供应商、基础设施等）只记录日志，不向客户端透传内部细节。
         log.error("blog agent task failed", exception);
-        return "博客智能体任务失败，请稍后重试";
+        return "博客生成助手任务失败，请稍后重试";
     }
 
     private String defaultErrorMessage(String message) {
-        return message == null || message.isBlank() ? "博客智能体任务失败" : message;
+        return message == null || message.isBlank() ? "博客生成助手任务失败" : message;
     }
 }
