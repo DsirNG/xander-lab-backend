@@ -144,12 +144,23 @@ public class BillingService {
     private void recordAndDeduct(Long userId, String bizType, String bizKey, String bizRef,
                                  long points, String model, Long input, Long output, Long cached,
                                  String remark) {
+        ensureAccount(userId);
+        // 串行化同一账户的变更，使流水中的余额快照与实际账户余额严格一致。
+        PointAccount account = accountMapper.selectForUpdate(userId);
+        if (account == null) {
+            throw new IllegalStateException("积分账户不存在");
+        }
+        boolean credit = BillingBiz.GRANT_REGISTER.equals(bizType);
+        long after = credit ? account.getBalance() + points : account.getBalance() - points;
+
         PointsLedger ledger = new PointsLedger();
         ledger.setUserId(userId);
         ledger.setBizType(bizType);
         ledger.setBizKey(bizKey);
         ledger.setBizRef(bizRef);
         ledger.setAmount(points);
+        ledger.setBalanceAfter(after);
+        ledger.setUnitPrice(unitPrice(model));
         ledger.setModel(model);
         ledger.setInputTokens(input);
         ledger.setOutputTokens(output);
@@ -163,24 +174,19 @@ public class BillingService {
             log.debug("billing ledger duplicate ignored: type={} key={}", bizType, bizKey);
             return;
         }
-        ensureAccount(userId);
-        boolean credit = "grant".equals(bizType);
-        long before = balance(userId);
         int updated = credit
                 ? accountMapper.add(userId, points)
                 : accountMapper.deduct(userId, points);
         if (updated != 1) {
             throw new IllegalStateException("积分账户更新失败");
         }
-        long after = credit ? before + points : before - points;
-        PointsLedger snapshot = new PointsLedger();
-        snapshot.setId(ledger.getId());
-        snapshot.setBalanceAfter(after);
-        snapshot.setUnitPrice(properties.getPrice().getInputMilliPer1kToken()
+    }
+
+    private String unitPrice(String model) {
+        return properties.getPrice().getInputMilliPer1kToken()
                 + "/" + properties.getPrice().getOutputMilliPer1kToken()
                 + "/" + properties.getPrice().getCachedMilliPer1kToken()
-                + (model == null ? "" : " " + model));
-        ledgerMapper.updateById(snapshot);
+                + (model == null ? "" : " " + model);
     }
 
     private void ensureAccount(Long userId) {
