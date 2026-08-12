@@ -1,6 +1,7 @@
 package com.xander.lab.identity.application;
 
 import com.xander.lab.common.Constants;
+import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
@@ -28,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -47,7 +49,8 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate, passwordEncoder);
+        service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate, passwordEncoder,
+                mock(BillingService.class));
         // 速率限制默认放行（increment 返回 1），只被涉及限流的用例使用
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(valueOperations.increment(anyString())).thenReturn(1L);

@@ -3,6 +3,8 @@ package com.xander.lab.agent.infrastructure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -44,9 +46,9 @@ public class AgentModelClient {
 
     /**
      * Asks the model to pick the next step: either conclude with a reply or
-     * invoke one of the provided tools. Returns a JSON decision object.
+     * invoke one of the provided tools. Returns a JSON decision object with usage.
      */
-    public JsonNode decideNextStep(String context, String toolDescriptions) {
+    public ModelCallResult decideNextStep(String context, String toolDescriptions) {
         return decideNextStepStream(context, toolDescriptions, ignored -> { });
     }
 
@@ -55,13 +57,13 @@ public class AgentModelClient {
      * JSON inside the orchestration boundary. The response is still parsed as
      * one authoritative decision object after the upstream stream completes.
      */
-    public JsonNode decideNextStepStream(String context, String toolDescriptions,
+    public ModelCallResult decideNextStepStream(String context, String toolDescriptions,
                                          Consumer<String> onAnswerDelta) {
         return decideNextStepStream(context, toolDescriptions, onAnswerDelta, () -> false);
     }
 
     /** Retries only transient failures and never retries after a user-visible reply delta. */
-    public JsonNode decideNextStepStream(String context, String toolDescriptions,
+    public ModelCallResult decideNextStepStream(String context, String toolDescriptions,
                                          Consumer<String> onAnswerDelta,
                                          BooleanSupplier cancellationRequested) {
         AtomicBoolean visibleDelta = new AtomicBoolean();
@@ -87,7 +89,7 @@ public class AgentModelClient {
         }
     }
 
-    private JsonNode decideNextStepStreamOnce(String context, String toolDescriptions,
+    private ModelCallResult decideNextStepStreamOnce(String context, String toolDescriptions,
                                                Consumer<String> onAnswerDelta,
                                                BooleanSupplier cancellationRequested) {
         requireConfigured();
@@ -96,6 +98,7 @@ public class AgentModelClient {
 
         HttpURLConnection connection = null;
         StringBuilder output = new StringBuilder();
+        ModelUsage usage = ModelUsage.NONE;
         DecisionReplyDecoder replyDecoder = new DecisionReplyDecoder(onAnswerDelta);
         try {
             connection = (HttpURLConnection) URI.create(
@@ -135,6 +138,7 @@ public class AgentModelClient {
                             appendDecisionDelta(output, replyDecoder,
                                     defaultText(extractOutputText(event.path("response"))));
                         }
+                        usage = ModelUsage.fromJson(event.path("response").path("usage"));
                         break;
                     } else if ("error".equals(type)) {
                         throw new ModelGatewayException(502, "模型服务暂时不可用，请稍后重试");
@@ -147,7 +151,7 @@ public class AgentModelClient {
             }
             JsonNode decision = objectMapper.readTree(stripCodeFence(output.toString()));
             validateDecision(decision);
-            return decision;
+            return ModelCallResult.of(decision, usage);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("模型决策结果不是有效的 JSON，请重试", exception);
         } catch (IOException exception) {

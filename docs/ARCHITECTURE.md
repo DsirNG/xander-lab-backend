@@ -14,6 +14,7 @@ feature; deployment and database topology stay unchanged.
 - `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
 - `components` (migrated): owns the UI component library catalog, detail pages, and community-shared submissions.
 - `bloghtml` (new): owns short-lived blog HTML preview sessions. Session creation (`POST /api/blog-html/previews`) is public with per-IP Redis fixed-window rate limiting; code is stored in Redis with a TTL and served as a standalone sandbox page (`GET /blog-html/{id}/raw`) outside `/api` so iframes load it without auth, CORS or cookies. The page runs on an independent origin (per-session subdomain in production, a different port locally) and carries a strict CSP with `frame-ancestors` restricting embedders; this is the preview isolation pattern used by ChatGPT for its artifact pages.
+- `billing` (new): owns the points account (`sys_user_points`), the append-only points ledger (`points_ledger`) with a unique `(biz_type, biz_key)` idempotency key, priced model-usage charges, flat-price charges, balance pre-checks, and the `/api/points` endpoints. It must not own generation tasks, conversations, articles, reminders, or publications; feature modules call it only through `BillingService` ports and never through its mappers.
 
 ## Module Documentation
 
@@ -50,6 +51,16 @@ configuration must remain compatible during package moves.
 bearer-token validation, consent, and MCP request identity. It is distinct from
 both browser JWT sessions and CSDN platform credentials. The `blog`, `csdn`,
 and `dual` MCP modules own only their transport contracts and application flows.
+
+`billing` is charge-on-success only: model clients return business payloads
+together with token usage (`ModelCallResult`), and the owning application
+service records the charge at its success sentinel (durable ready/failed
+transition, successful publish, or completed send) with a unique biz key.
+There is no refund flow because a charge is never recorded before success.
+Balance pre-checks (`ensureAvailable`) sit at the start of a new consumption
+request and fail fast with HTTP 402 until the user obtains points. All billing
+I/O is app-service-scoped; `identity` grants the registration bonus through
+`BillingService.grantRegister` and must not touch ledger tables.
 
 ## Migration Order
 

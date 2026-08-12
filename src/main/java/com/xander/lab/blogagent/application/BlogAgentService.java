@@ -8,6 +8,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentSessionVO;
+import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.common.ModelUsage;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.blogagent.domain.BlogAgentSource;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
@@ -65,6 +69,7 @@ public class BlogAgentService {
     private final BlogAgentMessageMapper messageMapper;
     private final BlogAgentEventService eventService;
     private final BlogAgentLeaseScheduler leaseScheduler;
+    private final BillingService billingService;
 
     @Autowired
     void setPublicationService(PublicationService publicationService) {
@@ -97,7 +102,8 @@ public class BlogAgentService {
         if (count < 1 || count > 30) {
             throw new IllegalArgumentException("主题数量需在 1-30 之间");
         }
-        JsonNode response = modelClient.planTopicSeries(seed, audience, tone, count, excludeTitles);
+        ModelCallResult call = modelClient.planTopicSeries(seed, audience, tone, count, excludeTitles);
+        JsonNode response = call.payload();
         List<String> topics = new ArrayList<>();
         JsonNode topicNodes = response.path("topics");
         if (topicNodes.isArray()) {
@@ -105,12 +111,17 @@ public class BlogAgentService {
                 if (StringUtils.hasText(node.asText())) topics.add(node.asText().trim());
             });
         }
-        return topics.stream()
+        List<String> result = topics.stream()
                 .filter(title -> excludeTitles == null || excludeTitles.stream().noneMatch(excluded ->
                         excluded != null && title.equalsIgnoreCase(excluded.strip())))
                 .distinct()
                 .limit(count)
                 .toList();
+        if (!result.isEmpty()) {
+            billingService.chargeTokens(userId, BillingBiz.BLOG_TOPIC, "topics:" + userId + ":" + System.currentTimeMillis(),
+                    "seed:" + seed, call.usage(), null, "AI 选题生成");
+        }
+        return result;
     }
 
     /** Executes analyze → research → write → review as one durable task run. */
@@ -157,23 +168,30 @@ public class BlogAgentService {
             throw exception;
         }
         try {
+            UsageAccumulator usage = new UsageAccumulator();
             checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "analyze", "正在理解你的目标和文章边界", onEvent);
-            JsonNode analysis = modelClient.analyze(getInput(taskId, userId));
+            ModelCallResult analysisCall = modelClient.analyze(getInput(taskId, userId));
+            JsonNode analysis = analysisCall.payload();
+            usage.add(analysisCall.usage());
             checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "research", "正在联网查找并核验相关资料", onEvent);
-            JsonNode research = modelClient.research(getInput(taskId, userId), analysis);
+            ModelCallResult researchCall = modelClient.research(getInput(taskId, userId), analysis);
+            JsonNode research = researchCall.payload();
+            usage.add(researchCall.usage());
             checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "write", "正在根据策划和调研结果撰写文章草稿", onEvent);
             String writingInput = getInput(taskId, userId)
                     + "\n\n策划结果：\n" + analysis
                     + "\n\n调研结果：\n" + research;
-            JsonNode result = streaming
+            ModelCallResult articleCall = streaming
                     ? modelClient.createArticleStream(writingInput, delta -> {
                         checkCancellation(cancellationRequested);
                         onEvent.accept("delta", delta);
                     })
                     : modelClient.createArticle(writingInput);
+            JsonNode result = articleCall.payload();
+            usage.add(articleCall.usage());
             checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "illustrate", "正在按需生成并保存知识插图", onEvent);
             IllustrationOutcome outcome = generateIllustrations(
@@ -181,9 +199,10 @@ public class BlogAgentService {
                     result.path("illustrations"), cancellationRequested);
             checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "review", "正在进行最终逻辑与表达审校", onEvent);
-            IllustrationOutcome reviewed = reviewOutcome(outcome, getInput(taskId, userId));
+            IllustrationOutcome reviewed = reviewOutcome(outcome, getInput(taskId, userId), usage);
             checkCancellation(cancellationRequested);
-            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, result, reviewed));
+            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, result, reviewed, usage,
+                        BillingBiz.BLOG_AGENT_RUN, "task:" + taskId + ":run"));
         } catch (CancellationException exception) {
             transactionTemplate.executeWithoutResult(status -> markCancelled(taskId, userId));
             throw exception;
@@ -210,9 +229,11 @@ public class BlogAgentService {
         onEvent.accept("stage", stage + "|" + message);
     }
 
-    private IllustrationOutcome reviewOutcome(IllustrationOutcome outcome, String request) {
+    private IllustrationOutcome reviewOutcome(IllustrationOutcome outcome, String request, UsageAccumulator usage) {
         try {
-            JsonNode reviewed = modelClient.reviewArticle(outcome.content(), request);
+            ModelCallResult call = modelClient.reviewArticle(outcome.content(), request);
+            JsonNode reviewed = call.payload();
+            usage.add(call.usage());
             if (reviewed == null) return outcome;
             String content = defaultText(reviewed.path("content").asText(), outcome.content());
             return new IllustrationOutcome(content, outcome.status(), outcome.error(), outcome.generated());
@@ -249,7 +270,8 @@ public class BlogAgentService {
     }
 
     private BlogAgentTaskVO finalizeResult(Long taskId, Long userId, JsonNode result,
-                                           IllustrationOutcome outcome) {
+                                           IllustrationOutcome outcome, UsageAccumulator usage,
+                                           String billingBizType, String billingBizKey) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
         if (!"running".equals(task.getStatus())) {
             throw new IllegalStateException("博客生成助手任务执行权已失效");
@@ -289,6 +311,8 @@ public class BlogAgentService {
                 ? "博客生成助手完成调研、写作、插图与审校"
                 : "博客生成助手完成调研、写作与审校");
         saveMessage(taskId, "assistant", "result", "review", task.getTitle());
+        billingService.chargeTokens(userId, billingBizType, billingBizKey,
+                "task:" + taskId, usage.sum(), null, billingBizKey);
         return get(taskId, userId);
     }
 
@@ -409,16 +433,20 @@ public class BlogAgentService {
             throw exception;
         }
         try {
+            UsageAccumulator usage = new UsageAccumulator();
             updateStage(taskId, userId, "write", "正在根据你的新要求修改文章", onEvent);
-            JsonNode result = modelClient.reviseArticleStream(
+            ModelCallResult reviseCall = modelClient.reviseArticleStream(
                     requireOwnedTask(taskId, userId).getContent(), instruction,
                     delta -> onEvent.accept("delta", delta));
+            JsonNode result = reviseCall.payload();
+            usage.add(reviseCall.usage());
             updateStage(taskId, userId, "illustrate", "正在同步调整文章插图", onEvent);
             IllustrationOutcome outcome = generateIllustrations(
                     taskId, userId, result.path("content").asText(), result.path("illustrations"));
             updateStage(taskId, userId, "review", "正在检查本轮修改", onEvent);
-            IllustrationOutcome reviewed = reviewOutcome(outcome, instruction);
-            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, result, reviewed));
+            IllustrationOutcome reviewed = reviewOutcome(outcome, instruction, usage);
+            return transactionTemplate.execute(status -> finalizeResult(taskId, userId, result, reviewed,
+                    usage, BillingBiz.BLOG_AGENT_REVISE, "task:" + taskId + ":revise"));
         } catch (RuntimeException e) {
             transactionTemplate.executeWithoutResult(status -> markRevisionFailed(taskId, userId, e.getMessage()));
             throw e;
@@ -527,6 +555,9 @@ public class BlogAgentService {
                             "size", properties.getImageSize()));
                     BlogMediaAsset asset = mediaService.saveAgentImage(userId, taskId, fileName, generated, meta);
                     markdown = "![" + alt + "](" + asset.getUrl() + ")";
+                    billingService.chargeFlat(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+                            "illustration:" + taskId + ":" + (index + 1), "task:" + taskId,
+                            billingService.flatPoints(BillingBiz.BLOG_AGENT_ILLUSTRATION), "知识插图生成");
                 }
                 content = replaceOrAppend(content, placeholder, markdown);
                 generatedCount++;
@@ -638,12 +669,16 @@ public class BlogAgentService {
             throw new IllegalStateException("文章内容为空，无法进行合规审核");
         }
         try {
-            com.fasterxml.jackson.databind.JsonNode result = modelClient.reviewCompliance(
+            ModelCallResult call = modelClient.reviewCompliance(
                     defaultText(task.getTitle(), ""), task.getContent());
+            JsonNode result = call.payload();
             boolean pass = result.path("pass").asBoolean(false);
             String reason = result.path("reasons").isArray()
                     ? result.path("reasons").toString()
                     : "";
+            billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_COMPLIANCE,
+                    "task:" + taskId + ":compliance", "task:" + taskId,
+                    call.usage(), null, "合规审查");
             return new ComplianceReview(pass, reason);
         } catch (RuntimeException e) {
             log.warn("blog-agent compliance review degraded to reject for task {}: {}",
@@ -749,6 +784,24 @@ public class BlogAgentService {
     private String excerpt(String content, int length) { return content.length() <= length ? content : content.substring(0, length - 1) + "…"; }
 
     private record IllustrationOutcome(String content, String status, String error, int generated) {}
+
+    /** Aggregates token usage across the sequential stages of one blog-agent run. */
+    private static final class UsageAccumulator {
+        private long input;
+        private long cached;
+        private long output;
+
+        void add(ModelUsage usage) {
+            if (usage == null) return;
+            input += Math.max(0L, usage.inputTokens());
+            cached += Math.max(0L, usage.cachedTokens());
+            output += Math.max(0L, usage.outputTokens());
+        }
+
+        ModelUsage sum() {
+            return new ModelUsage(input, cached, output);
+        }
+    }
 
     private static final class BlogAgentRunSupersededException extends IllegalStateException {
         private BlogAgentRunSupersededException(Long taskId) {

@@ -2,6 +2,7 @@ package com.xander.lab.automation.infrastructure;
 
 import com.xander.lab.automation.domain.EmailReminderTask;
 import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
+import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.integration.mail.MailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,6 +17,7 @@ import java.util.List;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,7 +38,8 @@ class EmailReminderSchedulerTest {
     void setUp() {
         scheduler = new EmailReminderScheduler(
                 taskMapper,
-                mailService
+                mailService,
+                mock(BillingService.class)
         );
         ReflectionTestUtils.setField(scheduler, "batchSize", 20);
         ReflectionTestUtils.setField(scheduler, "claimTimeoutMs", 600_000L);

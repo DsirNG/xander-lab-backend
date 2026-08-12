@@ -88,7 +88,7 @@ mybatis-plus:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   mapper-locations: classpath*:/mapper/*.xml
-  type-aliases-package: com.xander.lab.entity,com.xander.lab.automation.domain,com.xander.lab.studio.domain
+  type-aliases-package: com.xander.lab.entity,com.xander.lab.automation.domain,com.xander.lab.studio.domain,com.xander.lab.billing.domain
 
 # JWT配置
 jwt:
@@ -205,4 +205,19 @@ blog-content-plan:
   batch-size: ${BLOG_CONTENT_PLAN_BATCH_SIZE:5}
   max-active-per-user: ${BLOG_CONTENT_PLAN_MAX_ACTIVE_PER_USER:50}
   max-created-per-day: ${BLOG_CONTENT_PLAN_MAX_CREATED_PER_DAY:20}
+
+# Points billing module. token 单价以「毫分 / 每 1K token」为单位（500 = 每 1K 输入 token 折 0.5 分），
+# 扣费按次向上取整、至少 1 分。flat 为无 token 计量项的一口价（单位：分）。
+billing:
+  enabled: ${BILLING_ENABLED:true}
+  grant-register: ${BILLING_GRANT_REGISTER:2000}
+  pre-check-min-balance: ${BILLING_PRE_CHECK_MIN_BALANCE:1}
+  price:
+    input-milli-per-1k-token: ${BILLING_INPUT_MILLI_PER_1K_TOKEN:500}
+    output-milli-per-1k-token: ${BILLING_OUTPUT_MILLI_PER_1K_TOKEN:2000}
+    cached-milli-per-1k-token: ${BILLING_CACHED_MILLI_PER_1K_TOKEN:50}
+  flat:
+    blog-agent-illustration: ${BILLING_FLAT_BLOG_AGENT_ILLUSTRATION:50}
+    email-reminder: ${BILLING_FLAT_EMAIL_REMINDER:5}
+    csdn-publish: ${BILLING_FLAT_CSDN_PUBLISH:10}
 

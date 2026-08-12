@@ -118,7 +118,7 @@ class BlogAgentModelClientTest {
                 respondJson(502, UPSTREAM_ERROR),
                 respondJson(502, UPSTREAM_ERROR),
                 respondJson(200, "{\"output_text\":\"{\\\"angle\\\":\\\"深度优先\\\"}\"}")));
-        JsonNode result = client.analyze("测试主题");
+        JsonNode result = client.analyze("测试主题").payload();
         assertEquals("深度优先", result.path("angle").asText());
         assertEquals(3, requests.get());
     }
@@ -148,7 +148,7 @@ class BlogAgentModelClientTest {
     void retriesStreamGatewayFailureBeforeAnyDelta() throws Exception {
         startServer(List.of(respondJson(502, UPSTREAM_ERROR), respondStream(streamBody())));
         StringBuilder deltas = new StringBuilder();
-        JsonNode result = client.createArticleStream("测试主题", deltas::append);
+        JsonNode result = client.createArticleStream("测试主题", deltas::append).payload();
         assertEquals("{\"angle\":\"深度优先\"}", result.toString());
         assertEquals("{\"angle\":\"深度优先\"}", deltas.toString());
         assertEquals(2, requests.get());
@@ -158,7 +158,7 @@ class BlogAgentModelClientTest {
     void retriesStreamSseUpstreamErrorEvent() throws Exception {
         startServer(List.of(respondStream(streamErrorEvent()), respondStream(streamBody())));
         StringBuilder deltas = new StringBuilder();
-        JsonNode result = client.createArticleStream("测试主题", deltas::append);
+        JsonNode result = client.createArticleStream("测试主题", deltas::append).payload();
         assertEquals("{\"angle\":\"深度优先\"}", result.toString());
         assertEquals(2, requests.get());
     }

@@ -6,6 +6,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.publishing.application.BlogMediaService;
 import com.xander.lab.publishing.domain.BlogMediaAsset;
+import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.common.ModelUsage;
 import com.xander.lab.studio.api.Img2ThreeTaskVO;
 import com.xander.lab.studio.api.Img2ThreeTaskSummaryVO;
 import com.xander.lab.studio.domain.Img2ThreeTask;
@@ -45,6 +49,7 @@ public class Img2ThreeService {
     private final Img2ThreeProperties properties;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
+    private final BillingService billingService;
 
     public Img2ThreeTaskVO create(Long userId, MultipartFile file) {
         if (userId == null) {
@@ -96,6 +101,7 @@ public class Img2ThreeService {
     }
 
     public Img2ThreeTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
+        billingService.ensureAvailable(userId);
         Img2ThreeTask existing = requireOwned(taskId, userId);
         if ("ready".equals(existing.getStatus()) && StringUtils.hasText(existing.getSpecJson())) {
             return toVo(existing);
@@ -125,7 +131,7 @@ public class Img2ThreeService {
             requireActiveExecution(updateStage(taskId, userId, runToken, "spec"));
 
             GeneratedModel generated = new GeneratedModel(
-                    relief.title(), relief.analysis(), relief.sceneSpec(), relief.factoryCode()
+                    relief.title(), relief.analysis(), relief.sceneSpec(), relief.factoryCode(), ModelUsage.NONE
             );
             if (properties.isAgentEnabled()) {
                 try {
@@ -160,6 +166,10 @@ public class Img2ThreeService {
             if (!Integer.valueOf(1).equals(completed)) {
                 throw new IllegalStateException("任务状态已变化，本次重建结果未覆盖较新的任务状态");
             }
+            if (!generated.usage().isEmpty()) {
+                billingService.chargeTokens(userId, BillingBiz.IMG2THREE, "img2three:" + taskId,
+                        "task:" + taskId, generated.usage(), null, "图生 3D 重建完成");
+            }
             return get(taskId, userId);
         } catch (Exception e) {
             log.warn("img2three task {} failed at its current stage", taskId, e);
@@ -182,8 +192,11 @@ public class Img2ThreeService {
         String starterSpecJson = pipeline.createStarterSpec();
         log.info("img2three task {} requesting model reconstruction (imageBytes={}, starterSpecChars={})",
                 taskId, imageBytes.length, starterSpecJson.length());
-        JsonNode result = modelClient.reconstruct(imageBytes, contentType, starterSpecJson);
+        ModelCallResult reconstruction = modelClient.reconstruct(imageBytes, contentType, starterSpecJson);
+        JsonNode result = reconstruction.payload();
         log.info("img2three task {} received initial model response", taskId);
+        UsageAccumulator usage = new UsageAccumulator();
+        usage.add(reconstruction.usage());
         JsonNode analysis = objectMapper.createObjectNode();
         JsonNode sceneSpec = null;
         String title = null;
@@ -199,7 +212,7 @@ public class Img2ThreeService {
                     throw new IllegalStateException("模型未返回 img2threejs ObjectSculptSpec");
                 }
                 emit(onEvent, "stage", "spec|模型返回结构不完整，正在按 img2threejs 契约修订");
-                result = modelClient.repair(
+                ModelCallResult repair = modelClient.repair(
                         imageBytes,
                         contentType,
                         result,
@@ -207,6 +220,8 @@ public class Img2ThreeService {
                                 + "schemaVersion/componentTree/materials, or preferably wrap it as "
                                 + "{\"title\": string, \"analysis\": object, \"spec\": ObjectSculptSpec}."
                 );
+                result = repair.payload();
+                usage.add(repair.usage());
                 continue;
             }
 
@@ -220,7 +235,9 @@ public class Img2ThreeService {
                     throw e;
                 }
                 emit(onEvent, "stage", "spec|质量门未通过，正在根据完整报告修订规格");
-                result = modelClient.repair(imageBytes, contentType, result, e.getMessage());
+                ModelCallResult repair = modelClient.repair(imageBytes, contentType, result, e.getMessage());
+                result = repair.payload();
+                usage.add(repair.usage());
             }
         }
 
@@ -231,7 +248,8 @@ public class Img2ThreeService {
                 StringUtils.hasText(title) ? title : "Generated Model",
                 safeAnalysis,
                 sceneSpec,
-                factoryCode
+                factoryCode,
+                usage.sum()
         );
     }
 
@@ -449,7 +467,26 @@ public class Img2ThreeService {
             String title,
             JsonNode analysis,
             JsonNode sceneSpec,
-            String factoryCode
+            String factoryCode,
+            ModelUsage usage
     ) {
+    }
+
+    /** Aggregates token usage across the initial reconstruction and any repair retries. */
+    private static final class UsageAccumulator {
+        private long input;
+        private long cached;
+        private long output;
+
+        void add(ModelUsage usage) {
+            if (usage == null) return;
+            input += Math.max(0L, usage.inputTokens());
+            cached += Math.max(0L, usage.cachedTokens());
+            output += Math.max(0L, usage.outputTokens());
+        }
+
+        ModelUsage sum() {
+            return new ModelUsage(input, cached, output);
+        }
     }
 }

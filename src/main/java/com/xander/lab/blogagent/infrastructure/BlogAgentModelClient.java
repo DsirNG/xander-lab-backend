@@ -2,6 +2,8 @@ package com.xander.lab.blogagent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -52,7 +54,7 @@ public class BlogAgentModelClient {
                 .build();
     }
 
-    public JsonNode analyze(String input) {
+    public ModelCallResult analyze(String input) {
         return requestJson(
                 "你是知识博客策划编辑。只分析用户真正想写什么、必须保留什么、哪些信息需要查证。"
                         + "不要写文章，不要搜索。仅返回 JSON："
@@ -61,7 +63,7 @@ public class BlogAgentModelClient {
                 input, false);
     }
 
-    public JsonNode research(String input, JsonNode analysis) {
+    public ModelCallResult research(String input, JsonNode analysis) {
         return requestJson(
                 "你是知识博客研究员。使用网页搜索核验和补全用户主题，只保留与文章主线直接相关的权威信息。"
                         + "不要写文章。仅返回 JSON："
@@ -70,7 +72,7 @@ public class BlogAgentModelClient {
                 "用户输入：\n" + input + "\n\n策划结果：\n" + analysis, true);
     }
 
-    public JsonNode reviewArticle(String content, String userRequest) {
+    public ModelCallResult reviewArticle(String content, String userRequest) {
         return requestJson(
                 "你是严谨的中文知识博客审校编辑。检查逻辑、事实表述、结构、Markdown 和用户要求。"
                         + "保留文章中的图片 Markdown，不要虚构来源。仅返回 JSON："
@@ -79,7 +81,7 @@ public class BlogAgentModelClient {
     }
 
     /** Compliance gate for auto-publishing: rejects forbidden or unsafe content. */
-    public JsonNode reviewCompliance(String title, String content) {
+    public ModelCallResult reviewCompliance(String title, String content) {
         return requestJson(
                 "你是内容安全审核员。判断这篇文章是否包含色情、赌博、毒品、暴力仇恨、诈骗、违法违规等"
                         + "不得发布的敏感违规内容，或极低质量的水文。不要修改正文。仅返回 JSON："
@@ -89,7 +91,7 @@ public class BlogAgentModelClient {
     }
 
     /** Generates a series of distinct article topics for a scheduled plan run. */
-    public JsonNode planTopicSeries(String seed, String audience, String tone,
+    public ModelCallResult planTopicSeries(String seed, String audience, String tone,
                                     int count, List<String> excludeTitles) {
         String excludeText = excludeTitles == null || excludeTitles.isEmpty()
                 ? ""
@@ -106,7 +108,7 @@ public class BlogAgentModelClient {
                 false);
     }
 
-    public JsonNode reviseArticleStream(String currentArticle, String instruction, Consumer<String> onDelta) {
+    public ModelCallResult reviseArticleStream(String currentArticle, String instruction, Consumer<String> onDelta) {
         Map<String, Object> payload = requestPayload(
                 "当前文章：\n" + currentArticle + "\n\n用户本轮修改要求：\n" + instruction);
         payload.put("instructions", instructions()
@@ -115,7 +117,7 @@ public class BlogAgentModelClient {
         return streamJson(payload, onDelta);
     }
 
-    public JsonNode createArticle(String input) {
+    public ModelCallResult createArticle(String input) {
         if (!configured()) {
             throw new IllegalStateException("博客生成助手尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
         }
@@ -135,14 +137,15 @@ public class BlogAgentModelClient {
             throw new IllegalStateException("模型没有返回可读取的文章结果");
         }
         try {
-            return objectMapper.readTree(stripCodeFence(text));
+            return ModelCallResult.of(objectMapper.readTree(stripCodeFence(text)),
+                    ModelUsage.fromJson(response.path("usage")));
         } catch (Exception e) {
             throw new IllegalStateException("模型返回格式不正确，请重试", e);
         }
     }
 
     /** Streams output tokens from a Responses-compatible endpoint and returns the final JSON article. */
-    public JsonNode createArticleStream(String input, Consumer<String> onDelta) {
+    public ModelCallResult createArticleStream(String input, Consumer<String> onDelta) {
         Map<String, Object> payload = requestPayload(input);
         return streamJson(payload, onDelta);
     }
@@ -169,7 +172,7 @@ public class BlogAgentModelClient {
         }
     }
 
-    private JsonNode streamJson(Map<String, Object> payload, Consumer<String> onDelta) {
+    private ModelCallResult streamJson(Map<String, Object> payload, Consumer<String> onDelta) {
         payload.put("stream", true);
         boolean[] visibleDeltaDelivered = {false};
         Consumer<String> trackedOnDelta = delta -> {
@@ -197,9 +200,10 @@ public class BlogAgentModelClient {
         }
     }
 
-    private JsonNode streamOnce(Map<String, Object> payload, Consumer<String> onDelta) {
+    private ModelCallResult streamOnce(Map<String, Object> payload, Consumer<String> onDelta) {
         HttpURLConnection connection = null;
         StringBuilder output = new StringBuilder();
+        ModelUsage usage = ModelUsage.NONE;
         try {
             connection = (HttpURLConnection) URI.create(trimTrailingSlash(properties.getBaseUrl()) + "/responses").toURL().openConnection();
             connection.setRequestMethod("POST");
@@ -239,6 +243,7 @@ public class BlogAgentModelClient {
                         // A completed response may keep the upstream SSE connection open.
                         // The accumulated deltas are already the final article, so do not wait
                         // indefinitely for the provider to close the socket.
+                        usage = ModelUsage.fromJson(event.path("response").path("usage"));
                         break;
                     } else if ("error".equals(type)) {
                         // 上游网关通过 SSE 事件而非 HTTP 状态码报告失败（如 Upstream request failed），
@@ -254,7 +259,7 @@ public class BlogAgentModelClient {
                 }
             }
             if (!StringUtils.hasText(output)) throw new IllegalStateException("模型没有返回可读取的文章结果");
-            return objectMapper.readTree(stripCodeFence(output.toString()));
+            return ModelCallResult.of(objectMapper.readTree(stripCodeFence(output.toString())), usage);
         } catch (IOException e) {
             // 流在产出任何 delta 前中断视为可重试的瞬态失败；已有输出时重试会重复推送内容，直接失败。
             if (output.isEmpty()) {
@@ -272,7 +277,7 @@ public class BlogAgentModelClient {
         }
     }
 
-    private JsonNode requestJson(String instruction, String input, boolean webSearch) {
+    private ModelCallResult requestJson(String instruction, String input, boolean webSearch) {
         if (!configured()) {
             throw new IllegalStateException("博客生成助手尚未配置模型服务");
         }
@@ -288,7 +293,8 @@ public class BlogAgentModelClient {
         String text = extractOutputText(response);
         if (!StringUtils.hasText(text)) throw new IllegalStateException("模型没有返回可读取的阶段结果");
         try {
-            return objectMapper.readTree(stripCodeFence(text));
+            return ModelCallResult.of(objectMapper.readTree(stripCodeFence(text)),
+                    ModelUsage.fromJson(response.path("usage")));
         } catch (Exception e) {
             throw new IllegalStateException("模型阶段结果不是有效 JSON", e);
         }

@@ -1,6 +1,7 @@
 package com.xander.lab.identity.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.common.Constants;
 import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
@@ -36,6 +37,7 @@ public class AuthService {
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
     private final PasswordEncoder passwordEncoder;
+    private final BillingService billingService;
 
 /**
      * 发送登录验证码
@@ -183,6 +185,7 @@ public class AuthService {
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.insert(user);
+        billingService.grantRegister(user.getId(), "user:" + user.getId());
         return user;
     }
 
@@ -335,6 +338,7 @@ public class AuthService {
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.insert(user);
+        billingService.grantRegister(user.getId(), "user:" + user.getId());
         return generateTokenResponse(user);
     }
 }

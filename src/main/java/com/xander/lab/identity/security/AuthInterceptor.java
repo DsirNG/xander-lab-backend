@@ -76,7 +76,11 @@ public class AuthInterceptor implements HandlerInterceptor {
             "GET:/api/publishing/csdn/authorization/status",
             "POST:/api/publishing/csdn/authorization/start",
             "POST:/api/publishing/csdn/authorization/cancel",
-            "DELETE:/api/publishing/csdn/authorization"
+            "DELETE:/api/publishing/csdn/authorization",
+            // 积分余额与流水为私有数据，必须登录后才能读取。
+            "GET:/api/points",
+            "GET:/api/points/ledger",
+            "GET:/api/points/prices"
     );
 
     /** 公开的读操作路径（支持通配符） */

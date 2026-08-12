@@ -77,7 +77,8 @@ class BlogAgentServiceIdempotencyTest {
                 properties,
                 mock(BlogAgentMessageMapper.class),
                 mock(BlogAgentEventService.class),
-                leaseScheduler);
+                leaseScheduler,
+                mock(com.xander.lab.billing.application.BillingService.class));
         ScheduledFuture<?> renewal = mock(ScheduledFuture.class);
         org.mockito.Mockito.lenient().doReturn(renewal).when(leaseScheduler).scheduleAtFixedRate(
                 any(Runnable.class), any(Long.class));

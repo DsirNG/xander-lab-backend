@@ -117,7 +117,8 @@ class Img2ThreeServiceTest {
                 reliefGenerator,
                 properties,
                 objectMapper,
-                transactionTemplate
+                transactionTemplate,
+                mock(com.xander.lab.billing.application.BillingService.class)
         );
         List<String> events = new ArrayList<>();
 

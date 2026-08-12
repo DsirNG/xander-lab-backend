@@ -3,6 +3,8 @@ package com.xander.lab.automation.infrastructure;
 import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
 import com.xander.lab.automation.domain.EmailReminderTask;
 import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
+import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.billing.domain.BillingBiz;
 import com.xander.lab.integration.mail.MailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +33,7 @@ public class EmailReminderScheduler {
 
     private final EmailReminderTaskMapper taskMapper;
     private final MailService mailService;
+    private final BillingService billingService;
 
     @Value("${email-reminder.batch-size:20}")
     private int batchSize;
@@ -109,6 +112,11 @@ public class EmailReminderScheduler {
                     : taskMapper.markSentAndReschedule(task.getId(), processingToken, nextScheduledAt);
             if (completed != 1) {
                 log.error("[EmailReminder] 邮件已发送但任务完成状态写入失败：taskId={}", task.getId());
+            } else {
+                billingService.chargeFlat(task.getUserId(), BillingBiz.EMAIL_REMINDER,
+                        "email:" + task.getId() + ":" + task.getScheduledAt().toEpochMilli(),
+                        "task:" + task.getId(), billingService.flatPoints(BillingBiz.EMAIL_REMINDER),
+                        "定时邮件提醒发送成功");
             }
         } catch (Exception e) {
             String errorMessage = limitError(rootMessage(e));

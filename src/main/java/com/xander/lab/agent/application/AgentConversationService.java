@@ -13,6 +13,10 @@ import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
 import com.xander.lab.agent.infrastructure.AgentModelClient;
+import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.common.ModelUsage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -51,6 +55,7 @@ public class AgentConversationService {
     private final TransactionTemplate transactionTemplate;
     private final AgentEventService eventService;
     private final ScheduledExecutorService agentLeaseRenewer;
+    private final BillingService billingService;
 
     @Transactional
     public AgentConversation create(Long userId, String message) {
@@ -78,6 +83,7 @@ public class AgentConversationService {
         if (!StringUtils.hasText(userMessage)) {
             throw new IllegalArgumentException("消息内容不能为空");
         }
+        billingService.ensureAvailable(userId);
         return transactionTemplate.execute(status -> {
             long runVersion = claimConversation(conversationId, userId);
             saveMessage(conversationId, "user", "message", null, userMessage);
@@ -160,6 +166,7 @@ public class AgentConversationService {
         int maxSteps = Math.max(1, properties.getMaxSteps());
         int failures = 0;
         JsonNode lastError = null;
+        UsageAccumulator usage = new UsageAccumulator();
 
         for (int step = 0; step < maxSteps; step++) {
             // 用户取消请求优先于模型调用，工具执行结束后下一轮即退出。
@@ -167,16 +174,18 @@ public class AgentConversationService {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, runVersion, listener);
+                return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
             String context = buildContext(conversationId, userId, lastError);
             AnswerProgress answerProgress = new AnswerProgress(conversationId, userId, runVersion, listener);
             JsonNode decision;
             try {
                 try {
-                    decision = modelClient.decideNextStepStream(
+                    ModelCallResult call = modelClient.decideNextStepStream(
                             context, toolRegistry.describeTools(), answerProgress::accept,
                             () -> isCancelRequested(conversationId, userId, runVersion));
+                    decision = call.payload();
+                    usage.add(call.usage());
                 } finally {
                     answerProgress.flush();
                 }
@@ -184,13 +193,13 @@ public class AgentConversationService {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, runVersion, listener);
+                return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
             if (isCancelRequested(conversationId, userId, runVersion)) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, runVersion, listener);
+                return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
 
             String thought = decision.path("thought").asText("");
@@ -203,7 +212,7 @@ public class AgentConversationService {
                 String reply = defaultText(decision.path("reply").asText(), "已完成你的请求。");
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
                 appendActive(conversationId, userId, runVersion, "answer", reply, listener);
-                return finalizeReady(conversationId, userId, runVersion, listener);
+                return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
 
             JsonNode action = decision.path("action");
@@ -250,7 +259,7 @@ public class AgentConversationService {
                         listener);
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, runVersion, listener);
+                return finalizeReady(conversationId, userId, runVersion, usage, listener);
             } catch (Exception e) {
                 progress.flushToolDelta();
                 failures++;
@@ -264,7 +273,7 @@ public class AgentConversationService {
                             + "。请换个说法重试，或调整你的需求。";
                     saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
                     appendActive(conversationId, userId, runVersion, "answer", reply, listener);
-                    return finalizeReady(conversationId, userId, runVersion, listener);
+                    return finalizeReady(conversationId, userId, runVersion, usage, listener);
                 }
                 lastError = errorNode;
             }
@@ -274,7 +283,7 @@ public class AgentConversationService {
                 + "你可以继续补充信息或换一个更具体的需求。";
         saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, exhausted);
         appendActive(conversationId, userId, runVersion, "answer", exhausted, listener);
-        return finalizeReady(conversationId, userId, runVersion, listener);
+        return finalizeReady(conversationId, userId, runVersion, usage, listener);
     }
 
     private JsonNode progressPayload(String tool, String message) {
@@ -291,7 +300,7 @@ public class AgentConversationService {
     }
 
     private AgentConversation finalizeReady(Long conversationId, Long userId, long runVersion,
-                                            Consumer<AgentEvent> onEvent) {
+                                            UsageAccumulator usage, Consumer<AgentEvent> onEvent) {
         TerminalResult terminal = transactionTemplate.execute(status -> {
             LocalDateTime now = LocalDateTime.now();
             AgentConversation current = requireOwned(conversationId, userId);
@@ -315,6 +324,9 @@ public class AgentConversationService {
                     conversationId, userId, runVersion, "complete", current, false);
             return new TerminalResult(current, event);
         });
+        billingService.chargeTokens(userId, BillingBiz.AGENT_TURN,
+                "conv:" + conversationId + ":run:" + runVersion, "conv:" + conversationId,
+                usage.sum(), null, "智能体会话单轮执行");
         eventService.deliver(terminal.event(), onEvent);
         return terminal.conversation();
     }
@@ -659,5 +671,23 @@ public class AgentConversationService {
     }
 
     private record TerminalResult(AgentConversation conversation, AgentEvent event) {
+    }
+
+    /** Aggregates token usage across all decideNextStep calls of one conversation turn. */
+    private static final class UsageAccumulator {
+        private long input;
+        private long cached;
+        private long output;
+
+        void add(ModelUsage usage) {
+            if (usage == null) return;
+            input += Math.max(0L, usage.inputTokens());
+            cached += Math.max(0L, usage.cachedTokens());
+            output += Math.max(0L, usage.outputTokens());
+        }
+
+        ModelUsage sum() {
+            return new ModelUsage(input, cached, output);
+        }
     }
 }

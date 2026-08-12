@@ -3,6 +3,8 @@ package com.xander.lab.studio.infrastructure;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
+import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.common.ModelUsage;
 import com.xander.lab.studio.infrastructure.Img2ThreeProperties;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -33,7 +35,7 @@ public class Img2ThreeModelClient {
     private final BlogAgentProperties blogAgentProperties;
     private final ObjectMapper objectMapper;
 
-    public JsonNode reconstruct(byte[] imageBytes, String contentType, String starterSpecJson) {
+    public ModelCallResult reconstruct(byte[] imageBytes, String contentType, String starterSpecJson) {
         String apiKey = resolveApiKey();
         String model = resolveModel();
         String baseUrl = resolveBaseUrl();
@@ -63,20 +65,20 @@ public class Img2ThreeModelClient {
                 )
         )));
 
-        JsonNode response = invokeResponsesApi(baseUrl, apiKey, payload);
+        ModelCallResult response = invokeResponsesApi(baseUrl, apiKey, payload);
 
-        String text = extractOutputText(response);
+        String text = extractOutputText(response.payload());
         if (!StringUtils.hasText(text)) {
             throw new IllegalStateException("模型没有返回可读取的重建结果");
         }
         try {
-            return parseJsonObject(text);
+            return ModelCallResult.of(parseJsonObject(text), response.usage());
         } catch (Exception e) {
             throw new IllegalStateException("模型返回不是有效 JSON，请重试", e);
         }
     }
 
-    public JsonNode repair(byte[] imageBytes, String contentType, JsonNode previousResult, String gateFeedback) {
+    public ModelCallResult repair(byte[] imageBytes, String contentType, JsonNode previousResult, String gateFeedback) {
         String apiKey = resolveApiKey();
         String model = resolveModel();
         String baseUrl = resolveBaseUrl();
@@ -107,14 +109,14 @@ public class Img2ThreeModelClient {
                 )
         )));
 
-        JsonNode response = invokeResponsesApi(baseUrl, apiKey, payload);
+        ModelCallResult response = invokeResponsesApi(baseUrl, apiKey, payload);
 
-        String text = extractOutputText(response);
+        String text = extractOutputText(response.payload());
         if (!StringUtils.hasText(text)) {
             throw new IllegalStateException("模型没有返回可读取的修订结果");
         }
         try {
-            return parseJsonObject(text);
+            return ModelCallResult.of(parseJsonObject(text), response.usage());
         } catch (Exception e) {
             throw new IllegalStateException("模型修订结果不是有效 JSON，请重试", e);
         }
@@ -182,13 +184,13 @@ public class Img2ThreeModelClient {
                 + "The returned spec is passed to img2threejs strict validation, so satisfy its quality contract.";
     }
 
-    private JsonNode invokeResponsesApi(String baseUrl, String apiKey, Map<String, Object> payload) {
+    private ModelCallResult invokeResponsesApi(String baseUrl, String apiKey, Map<String, Object> payload) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(20));
         // ObjectSculptSpec responses can take minutes; this bound still guarantees durable failure recovery.
         requestFactory.setReadTimeout(Duration.ofMinutes(4));
         try {
-            return RestClient.builder()
+            JsonNode body = RestClient.builder()
                     .baseUrl(trimTrailingSlash(baseUrl))
                     .requestFactory(requestFactory)
                     .defaultHeader("Authorization", "Bearer " + apiKey)
@@ -199,6 +201,7 @@ public class Img2ThreeModelClient {
                     .body(payload)
                     .retrieve()
                     .body(JsonNode.class);
+            return ModelCallResult.of(body, ModelUsage.fromJson(body == null ? null : body.path("usage")));
         } catch (Exception e) {
             String reason = describeFailure(e);
             log.warn("img2three Responses API request failed: {}", reason, e);

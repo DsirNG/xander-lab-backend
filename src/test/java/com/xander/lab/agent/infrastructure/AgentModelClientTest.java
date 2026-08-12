@@ -34,7 +34,7 @@ class AgentModelClientTest {
         ));
         List<String> deltas = new ArrayList<>();
 
-        JsonNode decision = client().decideNextStepStream("context", "tools", deltas::add);
+        JsonNode decision = client().decideNextStepStream("context", "tools", deltas::add).payload();
 
         assertThat(decision.path("done").asBoolean()).isTrue();
         assertThat(decision.path("reply").asText()).isEqualTo("你好，世界");
@@ -51,7 +51,7 @@ class AgentModelClientTest {
         ));
         List<String> deltas = new ArrayList<>();
 
-        JsonNode decision = client().decideNextStepStream("context", "tools", deltas::add);
+        JsonNode decision = client().decideNextStepStream("context", "tools", deltas::add).payload();
 
         assertThat(decision.path("done").asBoolean()).isFalse();
         assertThat(decision.path("action").path("tool").asText()).isEqualTo("blog_generate");

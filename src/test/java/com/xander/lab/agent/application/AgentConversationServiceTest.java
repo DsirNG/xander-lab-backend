@@ -13,6 +13,9 @@ import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentEventMapper;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
 import com.xander.lab.agent.infrastructure.AgentModelClient;
+import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.common.ModelUsage;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -97,7 +100,7 @@ class AgentConversationServiceTest {
         eventService = new AgentEventService(eventMapper, conversationMapper, objectMapper);
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer);
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class));
         org.mockito.Mockito.lenient().doReturn(leaseRenewal).when(agentLeaseRenewer)
                 .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
         org.mockito.Mockito.lenient().when(properties.getMaxSteps()).thenReturn(10);
@@ -112,7 +115,8 @@ class AgentConversationServiceTest {
         ObjectNode first = decisionNode(false, "需要调用博客生成工具", "blog_generate", "帮我写博客");
         ObjectNode second = decisionNode(true, "文章已生成", null, null);
         second.put("reply", "已完成，博客文章已生成");
-        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(first, second);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(first), call(second));
 
         AtomicInteger progressEvents = new AtomicInteger();
         AtomicInteger deltaEvents = new AtomicInteger();
@@ -142,12 +146,12 @@ class AgentConversationServiceTest {
         stubTransactions();
         org.mockito.Mockito.when(properties.getMaxToolFailures()).thenReturn(1);
         ObjectNode failing = decisionNode(false, "调用工具", "failing_tool", null);
-        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(failing);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(failing));
         AgentToolRegistry failingRegistry = new AgentToolRegistry(
                 List.of(new FailingTool("failing_tool")));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, failingRegistry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer);
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class));
         AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(ready);
@@ -203,7 +207,7 @@ class AgentConversationServiceTest {
         stubTransactions();
         ObjectNode decision = decisionNode(true, "重试成功", null, null);
         decision.put("reply", "好的，重试完成了");
-        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(decision);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(decision));
         AgentConversation failed = conversation("running");
         when(conversationMapper.selectById(7L)).thenReturn(failed);
         when(conversationMapper.update(any(), any())).thenReturn(1);
@@ -287,7 +291,7 @@ class AgentConversationServiceTest {
             java.util.function.Consumer<String> deltas = invocation.getArgument(2);
             deltas.accept("短");
             deltas.accept("回复");
-            return decision;
+            return call(decision);
         });
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
@@ -302,7 +306,7 @@ class AgentConversationServiceTest {
     void oldWorkerCannotPublishAfterANewerRunWasClaimed() {
         ObjectNode decision = decisionNode(true, "不应公开的旧轮思考", null, null);
         decision.put("reply", "旧轮迟到回复");
-        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(decision);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(decision));
         AgentConversation oldRun = conversation("running");
         AgentConversation newRun = conversation("running");
         newRun.setRunVersion(2L);
@@ -414,6 +418,10 @@ class AgentConversationServiceTest {
             }
         }
         return decision;
+    }
+
+    private ModelCallResult call(ObjectNode decision) {
+        return ModelCallResult.of(decision, ModelUsage.NONE);
     }
 
     /** A tool that succeeds and reports one progress event (name: blog_generate). */
