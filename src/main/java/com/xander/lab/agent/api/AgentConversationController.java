@@ -67,6 +67,11 @@ public class AgentConversationController {
         return Result.success(buildVO(id, UserContext.getUserId()));
     }
 
+    @GetMapping("/{id}/messages")
+    public Result<List<AgentMessage>> listMessages(@PathVariable Long id) {
+        return Result.success(service.listMessages(id, UserContext.getUserId()));
+    }
+
     @PostMapping(value = "/{id}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendMessage(@PathVariable Long id,
                                   @Valid @RequestBody AgentConversationMessageRequest request,
