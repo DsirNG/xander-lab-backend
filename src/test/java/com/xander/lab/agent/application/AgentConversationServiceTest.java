@@ -303,6 +303,45 @@ class AgentConversationServiceTest {
     }
 
     @Test
+    void escapedBackticksInReplyAreNormalizedForMarkdownRendering() {
+        stubTransactions();
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "使用 \\`Axios + onDownloadProgress\\` 接收，不用 \\`EventSource\\`");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Consumer<String> deltas = invocation.getArgument(2);
+            deltas.accept("使用 \\`Axios + onDownload");
+            deltas.accept("Progress\\` 接收");
+            return call(decision);
+        });
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> deltas = new java.util.ArrayList<>();
+
+        service.executeTurn(7L, 42L, "你好", event -> {
+            if ("answer_delta".equals(event.getEventType())) deltas.add(event.getDataContent());
+        });
+
+        assertThat(deltas).allSatisfy(delta -> assertThat(delta).doesNotContain("\\`"));
+        verify(messageMapper).insertForActiveRun(
+                org.mockito.ArgumentMatchers.argThat(message ->
+                        "assistant".equals(message.getRole())
+                                && "answer".equals(message.getKind())
+                                && message.getContent().contains("`Axios + onDownloadProgress`")
+                                && !message.getContent().contains("\\`")),
+                eq(42L), eq(1L));
+    }
+
+    @Test
+    void normalizeAnswerUnescapesOnlyBacktickSequences() {
+        assertThat(AgentConversationService.normalizeAnswer("使用 \\`code\\` 说明"))
+                .isEqualTo("使用 `code` 说明");
+        assertThat(AgentConversationService.normalizeAnswer("路径 C:\\Users\\foo"))
+                .isEqualTo("路径 C:\\Users\\foo");
+        assertThat(AgentConversationService.normalizeAnswer(null)).isNull();
+        assertThat(AgentConversationService.normalizeAnswer("没有反引号")).isEqualTo("没有反引号");
+    }
+
+    @Test
     void oldWorkerCannotPublishAfterANewerRunWasClaimed() {
         ObjectNode decision = decisionNode(true, "不应公开的旧轮思考", null, null);
         decision.put("reply", "旧轮迟到回复");

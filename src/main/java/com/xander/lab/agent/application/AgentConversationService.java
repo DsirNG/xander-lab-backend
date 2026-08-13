@@ -47,6 +47,15 @@ public class AgentConversationService {
     private static final int ANSWER_DELTA_FLUSH_CHARS = 16;
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
 
+    /**
+     * 模型常把 Markdown 反引号转义成 \`；CommonMark 会把 \` 渲染成裸反引号。
+     * 归一化为真正的反引号，保证行内代码与代码围栏正确渲染。
+     */
+    static String normalizeAnswer(String text) {
+        if (!StringUtils.hasText(text) || text.indexOf("\\`") < 0) return text;
+        return text.replace("\\`", "`");
+    }
+
     private final AgentConversationMapper conversationMapper;
     private final AgentMessageMapper messageMapper;
     private final AgentModelClient modelClient;
@@ -209,7 +218,7 @@ public class AgentConversationService {
             }
 
             if (decision.path("done").asBoolean(false)) {
-                String reply = defaultText(decision.path("reply").asText(), "已完成你的请求。");
+                String reply = normalizeAnswer(defaultText(decision.path("reply").asText(), "已完成你的请求。"));
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
                 appendActive(conversationId, userId, runVersion, "answer", reply, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
@@ -656,7 +665,7 @@ public class AgentConversationService {
 
         private void accept(String delta) {
             if (delta == null || delta.isEmpty()) return;
-            buffer.append(delta);
+            buffer.append(normalizeAnswer(delta));
             if (buffer.codePointCount(0, buffer.length()) >= ANSWER_DELTA_FLUSH_CHARS) {
                 flush();
             }
