@@ -11,6 +11,14 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:root}
     password: ${SPRING_DATASOURCE_PASSWORD:your_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    # 远程 MySQL/代理可能提前关闭空闲连接（本地日志曾见
+    # "No operations allowed after connection closed"），缩短连接最大存活时间
+    # 并定期探测，避免整个连接池失效后所有定时任务停止。
+    hikari:
+      connection-timeout: 30000
+      validation-timeout: 5000
+      max-lifetime: 600000
+      keepalive-time: 300000
   
   data:
     redis:

@@ -23,6 +23,8 @@ public class BlogContentPlanScheduler {
 
     private static final String STALE_CLAIM_ERROR =
             "执行进程意外中断，本次触发已跳过并顺延到下一周期";
+    private static final String STALE_ONE_SHOT_ERROR =
+            "执行进程意外中断，本次触发未完成，计划已标记失败";
 
     private final com.xander.lab.automation.infrastructure.BlogContentPlanMapper planMapper;
     private final com.xander.lab.automation.infrastructure.BlogPlanRunMapper runMapper;
@@ -56,15 +58,22 @@ public class BlogContentPlanScheduler {
 
     /** Fails plans claimed by a crashed instance and fails their in-flight runs
      * so history shows a terminal state instead of a forever-GENERATING row.
-     * One-shot plans end in FINISHED (their single trigger already fired). */
+     * One-shot plans end in FAILED; when the interrupt happened only between a
+     * successful run and its final bookkeeping, the plan is finished as success
+     * instead of being wrongly reported as failed. */
     private void recoverStaleClaims() {
         List<BlogContentPlan> stale = planMapper.selectStaleClaims(Math.max(1, claimTimeoutMs), Math.max(1, batchSize));
         for (BlogContentPlan plan : stale) {
             if (Boolean.TRUE.equals(plan.getRunOnce())) {
-                int recovered = planMapper.recoverStaleOneShot(plan.getId(), STALE_CLAIM_ERROR);
-                if (recovered == 1) {
-                    runMapper.failInFlightRunsForPlan(plan.getId(), STALE_CLAIM_ERROR);
-                    log.warn("[BlogPlan] recovered stale one-shot plan={} -> FINISHED", plan.getId());
+                if (runMapper.hasSucceededRun(plan.getId())) {
+                    planMapper.finishOneShotPlan(plan.getId(), plan.getProcessingToken(), plan.getNextRunAt());
+                    log.warn("[BlogPlan] recovered stale one-shot plan={} (run succeeded) -> FINISHED", plan.getId());
+                } else {
+                    int recovered = planMapper.recoverStaleOneShot(plan.getId(), STALE_ONE_SHOT_ERROR);
+                    if (recovered == 1) {
+                        runMapper.failInFlightRunsForPlan(plan.getId(), STALE_ONE_SHOT_ERROR);
+                        log.warn("[BlogPlan] recovered stale one-shot plan={} -> FAILED", plan.getId());
+                    }
                 }
                 continue;
             }

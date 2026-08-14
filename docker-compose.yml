@@ -37,6 +37,8 @@ services:
       # 定时邮件统一使用 UTC，并以 1 秒间隔检查到期任务
       - EMAIL_REMINDER_ENABLED=true
       - EMAIL_REMINDER_POLL_INTERVAL_MS=1000
+      # 定时发文计划（AI 生成 + 自动发布），依赖已部署的数据库迁移
+      - BLOG_CONTENT_PLAN_ENABLED=true
       # 阿里云 OSS 配置
       - ALIYUN_OSS_ACCESS_KEY_ID=${ALIYUN_OSS_ACCESS_KEY_ID}
       - ALIYUN_OSS_ACCESS_KEY_SECRET=${ALIYUN_OSS_ACCESS_KEY_SECRET}

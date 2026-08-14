@@ -140,11 +140,31 @@ public interface BlogContentPlanMapper extends BaseMapper<BlogContentPlan> {
                           @Param("processingToken") String processingToken,
                           @Param("lastRunAt") Instant lastRunAt);
 
-    /** Stale-claim recovery for one-shot plans: the single trigger already
-     * fired, so the plan ends in FINISHED instead of rescheduling a daily run. */
+    /** Terminal failure for a one-shot plan whose single run failed, was
+     * rejected, or never completed: FAILED with the run's error message. */
     @Update("""
             UPDATE blog_content_plan
-            SET status = 'FINISHED',
+            SET status = 'FAILED',
+                next_run_at = NULL,
+                last_run_at = #{lastRunAt},
+                processing_token = NULL,
+                claimed_at = NULL,
+                error_message = #{errorMessage}
+            WHERE id = #{id}
+              AND deleted_at IS NULL
+              AND status = 'RUNNING'
+              AND processing_token = #{processingToken}
+            """)
+    int failOneShotPlan(@Param("id") Long id,
+                        @Param("processingToken") String processingToken,
+                        @Param("lastRunAt") Instant lastRunAt,
+                        @Param("errorMessage") String errorMessage);
+
+    /** Stale-claim recovery for one-shot plans whose run never succeeded: the
+     * single trigger fired but was interrupted, so the plan ends in FAILED. */
+    @Update("""
+            UPDATE blog_content_plan
+            SET status = 'FAILED',
                 next_run_at = NULL,
                 processing_token = NULL,
                 claimed_at = NULL,

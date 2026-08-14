@@ -37,6 +37,7 @@ docker run -d \
   -e MAIL_FROM="noreply@mail.dsircity.top" \
   -e EMAIL_REMINDER_ENABLED=true \
   -e EMAIL_REMINDER_POLL_INTERVAL_MS=1000 \
+  -e BLOG_CONTENT_PLAN_ENABLED=true \
   -e ALIYUN_OSS_ACCESS_KEY_ID="您的ID" \
   -e ALIYUN_OSS_ACCESS_KEY_SECRET="您的Secret" \
   -e JWT_SECRET="您的JWT密钥" \

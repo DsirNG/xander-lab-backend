@@ -24,8 +24,12 @@ public class BlogContentPlan {
     public static final String STATUS_RUNNING = "RUNNING";
     public static final String STATUS_PAUSED = "PAUSED";
     public static final String STATUS_CANCELLED = "CANCELLED";
-    /** Terminal state for one-shot plans: their single scheduled trigger ran. */
+    /** Terminal success for one-shot plans: the single scheduled trigger ran
+     * and its run ended SUCCEEDED. Failed/rejected runs end in STATUS_FAILED. */
     public static final String STATUS_FINISHED = "FINISHED";
+    /** Terminal failure for one-shot plans: the single run failed, was rejected
+     * by compliance, or its executor crashed before completion. */
+    public static final String STATUS_FAILED = "FAILED";
 
     @TableId(type = IdType.AUTO)
     private Long id;

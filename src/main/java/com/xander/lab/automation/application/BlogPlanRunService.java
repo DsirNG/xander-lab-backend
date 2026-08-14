@@ -298,7 +298,9 @@ public class BlogPlanRunService {
         sseService.push(userId, type, title, notification.getMessage(), planId, runId);
     }
 
-    private BlogPlanRun requireRun(Long runId) {
+    /** Reloads the run row for terminal bookkeeping. Package-visible so the
+     * dispatcher can read the run's final status after execution finished. */
+    BlogPlanRun requireRun(Long runId) {
         BlogPlanRun run = runMapper.selectById(runId);
         if (run == null) {
             throw new IllegalStateException("计划执行记录不存在：" + runId);
@@ -318,6 +320,13 @@ public class BlogPlanRunService {
     private String limit(String value, int max) {
         if (value == null) return "";
         return value.length() <= max ? value : value.substring(0, max);
+    }
+
+    /** Marks any runs of the plan still in-flight (left by a crashed executor)
+     * as FAILED so history never shows a forever-GENERATING row. Used when a
+     * one-shot plan lands in its terminal FAILED state. */
+    public void failInFlightRuns(Long planId, String errorMessage) {
+        runMapper.failInFlightRunsForPlan(planId, errorMessage);
     }
 
     /** Computes the next daily trigger after the given reference instant. */

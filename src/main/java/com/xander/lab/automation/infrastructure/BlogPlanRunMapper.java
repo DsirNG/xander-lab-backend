@@ -52,4 +52,17 @@ public interface BlogPlanRunMapper extends BaseMapper<BlogPlanRun> {
             """)
     List<Long> selectRecentLocalPostIds(@Param("planId") Long planId,
                                         @Param("limit") int limit);
+
+    /** True when any run of the plan already reached SUCCEEDED. Used by stale
+     * recovery to finish a one-shot plan as success when its run completed but
+     * the final bookkeeping was interrupted. */
+    @Select("""
+            SELECT EXISTS(
+                SELECT 1
+                FROM blog_plan_run
+                WHERE plan_id = #{planId}
+                  AND status = 'SUCCEEDED'
+            )
+            """)
+    boolean hasSucceededRun(@Param("planId") Long planId);
 }

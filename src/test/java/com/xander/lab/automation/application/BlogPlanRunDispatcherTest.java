@@ -103,7 +103,7 @@ class BlogPlanRunDispatcherTest {
     }
 
     /** One-shot plans finish (FINISHED, no next run) after their single run
-     * instead of rescheduling the next daily trigger. */
+     * succeeded instead of rescheduling the next daily trigger. */
     @Test
     void oneShotPlanFinishesInsteadOfRescheduling() {
         when(planMapper.claimPlan(eq(1L), any(String.class))).thenReturn(1);
@@ -112,6 +112,9 @@ class BlogPlanRunDispatcherTest {
         BlogContentPlan snapshot = plan(1L);
         snapshot.setRunOnce(true);
         when(planMapper.selectById(1L)).thenReturn(snapshot);
+        BlogPlanRun succeeded = run(11L, 1L, NOW);
+        succeeded.setStatus(BlogPlanRun.STATUS_SUCCEEDED);
+        when(runService.requireRun(11L)).thenReturn(succeeded);
         when(planMapper.finishOneShotPlan(eq(1L), any(String.class), eq(NOW))).thenReturn(1);
 
         BlogContentPlan plan = plan(1L);
@@ -122,13 +125,64 @@ class BlogPlanRunDispatcherTest {
         assertThat(enqueued).isTrue();
         verify(runService).executeRun(run, snapshot);
         verify(planMapper).finishOneShotPlan(eq(1L), any(String.class), eq(NOW));
+        verify(planMapper, never()).failOneShotPlan(any(), any(), any(), any());
         verify(planMapper, never()).markRunFinished(any(), any(), any(), any());
     }
 
-    /** When the run row already exists for a one-shot plan's fixed trigger,
-     * the plan ends in FINISHED rather than being re-enqueued or rescheduled. */
+    /** A failed one-shot run must end the plan in FAILED, never FINISHED. */
     @Test
-    void oneShotDuplicateRunFinishesPlan() {
+    void oneShotFailedRunEndsPlanInFailed() {
+        when(planMapper.claimPlan(eq(1L), any(String.class))).thenReturn(1);
+        BlogPlanRun run = run(11L, 1L, NOW);
+        when(runService.createScheduledRun(any(), eq(NOW), any(String.class))).thenReturn(run);
+        BlogContentPlan snapshot = plan(1L);
+        snapshot.setRunOnce(true);
+        when(planMapper.selectById(1L)).thenReturn(snapshot);
+        BlogPlanRun failed = run(11L, 1L, NOW);
+        failed.setStatus(BlogPlanRun.STATUS_FAILED);
+        failed.setErrorMessage("model timeout");
+        when(runService.requireRun(11L)).thenReturn(failed);
+
+        BlogContentPlan plan = plan(1L);
+        plan.setRunOnce(true);
+        plan.setNextRunAt(NOW);
+        boolean enqueued = dispatcher.dispatchDue(plan);
+
+        assertThat(enqueued).isTrue();
+        verify(planMapper).failOneShotPlan(eq(1L), any(String.class), eq(NOW), eq("model timeout"));
+        verify(runService).failInFlightRuns(eq(1L), eq("model timeout"));
+        verify(planMapper, never()).finishOneShotPlan(any(), any(), any());
+    }
+
+    /** A compliance-rejected one-shot run also ends the plan in FAILED with the
+     * rejection reason as the persisted error message. */
+    @Test
+    void oneShotRejectedRunEndsPlanInFailedWithReviewReason() {
+        when(planMapper.claimPlan(eq(1L), any(String.class))).thenReturn(1);
+        BlogPlanRun run = run(11L, 1L, NOW);
+        when(runService.createScheduledRun(any(), eq(NOW), any(String.class))).thenReturn(run);
+        BlogContentPlan snapshot = plan(1L);
+        snapshot.setRunOnce(true);
+        when(planMapper.selectById(1L)).thenReturn(snapshot);
+        BlogPlanRun rejected = run(11L, 1L, NOW);
+        rejected.setStatus(BlogPlanRun.STATUS_REVIEW_REJECTED);
+        rejected.setReviewReason("内容未通过审核");
+        when(runService.requireRun(11L)).thenReturn(rejected);
+
+        BlogContentPlan plan = plan(1L);
+        plan.setRunOnce(true);
+        plan.setNextRunAt(NOW);
+        boolean enqueued = dispatcher.dispatchDue(plan);
+
+        assertThat(enqueued).isTrue();
+        verify(planMapper).failOneShotPlan(eq(1L), any(String.class), eq(NOW), eq("内容未通过审核"));
+        verify(planMapper, never()).finishOneShotPlan(any(), any(), any());
+    }
+
+    /** When the run row already exists for a one-shot plan's fixed trigger,
+     * the plan ends in FAILED rather than being re-enqueued or rescheduled. */
+    @Test
+    void oneShotDuplicateRunFailsPlan() {
         when(planMapper.claimPlan(eq(1L), any(String.class))).thenReturn(1);
         when(runService.createScheduledRun(any(), eq(NOW), any(String.class))).thenReturn(null);
 
@@ -138,7 +192,28 @@ class BlogPlanRunDispatcherTest {
         boolean enqueued = dispatcher.dispatchDue(plan);
 
         assertThat(enqueued).isFalse();
-        verify(planMapper).finishOneShotPlan(eq(1L), any(String.class), isNull());
+        verify(planMapper).failOneShotPlan(eq(1L), any(String.class), isNull(), any(String.class));
+        verify(runService).failInFlightRuns(eq(1L), any(String.class));
+        verify(planMapper, never()).finishOneShotPlan(any(), any(), any());
+        verify(planMapper, never()).recoverStaleClaim(any(), any(), any());
+    }
+
+    /** A one-shot plan whose run row cannot even be created must also end in
+     * FAILED with the root cause, never reschedule itself. */
+    @Test
+    void oneShotCreateRunFailureEndsPlanInFailed() {
+        when(planMapper.claimPlan(eq(1L), any(String.class))).thenReturn(1);
+        when(runService.createScheduledRun(any(), eq(NOW), any(String.class)))
+                .thenThrow(new IllegalStateException("dup key"));
+
+        BlogContentPlan plan = plan(1L);
+        plan.setRunOnce(true);
+        plan.setNextRunAt(NOW);
+        boolean enqueued = dispatcher.dispatchDue(plan);
+
+        assertThat(enqueued).isFalse();
+        verify(planMapper).failOneShotPlan(eq(1L), any(String.class), isNull(), eq("dup key"));
+        verify(planMapper, never()).finishOneShotPlan(any(), any(), any());
         verify(planMapper, never()).recoverStaleClaim(any(), any(), any());
     }
 

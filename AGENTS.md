@@ -143,3 +143,10 @@
 - Preserve user changes in a dirty worktree and avoid rewriting unrelated files.
 - Prefer small, behavior-preserving migration batches. Preserve routes, tables, serialized fields, config keys, and security behavior unless explicitly changing them.
 - Add migrations for schema changes, compile before commit, and never commit local credentials or runtime configuration.
+
+## 定时发文计划（blog-content-plan）要点
+
+- 计划状态语义：ACTIVE=待执行、RUNNING=运行中、FINISHED=一次性计划成功终态、FAILED=失败终态；前端 6 语言文案与徽标需同步（`blogPlans.status*` key）。
+- 一次性计划（run_once=1）终态 SQL（finishOneShotPlan / failOneShotPlan / recoverStaleOneShot）会把 `next_run_at` 置 NULL：该列必须保持可空（迁移 `20260814_blog_content_plan_next_run_nullable`），改回 NOT NULL 会让所有一次性计划卡死在 RUNNING。
+- 调度器默认关闭：本地在 `application-local.yml` 开 `blog-content-plan.enabled: true`，生产靠部署脚本/`docker-compose.yml` 注入 `BLOG_CONTENT_PLAN_ENABLED=true`；迁移 SQL 需手工应用到线上库。
+- 崩溃恢复必须区分成败：stale 一次性计划若已有 SUCCEEDED 的 run 则补记 FINISHED，否则标记 FAILED 并失败其 in-flight runs，避免把已发布成功的内容报成失败。

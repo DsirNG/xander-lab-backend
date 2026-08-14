@@ -1,6 +1,7 @@
 package com.xander.lab.automation.application;
 
 import com.xander.lab.automation.api.BlogContentPlanAiGenerateRequest;
+import com.xander.lab.automation.api.BlogContentPlanUpdateRequest;
 import com.xander.lab.automation.api.BlogContentPlanVO;
 import com.xander.lab.automation.domain.BlogContentPlan;
 import com.xander.lab.automation.infrastructure.BlogContentPlanMapper;
@@ -181,5 +182,23 @@ class BlogContentPlanServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
                 .isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR.value());
+    }
+
+    /** FAILED is a terminal one-shot state: like FINISHED, the plan must not be
+     * editable anymore. */
+    @Test
+    void updateRejectsFailedPlanAsTerminal() {
+        BlogContentPlan failed = new BlogContentPlan();
+        failed.setId(9L);
+        failed.setUserId(7L);
+        failed.setTopic("旧主题");
+        failed.setStatus(BlogContentPlan.STATUS_FAILED);
+        when(planMapper.selectOne(any())).thenReturn(failed);
+
+        BlogContentPlanService service = newService();
+        assertThatThrownBy(() -> service.update(7L, 9L, new BlogContentPlanUpdateRequest()))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
+                .isEqualTo(HttpStatus.CONFLICT.value());
     }
 }

@@ -36,9 +36,12 @@ public class BlogPlanRunDispatcher {
         try {
             run = runService.createScheduledRun(plan, scheduledAt, token);
         } catch (RuntimeException e) {
-            // One-shot plans never reschedule: end them so they cannot fire daily.
+            // One-shot plans never reschedule: end them in FAILED so they cannot
+            // fire daily and the user sees the real terminal state.
             if (Boolean.TRUE.equals(plan.getRunOnce())) {
-                planMapper.finishOneShotPlan(plan.getId(), token, null);
+                String message = rootMessage(e);
+                planMapper.failOneShotPlan(plan.getId(), token, null, message);
+                runService.failInFlightRuns(plan.getId(), message);
             } else {
                 planMapper.recoverStaleClaim(plan.getId(),
                         runService.resolveNextRun(plan, Instant.now()),
@@ -51,7 +54,10 @@ public class BlogPlanRunDispatcher {
             // Duplicate run row already exists; hand the plan back to ACTIVE
             // without creating another run for this trigger.
             if (Boolean.TRUE.equals(plan.getRunOnce())) {
-                planMapper.finishOneShotPlan(plan.getId(), token, null);
+                // 同一次触发已存在执行记录（多为上次实例中断遗留），无法补跑，落失败终态。
+                String message = "同一次触发已存在执行记录，已跳过";
+                planMapper.failOneShotPlan(plan.getId(), token, null, message);
+                runService.failInFlightRuns(plan.getId(), message);
             } else {
                 planMapper.recoverStaleClaim(plan.getId(),
                         runService.resolveNextRun(plan, Instant.now()),
@@ -68,7 +74,16 @@ public class BlogPlanRunDispatcher {
                 }
                 runService.executeRun(run, snapshot);
                 if (Boolean.TRUE.equals(snapshot.getRunOnce())) {
-                    planMapper.finishOneShotPlan(snapshot.getId(), token, run.getScheduledAt());
+                    // 一次性计划按本次运行的真实结果落终态：成功 -> FINISHED，
+                    // 失败/未过审 -> FAILED，绝不把失败标成成功。
+                    BlogPlanRun terminal = runService.requireRun(run.getId());
+                    if (BlogPlanRun.STATUS_SUCCEEDED.equals(terminal.getStatus())) {
+                        planMapper.finishOneShotPlan(snapshot.getId(), token, run.getScheduledAt());
+                    } else {
+                        String message = terminalErrorMessage(terminal);
+                        planMapper.failOneShotPlan(snapshot.getId(), token, run.getScheduledAt(), message);
+                        runService.failInFlightRuns(snapshot.getId(), message);
+                    }
                 } else {
                     Instant next = runService.resolveNextRun(snapshot, Instant.now());
                     planMapper.markRunFinished(snapshot.getId(), token, next, run.getScheduledAt());
@@ -104,5 +119,18 @@ public class BlogPlanRunDispatcher {
         }
         String message = current.getMessage();
         return message == null || message.isBlank() ? "计划执行失败" : message;
+    }
+
+    /** Error text persisted on a failed one-shot plan: the run's own failure
+     * message, the compliance rejection reason, or a generic fallback. */
+    private String terminalErrorMessage(BlogPlanRun terminal) {
+        if (terminal.getErrorMessage() != null && !terminal.getErrorMessage().isBlank()) {
+            return terminal.getErrorMessage();
+        }
+        if (BlogPlanRun.STATUS_REVIEW_REJECTED.equals(terminal.getStatus())
+                && terminal.getReviewReason() != null && !terminal.getReviewReason().isBlank()) {
+            return terminal.getReviewReason();
+        }
+        return "计划执行失败";
     }
 }

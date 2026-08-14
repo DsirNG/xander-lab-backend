@@ -199,9 +199,10 @@ public class BlogContentPlanService {
         BlogContentPlan plan = requireOwnedPlan(planId, userId);
         if (BlogContentPlan.STATUS_RUNNING.equals(plan.getStatus())
                 || BlogContentPlan.STATUS_CANCELLED.equals(plan.getStatus())
-                || BlogContentPlan.STATUS_FINISHED.equals(plan.getStatus())) {
+                || BlogContentPlan.STATUS_FINISHED.equals(plan.getStatus())
+                || BlogContentPlan.STATUS_FAILED.equals(plan.getStatus())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "计划执行中、已取消或已完结，暂不能修改");
+                    "计划执行中、已取消、已完结或已失败，暂不能修改");
         }
 
         String topic = request.getTopic();
