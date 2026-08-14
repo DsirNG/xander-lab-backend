@@ -52,6 +52,10 @@ class BlogAgentModelClientTest {
         properties.setApiKey("test-key");
         properties.setModel("test-model");
         properties.setWebSearchEnabled(false);
+        // 生产默认读超时 300s，截断流用例需要等满超时才暴露连接断开；
+        // 测试内缩短超时，避免单个用例空等 5 分钟。
+        properties.setConnectTimeoutMillis(2_000);
+        properties.setReadTimeoutMillis(2_000);
         client = new BlogAgentModelClient(properties, objectMapper);
     }
 
