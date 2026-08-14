@@ -222,4 +222,67 @@ class AuthServiceTest {
         assertThatThrownBy(() -> service.login(request, "127.0.0.1")).isInstanceOf(IllegalArgumentException.class);
         verify(jwtUtil, never()).generateAccessToken(anyString(), any(Map.class));
     }
+
+    @Test
+    void updateProfileRejectsInvalidTokenWithUnauthorized() {
+        when(jwtUtil.isValid("bad-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.updateProfile("Bearer bad-token", "新昵称", null))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode().value())
+                .isEqualTo(401);
+        verify(userMapper, never()).updateById(any());
+    }
+
+    @Test
+    void updateProfileRejectsBlankNickname() {
+        when(jwtUtil.isValid("access")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateProfile("Bearer access", "   ", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("昵称");
+        verify(userMapper, never()).updateById(any());
+    }
+
+    @Test
+    void updateProfileRejectsNonHttpAvatar() {
+        when(jwtUtil.isValid("access")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.updateProfile("Bearer access", "新昵称", "ftp://x"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("http");
+        verify(userMapper, never()).updateById(any());
+    }
+
+    @Test
+    void updateProfilePersistsNicknameAndAvatarAndReturnsUserInfo() {
+        User user = user(5L, "alice", "secret", 1);
+        user.setEmail("alice@example.com");
+        when(jwtUtil.isValid("access")).thenReturn(true);
+        when(jwtUtil.getSubject("access")).thenReturn("5");
+        when(userMapper.selectById("5")).thenReturn(user);
+
+        TokenResponse.UserInfo info = service.updateProfile("Bearer access", " 新昵称 ", "https://example.com/a.png");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getNickname()).isEqualTo("新昵称");
+        assertThat(captor.getValue().getAvatar()).isEqualTo("https://example.com/a.png");
+        assertThat(info.getNickname()).isEqualTo("新昵称");
+        assertThat(info.getEmail()).isEqualTo("alice@example.com");
+    }
+
+    @Test
+    void updateProfileKeepsExistingAvatarWhenBlank() {
+        User user = user(5L, "alice", "secret", 1);
+        when(jwtUtil.isValid("access")).thenReturn(true);
+        when(jwtUtil.getSubject("access")).thenReturn("5");
+        when(userMapper.selectById("5")).thenReturn(user);
+
+        service.updateProfile("Bearer access", "新昵称", "  ");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getAvatar()).isNull();
+    }
 }

@@ -131,6 +131,28 @@ public class AuthController {
     }
 
     /**
+     * 更新账户信息（昵称 / 头像）
+     * PUT /api/auth/profile，携带 Authorization 头；返回更新后的用户信息。
+     */
+    @PutMapping("/profile")
+    public ResponseEntity<Result<TokenResponse.UserInfo>> updateProfile(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Valid @RequestBody ProfileUpdateRequest request) {
+        if (authorization == null || authorization.isBlank()) {
+            return unauthorizedResponse();
+        }
+        try {
+            TokenResponse.UserInfo userInfo = authService.updateProfile(
+                    authorization, request.getNickname(), request.getAvatar());
+            return ResponseEntity.ok(Result.success(userInfo));
+        } catch (IllegalArgumentException e) {
+            // 业务校验失败（昵称/头像不合法）映射为 400；token 无效由服务抛 401 交给全局异常处理。
+            return ResponseEntity.badRequest()
+                    .body(Result.error(400, e.getMessage()));
+        }
+    }
+
+    /**
      * FlowCraft 注册（邮箱 + 密码 + 用户名）
      * POST /api/auth/register
      */

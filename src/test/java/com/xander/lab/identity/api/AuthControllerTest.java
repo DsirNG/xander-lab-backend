@@ -78,6 +78,44 @@ class AuthControllerTest {
     }
 
     @Test
+    void updateProfileRequiresAuthorizationHeader() {
+        ProfileUpdateRequest request = new ProfileUpdateRequest();
+        request.setNickname("新昵称");
+
+        ResponseEntity<Result<TokenResponse.UserInfo>> response = controller.updateProfile(null, request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        verify(authService, org.mockito.Mockito.never()).updateProfile(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void updateProfileReturnsUpdatedUserInfo() {
+        ProfileUpdateRequest request = new ProfileUpdateRequest();
+        request.setNickname("新昵称");
+        request.setAvatar("https://example.com/a.png");
+        TokenResponse.UserInfo updated = TokenResponse.UserInfo.builder().nickname("新昵称").build();
+        when(authService.updateProfile("Bearer token", "新昵称", "https://example.com/a.png")).thenReturn(updated);
+
+        ResponseEntity<Result<TokenResponse.UserInfo>> response = controller.updateProfile("Bearer token", request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody().getData()).isSameAs(updated);
+    }
+
+    @Test
+    void updateProfileMapsValidationFailureToBadRequest() {
+        ProfileUpdateRequest request = new ProfileUpdateRequest();
+        request.setNickname("  ");
+        when(authService.updateProfile(eq("Bearer token"), anyString(), any()))
+                .thenThrow(new IllegalArgumentException("昵称不能为空"));
+
+        ResponseEntity<Result<TokenResponse.UserInfo>> response = controller.updateProfile("Bearer token", request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().getMessage()).isEqualTo("昵称不能为空");
+    }
+
+    @Test
     void validateRejectsMalformedHeaderWithoutCallingService() {
         Result<Boolean> result = controller.validateToken("access-token");
 

@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 /**
  * 登录 / Token 刷新响应体
  * 对应前端 axios 封装中解析的字段：
@@ -40,5 +42,9 @@ public class TokenResponse {
         private String nickname;
         private String avatar;
         private String role;
+        /** 邮箱（登录账号，展示用，不支持修改） */
+        private String email;
+        /** 注册时间（账户信息页展示） */
+        private LocalDateTime createdAt;
     }
 }

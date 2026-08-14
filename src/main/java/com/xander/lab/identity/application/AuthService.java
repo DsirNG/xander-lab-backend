@@ -293,7 +293,68 @@ public class AuthService {
                 .nickname(user.getNickname())
                 .avatar(user.getAvatar())
                 .role(user.getRole())
+                .email(user.getEmail())
+                .createdAt(user.getCreatedAt())
                 .build();
+    }
+
+    /**
+     * 更新账户信息（昵称 / 头像）。
+     * 与 {@link #getCurrentUser} 同样在控制器内自行鉴权（/api/auth 路径在拦截器中整体排除），
+     * token 无效或过期抛 {@link ResponseStatusException}（401），参数不合法抛
+     * IllegalArgumentException（400）。
+     */
+    public TokenResponse.UserInfo updateProfile(String bearerToken, String nickname, String avatar) {
+        String token;
+        try {
+            token = extractToken(bearerToken);
+        } catch (IllegalArgumentException e) {
+            // 与 /me 保持一致：Authorization 头缺失或格式错误按未登录处理。
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        if (!jwtUtil.isValid(token)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        if (nickname == null || nickname.isBlank()) {
+            throw new IllegalArgumentException("昵称不能为空");
+        }
+        String trimmedNickname = nickname.trim();
+        if (trimmedNickname.length() > 30) {
+            throw new IllegalArgumentException("昵称长度不能超过 30 个字符");
+        }
+        String normalizedAvatar = null;
+        if (avatar != null && !avatar.isBlank()) {
+            String trimmedAvatar = avatar.trim();
+            if (!trimmedAvatar.startsWith("http://") && !trimmedAvatar.startsWith("https://")) {
+                throw new IllegalArgumentException("头像地址必须以 http(s):// 开头");
+            }
+            if (trimmedAvatar.length() > 255) {
+                throw new IllegalArgumentException("头像地址过长");
+            }
+            normalizedAvatar = trimmedAvatar;
+        }
+
+        String userId = jwtUtil.getSubject(token);
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        // 只更新可修改字段，username/email 等登录凭据保持只读。
+        User update = new User();
+        update.setId(Long.valueOf(userId));
+        update.setNickname(trimmedNickname);
+        if (normalizedAvatar != null) {
+            update.setAvatar(normalizedAvatar);
+        }
+        update.setUpdatedAt(LocalDateTime.now());
+        userMapper.updateById(update);
+
+        // 重新查询以返回数据库中的最新值（含未修改的头像原值）。
+        user.setNickname(trimmedNickname);
+        if (normalizedAvatar != null) {
+            user.setAvatar(normalizedAvatar);
+        }
+        return buildUserInfo(user);
     }
 
     public String extractToken(String bearerToken) {
