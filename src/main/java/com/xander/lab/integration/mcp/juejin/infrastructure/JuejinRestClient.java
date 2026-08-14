@@ -9,7 +9,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -87,7 +86,7 @@ public class JuejinRestClient implements JuejinClient {
     public JsonNode fetchUserProfile(Credential credential) {
         String url = "/user_api/v1/user/get?aid=" + url(credential.aid()) + "&uuid=" + url(credential.uuid()) + "&not_self=0";
         try {
-            JsonNode response = client.get().uri(URI.create(url))
+            JsonNode response = client.get().uri(url)
                     .header(HttpHeaders.COOKIE, credential.cookie())
                     .header("origin", "https://juejin.cn")
                     .header("referer", "https://juejin.cn/")
@@ -111,7 +110,7 @@ public class JuejinRestClient implements JuejinClient {
     private JsonNode post(String path, Credential credential, Map<String, Object> body) {
         String url = path + "?aid=" + url(credential.aid()) + "&uuid=" + url(credential.uuid());
         try {
-            var request = client.post().uri(URI.create(url))
+            var request = client.post().uri(url)
                     .contentType(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.COOKIE, credential.cookie())
                     .header("origin", "https://juejin.cn")
