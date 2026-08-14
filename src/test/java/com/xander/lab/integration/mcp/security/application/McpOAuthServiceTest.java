@@ -3,6 +3,7 @@ package com.xander.lab.integration.mcp.security.application;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.xander.lab.identity.application.AuthService;
 import com.xander.lab.identity.security.JwtUtil;
 import com.xander.lab.integration.mcp.security.McpOAuthException;
@@ -24,6 +25,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -46,6 +48,12 @@ class McpOAuthServiceTest {
 
     private static final String CLIENT_ID = "client-1";
     private static final String FAMILY = "family-1";
+    private static final String BASE_URL = "https://xander.dsircity.top";
+    private static final String AUTHORIZATION_REQUEST_JSON = "{\"requestId\":\"req-1\",\"clientId\":\"client-1\","
+            + "\"redirectUri\":\"https://client.example/cb\",\"scopes\":[\"blog:read\",\"blog:write\"],"
+            + "\"state\":\"state-1\","
+            + "\"codeChallenge\":\"challenge-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMM\","
+            + "\"resource\":\"https://xander.dsircity.top/api/mcp\",\"createdAt\":\"2026-08-14T10:00:00\"}";
 
     @BeforeAll
     static void registerMybatisEntities() {
@@ -71,13 +79,14 @@ class McpOAuthServiceTest {
     @BeforeEach
     void setUp() {
         service = new McpOAuthService(properties, clientMapper, grantMapper, tokenMapper,
-                redisTemplate, new ObjectMapper(), authService, jwtUtil);
+                redisTemplate, new ObjectMapper().registerModule(new JavaTimeModule()), authService, jwtUtil);
         when(properties.isEnabled()).thenReturn(true);
         when(properties.getAccessTokenTtlSeconds()).thenReturn(3600);
         when(properties.getRefreshTokenTtlSeconds()).thenReturn(2592000);
         McpOAuthClient client = new McpOAuthClient();
         client.setClientId(CLIENT_ID);
         client.setStatus("ACTIVE");
+        client.setRedirectUris("[\"https://client.example/cb\"]");
         when(clientMapper.selectOne(any())).thenReturn(client);
         McpOAuthGrant grant = new McpOAuthGrant();
         grant.setId(1L);
@@ -208,6 +217,119 @@ class McpOAuthServiceTest {
         assertNull(service.authenticateBearer(null));
         assertNull(service.authenticateBearer("Basic abc"));
         assertNull(service.authenticateBearer("Bearer   "));
+    }
+
+    private void mockWebLogin() {
+        when(authService.validateAccessToken(anyString())).thenReturn(true);
+        when(jwtUtil.getSubject(anyString())).thenReturn("123");
+    }
+
+    private void seedAuthorizationRequest() {
+        ValueOperations<String, String> ops = org.mockito.Mockito.mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(ops);
+        when(ops.get(anyString())).thenReturn(AUTHORIZATION_REQUEST_JSON);
+    }
+
+    @Test
+    void startAuthorizationRejectsScopeNotEnforcedByResource() {
+        when(properties.getPublicBaseUrl()).thenReturn(BASE_URL);
+
+        McpOAuthException error = assertThrows(McpOAuthException.class, () -> service.startAuthorization(
+                "code", CLIENT_ID, "https://client.example/cb", "csdn:publish", "state-1",
+                "challenge-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMM", "S256", BASE_URL + "/api/mcp"));
+
+        assertEquals("invalid_scope", error.error());
+    }
+
+    @Test
+    void startAuthorizationAcceptsScopeEnforcedByResource() {
+        when(properties.getPublicBaseUrl()).thenReturn(BASE_URL);
+        ValueOperations<String, String> ops = org.mockito.Mockito.mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(ops);
+
+        McpOAuthService.AuthorizationStart start = service.startAuthorization(
+                "code", CLIENT_ID, "https://client.example/cb", "blog:read blog:write", "state-1",
+                "challenge-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMM", "S256", BASE_URL + "/api/mcp");
+
+        assertEquals(Set.of("blog:read", "blog:write"), start.scopes());
+        assertTrue(start.consentUrl().startsWith(BASE_URL + "/profile?mcpOAuthRequest="));
+    }
+
+    @Test
+    void approvingPersistsOnlyUserSelectedScopes() {
+        mockWebLogin();
+        seedAuthorizationRequest();
+
+        String redirect = service.approveAuthorization("req-1", "Bearer web-token", Set.of("blog:read"));
+
+        assertTrue(redirect.startsWith("https://client.example/cb?"), "redirect was: " + redirect);
+        assertTrue(redirect.contains("code="), "redirect was: " + redirect);
+        assertTrue(redirect.contains("state=state-1"), "redirect was: " + redirect);
+        ArgumentCaptor<McpOAuthGrant> inserted = ArgumentCaptor.forClass(McpOAuthGrant.class);
+        verify(grantMapper).insert(inserted.capture());
+        assertEquals("blog:read", inserted.getValue().getScopes());
+    }
+
+    @Test
+    void approvingScopeOutsideClientRequestIsRejected() {
+        mockWebLogin();
+        seedAuthorizationRequest();
+
+        McpOAuthException error = assertThrows(McpOAuthException.class,
+                () -> service.approveAuthorization("req-1", "Bearer web-token", Set.of("csdn:publish")));
+
+        assertEquals("invalid_request", error.error());
+        verify(grantMapper, org.mockito.Mockito.never()).insert(any());
+    }
+
+    @Test
+    void approvingWithoutExplicitSelectionGrantsEverythingRequested() {
+        mockWebLogin();
+        seedAuthorizationRequest();
+
+        String redirect = service.approveAuthorization("req-1", "Bearer web-token", null);
+
+        assertTrue(redirect.startsWith("https://client.example/cb?"), "redirect was: " + redirect);
+        ArgumentCaptor<McpOAuthGrant> inserted = ArgumentCaptor.forClass(McpOAuthGrant.class);
+        verify(grantMapper).insert(inserted.capture());
+        assertEquals("blog:read blog:write", inserted.getValue().getScopes());
+    }
+
+    @Test
+    void approvingWithoutAnySelectedScopeIsRejected() {
+        mockWebLogin();
+        seedAuthorizationRequest();
+
+        assertThrows(McpOAuthException.class,
+                () -> service.approveAuthorization("req-1", "Bearer web-token", Set.of()));
+        verify(grantMapper, org.mockito.Mockito.never()).insert(any());
+    }
+
+    @Test
+    void pendingAuthorizationExposesPreviouslyGrantedScopesForPreselection() {
+        mockWebLogin();
+        seedAuthorizationRequest();
+        McpOAuthGrant prior = new McpOAuthGrant();
+        prior.setId(5L);
+        prior.setUserId(123L);
+        prior.setClientId(CLIENT_ID);
+        prior.setStatus("ACTIVE");
+        prior.setScopes("blog:read");
+        when(grantMapper.selectOne(any())).thenReturn(prior);
+
+        McpOAuthService.AuthorizationRequestView view = service.pendingAuthorization("req-1", "Bearer web-token");
+
+        assertEquals(Set.of("blog:read", "blog:write"), view.scopes());
+        assertEquals(Set.of("blog:read"), view.previouslyGranted());
+    }
+
+    @Test
+    void resourceScopesAreTrimmedPerMcpEndpoint() {
+        assertEquals(Set.of("blog:read", "blog:write"), McpOAuthService.resourceScopes(BASE_URL + "/api/mcp"));
+        assertEquals(Set.of("csdn:status", "csdn:authorize", "csdn:publish"), McpOAuthService.resourceScopes(BASE_URL + "/api/mcp/csdn"));
+        assertEquals(Set.of("juejin:status", "juejin:publish", "blog:write"), McpOAuthService.resourceScopes(BASE_URL + "/api/mcp/juejin"));
+        assertEquals(Set.of("publish:dual", "blog:write", "csdn:publish", "csdn:authorize"), McpOAuthService.resourceScopes(BASE_URL + "/api/mcp/dual"));
+        assertNull(McpOAuthService.resourceScopes(BASE_URL + "/api/unknown"));
     }
 
     private Wrapper<McpOAuthToken> argWithSetValue(String expectedSetValue) {

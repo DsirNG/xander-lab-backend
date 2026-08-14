@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** OAuth 2.1 endpoints and discovery metadata for the public remote MCP server. */
 @RestController
@@ -42,7 +43,7 @@ public class McpOAuthController {
         return Map.of(
                 "resource", resolvedResource,
                 "authorization_servers", List.of(base),
-                "scopes_supported", McpOAuthService.SUPPORTED_SCOPES,
+                "scopes_supported", McpOAuthService.resourceScopes(resolvedResource),
                 "bearer_methods_supported", List.of("header"));
     }
 
@@ -101,9 +102,13 @@ public class McpOAuthController {
     @PostMapping("/api/mcp/oauth/authorize/requests/{requestId}/approve")
     public Map<String, String> approve(@PathVariable String requestId,
                                        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+                                       @RequestParam(value = "scopes", required = false) List<String> scopes,
                                        HttpServletRequest servletRequest) {
         oauthService.checkRateLimit("approve", clientIp(servletRequest));
-        return Map.of("redirectUrl", oauthService.approveAuthorization(requestId, authorization));
+        Set<String> selected = scopes == null || scopes.isEmpty() ? null
+                : scopes.stream().flatMap(value -> java.util.Arrays.stream(value.split("\\s+"))).filter(v -> !v.isBlank())
+                        .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        return Map.of("redirectUrl", oauthService.approveAuthorization(requestId, authorization, selected));
     }
 
     @PostMapping("/api/mcp/oauth/authorize/requests/{requestId}/deny")

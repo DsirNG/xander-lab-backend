@@ -42,6 +42,13 @@ public class McpOAuthService {
             "blog:read", "blog:write", "csdn:status", "csdn:authorize", "csdn:publish", "publish:dual",
             "juejin:status", "juejin:publish");
 
+    /** Scopes each MCP endpoint actually enforces, so metadata and authorize never advertise useless ones. */
+    public static final Map<String, Set<String>> RESOURCE_SCOPES = Map.of(
+            "/api/mcp", Set.of("blog:read", "blog:write"),
+            "/api/mcp/csdn", Set.of("csdn:status", "csdn:authorize", "csdn:publish"),
+            "/api/mcp/juejin", Set.of("juejin:status", "juejin:publish", "blog:write"),
+            "/api/mcp/dual", Set.of("publish:dual", "blog:write", "csdn:publish", "csdn:authorize"));
+
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String AUTHORIZATION_REQUEST_PREFIX = "mcp:oauth:authorization-request:";
     private static final String AUTHORIZATION_CODE_PREFIX = "mcp:oauth:authorization-code:";
@@ -92,6 +99,13 @@ public class McpOAuthService {
         if (!redirectUris(client).contains(normalizedRedirectUri)) throw invalidRequest("redirect_uri is not registered");
         Set<String> scopes = parseScopes(scope);
         if (resource != null && !resource.isBlank() && !isMcpResource(resource)) throw invalidRequest("resource is not an Xander MCP endpoint");
+        if (resource != null && !resource.isBlank()) {
+            Set<String> resourceScopes = resourceScopes(resource);
+            // A scope the endpoint never enforces is useless; rejecting it keeps grants honest.
+            if (!resourceScopes.containsAll(scopes)) {
+                throw new McpOAuthException("invalid_scope", 400, "requested scope is not available on the selected MCP endpoint");
+            }
+        }
 
         String requestId = randomToken(24);
         AuthorizationRequest request = new AuthorizationRequest(requestId, client.getClientId(), normalizedRedirectUri,
@@ -104,18 +118,31 @@ public class McpOAuthService {
 
     /** Returns the pending consent details only to an already authenticated Xander Lab user. */
     public AuthorizationRequestView pendingAuthorization(String requestId, String webAuthorization) {
-        requireWebUser(webAuthorization);
+        Long userId = requireWebUser(webAuthorization);
         AuthorizationRequest request = requireAuthorizationRequest(requestId);
         McpOAuthClient client = requireActiveClient(request.clientId());
-        return new AuthorizationRequestView(request.requestId(), client.getClientName(), request.scopes(), request.resource());
+        McpOAuthGrant priorGrant = activeGrant(userId, client.getClientId());
+        Set<String> previouslyGranted = priorGrant == null ? Set.of() : splitScopes(priorGrant.getScopes());
+        return new AuthorizationRequestView(request.requestId(), client.getClientName(), request.scopes(), request.resource(),
+                previouslyGranted);
     }
 
-    /** Records consent and returns the exact registered redirect URI carrying a single-use code. */
-    public String approveAuthorization(String requestId, String webAuthorization) {
+    /**
+     * Records consent for the scopes the user selected on the consent page and returns the exact registered
+     * redirect URI carrying a single-use code. The selection may only narrow what the client requested; it
+     * can never grant scopes the client did not ask for.
+     */
+    public String approveAuthorization(String requestId, String webAuthorization, Set<String> selectedScopes) {
         Long userId = requireWebUser(webAuthorization);
         AuthorizationRequest request = requireAuthorizationRequest(requestId);
         McpOAuthClient client = requireActiveClient(request.clientId());
         if (!redirectUris(client).contains(request.redirectUri())) throw invalidRequest("redirect_uri is not registered");
+        // An absent selection (older clients or a plain approve) defaults to granting everything the client requested.
+        if (selectedScopes == null) selectedScopes = request.scopes();
+        if (selectedScopes.isEmpty()) throw invalidRequest("at least one scope must be selected");
+        if (!request.scopes().containsAll(selectedScopes)) {
+            throw invalidRequest("selected scopes exceed the scopes requested by the client");
+        }
 
         McpOAuthGrant grant = activeGrant(userId, client.getClientId());
         LocalDateTime now = LocalDateTime.now();
@@ -125,7 +152,7 @@ public class McpOAuthService {
             grant.setClientId(client.getClientId());
             grant.setCreatedAt(now);
         }
-        grant.setScopes(joinScopes(request.scopes()));
+        grant.setScopes(joinScopes(selectedScopes));
         grant.setStatus("ACTIVE");
         grant.setGrantedAt(now);
         grant.setRevokedAt(null);
@@ -355,6 +382,16 @@ public class McpOAuthService {
                 || resource.equals(base + "/api/mcp/dual") || resource.equals(base + "/api/mcp/juejin");
     }
 
+    /** Scopes the given full resource URL is allowed to request; null when the resource is not a public MCP endpoint. */
+    public static Set<String> resourceScopes(String resource) {
+        if (resource == null) return null;
+        try {
+            return RESOURCE_SCOPES.get(URI.create(resource).getPath());
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
     private void requireEnabled() {
         if (!properties.isEnabled()) throw new McpOAuthException("temporarily_unavailable", 503, "MCP OAuth is disabled");
     }
@@ -388,7 +425,8 @@ public class McpOAuthService {
 
     public record RegisteredClient(String clientId, String clientName, List<String> redirectUris) { }
     public record AuthorizationStart(String requestId, String clientName, Set<String> scopes, String consentUrl) { }
-    public record AuthorizationRequestView(String requestId, String clientName, Set<String> scopes, String resource) { }
+    public record AuthorizationRequestView(String requestId, String clientName, Set<String> scopes, String resource,
+                                           Set<String> previouslyGranted) { }
     public record TokenPair(String accessToken, String refreshToken, int expiresIn, String scope) { }
     public record ClientGrantView(String clientId, String clientName, Set<String> scopes, LocalDateTime grantedAt) { }
     private record AuthorizationRequest(String requestId, String clientId, String redirectUri, Set<String> scopes,
