@@ -107,6 +107,34 @@ public class JuejinRestClient implements JuejinClient {
         }
     }
 
+    @Override
+    public JsonNode searchTags(String keyword, int limit) {
+        try {
+            // 标签搜索是公开只读接口，不需要 Cookie/CSRF；掘金按相关性返回前 limit 条。
+            // 用 UriBuilder 编码查询参数，避免先编码再被 RestClient 二次转义成 %25。
+            JsonNode response = client.get()
+                    .uri(builder -> builder.path("/tag_api/v1/query_tag_list")
+                            .queryParam("key_word", keyword == null ? "" : keyword)
+                            .queryParam("cursor", "0")
+                            .queryParam("limit", limit)
+                            .build())
+                    .header("origin", "https://juejin.cn")
+                    .header("referer", "https://juejin.cn/")
+                    .retrieve().body(JsonNode.class);
+            if (response == null) throw new JuejinApiException(-1, "empty response");
+            int errNo = response.path("err_no").asInt(-1);
+            if (errNo != 0) {
+                throw new JuejinApiException(errNo, response.path("err_msg").asText("unknown error"));
+            }
+            return response;
+        } catch (RestClientResponseException ex) {
+            if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403) {
+                throw new JuejinSessionException("Juejin session invalid (HTTP " + ex.getStatusCode().value() + ")");
+            }
+            throw new JuejinApiException(-1, "HTTP " + ex.getStatusCode().value());
+        }
+    }
+
     private JsonNode post(String path, Credential credential, Map<String, Object> body) {
         String url = path + "?aid=" + url(credential.aid()) + "&uuid=" + url(credential.uuid());
         try {

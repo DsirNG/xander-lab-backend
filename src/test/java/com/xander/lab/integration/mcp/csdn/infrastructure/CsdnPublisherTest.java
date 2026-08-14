@@ -36,4 +36,13 @@ class CsdnPublisherTest {
         assertThat(CsdnPublisher.isSessionExpired(200, null)).isFalse();
         assertThat(CsdnPublisher.isSessionExpired(500, null)).isFalse();
     }
+
+    @Test
+    void normalizeDescriptionTrimsAndTruncatesToSharedMax() {
+        assertThat(CsdnPublisher.normalizeDescription(null)).isEmpty();
+        assertThat(CsdnPublisher.normalizeDescription("  摘要  ")).isEqualTo("摘要");
+        String hundredChars = "a".repeat(100);
+        assertThat(CsdnPublisher.normalizeDescription(hundredChars)).isEqualTo(hundredChars);
+        assertThat(CsdnPublisher.normalizeDescription("a".repeat(150))).hasSize(100);
+    }
 }

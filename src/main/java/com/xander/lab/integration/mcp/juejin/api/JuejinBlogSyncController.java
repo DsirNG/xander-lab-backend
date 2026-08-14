@@ -23,7 +23,8 @@ public class JuejinBlogSyncController {
 
     /**
      * Body: {"juejinCategoryId": "6809637773935386632", "juejinTagIds": ["6809640407484334093"]}
-     * Both fields are optional; the publisher falls back to the frontend category.
+     * Both fields are optional; the category falls back to the frontend category and,
+     * when no tag ids are given, the local post's tag names are resolved to Juejin tag ids.
      */
     @PostMapping("/{postId}/sync/juejin")
     public Result<PublishResult> sync(@PathVariable Long postId,

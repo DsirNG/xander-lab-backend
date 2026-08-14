@@ -46,7 +46,10 @@ class JuejinRestClientTest {
     private void handle(HttpExchange exchange) throws IOException {
         receivedPaths.add(exchange.getRequestURI().toString());
         receivedBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-        byte[] response = "{\"err_no\":0,\"data\":{\"id\":\"draft-1\"}}".getBytes(StandardCharsets.UTF_8);
+        String body = exchange.getRequestURI().getPath().startsWith("/tag_api/v1/query_tag_list")
+                ? "{\"err_no\":0,\"data\":[{\"id\":\"6809640407484334093\",\"tag_name\":\"JavaScript\"}]}"
+                : "{\"err_no\":0,\"data\":{\"id\":\"draft-1\"}}";
+        byte[] response = body.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, response.length);
         try (OutputStream out = exchange.getResponseBody()) {
@@ -73,5 +76,23 @@ class JuejinRestClientTest {
             assertThat(path).startsWith("/content_api/v1/article/publish?aid=2608&uuid=uuid-1");
         });
         assertThat(receivedBody.get()).contains("\"draft_id\":\"draft-1\"");
+    }
+
+    @Test
+    void searchTagsEncodesKeywordAndParsesTagList() {
+        JsonNode result = client.searchTags("JavaScript", 5);
+        assertThat(result.path("data").path(0).path("id").asText()).isEqualTo("6809640407484334093");
+        assertThat(receivedPaths).singleElement().satisfies(path -> {
+            assertThat(path).startsWith("/tag_api/v1/query_tag_list?key_word=");
+            assertThat(path).contains("&cursor=0&limit=5");
+        });
+    }
+
+    @Test
+    void searchTagsEncodesChineseKeyword() {
+        client.searchTags("后端", 3);
+        assertThat(receivedPaths).singleElement().satisfies(path -> {
+            assertThat(path).contains("key_word=%E5%90%8E%E7%AB%AF");
+        });
     }
 }

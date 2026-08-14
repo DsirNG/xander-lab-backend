@@ -5,23 +5,30 @@ import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService
 import com.xander.lab.publishing.domain.BlogPublisher;
 import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.publishing.domain.PublishingLimits;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /**
  * Publishes an article through juejin.cn content_api: creates a draft, then publishes it.
  * The publish result is the juejin post URL; juejin requires a 50-100 character summary
- * ({@link #MIN_BRIEF_LENGTH}), so one is derived from the command when missing.
+ * ({@link #MIN_BRIEF_LENGTH}) and at least one Juejin-side tag id, so the summary is derived
+ * from the command when missing and tag names are resolved to tag ids via the tag search API.
  */
 @Component
 @Slf4j
 public class JuejinPublisher implements BlogPublisher {
     /** juejin 对摘要的硬性长度要求：50-100 字，低于 50 字直接返回参数错误。 */
     static final int MIN_BRIEF_LENGTH = 50;
-    static final int MAX_BRIEF_LENGTH = 100;
+    static final int MAX_BRIEF_LENGTH = PublishingLimits.MAX_SUMMARY_LENGTH;
+    /** 掘金编辑器最多允许 3 个标签，解析与透传都按此封顶。 */
+    static final int MAX_TAGS = PublishingLimits.MAX_JUEJIN_TAGS;
     private static final Pattern MARKDOWN_PREFIX = Pattern.compile("^[#>*\\-+\\d.\\s]+");
+    private static final Pattern NUMERIC_TAG_ID = Pattern.compile("\\d+");
 
     private final JuejinPlatformProperties properties;
     private final JuejinCredentialService credentials;
@@ -39,13 +46,13 @@ public class JuejinPublisher implements BlogPublisher {
     public PublishResult publish(PublishCommand command) {
         if (!properties.isEnabled()) throw new IllegalStateException("Juejin publisher is disabled");
         JuejinClient.Credential credential = credentials.requireCredential(command.userId());
-        // juejin 的分类与标签使用掘金侧 ID（字符串），命令里没有时就落到前端分类。
+        // 掘金的分类与标签使用掘金侧 ID（字符串），命令里没有时就落到前端分类。
         String categoryId = command.categoryId() == null || command.categoryId().isBlank()
                 ? defaultCategoryId() : command.categoryId();
         String brief = buildBrief(command.summary(), command.content());
         try {
             JsonNode created = client.createDraft(credential, command.title(), brief, command.content(),
-                    categoryId, command.tags(), command.coverImage());
+                    categoryId, resolveTagIds(command.tags()), command.coverImage());
             String draftId = textValue(created.path("data"), "id");
             if (draftId == null || draftId.isBlank()) {
                 throw new IllegalStateException("Juejin draft create returned no draft id");
@@ -106,5 +113,52 @@ public class JuejinPublisher implements BlogPublisher {
             if (cleaned.length() >= 10) return cleaned;
         }
         return null;
+    }
+
+    /**
+     * 把发布命令里的标签统一转换为掘金 tag_id：纯数字当作 ID 直接透传，
+     * 其余当作本地标签名调用掘金标签搜索解析，最多取 {@link #MAX_TAGS} 个。
+     * 一个都解析不出来时抛出明确错误，避免掘金「至少添加一个标签」的模糊报错。
+     */
+    List<String> resolveTagIds(List<String> tags) {
+        List<String> ids = new ArrayList<>();
+        for (String tag : tags) {
+            if (tag == null || tag.isBlank()) continue;
+            String trimmed = tag.strip();
+            if (NUMERIC_TAG_ID.matcher(trimmed).matches()) {
+                ids.add(trimmed);
+            } else {
+                String resolved = resolveTagId(trimmed);
+                if (resolved != null) ids.add(resolved);
+            }
+            if (ids.size() >= MAX_TAGS) break;
+        }
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("掘金至少需要一个标签：请为文章添加标签，或传入掘金标签 ID");
+        }
+        return List.copyOf(ids);
+    }
+
+    /** 按名称搜索掘金标签：优先取名称精确匹配项，否则取搜索结果第一条（按相关性排序）。 */
+    private String resolveTagId(String name) {
+        JsonNode data;
+        try {
+            data = client.searchTags(name, 8).path("data");
+        } catch (JuejinClient.JuejinApiException ex) {
+            log.warn("[Juejin] 标签「{}」查询失败（{}），已跳过该标签", name, ex.getMessage());
+            return null;
+        }
+        if (!data.isArray() || data.isEmpty()) return null;
+        for (JsonNode tag : data) {
+            if (name.equalsIgnoreCase(tag.path("tag_name").asText(""))) {
+                return tagId(tag);
+            }
+        }
+        return tagId(data.get(0));
+    }
+
+    private static String tagId(JsonNode tag) {
+        String id = tag.path("id").asText("");
+        return id.isBlank() ? tag.path("tag_id").asText("") : id;
     }
 }

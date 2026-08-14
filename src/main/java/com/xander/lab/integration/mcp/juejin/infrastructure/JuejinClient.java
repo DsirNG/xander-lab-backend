@@ -64,4 +64,11 @@ public interface JuejinClient {
      * (user_id, user_name, avatar_large, level, growth info, ...). Returns the response root node.
      */
     JsonNode fetchUserProfile(Credential credential);
+
+    /**
+     * GET /tag_api/v1/query_tag_list?key_word=...&cursor=0&limit=... Searches Juejin tags by
+     * keyword (no session required). Returns the response root node whose {@code data} array
+     * items carry {@code tag_name} and the tag id ({@code id} / {@code tag_id}).
+     */
+    JsonNode searchTags(String keyword, int limit);
 }

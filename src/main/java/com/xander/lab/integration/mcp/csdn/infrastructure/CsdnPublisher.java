@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.xander.lab.publishing.domain.BlogPublisher;
 import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.publishing.domain.PublishingLimits;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Component;
@@ -68,7 +69,7 @@ public class CsdnPublisher implements BlogPublisher {
                     .body(java.util.Map.ofEntries(
                             java.util.Map.entry("article_id", ""),
                             java.util.Map.entry("title", command.title()),
-                            java.util.Map.entry("description", command.summary() == null ? "" : command.summary()),
+                            java.util.Map.entry("description", normalizeDescription(command.summary())),
                             java.util.Map.entry("content", htmlContent),
                             java.util.Map.entry("tags", command.tags().stream().collect(Collectors.joining(","))),
                             java.util.Map.entry("categories", command.categoryId() == null ? "" : command.categoryId()),
@@ -122,6 +123,17 @@ public class CsdnPublisher implements BlogPublisher {
     static boolean isSessionExpired(int httpStatus, JsonNode body) {
         if (httpStatus == 401) return true;
         return body != null && body.path("code").asInt(0) == 401;
+    }
+
+        /**
+     * 摘要统一按两个外部平台中最严格的上限处理：截断到 {@link PublishingLimits#MAX_SUMMARY_LENGTH}
+     * 字，保证同一份数据对 CSDN（200 字内）与掘金（50-100 字）都合法。
+     */
+    static String normalizeDescription(String summary) {
+        if (summary == null) return "";
+        String trimmed = summary.strip();
+        return trimmed.length() > PublishingLimits.MAX_SUMMARY_LENGTH
+                ? trimmed.substring(0, PublishingLimits.MAX_SUMMARY_LENGTH) : trimmed;
     }
 
     static List<String> resolveCoverImages(String coverImage, String htmlContent) {
