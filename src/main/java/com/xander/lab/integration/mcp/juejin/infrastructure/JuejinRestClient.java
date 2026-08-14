@@ -23,6 +23,8 @@ public class JuejinRestClient implements JuejinClient {
     private static final String CREATE_DRAFT_PATH = "/content_api/v1/article_draft/create";
     private static final String UPDATE_DRAFT_PATH = "/content_api/v1/article_draft/update";
     private static final String PUBLISH_PATH = "/content_api/v1/article/publish";
+    private static final String QUERY_CATEGORY_LIST_PATH = "/tag_api/v1/query_category_list";
+    private static final String QUERY_TAG_LIST_PATH = "/tag_api/v1/query_tag_list";
 
     private final JuejinPlatformProperties properties;
     private final RestClient client;
@@ -133,6 +135,23 @@ public class JuejinRestClient implements JuejinClient {
             }
             throw new JuejinApiException(-1, "HTTP " + ex.getStatusCode().value());
         }
+    }
+
+    @Override
+    public JsonNode queryCategories(Credential credential) {
+        // 分类目录是全站公开数据，但按 HAR 快照的编辑器请求格式带 aid/uuid 调用，
+        // 响应 data[] 每项含 category_id、category（名称/排序）与 hot_tags 数组。
+        return post(QUERY_CATEGORY_LIST_PATH, credential, Map.of());
+    }
+
+    @Override
+    public JsonNode queryTagList(Credential credential, String cursor, int limit) {
+        // 全量标签目录分页接口：sort_type=1 按热度排序，响应带 has_more 与下一页 cursor。
+        return post(QUERY_TAG_LIST_PATH, credential, Map.of(
+                "cursor", cursor == null ? "0" : cursor,
+                "key_word", "",
+                "limit", limit,
+                "sort_type", 1));
     }
 
     private JsonNode post(String path, Credential credential, Map<String, Object> body) {

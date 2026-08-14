@@ -2,27 +2,35 @@ package com.xander.lab.integration.mcp.juejin.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.integration.mcp.juejin.application.JuejinCatalogService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class JuejinPublisherTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private FakeJuejinClient client;
+    private JuejinCatalogService catalogService;
 
     @BeforeEach
     void setUp() {
         client = new FakeJuejinClient();
+        catalogService = mock(JuejinCatalogService.class);
+        when(catalogService.resolveCategoryId(anyString())).thenReturn("6809637767543259144");
+        when(catalogService.resolveCategoryId(null)).thenReturn(JuejinCatalogService.DEFAULT_CATEGORY_ID);
+        when(catalogService.resolveTagId(anyString())).thenReturn(null);
     }
 
     private JuejinPublisher publisher() {
-        // resolveTagIds 只依赖 JuejinClient，凭据服务在此仅透传给 publish()，单测不触发。
-        return new JuejinPublisher(new JuejinPlatformProperties(), null, client);
+        // resolveTagIds 只依赖 JuejinClient 与目录服务，凭据服务在此仅透传给 publish()，单测不触发。
+        return new JuejinPublisher(new JuejinPlatformProperties(), null, client, catalogService);
     }
 
     @Test
@@ -105,11 +113,28 @@ class JuejinPublisherTest {
     }
 
     @Test
-    void resolveTagIdsFailsWithClearMessageWhenNothingResolves() {
+    void resolveTagIdsFallsBackToDefaultTagWhenNothingResolves() {
         JuejinPublisher publisher = publisher();
-        assertThatThrownBy(() -> publisher.resolveTagIds(List.of()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("至少需要一个标签");
+        assertThat(publisher.resolveTagIds(List.of()))
+                .containsExactly(JuejinCatalogService.DEFAULT_TAG_ID);
+    }
+
+    @Test
+    void resolveTagIdsPrefersCatalogMatchOverRemoteSearch() {
+        when(catalogService.resolveTagId("Java")).thenReturn("6809640445233070094");
+        JuejinPublisher publisher = publisher();
+        // 目录命中时不再发起远程搜索
+        assertThat(publisher.resolveTagIds(List.of("Java"))).containsExactly("6809640445233070094");
+        assertThat(client.searchedKeywords).isEmpty();
+    }
+
+    @Test
+    void resolveTagIdsFallsBackToDefaultTagWhenOnlySearchFails() {
+        client.searchFailures.add("caidi");
+        JuejinPublisher publisher = publisher();
+        // 目录未命中且搜索失败时回落默认标签，而不是抛错
+        assertThat(publisher.resolveTagIds(List.of("caidi")))
+                .containsExactly(JuejinCatalogService.DEFAULT_TAG_ID);
     }
 
     @Test
@@ -163,6 +188,16 @@ class JuejinPublisherTest {
 
         @Override
         public JsonNode fetchUserProfile(Credential credential) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public JsonNode queryCategories(Credential credential) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public JsonNode queryTagList(Credential credential, String cursor, int limit) {
             throw new UnsupportedOperationException();
         }
     }

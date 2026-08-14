@@ -95,4 +95,24 @@ class JuejinRestClientTest {
             assertThat(path).contains("key_word=%E5%90%8E%E7%AB%AF");
         });
     }
+
+    @Test
+    void queryCategoriesPostsToCategoryListPath() {
+        JuejinClient.Credential credential = new JuejinClient.Credential("cookie=abc", "csrf", "2608", "uuid-1");
+        client.queryCategories(credential);
+        assertThat(receivedPaths).singleElement().satisfies(path -> {
+            assertThat(path).startsWith("/tag_api/v1/query_category_list?aid=2608&uuid=uuid-1");
+        });
+        assertThat(receivedBody.get()).isEqualTo("{}");
+    }
+
+    @Test
+    void queryTagListPostsCursorLimitAndSortType() {
+        JuejinClient.Credential credential = new JuejinClient.Credential("cookie=abc", "csrf", "2608", "uuid-1");
+        client.queryTagList(credential, "100", 100);
+        assertThat(receivedPaths).singleElement().satisfies(path -> {
+            assertThat(path).startsWith("/tag_api/v1/query_tag_list?aid=2608&uuid=uuid-1");
+        });
+        assertThat(receivedBody.get()).contains("\"cursor\":\"100\"", "\"limit\":100", "\"sort_type\":1");
+    }
 }

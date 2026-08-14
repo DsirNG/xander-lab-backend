@@ -51,7 +51,10 @@ configuration must remain compatible during package moves.
 bearer-token validation, consent, and MCP request identity. It is distinct from
 both browser JWT sessions and platform credentials (CSDN, Juejin). The `blog`,
 `csdn`, `dual`, and `juejin` MCP modules own only their transport contracts and
-application flows.
+application flows. The juejin module also keeps a globally-shared category/tag
+catalog (`juejin_category` / `juejin_tag`) synced from `tag_api` by
+`JuejinCatalogService`; the publisher resolves local category/tag names to
+Juejin-side IDs against it and falls back to defaults when unmatched.
 
 `billing` is charge-on-success only: model clients return business payloads
 together with token usage (`ModelCallResult`), and the owning application

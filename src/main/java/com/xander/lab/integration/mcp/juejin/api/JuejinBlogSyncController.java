@@ -22,9 +22,10 @@ public class JuejinBlogSyncController {
     private final JuejinBlogSyncService service;
 
     /**
-     * Body: {"juejinCategoryId": "6809637773935386632", "juejinTagIds": ["6809640407484334093"]}
-     * Both fields are optional; the category falls back to the frontend category and,
-     * when no tag ids are given, the local post's tag names are resolved to Juejin tag ids.
+     * Body: {"juejinCategoryId": "6809637767543259144", "juejinTagIds": ["6809640407484334093"]}
+     * Both fields are optional; a category name or numeric id is accepted (unmatched names fall
+     * back to the frontend category) and, when no tag ids are given, the local post's tag names
+     * are resolved to Juejin tag ids via the synced category/tag catalog.
      */
     @PostMapping("/{postId}/sync/juejin")
     public Result<PublishResult> sync(@PathVariable Long postId,

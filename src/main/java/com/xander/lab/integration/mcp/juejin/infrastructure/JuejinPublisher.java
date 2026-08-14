@@ -1,6 +1,7 @@
 package com.xander.lab.integration.mcp.juejin.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.xander.lab.integration.mcp.juejin.application.JuejinCatalogService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
 import com.xander.lab.publishing.domain.BlogPublisher;
 import com.xander.lab.publishing.domain.PublishCommand;
@@ -17,7 +18,8 @@ import java.util.regex.Pattern;
  * Publishes an article through juejin.cn content_api: creates a draft, then publishes it.
  * The publish result is the juejin post URL; juejin requires a 50-100 character summary
  * ({@link #MIN_BRIEF_LENGTH}) and at least one Juejin-side tag id, so the summary is derived
- * from the command when missing and tag names are resolved to tag ids via the tag search API.
+ * from the command when missing and tag names are resolved to tag ids via the synced
+ * category/tag catalog (with a remote search fallback).
  */
 @Component
 @Slf4j
@@ -33,11 +35,14 @@ public class JuejinPublisher implements BlogPublisher {
     private final JuejinPlatformProperties properties;
     private final JuejinCredentialService credentials;
     private final JuejinClient client;
+    private final JuejinCatalogService catalogService;
 
-    public JuejinPublisher(JuejinPlatformProperties properties, JuejinCredentialService credentials, JuejinClient client) {
+    public JuejinPublisher(JuejinPlatformProperties properties, JuejinCredentialService credentials,
+                           JuejinClient client, JuejinCatalogService catalogService) {
         this.properties = properties;
         this.credentials = credentials;
         this.client = client;
+        this.catalogService = catalogService;
     }
 
     @Override public String platform() { return "juejin"; }
@@ -46,9 +51,10 @@ public class JuejinPublisher implements BlogPublisher {
     public PublishResult publish(PublishCommand command) {
         if (!properties.isEnabled()) throw new IllegalStateException("Juejin publisher is disabled");
         JuejinClient.Credential credential = credentials.requireCredential(command.userId());
-        // 掘金的分类与标签使用掘金侧 ID（字符串），命令里没有时就落到前端分类。
-        String categoryId = command.categoryId() == null || command.categoryId().isBlank()
-                ? defaultCategoryId() : command.categoryId();
+        // 目录过期或为空时先同步（失败只降级不阻断发布）；分类名/ID 统一交给目录解析，
+        // 解析不了时回落默认前端分类。
+        catalogService.ensureFresh(credential, command.userId());
+        String categoryId = catalogService.resolveCategoryId(command.categoryId());
         String brief = buildBrief(command.summary(), command.content());
         try {
             JsonNode created = client.createDraft(credential, command.title(), brief, command.content(),
@@ -70,9 +76,6 @@ public class JuejinPublisher implements BlogPublisher {
             throw ex;
         }
     }
-
-    /** 掘金前端默认分类（前端）。 */
-    private String defaultCategoryId() { return "6809637773935386632"; }
 
     private String textValue(JsonNode node, String field) {
         JsonNode value = node.path(field);
@@ -117,8 +120,9 @@ public class JuejinPublisher implements BlogPublisher {
 
     /**
      * 把发布命令里的标签统一转换为掘金 tag_id：纯数字当作 ID 直接透传，
-     * 其余当作本地标签名调用掘金标签搜索解析，最多取 {@link #MAX_TAGS} 个。
-     * 一个都解析不出来时抛出明确错误，避免掘金「至少添加一个标签」的模糊报错。
+     * 其余先查本地目录（名称→ID 匹配），目录未命中再调用掘金标签搜索兜底，
+     * 最多取 {@link #MAX_TAGS} 个。一个都解析不出来时使用默认标签，
+     * 避免掘金「至少添加一个标签」的模糊报错。
      */
     List<String> resolveTagIds(List<String> tags) {
         List<String> ids = new ArrayList<>();
@@ -128,13 +132,19 @@ public class JuejinPublisher implements BlogPublisher {
             if (NUMERIC_TAG_ID.matcher(trimmed).matches()) {
                 ids.add(trimmed);
             } else {
-                String resolved = resolveTagId(trimmed);
-                if (resolved != null) ids.add(resolved);
+                // 目录精确匹配优先于远程搜索：命中即返回，未命中再走搜索兜底。
+                String catalogId = catalogService.resolveTagId(trimmed);
+                if (catalogId != null) {
+                    ids.add(catalogId);
+                } else {
+                    String resolved = resolveTagId(trimmed);
+                    if (resolved != null) ids.add(resolved);
+                }
             }
             if (ids.size() >= MAX_TAGS) break;
         }
         if (ids.isEmpty()) {
-            throw new IllegalArgumentException("掘金至少需要一个标签：请为文章添加标签，或传入掘金标签 ID");
+            ids.add(JuejinCatalogService.DEFAULT_TAG_ID);
         }
         return List.copyOf(ids);
     }

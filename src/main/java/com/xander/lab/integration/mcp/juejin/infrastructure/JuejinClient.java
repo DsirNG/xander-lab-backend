@@ -71,4 +71,19 @@ public interface JuejinClient {
      * items carry {@code tag_name} and the tag id ({@code id} / {@code tag_id}).
      */
     JsonNode searchTags(String keyword, int limit);
+
+    /**
+     * POST /tag_api/v1/query_category_list. Fetches the full Juejin category catalog; each
+     * {@code data} item carries {@code category_id}, a nested {@code category} object and the
+     * category's {@code hot_tags} array. Used to keep the local category/tag catalog fresh.
+     */
+    JsonNode queryCategories(Credential credential);
+
+    /**
+     * POST /tag_api/v1/query_tag_list with body {"cursor","key_word","limit","sort_type"}.
+     * Fetches one page of the Juejin tag catalog; {@code data} items carry {@code tag_id} and
+     * a nested {@code tag} object with {@code tag_name}. Response root carries {@code has_more}
+     * and the next {@code cursor} for pagination.
+     */
+    JsonNode queryTagList(Credential credential, String cursor, int limit);
 }

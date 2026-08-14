@@ -143,6 +143,7 @@ mcp:
       credential-encryption-key: ${JUEJIN_CREDENTIAL_ENCRYPTION_KEY:}
       connect-timeout-millis: ${JUEJIN_CONNECT_TIMEOUT_MILLIS:10000}
       read-timeout-millis: ${JUEJIN_READ_TIMEOUT_MILLIS:30000}
+      catalog-freshness-hours: ${JUEJIN_CATALOG_FRESHNESS_HOURS:24}
 
 # Blog HTML preview sandbox. The page is hosted on its own origin (production:
 # per-session subdomain of the preview domain) and embedded via iframe src;

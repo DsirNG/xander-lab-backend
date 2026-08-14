@@ -25,6 +25,8 @@ public class JuejinPlatformProperties {
     private int authorizationTimeoutSeconds = 60;
     /** 后台清理过期授权会话的扫描间隔（毫秒）。 */
     private long cleanupIntervalMs = 15_000;
+    /** 分类/标签目录的新鲜度窗口（小时），过期或为空时在发布链路触发全量同步。 */
+    private int catalogFreshnessHours = 24;
     /** 掘金登录页二维码选择器（无头浏览器在登录框内找到的图片节点）。 */
     private String qrImageSelector = ".qrcode-img-wrap img.qrcode-img";
 }
