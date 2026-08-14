@@ -35,7 +35,8 @@ public class McpOAuthController {
     public Map<String, Object> protectedResourceMetadata(@RequestParam(required = false) String resource) {
         String base = properties.getPublicBaseUrl();
         String resolvedResource = resource == null || resource.isBlank() ? base + "/api/mcp" : resource;
-        if (!List.of(base + "/api/mcp", base + "/api/mcp/csdn", base + "/api/mcp/dual").contains(resolvedResource)) {
+        if (!List.of(base + "/api/mcp", base + "/api/mcp/csdn", base + "/api/mcp/dual",
+                base + "/api/mcp/juejin").contains(resolvedResource)) {
             throw new McpOAuthException("invalid_request", 400, "resource is not an Xander MCP endpoint");
         }
         return Map.of(

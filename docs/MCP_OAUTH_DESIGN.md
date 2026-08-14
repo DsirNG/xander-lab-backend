@@ -14,10 +14,13 @@ The server keeps three independent product capabilities:
 | Blog MCP | `/api/mcp` | Owned blog CRUD and publication |
 | CSDN MCP | `/api/mcp/csdn` | CSDN account authorization and owned-post sync |
 | Dual publish MCP | `/api/mcp/dual` | Composition of the two capabilities |
+| Juejin MCP | `/api/mcp/juejin` | Juejin account status and owned-post publish |
 
 The dual server orchestrates the blog and CSDN application services. It never
 reads CSDN credentials. CSDN credentials remain encrypted and scoped by the
-Xander Lab user ID in `integration.mcp.csdn`.
+Xander Lab user ID in `integration.mcp.csdn`. The Juejin module stores its own
+per-user encrypted credentials in `integration.mcp.juejin` and never touches
+CSDN credentials.
 
 ## 2. Non-goals
 
@@ -82,6 +85,9 @@ rate-limits registrations, and persists the client ID and redirect URI set.
 For CSDN work, the MCP host first receives Xander Lab OAuth authorization. The
 user's CSDN account is then checked or bound through CSDN MCP's existing QR
 authorization flow. A token can never select another user's CSDN credential.
+The Juejin MCP follows the same pattern: the Juejin credential is bound per
+Xander Lab user (QR authorization handoff planned) and publish tools always
+resolve the credential of the calling user.
 
 ## 5. Scopes
 
@@ -95,11 +101,14 @@ Scopes are capability-based and granted per external OAuth client:
 | `csdn:authorize` | Start CSDN QR authorization for the current user |
 | `csdn:publish` | Synchronize owned posts to CSDN |
 | `publish:dual` | Publish an article to the local blog and then CSDN |
+| `juejin:status` | Read the current user's Juejin authorization state |
+| `juejin:publish` | Publish articles or owned posts to Juejin |
 
-`/api/mcp` accepts the blog scopes, `/api/mcp/csdn` accepts CSDN scopes, and
-`/api/mcp/dual` requires `publish:dual` plus the effective blog and CSDN write
-permissions. The dual endpoint may request these as one consent bundle but the
-token persists the individual scopes for auditability.
+`/api/mcp` accepts the blog scopes, `/api/mcp/csdn` accepts CSDN scopes,
+`/api/mcp/juejin` accepts the Juejin scopes, and `/api/mcp/dual` requires
+`publish:dual` plus the effective blog and CSDN write permissions. The dual
+endpoint may request these as one consent bundle but the token persists the
+individual scopes for auditability.
 
 ## 6. Persistence and Security
 

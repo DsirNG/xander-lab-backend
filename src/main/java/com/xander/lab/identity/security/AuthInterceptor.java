@@ -77,6 +77,11 @@ public class AuthInterceptor implements HandlerInterceptor {
             "POST:/api/publishing/csdn/authorization/start",
             "POST:/api/publishing/csdn/authorization/cancel",
             "DELETE:/api/publishing/csdn/authorization",
+            // 掘金授权状态属于私有凭据信息，必须登录后才能读写。
+            "GET:/api/publishing/juejin/authorization/status",
+            "POST:/api/publishing/juejin/authorization/start",
+            "POST:/api/publishing/juejin/authorization/cancel",
+            "DELETE:/api/publishing/juejin/authorization",
             // 积分余额与流水为私有数据，必须登录后才能读取。
             "GET:/api/points",
             "GET:/api/points/ledger",

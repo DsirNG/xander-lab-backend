@@ -35,4 +35,7 @@ public final class BillingBiz {
 
     /** CSDN 发布：一次成功发文 */
     public static final String CSDN_PUBLISH = "csdn-publish";
+
+    /** 掘金发布：一次成功发文 */
+    public static final String JUEJIN_PUBLISH = "juejin-publish";
 }

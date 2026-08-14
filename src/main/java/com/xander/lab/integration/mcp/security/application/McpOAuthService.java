@@ -39,7 +39,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class McpOAuthService {
     public static final Set<String> SUPPORTED_SCOPES = Set.of(
-            "blog:read", "blog:write", "csdn:status", "csdn:authorize", "csdn:publish", "publish:dual");
+            "blog:read", "blog:write", "csdn:status", "csdn:authorize", "csdn:publish", "publish:dual",
+            "juejin:status", "juejin:publish");
 
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String AUTHORIZATION_REQUEST_PREFIX = "mcp:oauth:authorization-request:";
@@ -350,7 +351,8 @@ public class McpOAuthService {
 
     private boolean isMcpResource(String resource) {
         String base = properties.getPublicBaseUrl();
-        return resource.equals(base + "/api/mcp") || resource.equals(base + "/api/mcp/csdn") || resource.equals(base + "/api/mcp/dual");
+        return resource.equals(base + "/api/mcp") || resource.equals(base + "/api/mcp/csdn")
+                || resource.equals(base + "/api/mcp/dual") || resource.equals(base + "/api/mcp/juejin");
     }
 
     private void requireEnabled() {

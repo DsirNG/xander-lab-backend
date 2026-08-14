@@ -10,7 +10,7 @@ feature; deployment and database topology stay unchanged.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions.
 - `publishing` (migrated): owns blog posts, categories, tags, view records, publication commands, generic publication contracts, durable publication records, and blog media uploads.
 - `automation` (migrated): owns email reminders, recurring content plans (`blog_content_plan`), durable plan runs (`blog_plan_run`), the plan poller with atomic claiming and stale-claim recovery, and user notifications (`blog_notification`). Runs a headless pipeline: generation via `blogagent`, a fail-closed compliance gate, local/CSDN publication via `publishing`/`integration`, then reschedules the plan. Per-user SSE pushes live updates; the notification table is the durable fallback for offline users.
-- `integration` (migrated): owns MCP protocol adapters, OSS/file/mail delivery adapters, and vendor-specific integrations such as the complete CSDN MCP flow.
+- `integration` (migrated): owns MCP protocol adapters, OSS/file/mail delivery adapters, and vendor-specific integrations such as the complete CSDN MCP flow and the Juejin MCP flow.
 - `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
 - `components` (migrated): owns the UI component library catalog, detail pages, and community-shared submissions.
 - `bloghtml` (new): owns short-lived blog HTML preview sessions. Session creation (`POST /api/blog-html/previews`) is public with per-IP Redis fixed-window rate limiting; code is stored in Redis with a TTL and served as a standalone sandbox page (`GET /blog-html/{id}/raw`) outside `/api` so iframes load it without auth, CORS or cookies. The page runs on an independent origin (per-session subdomain in production, a different port locally) and carries a strict CSP with `frame-ancestors` restricting embedders; this is the preview isolation pattern used by ChatGPT for its artifact pages.
@@ -49,8 +49,9 @@ configuration must remain compatible during package moves.
 
 `integration.mcp.security` owns OAuth 2.1 discovery, PKCE authorization,
 bearer-token validation, consent, and MCP request identity. It is distinct from
-both browser JWT sessions and CSDN platform credentials. The `blog`, `csdn`,
-and `dual` MCP modules own only their transport contracts and application flows.
+both browser JWT sessions and platform credentials (CSDN, Juejin). The `blog`,
+`csdn`, `dual`, and `juejin` MCP modules own only their transport contracts and
+application flows.
 
 `billing` is charge-on-success only: model clients return business payloads
 together with token usage (`ModelCallResult`), and the owning application

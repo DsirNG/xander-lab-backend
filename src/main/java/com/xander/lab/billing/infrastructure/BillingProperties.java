@@ -41,7 +41,8 @@ public class BillingProperties {
     private Map<String, Integer> flat = new LinkedHashMap<>(Map.of(
             "blog-agent-illustration", 50,
             "email-reminder", 5,
-            "csdn-publish", 10
+            "csdn-publish", 10,
+            "juejin-publish", 10
     ));
 
     private Price price = new Price();

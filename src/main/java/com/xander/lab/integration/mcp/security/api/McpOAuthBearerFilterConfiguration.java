@@ -53,7 +53,7 @@ public class McpOAuthBearerFilterConfiguration {
             }
         };
         FilterRegistrationBean<OncePerRequestFilter> registration = new FilterRegistrationBean<>(filter);
-        registration.addUrlPatterns("/api/mcp", "/api/mcp/csdn", "/api/mcp/dual");
+        registration.addUrlPatterns("/api/mcp", "/api/mcp/csdn", "/api/mcp/dual", "/api/mcp/juejin");
         registration.setOrder(-101);
         return registration;
     }

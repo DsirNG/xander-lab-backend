@@ -71,7 +71,7 @@ Xander Lab 的多个功能依赖外部付费资源（大模型、图生 3D、邮
 
 ### 3.6 CSDN / 第三方发布
 
-位置：`integration.mcp.csdn.CsdnPublisher` / `publishing.application.PublicationService.publish(command, "csdn")`。
+位置：`integration.mcp.csdn.CsdnPublisher` 与 `integration.mcp.juejin.JuejinPublisher` / `publishing.application.PublicationService.publish(command, "csdn" | "juejin")`。
 
 平台承担 API 调用成本并消耗用户第三方账户配额，建议每次发文尝试扣少量积分防滥用。本站本地发布（`publish(command, "local")`）不扣。
 
