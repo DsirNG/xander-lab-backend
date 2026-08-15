@@ -216,7 +216,7 @@
         </if>
         GROUP BY p.id, p.title, p.summary, p.category_id, c.name, p.user_id,
                  p.author, p.published_at, p.read_time, p.tips, p.views, p.status
-        ORDER BY p.updated_at DESC, p.id DESC
+        ORDER BY COALESCE(p.published_at, p.updated_at) DESC, p.id DESC
     </select>
 
 </mapper>
