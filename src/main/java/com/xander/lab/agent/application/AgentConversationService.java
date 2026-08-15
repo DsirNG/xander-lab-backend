@@ -28,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -484,6 +485,53 @@ public class AgentConversationService {
                 .eq(AgentConversation::getUserId, userId)
                 .orderByDesc(AgentConversation::getUpdatedAt)
                 .last("LIMIT 50"));
+    }
+
+    /** 启用分享：生成唯一 share_token 并返回。若已启用则直接返回现有 token。 */
+    public String enableShare(Long conversationId, Long userId) {
+        AgentConversation conversation = requireOwned(conversationId, userId);
+        if (conversation.getShareToken() != null) {
+            return conversation.getShareToken();
+        }
+        String token = UUID.randomUUID().toString().replace("-", "");
+        conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                .eq(AgentConversation::getId, conversationId)
+                .eq(AgentConversation::getUserId, userId)
+                .set(AgentConversation::getShareToken, token)
+                .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+        return token;
+    }
+
+    /** 禁用分享：将 share_token 置 NULL。 */
+    public void disableShare(Long conversationId, Long userId) {
+        requireOwned(conversationId, userId);
+        conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                .eq(AgentConversation::getId, conversationId)
+                .eq(AgentConversation::getUserId, userId)
+                .set(AgentConversation::getShareToken, null)
+                .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+    }
+
+    /** 通过分享令牌获取对话（公开接口，无需登录）。 */
+    public AgentConversation getByShareToken(String shareToken) {
+        if (!StringUtils.hasText(shareToken)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "分享链接无效");
+        }
+        AgentConversation conversation = conversationMapper.selectOne(
+                new LambdaQueryWrapper<AgentConversation>()
+                        .eq(AgentConversation::getShareToken, shareToken));
+        if (conversation == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "分享链接无效或已失效");
+        }
+        return conversation;
+    }
+
+    /** 通过分享令牌获取消息列表（公开接口，无需登录）。 */
+    public List<AgentMessage> listMessagesByShareToken(String shareToken) {
+        AgentConversation conversation = getByShareToken(shareToken);
+        return messageMapper.selectList(new LambdaQueryWrapper<AgentMessage>()
+                .eq(AgentMessage::getConversationId, conversation.getId())
+                .orderByAsc(AgentMessage::getId));
     }
 
     private void saveMessage(Long conversationId, String role, String kind,

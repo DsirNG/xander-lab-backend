@@ -79,6 +79,28 @@ public class AgentConversationController {
         return Result.success(service.listMessages(id, UserContext.getUserId()));
     }
 
+    @GetMapping("/shared/{shareToken}")
+    public Result<AgentConversationVO> getShared(@PathVariable String shareToken) {
+        AgentConversation conversation = service.getByShareToken(shareToken);
+        List<AgentMessage> messages = service.listMessagesByShareToken(shareToken);
+        return Result.success(AgentConversationVO.builder()
+                .conversation(conversation)
+                .messages(messages)
+                .build());
+    }
+
+    @PostMapping("/{id}/share")
+    public Result<String> enableShare(@PathVariable Long id) {
+        String token = service.enableShare(id, UserContext.getUserId());
+        return Result.success(token);
+    }
+
+    @DeleteMapping("/{id}/share")
+    public Result<Void> disableShare(@PathVariable Long id) {
+        service.disableShare(id, UserContext.getUserId());
+        return Result.success(null);
+    }
+
     @PostMapping("/{id}/cancel")
     public Result<AgentConversation> cancel(@PathVariable Long id) {
         return Result.success(service.cancel(id, UserContext.getUserId()));

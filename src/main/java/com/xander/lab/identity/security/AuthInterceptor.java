@@ -103,7 +103,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             "GET:/api/component/categories",
             "GET:/api/component/tags",
             "GET:/api/studio/preview/*",
-            "GET:/api/studio/project/*"
+            "GET:/api/studio/project/*",
+            "GET:/api/agent/conversations/shared/*"
     );
 
     /** 完全排除的路径（独立鉴权体系，如 MCP 传输与 OAuth 端点） */
