@@ -17,6 +17,7 @@ import java.util.Base64;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -64,10 +65,21 @@ class ModelGatewayServiceTest {
     }
 
     @Test
-    void returnsEmptyWhenFeatureHasNoEnabledConfig() {
+    void throwsWhenFeatureHasNoConfigRow() {
         when(configMapper.selectOne(any())).thenReturn(null);
 
-        assertThat(service.candidates(ModelGateway.FEATURE_BLOG_AGENT)).isEmpty();
+        assertThatThrownBy(() -> service.candidates(ModelGateway.FEATURE_BLOG_AGENT))
+                .isInstanceOf(FeatureModelNotConfiguredException.class)
+                .hasMessageContaining("blog_agent");
+    }
+
+    @Test
+    void throwsWhenFeatureConfigIsDisabled() {
+        when(configMapper.selectOne(any())).thenReturn(config(false, 1L, "gpt-a", 2L, "gpt-b"));
+
+        assertThatThrownBy(() -> service.candidates(ModelGateway.FEATURE_BLOG_AGENT))
+                .isInstanceOf(FeatureModelNotConfiguredException.class);
+        verify(providerMapper, never()).selectById(any());
     }
 
     @Test
@@ -88,33 +100,34 @@ class ModelGatewayServiceTest {
     }
 
     @Test
-    void skipsDisabledMissingOrDecryptBrokenProviders() {
+    void throwsWhenAllProvidersAreUnusable() {
         when(configMapper.selectOne(any())).thenReturn(config(true, 1L, "gpt-a", 2L, "gpt-b"));
         ModelProvider disabled = enabledProvider(1L);
         disabled.setEnabled(false);
         when(providerMapper.selectById(1L)).thenReturn(disabled);
         when(providerMapper.selectById(2L)).thenReturn(null);
 
-        List<ModelEndpoint> endpoints = service.candidates(ModelGateway.FEATURE_AGENT);
-
-        assertThat(endpoints).isEmpty();
+        assertThatThrownBy(() -> service.candidates(ModelGateway.FEATURE_AGENT))
+                .isInstanceOf(FeatureModelNotConfiguredException.class);
     }
 
     @Test
-    void skipsEndpointWhoseKeyCannotBeDecrypted() {
+    void throwsWhenAllKeysCannotBeDecrypted() {
         when(configMapper.selectOne(any())).thenReturn(config(true, 1L, "gpt-a", null, null));
         ModelProvider broken = enabledProvider(1L);
         broken.setEncryptedApiKey("not-a-ciphertext");
         when(providerMapper.selectById(1L)).thenReturn(broken);
 
-        assertThat(service.candidates(ModelGateway.FEATURE_AGENT)).isEmpty();
+        assertThatThrownBy(() -> service.candidates(ModelGateway.FEATURE_AGENT))
+                .isInstanceOf(FeatureModelNotConfiguredException.class);
     }
 
     @Test
-    void treatsBlankSlotAsNoEndpoint() {
+    void throwsWhenAllSlotsAreBlank() {
         when(configMapper.selectOne(any())).thenReturn(config(true, null, null, null, null));
 
-        assertThat(service.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE)).isEmpty();
+        assertThatThrownBy(() -> service.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE))
+                .isInstanceOf(FeatureModelNotConfiguredException.class);
     }
 
     private FeatureModelConfig config(boolean enabled, Long primaryId, String primaryModel,

@@ -5,10 +5,12 @@ import java.util.List;
 /**
  * 运行时模型网关：按功能解析候选模型端点。
  *
- * <p>供应商与「功能 → 主/兜底模型」指派均由 admin 模块持久化。当网关总开关关闭、
- * 功能未启用或没有任何可用端点时返回空列表，各模型客户端继续使用环境变量配置，
- * 行为与网关功能引入前完全一致。agent / blogagent / studio 的模型客户端只能通过
- * 本接口读取解析结果，不得直接访问 admin 的表或 mapper。</p>
+ * <p>供应商与「功能 → 主/兜底模型」指派均由 admin 模块持久化。网关启用后，
+ * 各功能的模型调用只能由「功能模型配置」驱动：无可用配置时抛
+ * {@link FeatureModelNotConfiguredException}，禁止回退到环境变量。
+ * 网关关闭时返回空列表，各模型客户端继续使用环境变量配置，行为与网关功能
+ * 引入前完全一致。agent / blogagent / studio 的模型客户端只能通过本接口
+ * 读取解析结果，不得直接访问 admin 的表或 mapper。</p>
  */
 public interface ModelGateway {
 
@@ -26,7 +28,9 @@ public interface ModelGateway {
 
     /**
      * 返回某功能的有序候选端点（主优先，兜底其次）。
-     * 空列表表示没有可用的管理台配置，调用方应回退到自己的环境变量配置。
+     * 网关关闭时返回空列表，调用方回退到自己的环境变量配置；网关启用后，
+     * 功能没有可用配置（无配置行/配置停用/主兜底均无可用端点）会抛出
+     * {@link FeatureModelNotConfiguredException}，调用方必须向上传播而不回退。
      */
     List<ModelEndpoint> candidates(String featureKey);
 

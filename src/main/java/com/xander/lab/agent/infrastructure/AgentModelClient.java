@@ -131,7 +131,7 @@ public class AgentModelClient {
         }
     }
 
-    /** 解析候选端点：管理台网关优先，否则回退到环境变量（原行为）。 */
+    /** 解析候选端点：网关启用时由功能模型配置驱动（未配置由网关抛错）；网关关闭时回退环境变量（原行为）。 */
     private List<ModelEndpoint> endpoints() {
         List<ModelEndpoint> candidates = gateway.candidates(ModelGateway.FEATURE_AGENT);
         if (!candidates.isEmpty()) {

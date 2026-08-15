@@ -81,7 +81,7 @@ public class Img2ThreeModelClient {
         throw lastFailure;
     }
 
-    /** 解析候选端点：管理台网关优先；否则复用原环境变量回退链（img2three.agent → blog.agent）。 */
+    /** 解析候选端点：网关启用时由功能模型配置驱动（未配置由网关抛错）；网关关闭时复用原环境变量回退链（img2three.agent → blog.agent）。 */
     private List<ModelEndpoint> endpoints() {
         List<ModelEndpoint> candidates = gateway.candidates(ModelGateway.FEATURE_IMG2THREE_VISION);
         if (!candidates.isEmpty()) {

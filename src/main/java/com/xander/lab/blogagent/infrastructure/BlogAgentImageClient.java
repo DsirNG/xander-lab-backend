@@ -60,9 +60,14 @@ public class BlogAgentImageClient {
                 .build();
     }
 
+    /** 网关启用且已配置时由配置驱动；网关关闭时回退环境变量；未配置视为不可用（不抛出）。 */
     public boolean isEnabled() {
-        if (!gateway.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE).isEmpty()) {
-            return true;
+        try {
+            if (!gateway.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE).isEmpty()) {
+                return true;
+            }
+        } catch (com.xander.lab.admin.application.FeatureModelNotConfiguredException e) {
+            return false;
         }
         return StringUtils.hasText(properties.getApiKey()) && StringUtils.hasText(properties.getImageModel());
     }
@@ -85,7 +90,7 @@ public class BlogAgentImageClient {
         throw lastFailure;
     }
 
-    /** 解析候选端点：管理台网关优先，否则回退到环境变量（原行为）。 */
+    /** 解析候选端点：网关启用时由功能模型配置驱动（未配置由网关抛错）；网关关闭时回退环境变量（原行为）。 */
     private List<ModelEndpoint> endpoints() {
         List<ModelEndpoint> candidates = gateway.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE);
         if (!candidates.isEmpty()) {

@@ -20,7 +20,11 @@ import java.util.List;
  *
  * <p>每个模型调用都直接读库（不缓存）：配置只在管理台变更，读库成本相对模型请求
  * 秒级延迟可忽略，且不会出现多实例配置不一致被长期缓存的问题。解密失败或供应商
- * 停用/缺失的端点会被跳过，宁可回退到环境变量也不会带上残缺密钥调用外部服务。</p>
+ * 停用/缺失的端点会被跳过，宁可报“功能未配置”也不会带上残缺密钥调用外部服务。
+ *
+ * <p>网关启用后功能只能由「功能模型配置」驱动：无配置行、配置被停用或没有任何
+ * 可用端点时抛出 {@link FeatureModelNotConfiguredException}（HTTP 400），不允许
+ * 客户端回退到环境变量；网关关闭时返回空列表，调用方保持环境变量行为。</p>
  */
 @Slf4j
 @Service
@@ -40,11 +44,14 @@ public class ModelGatewayService implements ModelGateway {
         FeatureModelConfig config = configMapper.selectOne(
                 new LambdaQueryWrapper<FeatureModelConfig>().eq(FeatureModelConfig::getFeatureKey, featureKey));
         if (config == null || !Boolean.TRUE.equals(config.getEnabled())) {
-            return List.of();
+            throw new FeatureModelNotConfiguredException(featureKey);
         }
         List<ModelEndpoint> endpoints = new ArrayList<>(2);
         addEndpoint(endpoints, config.getPrimaryProviderId(), config.getPrimaryModel());
         addEndpoint(endpoints, config.getFallbackProviderId(), config.getFallbackModel());
+        if (endpoints.isEmpty()) {
+            throw new FeatureModelNotConfiguredException(featureKey);
+        }
         return endpoints;
     }
 

@@ -517,7 +517,7 @@ public class BlogAgentService {
         }
         if (!imageClient.isEnabled()) {
             return new IllustrationOutcome(removeIllustrationPlaceholders(content), "disabled",
-                    "未配置 BLOG_AGENT_IMAGE_MODEL，已跳过插图生成", 0);
+                    "未配置插图生成模型（功能模型配置），已跳过插图生成", 0);
         }
 
         int generatedCount = 0;
