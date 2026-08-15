@@ -7,6 +7,7 @@ import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -53,6 +54,9 @@ public class BlogAgentModelClient {
         this(properties, objectMapper, ModelGateway.disabled());
     }
 
+    /** Spring 构造器注入入口。类里有多个构造器，必须显式标注 @Autowired，
+     *  否则容器退回找无参构造器导致启动失败。 */
+    @Autowired
     public BlogAgentModelClient(BlogAgentProperties properties, ObjectMapper objectMapper, ModelGateway gateway) {
         this.properties = properties;
         this.objectMapper = objectMapper;
