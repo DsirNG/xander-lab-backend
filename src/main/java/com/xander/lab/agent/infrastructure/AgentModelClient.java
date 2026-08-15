@@ -3,6 +3,8 @@ package com.xander.lab.agent.infrastructure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,8 @@ import java.util.function.BooleanSupplier;
  * Calls an OpenAI-compatible Responses endpoint to drive the agent loop.
  * Configuration belongs to the agent module; deployment defaults may reuse
  * the blog model environment variables without coupling Java modules.
+ * When the admin model gateway returns candidates for the agent feature they
+ * take precedence; otherwise the environment configuration is used as before.
  */
 @Slf4j
 @Component
@@ -38,10 +42,17 @@ public class AgentModelClient {
     private static final long RETRY_BACKOFF_MILLIS = 500L;
     private final AgentModelProperties properties;
     private final ObjectMapper objectMapper;
+    private final ModelGateway gateway;
 
+    /** 兼容仅依赖环境变量的构造器（测试/独立组件）：关闭管理台网关。 */
     public AgentModelClient(AgentModelProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, ModelGateway.disabled());
+    }
+
+    public AgentModelClient(AgentModelProperties properties, ObjectMapper objectMapper, ModelGateway gateway) {
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.gateway = gateway;
     }
 
     /**
@@ -62,21 +73,48 @@ public class AgentModelClient {
         return decideNextStepStream(context, toolDescriptions, onAnswerDelta, () -> false);
     }
 
-    /** Retries only transient failures and never retries after a user-visible reply delta. */
+    /**
+     * Retries only transient failures and never retries after a user-visible reply delta.
+     * When the admin gateway configured a fallback endpoint, exhausted primary attempts
+     * fail over to it, still never re-streaming deltas that were already delivered.
+     */
     public ModelCallResult decideNextStepStream(String context, String toolDescriptions,
                                          Consumer<String> onAnswerDelta,
                                          BooleanSupplier cancellationRequested) {
+        List<ModelEndpoint> endpoints = endpoints();
         AtomicBoolean visibleDelta = new AtomicBoolean();
         Consumer<String> guardedDelta = delta -> {
             checkCancellation(cancellationRequested);
             visibleDelta.set(true);
             onAnswerDelta.accept(delta);
         };
+        RuntimeException lastFailure = new IllegalStateException("模型服务未配置");
+        for (int index = 0; index < endpoints.size(); index++) {
+            ModelEndpoint endpoint = endpoints.get(index);
+            try {
+                return decideNextStepStreamPerEndpoint(endpoint, context, toolDescriptions,
+                        guardedDelta, visibleDelta, cancellationRequested);
+            } catch (RuntimeException exception) {
+                lastFailure = exception;
+                if (visibleDelta.get() || index == endpoints.size() - 1) {
+                    throw exception;
+                }
+                log.warn("agent model endpoint {} failed, failing over to the next provider",
+                        endpoint.providerId());
+            }
+        }
+        throw lastFailure;
+    }
+
+    private ModelCallResult decideNextStepStreamPerEndpoint(ModelEndpoint endpoint, String context,
+                                                     String toolDescriptions, Consumer<String> onAnswerDelta,
+                                                     AtomicBoolean visibleDelta,
+                                                     BooleanSupplier cancellationRequested) {
         for (int attempt = 1; ; attempt++) {
             checkCancellation(cancellationRequested);
             try {
-                return decideNextStepStreamOnce(
-                        context, toolDescriptions, guardedDelta, cancellationRequested);
+                return decideNextStepStreamOnce(endpoint, context, toolDescriptions,
+                        onAnswerDelta, cancellationRequested);
             } catch (ModelGatewayException exception) {
                 if (!TRANSIENT_STATUS.contains(exception.status())
                         || visibleDelta.get() || attempt >= MAX_ATTEMPTS) {
@@ -89,11 +127,21 @@ public class AgentModelClient {
         }
     }
 
-    private ModelCallResult decideNextStepStreamOnce(String context, String toolDescriptions,
-                                               Consumer<String> onAnswerDelta,
-                                               BooleanSupplier cancellationRequested) {
+    /** 解析候选端点：管理台网关优先，否则回退到环境变量（原行为）。 */
+    private List<ModelEndpoint> endpoints() {
+        List<ModelEndpoint> candidates = gateway.candidates(ModelGateway.FEATURE_AGENT);
+        if (!candidates.isEmpty()) {
+            return candidates;
+        }
         requireConfigured();
-        Map<String, Object> payload = requestPayload(context, toolDescriptions);
+        return List.of(new ModelEndpoint(0L, properties.getBaseUrl(),
+                properties.getApiKey(), properties.getModel()));
+    }
+
+    private ModelCallResult decideNextStepStreamOnce(ModelEndpoint endpoint, String context, String toolDescriptions,
+                                                Consumer<String> onAnswerDelta,
+                                                BooleanSupplier cancellationRequested) {
+        Map<String, Object> payload = requestPayload(endpoint.model(), context, toolDescriptions);
         payload.put("stream", true);
 
         HttpURLConnection connection = null;
@@ -102,10 +150,10 @@ public class AgentModelClient {
         DecisionReplyDecoder replyDecoder = new DecisionReplyDecoder(onAnswerDelta);
         try {
             connection = (HttpURLConnection) URI.create(
-                    trimTrailingSlash(properties.getBaseUrl()) + "/responses")
+                    trimTrailingSlash(endpoint.baseUrl()) + "/responses")
                     .toURL().openConnection();
             connection.setRequestMethod("POST");
-            connection.setRequestProperty("Authorization", "Bearer " + properties.getApiKey());
+            connection.setRequestProperty("Authorization", "Bearer " + endpoint.apiKey());
             connection.setRequestProperty("Content-Type", MediaType.APPLICATION_JSON_VALUE);
             connection.setRequestProperty("Accept", MediaType.TEXT_EVENT_STREAM_VALUE);
             connection.setConnectTimeout(Math.max(1, properties.getConnectTimeoutMillis()));
@@ -182,9 +230,9 @@ public class AgentModelClient {
         decoder.accept(delta);
     }
 
-    private Map<String, Object> requestPayload(String context, String toolDescriptions) {
+    private Map<String, Object> requestPayload(String model, String context, String toolDescriptions) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", properties.getModel());
+        payload.put("model", model);
         payload.put("store", false);
         payload.put("instructions", instructions(toolDescriptions));
         payload.put("input", context);

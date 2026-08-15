@@ -130,6 +130,11 @@ public class AuthInterceptor implements HandlerInterceptor {
             }
         }
 
+        // 管理后台路径：必须登录且角色为 ADMIN，其余角色一律 403。需要在公开 GET 分支之前判断。
+        if (path.startsWith("/api/admin/")) {
+            return requireAdmin(request, response);
+        }
+
         // 公开的GET读操作直接放行（但仍尝试解析token以便记录用户信息）
         // This matches the public post-detail wildcard below, but idempotent
         // publish status belongs to the authenticated user only.
@@ -230,6 +235,29 @@ public class AuthInterceptor implements HandlerInterceptor {
     }
 
     /**
+     * 管理后台鉴权：先走普通登录校验，再校验 JWT 内携带的 role 必须为 ADMIN。
+     * 身份模块拥有 JWT 解析，这里是唯一授权点；不做权限升级或用户态写入。
+     */
+    private boolean requireAdmin(HttpServletRequest request, HttpServletResponse response) {
+        if (!requireAuth(request, response)) {
+            return false;
+        }
+        String authHeader = request.getHeader(Constants.AUTHORIZATION_HEADER);
+        String token = authHeader.substring(Constants.TOKEN_PREFIX.length());
+        try {
+            if (!"ADMIN".equals(jwtUtil.parseToken(token).get("role", String.class))) {
+                forbidden(response);
+                return false;
+            }
+        } catch (Exception e) {
+            // token 过期/签名变化等：按未登录处理，避免 403 泄露角色信息。
+            unauthorized(response);
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * 简单路径匹配（支持单层通配符 *）
      */
     private boolean matchPath(String pattern, String path) {
@@ -265,6 +293,16 @@ public class AuthInterceptor implements HandlerInterceptor {
             response.setContentType("application/json;charset=UTF-8");
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             response.getWriter().write("{\"code\":401,\"message\":\"未登录或登录已过期\",\"data\":null}");
+        } catch (Exception e) {
+            log.error("[Auth] 响应写入失败", e);
+        }
+    }
+
+    private void forbidden(HttpServletResponse response) {
+        try {
+            response.setContentType("application/json;charset=UTF-8");
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.getWriter().write("{\"code\":403,\"message\":\"无管理员权限\",\"data\":null}");
         } catch (Exception e) {
             log.error("[Auth] 响应写入失败", e);
         }

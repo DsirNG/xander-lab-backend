@@ -157,6 +157,13 @@ blog-html:
     rate-limit-max-requests: ${BLOG_HTML_PREVIEW_RATE_LIMIT_MAX_REQUESTS:10}
     rate-limit-window-seconds: ${BLOG_HTML_PREVIEW_RATE_LIMIT_WINDOW_SECONDS:60}
 
+# 管理台模型网关：关闭时各功能继续使用下方环境变量配置；开启前必须先应用 db 迁移 SQL。
+admin:
+  model-gateway:
+    enabled: ${ADMIN_MODEL_GATEWAY_ENABLED:false}
+    # Base64 编码的 32 字节 AES 密钥，用于加密 model_provider 的 API 密钥静态存储。
+    encryption-key: ${MODEL_PROVIDER_ENCRYPTION_KEY:}
+
 # Leave credentials in application-local.yml or environment variables; never commit them.
 agent:
   conversation:

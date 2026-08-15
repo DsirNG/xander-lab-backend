@@ -15,6 +15,7 @@ feature; deployment and database topology stay unchanged.
 - `components` (migrated): owns the UI component library catalog, detail pages, and community-shared submissions.
 - `bloghtml` (new): owns short-lived blog HTML preview sessions. Session creation (`POST /api/blog-html/previews`) is public with per-IP Redis fixed-window rate limiting; code is stored in Redis with a TTL and served as a standalone sandbox page (`GET /blog-html/{id}/raw`) outside `/api` so iframes load it without auth, CORS or cookies. The page runs on an independent origin (per-session subdomain in production, a different port locally) and carries a strict CSP with `frame-ancestors` restricting embedders; this is the preview isolation pattern used by ChatGPT for its artifact pages.
 - `billing` (new): owns the points account (`sys_user_points`), the append-only points ledger (`points_ledger`) with a unique `(biz_type, biz_key)` idempotency key, priced model-usage charges, flat-price charges, balance pre-checks, and the `/api/points` endpoints. It must not own generation tasks, conversations, articles, reminders, or publications; feature modules call it only through `BillingService` ports and never through its mappers.
+- `admin` (new): owns the backend admin console. It manages model providers (`model_provider`, AES-GCM encrypted API keys via `MODEL_PROVIDER_ENCRYPTION_KEY`), per-feature model routing (`feature_model_config` with primary + fallback endpoints), and exposes the read-side API for user bans; it never writes users or login sessions itself. `ModelGateway` is the shared contract that model clients consult for endpoint candidates; when the gateway is disabled (default) or has no candidates, clients fall back to environment variables so existing behavior is preserved. User ban/enable mutations go through the `identity` application service (`UserAdminService`), which owns session revocation; `admin` owns neither identity tables nor Redis login keys.
 
 ## Module Documentation
 
@@ -65,6 +66,23 @@ Balance pre-checks (`ensureAvailable`) sit at the start of a new consumption
 request and fail fast with HTTP 402 until the user obtains points. All billing
 I/O is app-service-scoped; `identity` grants the registration bonus through
 `BillingService.grantRegister` and must not touch ledger tables.
+
+`admin` routes live under `/api/admin/**`. `AuthInterceptor` enforces login plus
+a JWT `role=ADMIN` claim for the whole prefix (403 for non-admin roles),
+making it the single authorization point; unparseable tokens are treated as
+logged out (401), never 403. `identity` owns JWT parsing and session
+revocation; `admin` reads users only through `UserAdminService` (which bans by
+flipping `sys_user.status`, forbids self-bans and ADMIN targets, and revokes
+every Redis session of the banned user).
+
+`ModelGateway.candidates(featureKey)` returns an ordered list of
+`ModelEndpoint` (base URL, API key, model name). Feature keys are stable
+constants (`agent`, `blog_agent`, `blog_agent_image`, `img2three_vision`). The
+gateway is disabled by default and requires
+`MODEL_PROVIDER_ENCRYPTION_KEY` (Base64 32 bytes) when enabled; the
+`admin_model_gateway_migration.sql` marker key is `20260815_admin_model_gateway`
+and must be applied before production enablement. Admin API key values are
+never returned to clients; views expose only `apiKeyConfigured`.
 
 ## Migration Order
 

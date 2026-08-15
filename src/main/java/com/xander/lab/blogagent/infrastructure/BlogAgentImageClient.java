@@ -2,6 +2,9 @@ package com.xander.lab.blogagent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -21,30 +24,31 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Component
 public class BlogAgentImageClient {
     static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
     private final BlogAgentProperties properties;
     private final ObjectMapper objectMapper;
-    private final RestClient generationClient;
+    private final ModelGateway gateway;
     private final HttpClient downloadClient;
+    private final ConcurrentHashMap<String, RestClient> generationClients = new ConcurrentHashMap<>();
 
+    /** 兼容仅依赖环境变量的构造器（测试/独立组件）：关闭管理台网关。 */
     public BlogAgentImageClient(BlogAgentProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, ModelGateway.disabled());
+    }
+
+    public BlogAgentImageClient(BlogAgentProperties properties, ObjectMapper objectMapper, ModelGateway gateway) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(positiveTimeoutMillis(properties.getConnectTimeoutMillis()));
-        requestFactory.setReadTimeout(positiveTimeoutMillis(properties.getReadTimeoutMillis()));
-        this.generationClient = RestClient.builder()
-                .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
-                .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
-                .requestFactory(requestFactory)
-                .build();
+        this.gateway = gateway;
         this.downloadClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(positiveTimeoutMillis(properties.getConnectTimeoutMillis())))
                 // Redirect targets must never bypass the address validation below.
@@ -53,19 +57,65 @@ public class BlogAgentImageClient {
     }
 
     public boolean isEnabled() {
+        if (!gateway.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE).isEmpty()) {
+            return true;
+        }
         return StringUtils.hasText(properties.getApiKey()) && StringUtils.hasText(properties.getImageModel());
     }
 
     public GeneratedImage generate(String prompt) {
-        if (!isEnabled()) throw new IllegalStateException("博客生成助手图片模型尚未配置");
+        RuntimeException lastFailure = new IllegalStateException("博客生成助手图片模型尚未配置");
+        List<ModelEndpoint> endpoints = endpoints();
+        for (int index = 0; index < endpoints.size(); index++) {
+            ModelEndpoint endpoint = endpoints.get(index);
+            try {
+                return generateOnce(endpoint, prompt);
+            } catch (RuntimeException e) {
+                lastFailure = e;
+                if (index == endpoints.size() - 1) {
+                    throw e;
+                }
+                log.warn("博客插图主模型端点（provider {}）失败，切换兜底模型", endpoint.providerId());
+            }
+        }
+        throw lastFailure;
+    }
 
+    /** 解析候选端点：管理台网关优先，否则回退到环境变量（原行为）。 */
+    private List<ModelEndpoint> endpoints() {
+        List<ModelEndpoint> candidates = gateway.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE);
+        if (!candidates.isEmpty()) {
+            return candidates;
+        }
+        if (!StringUtils.hasText(properties.getApiKey()) || !StringUtils.hasText(properties.getImageModel())) {
+            throw new IllegalStateException("博客生成助手图片模型尚未配置");
+        }
+        return List.of(new ModelEndpoint(0L, properties.getBaseUrl(),
+                properties.getApiKey(), properties.getImageModel()));
+    }
+
+    /** 每个端点一个 RestClient，按 baseUrl|apiKey 缓存复用；超时取自 blog.agent 属性。 */
+    private RestClient generationClientFor(ModelEndpoint endpoint) {
+        return generationClients.computeIfAbsent(endpoint.baseUrl() + "|" + endpoint.apiKey(), key -> {
+            SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(positiveTimeoutMillis(properties.getConnectTimeoutMillis()));
+            requestFactory.setReadTimeout(positiveTimeoutMillis(properties.getReadTimeoutMillis()));
+            return RestClient.builder()
+                    .baseUrl(trimTrailingSlash(endpoint.baseUrl()))
+                    .defaultHeader("Authorization", "Bearer " + endpoint.apiKey())
+                    .requestFactory(requestFactory)
+                    .build();
+        });
+    }
+
+    private GeneratedImage generateOnce(ModelEndpoint endpoint, String prompt) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", properties.getImageModel());
+        payload.put("model", endpoint.model());
         payload.put("prompt", prompt);
         payload.put("size", properties.getImageSize());
         payload.put("n", 1);
 
-        JsonNode response = generationClient.post()
+        JsonNode response = generationClientFor(endpoint).post()
                 .uri("/images/generations")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(payload)

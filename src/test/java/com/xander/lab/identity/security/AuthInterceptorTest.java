@@ -1,6 +1,7 @@
 package com.xander.lab.identity.security;
 
 import com.xander.lab.identity.application.AuthService;
+import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -168,5 +169,58 @@ class AuthInterceptorTest {
 
         assertThat(interceptor.preHandle(tokenRequest, response, new Object())).isTrue();
         assertThat(interceptor.preHandle(transportRequest, response, new Object())).isTrue();
+    }
+
+    @Test
+    void adminRouteRejectsAnonymousRequest() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void adminRouteRejectsNonAdminRole() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
+        request.addHeader("Authorization", "Bearer user-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        Claims claims = mock(Claims.class);
+        when(authService.validateAccessToken("user-token")).thenReturn(true);
+        when(jwtUtil.getSubject("user-token")).thenReturn("7");
+        when(jwtUtil.parseToken("user-token")).thenReturn(claims);
+        when(claims.get("role", String.class)).thenReturn("USER");
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(403);
+    }
+
+    @Test
+    void adminRouteAcceptsAdminRole() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/admin/users");
+        request.addHeader("Authorization", "Bearer admin-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        Claims claims = mock(Claims.class);
+        when(authService.validateAccessToken("admin-token")).thenReturn(true);
+        when(jwtUtil.getSubject("admin-token")).thenReturn("1");
+        when(jwtUtil.parseToken("admin-token")).thenReturn(claims);
+        when(claims.get("role", String.class)).thenReturn("ADMIN");
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(UserContext.getUserId()).isEqualTo(1L);
+    }
+
+    @Test
+    void adminRouteWithUnparseableTokenIsTreatedAsLoggedOut() {
+        MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/api/admin/model-providers/3");
+        request.addHeader("Authorization", "Bearer broken-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(authService.validateAccessToken("broken-token")).thenReturn(true);
+        when(jwtUtil.getSubject("broken-token")).thenReturn("1");
+        when(jwtUtil.parseToken("broken-token")).thenThrow(new RuntimeException("expired"));
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
     }
 }

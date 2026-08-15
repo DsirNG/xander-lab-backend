@@ -2,10 +2,11 @@ package com.xander.lab.studio.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
-import com.xander.lab.studio.infrastructure.Img2ThreeProperties;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,6 +26,8 @@ import java.util.Map;
 /**
  * Vision-capable Responses client for image → procedural Three.js reconstruction.
  * Credentials fall back to blog.agent when img2three.agent fields are blank.
+ * When the admin model gateway returns candidates for the img2three_vision
+ * feature they take precedence (primary first, fallback second).
  */
 @Component
 @RequiredArgsConstructor
@@ -34,20 +37,71 @@ public class Img2ThreeModelClient {
     private final Img2ThreeProperties properties;
     private final BlogAgentProperties blogAgentProperties;
     private final ObjectMapper objectMapper;
+    private final ModelGateway gateway;
 
     public ModelCallResult reconstruct(byte[] imageBytes, String contentType, String starterSpecJson) {
+        RuntimeException lastFailure = new IllegalStateException(
+                "图片转 3D 尚未配置模型服务，请设置 IMG2THREE_AGENT_API_KEY / IMG2THREE_AGENT_MODEL（或复用 BLOG_AGENT_*）");
+        List<ModelEndpoint> endpoints = endpoints();
+        for (int index = 0; index < endpoints.size(); index++) {
+            ModelEndpoint endpoint = endpoints.get(index);
+            try {
+                ModelCallResult response = invokeResponsesApi(endpoint,
+                        reconstructPayload(endpoint, imageBytes, contentType, starterSpecJson));
+                return parseResult(response, "重建");
+            } catch (RuntimeException e) {
+                lastFailure = e;
+                if (index == endpoints.size() - 1) {
+                    throw e;
+                }
+                log.warn("img2three 主模型端点（provider {}）失败，切换兜底模型", endpoint.providerId());
+            }
+        }
+        throw lastFailure;
+    }
+
+    public ModelCallResult repair(byte[] imageBytes, String contentType, JsonNode previousResult, String gateFeedback) {
+        RuntimeException lastFailure = new IllegalStateException(
+                "图片转 3D 尚未配置模型服务，请设置 IMG2THREE_AGENT_API_KEY / IMG2THREE_AGENT_MODEL（或复用 BLOG_AGENT_*）");
+        List<ModelEndpoint> endpoints = endpoints();
+        for (int index = 0; index < endpoints.size(); index++) {
+            ModelEndpoint endpoint = endpoints.get(index);
+            try {
+                ModelCallResult response = invokeResponsesApi(endpoint,
+                        repairPayload(endpoint, imageBytes, contentType, previousResult, gateFeedback));
+                return parseResult(response, "修订");
+            } catch (RuntimeException e) {
+                lastFailure = e;
+                if (index == endpoints.size() - 1) {
+                    throw e;
+                }
+                log.warn("img2three 主模型端点（provider {}）失败，切换兜底模型", endpoint.providerId());
+            }
+        }
+        throw lastFailure;
+    }
+
+    /** 解析候选端点：管理台网关优先；否则复用原环境变量回退链（img2three.agent → blog.agent）。 */
+    private List<ModelEndpoint> endpoints() {
+        List<ModelEndpoint> candidates = gateway.candidates(ModelGateway.FEATURE_IMG2THREE_VISION);
+        if (!candidates.isEmpty()) {
+            return candidates;
+        }
         String apiKey = resolveApiKey();
         String model = resolveModel();
-        String baseUrl = resolveBaseUrl();
         if (!StringUtils.hasText(apiKey) || !StringUtils.hasText(model)) {
             throw new IllegalStateException("图片转 3D 尚未配置模型服务，请设置 IMG2THREE_AGENT_API_KEY / IMG2THREE_AGENT_MODEL（或复用 BLOG_AGENT_*）");
         }
+        return List.of(new ModelEndpoint(0L, resolveBaseUrl(), apiKey, model));
+    }
 
+    private Map<String, Object> reconstructPayload(ModelEndpoint endpoint, byte[] imageBytes,
+                                                   String contentType, String starterSpecJson) {
         String mime = StringUtils.hasText(contentType) ? contentType : "image/jpeg";
         String dataUrl = "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(imageBytes);
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", model);
+        payload.put("model", endpoint.model());
         payload.put("store", false);
         payload.put("max_output_tokens", MAX_OUTPUT_TOKENS);
         payload.put("instructions", pipelineInstructions());
@@ -64,28 +118,11 @@ public class Img2ThreeModelClient {
                         Map.of("type", "input_image", "image_url", dataUrl)
                 )
         )));
-
-        ModelCallResult response = invokeResponsesApi(baseUrl, apiKey, payload);
-
-        String text = extractOutputText(response.payload());
-        if (!StringUtils.hasText(text)) {
-            throw new IllegalStateException("模型没有返回可读取的重建结果");
-        }
-        try {
-            return ModelCallResult.of(parseJsonObject(text), response.usage());
-        } catch (Exception e) {
-            throw new IllegalStateException("模型返回不是有效 JSON，请重试", e);
-        }
+        return payload;
     }
 
-    public ModelCallResult repair(byte[] imageBytes, String contentType, JsonNode previousResult, String gateFeedback) {
-        String apiKey = resolveApiKey();
-        String model = resolveModel();
-        String baseUrl = resolveBaseUrl();
-        if (!StringUtils.hasText(apiKey) || !StringUtils.hasText(model)) {
-            throw new IllegalStateException("图片转 3D 尚未配置模型服务，请设置 IMG2THREE_AGENT_API_KEY / IMG2THREE_AGENT_MODEL（或复用 BLOG_AGENT_*）");
-        }
-
+    private Map<String, Object> repairPayload(ModelEndpoint endpoint, byte[] imageBytes, String contentType,
+                                              JsonNode previousResult, String gateFeedback) {
         String mime = StringUtils.hasText(contentType) ? contentType : "image/jpeg";
         String dataUrl = "data:" + mime + ";base64," + Base64.getEncoder().encodeToString(imageBytes);
         String repairPrompt = "Repair the previous img2threejs result using the strict validator feedback. "
@@ -97,7 +134,7 @@ public class Img2ThreeModelClient {
                 + "\n\nPREVIOUS_RESULT:\n" + previousResult;
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", model);
+        payload.put("model", endpoint.model());
         payload.put("store", false);
         payload.put("max_output_tokens", MAX_OUTPUT_TOKENS);
         payload.put("instructions", pipelineInstructions());
@@ -108,17 +145,18 @@ public class Img2ThreeModelClient {
                         Map.of("type", "input_image", "image_url", dataUrl)
                 )
         )));
+        return payload;
+    }
 
-        ModelCallResult response = invokeResponsesApi(baseUrl, apiKey, payload);
-
+    private ModelCallResult parseResult(ModelCallResult response, String stage) {
         String text = extractOutputText(response.payload());
         if (!StringUtils.hasText(text)) {
-            throw new IllegalStateException("模型没有返回可读取的修订结果");
+            throw new IllegalStateException("模型没有返回可读取的" + stage + "结果");
         }
         try {
             return ModelCallResult.of(parseJsonObject(text), response.usage());
         } catch (Exception e) {
-            throw new IllegalStateException("模型修订结果不是有效 JSON，请重试", e);
+            throw new IllegalStateException("模型" + stage + "结果不是有效 JSON，请重试", e);
         }
     }
 
@@ -184,16 +222,16 @@ public class Img2ThreeModelClient {
                 + "The returned spec is passed to img2threejs strict validation, so satisfy its quality contract.";
     }
 
-    private ModelCallResult invokeResponsesApi(String baseUrl, String apiKey, Map<String, Object> payload) {
+    private ModelCallResult invokeResponsesApi(ModelEndpoint endpoint, Map<String, Object> payload) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(20));
         // ObjectSculptSpec responses can take minutes; this bound still guarantees durable failure recovery.
         requestFactory.setReadTimeout(Duration.ofMinutes(4));
         try {
             JsonNode body = RestClient.builder()
-                    .baseUrl(trimTrailingSlash(baseUrl))
+                    .baseUrl(trimTrailingSlash(endpoint.baseUrl()))
                     .requestFactory(requestFactory)
-                    .defaultHeader("Authorization", "Bearer " + apiKey)
+                    .defaultHeader("Authorization", "Bearer " + endpoint.apiKey())
                     .build()
                     .post()
                     .uri("/responses")

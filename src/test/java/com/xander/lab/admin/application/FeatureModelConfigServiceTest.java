@@ -1,0 +1,151 @@
+package com.xander.lab.admin.application;
+
+import com.xander.lab.admin.api.FeatureConfigView;
+import com.xander.lab.admin.api.UpdateFeatureConfigRequest;
+import com.xander.lab.admin.domain.FeatureModelConfig;
+import com.xander.lab.admin.domain.ModelProvider;
+import com.xander.lab.admin.infrastructure.FeatureModelConfigMapper;
+import com.xander.lab.admin.infrastructure.ModelGatewayProperties;
+import com.xander.lab.admin.infrastructure.ModelProviderMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+@ExtendWith(MockitoExtension.class)
+class FeatureModelConfigServiceTest {
+
+    private ModelGatewayProperties properties;
+    private FeatureModelConfigService service;
+
+    @Mock
+    private FeatureModelConfigMapper configMapper;
+    @Mock
+    private ModelProviderMapper providerMapper;
+
+    @BeforeEach
+    void setUp() {
+        properties = new ModelGatewayProperties();
+        properties.setEnabled(true);
+        service = new FeatureModelConfigService(properties, configMapper, providerMapper);
+    }
+
+    @Test
+    void listReturnsAllFourFeaturesWithDefaultEmptyViews() {
+        when(configMapper.selectList(any())).thenReturn(List.of());
+
+        List<FeatureConfigView> views = service.listConfigs();
+
+        assertThat(views).hasSize(4);
+        assertThat(views).extracting(FeatureConfigView::featureKey)
+                .containsExactly("agent", "blog_agent", "blog_agent_image", "img2three_vision");
+        assertThat(views).allMatch(view -> !view.enabled());
+    }
+
+    @Test
+    void updateInsertsAConfigWhenNoneExists() {
+        when(configMapper.selectOne(any())).thenReturn(null);
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+        when(providerMapper.selectById(2L)).thenReturn(enabledProvider(2L));
+        when(configMapper.selectList(any())).thenReturn(List.of());
+
+        service.update("agent", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-4o", 2L, "gpt-4o-mini"));
+
+        ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
+        verify(configMapper).insert(captured.capture());
+        assertThat(captured.getValue().getFeatureKey()).isEqualTo("agent");
+        assertThat(captured.getValue().getPrimaryModel()).isEqualTo("gpt-4o");
+        assertThat(captured.getValue().getFallbackProviderId()).isEqualTo(2L);
+    }
+
+    @Test
+    void updateNormalizesBlankModelsToNull() {
+        when(configMapper.selectOne(any())).thenReturn(null);
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+        when(configMapper.selectList(any())).thenReturn(List.of());
+
+        service.update("blog_agent", new UpdateFeatureConfigRequest(
+                true, 1L, "  gpt-4o  ", null, "   "));
+
+        ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
+        verify(configMapper).insert(captured.capture());
+        assertThat(captured.getValue().getPrimaryModel()).isEqualTo("gpt-4o");
+        assertThat(captured.getValue().getFallbackModel()).isNull();
+        assertThat(captured.getValue().getFallbackProviderId()).isNull();
+    }
+
+    @Test
+    void updateRejectsUnknownFeatureKey() {
+        assertThatThrownBy(() -> service.update("unknown", new UpdateFeatureConfigRequest(
+                true, 1L, "m", null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未知的功能标识");
+    }
+
+    @Test
+    void updateRejectsSlotWithProviderButNoModel() {
+        assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
+                true, 1L, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("同时填写");
+        verify(configMapper, never()).insert(any());
+    }
+
+    @Test
+    void updateRejectsDisabledOrMissingProvider() {
+        when(providerMapper.selectById(9L)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
+                true, 9L, "gpt-4o", null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("不存在或已停用");
+    }
+
+    @Test
+    void updateRejectsDisabledConfigThatStillCarriesSlots() {
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+
+        assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
+                false, 1L, "gpt-4o", null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未启用");
+        verify(configMapper, never()).insert(any());
+        verify(configMapper, never()).updateById(any());
+    }
+
+    @Test
+    void updateWithoutProvidersClearsTheConfig() {
+        FeatureModelConfig existing = new FeatureModelConfig();
+        existing.setId(5L);
+        existing.setFeatureKey("agent");
+        when(configMapper.selectOne(any())).thenReturn(existing);
+        when(configMapper.selectList(any())).thenReturn(List.of());
+
+        service.update("agent", new UpdateFeatureConfigRequest(false, null, null, null, null));
+
+        ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
+        verify(configMapper).updateById(captured.capture());
+        assertThat(captured.getValue().getEnabled()).isFalse();
+        assertThat(captured.getValue().getPrimaryProviderId()).isNull();
+        assertThat(captured.getValue().getPrimaryModel()).isNull();
+    }
+
+    private ModelProvider enabledProvider(Long id) {
+        ModelProvider provider = new ModelProvider();
+        provider.setId(id);
+        provider.setEnabled(true);
+        return provider;
+    }
+}

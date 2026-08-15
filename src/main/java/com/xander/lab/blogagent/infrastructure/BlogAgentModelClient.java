@@ -2,16 +2,18 @@ package com.xander.lab.blogagent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -24,10 +26,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Calls a Responses-compatible model endpoint. Model credentials are configuration only. */
+/** Calls a Responses-compatible model endpoint. Model credentials are configuration only.
+ *  When the admin model gateway returns candidates for the blog_agent feature they take
+ *  precedence (primary first, fallback second); otherwise environment variables are used
+ *  as before. Rest clients are cached per endpoint (base URL + key) and reused. */
 @Slf4j
 @Component
 public class BlogAgentModelClient {
@@ -39,19 +45,45 @@ public class BlogAgentModelClient {
 
     private final BlogAgentProperties properties;
     private final ObjectMapper objectMapper;
-    private final RestClient restClient;
+    private final ModelGateway gateway;
+    private final ConcurrentHashMap<String, RestClient> restClients = new ConcurrentHashMap<>();
 
+    /** 兼容仅依赖环境变量的构造器（测试/独立组件）：关闭管理台网关。 */
     public BlogAgentModelClient(BlogAgentProperties properties, ObjectMapper objectMapper) {
+        this(properties, objectMapper, ModelGateway.disabled());
+    }
+
+    public BlogAgentModelClient(BlogAgentProperties properties, ObjectMapper objectMapper, ModelGateway gateway) {
         this.properties = properties;
         this.objectMapper = objectMapper;
-        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(properties.getConnectTimeoutMillis());
-        requestFactory.setReadTimeout(properties.getReadTimeoutMillis());
-        this.restClient = RestClient.builder()
-                .baseUrl(trimTrailingSlash(properties.getBaseUrl()))
-                .defaultHeader("Authorization", "Bearer " + properties.getApiKey())
-                .requestFactory(requestFactory)
-                .build();
+        this.gateway = gateway;
+    }
+
+    /** 解析候选端点：管理台网关优先，否则回退到环境变量（原行为）。 */
+    private List<ModelEndpoint> endpoints() {
+        List<ModelEndpoint> candidates = gateway.candidates(ModelGateway.FEATURE_BLOG_AGENT);
+        if (!candidates.isEmpty()) {
+            return candidates;
+        }
+        if (!StringUtils.hasText(properties.getApiKey()) || !StringUtils.hasText(properties.getModel())) {
+            throw new IllegalStateException("博客生成助手尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
+        }
+        return List.of(new ModelEndpoint(0L, properties.getBaseUrl(),
+                properties.getApiKey(), properties.getModel()));
+    }
+
+    /** 每个端点一个 RestClient，按 baseUrl|apiKey 缓存复用，避免每次请求新建连接客户端。 */
+    private RestClient restClientFor(ModelEndpoint endpoint) {
+        return restClients.computeIfAbsent(endpoint.baseUrl() + "|" + endpoint.apiKey(), key -> {
+            SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+            requestFactory.setConnectTimeout(properties.getConnectTimeoutMillis());
+            requestFactory.setReadTimeout(properties.getReadTimeoutMillis());
+            return RestClient.builder()
+                    .baseUrl(trimTrailingSlash(endpoint.baseUrl()))
+                    .defaultHeader("Authorization", "Bearer " + endpoint.apiKey())
+                    .requestFactory(requestFactory)
+                    .build();
+        });
     }
 
     public ModelCallResult analyze(String input) {
@@ -109,8 +141,9 @@ public class BlogAgentModelClient {
     }
 
     public ModelCallResult reviseArticleStream(String currentArticle, String instruction, Consumer<String> onDelta) {
-        Map<String, Object> payload = requestPayload(
-                "当前文章：\n" + currentArticle + "\n\n用户本轮修改要求：\n" + instruction);
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("store", false);
+        payload.put("input", "当前文章：\n" + currentArticle + "\n\n用户本轮修改要求：\n" + instruction);
         payload.put("instructions", instructions()
                 + "这是同一会话中的后续修改。必须以当前文章为基础执行用户要求，不要无故重写未涉及部分。"
                 + "仍返回完整 JSON 文章对象，便于保存新版本。");
@@ -118,36 +151,91 @@ public class BlogAgentModelClient {
     }
 
     public ModelCallResult createArticle(String input) {
-        if (!configured()) {
-            throw new IllegalStateException("博客生成助手尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
-        }
+        return requestJsonOnceResult(articlePayload(input), "article");
+    }
 
+    /** Streams output tokens from a Responses-compatible endpoint and returns the final JSON article. */
+    public ModelCallResult createArticleStream(String input, Consumer<String> onDelta) {
+        return streamJson(articlePayload(input), onDelta);
+    }
+
+    private Map<String, Object> articlePayload(String input) {
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", properties.getModel());
         payload.put("store", false);
         payload.put("instructions", instructions());
         payload.put("input", "用户输入：\n" + input);
         if (properties.isWebSearchEnabled()) {
             payload.put("tools", List.of(Map.of("type", "web_search")));
         }
-
-        JsonNode response = executeWithRetry("article", () -> postJson(payload));
-        String text = extractOutputText(response);
-        if (!StringUtils.hasText(text)) {
-            throw new IllegalStateException("模型没有返回可读取的文章结果");
-        }
-        try {
-            return ModelCallResult.of(objectMapper.readTree(stripCodeFence(text)),
-                    ModelUsage.fromJson(response.path("usage")));
-        } catch (Exception e) {
-            throw new IllegalStateException("模型返回格式不正确，请重试", e);
-        }
+        return payload;
     }
 
-    /** Streams output tokens from a Responses-compatible endpoint and returns the final JSON article. */
-    public ModelCallResult createArticleStream(String input, Consumer<String> onDelta) {
-        Map<String, Object> payload = requestPayload(input);
-        return streamJson(payload, onDelta);
+    /** 非流式调用：逐端点尝试，每个端点内部有界重试；全部失败后抛出最后异常。 */
+    private ModelCallResult requestJson(String instruction, String input, boolean webSearch) {
+        RuntimeException lastFailure = new IllegalStateException("博客生成助手尚未配置模型服务");
+        List<ModelEndpoint> endpoints = endpoints();
+        for (int index = 0; index < endpoints.size(); index++) {
+            ModelEndpoint endpoint = endpoints.get(index);
+            try {
+                Map<String, Object> payload = new LinkedHashMap<>();
+                payload.put("model", endpoint.model());
+                payload.put("store", false);
+                payload.put("instructions", instruction);
+                payload.put("input", input);
+                if (webSearch && properties.isWebSearchEnabled()) {
+                    payload.put("tools", List.of(Map.of("type", "web_search")));
+                }
+                JsonNode response = executeWithRetry("stage", () -> postJson(endpoint, payload));
+                String text = extractOutputText(response);
+                if (!StringUtils.hasText(text)) {
+                    throw new IllegalStateException("模型没有返回可读取的阶段结果");
+                }
+                try {
+                    return ModelCallResult.of(objectMapper.readTree(stripCodeFence(text)),
+                            ModelUsage.fromJson(response.path("usage")));
+                } catch (Exception e) {
+                    throw new IllegalStateException("模型阶段结果不是有效 JSON", e);
+                }
+            } catch (RuntimeException e) {
+                lastFailure = e;
+                if (index == endpoints.size() - 1) {
+                    throw e;
+                }
+                log.warn("博客生成主模型端点（provider {}）失败，切换兜底模型", endpoint.providerId());
+            }
+        }
+        throw lastFailure;
+    }
+
+    /** 单个完整 payload 的非流式调用（文章生成）：逐端点执行带重试的 POST。 */
+    private ModelCallResult requestJsonOnceResult(Map<String, Object> payload, String description) {
+        RuntimeException lastFailure = new IllegalStateException("博客生成助手尚未配置模型服务");
+        List<ModelEndpoint> endpoints = endpoints();
+        for (int index = 0; index < endpoints.size(); index++) {
+            ModelEndpoint endpoint = endpoints.get(index);
+            try {
+                Map<String, Object> endpointPayload = new LinkedHashMap<>(payload);
+                endpointPayload.put("model", endpoint.model());
+                JsonNode response = executeWithRetry(description, () -> postJson(endpoint, endpointPayload));
+                String text = extractOutputText(response);
+                if (!StringUtils.hasText(text)) {
+                    throw new IllegalStateException("模型没有返回可读取的文章结果");
+                }
+                try {
+                    return ModelCallResult.of(objectMapper.readTree(stripCodeFence(text)),
+                            ModelUsage.fromJson(response.path("usage")));
+                } catch (Exception e) {
+                    throw new IllegalStateException("模型返回格式不正确，请重试", e);
+                }
+            } catch (RuntimeException e) {
+                lastFailure = e;
+                if (index == endpoints.size() - 1) {
+                    throw e;
+                }
+                log.warn("博客生成主模型端点（provider {}）失败，切换兜底模型", endpoint.providerId());
+            }
+        }
+        throw lastFailure;
     }
 
     /** Retries classified transient failures (gateway 429/5xx、连接超时/中断、SSE 上游错误) with
@@ -172,9 +260,31 @@ public class BlogAgentModelClient {
         }
     }
 
+    /** 流式调用：逐端点尝试；端点内部有界重试且绝不重放已推送的 delta；主端点耗尽后切换兜底端点。 */
     private ModelCallResult streamJson(Map<String, Object> payload, Consumer<String> onDelta) {
         payload.put("stream", true);
         boolean[] visibleDeltaDelivered = {false};
+        RuntimeException lastFailure = new IllegalStateException("博客生成助手尚未配置模型服务");
+        List<ModelEndpoint> endpoints = endpoints();
+        for (int index = 0; index < endpoints.size(); index++) {
+            ModelEndpoint endpoint = endpoints.get(index);
+            try {
+                return streamJsonPerEndpoint(endpoint, payload, onDelta, visibleDeltaDelivered);
+            } catch (RuntimeException e) {
+                if (visibleDeltaDelivered[0]) throw e;
+                lastFailure = e;
+                if (index == endpoints.size() - 1) {
+                    throw e;
+                }
+                log.warn("博客生成主模型端点（provider {}）失败，切换兜底模型", endpoint.providerId());
+            }
+        }
+        throw lastFailure;
+    }
+
+    private ModelCallResult streamJsonPerEndpoint(ModelEndpoint endpoint, Map<String, Object> payload,
+                                           Consumer<String> onDelta, boolean[] visibleDeltaDelivered) {
+        payload.put("model", endpoint.model());
         Consumer<String> trackedOnDelta = delta -> {
             if (delta != null && !delta.isEmpty()) {
                 visibleDeltaDelivered[0] = true;
@@ -185,7 +295,7 @@ public class BlogAgentModelClient {
         while (true) {
             attempt++;
             try {
-                return streamOnce(payload, trackedOnDelta);
+                return streamOnce(endpoint, payload, trackedOnDelta);
             } catch (RuntimeException e) {
                 if (visibleDeltaDelivered[0]) throw e;
                 if (!isTransient(e)) throw e;
@@ -200,14 +310,14 @@ public class BlogAgentModelClient {
         }
     }
 
-    private ModelCallResult streamOnce(Map<String, Object> payload, Consumer<String> onDelta) {
+    private ModelCallResult streamOnce(ModelEndpoint endpoint, Map<String, Object> payload, Consumer<String> onDelta) {
         HttpURLConnection connection = null;
         StringBuilder output = new StringBuilder();
         ModelUsage usage = ModelUsage.NONE;
         try {
-            connection = (HttpURLConnection) URI.create(trimTrailingSlash(properties.getBaseUrl()) + "/responses").toURL().openConnection();
+            connection = (HttpURLConnection) URI.create(trimTrailingSlash(endpoint.baseUrl()) + "/responses").toURL().openConnection();
             connection.setRequestMethod("POST");
-            connection.setRequestProperty("Authorization", "Bearer " + properties.getApiKey());
+            connection.setRequestProperty("Authorization", "Bearer " + endpoint.apiKey());
             connection.setRequestProperty("Content-Type", MediaType.APPLICATION_JSON_VALUE);
             connection.setRequestProperty("Accept", MediaType.TEXT_EVENT_STREAM_VALUE);
             connection.setDoOutput(true);
@@ -277,32 +387,9 @@ public class BlogAgentModelClient {
         }
     }
 
-    private ModelCallResult requestJson(String instruction, String input, boolean webSearch) {
-        if (!configured()) {
-            throw new IllegalStateException("博客生成助手尚未配置模型服务");
-        }
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", properties.getModel());
-        payload.put("store", false);
-        payload.put("instructions", instruction);
-        payload.put("input", input);
-        if (webSearch && properties.isWebSearchEnabled()) {
-            payload.put("tools", List.of(Map.of("type", "web_search")));
-        }
-        JsonNode response = executeWithRetry("stage", () -> postJson(payload));
-        String text = extractOutputText(response);
-        if (!StringUtils.hasText(text)) throw new IllegalStateException("模型没有返回可读取的阶段结果");
+    private JsonNode postJson(ModelEndpoint endpoint, Map<String, Object> payload) {
         try {
-            return ModelCallResult.of(objectMapper.readTree(stripCodeFence(text)),
-                    ModelUsage.fromJson(response.path("usage")));
-        } catch (Exception e) {
-            throw new IllegalStateException("模型阶段结果不是有效 JSON", e);
-        }
-    }
-
-    private JsonNode postJson(Map<String, Object> payload) {
-        try {
-            return restClient.post()
+            return restClientFor(endpoint).post()
                     .uri("/responses")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(payload)
@@ -313,23 +400,6 @@ public class BlogAgentModelClient {
             int status = e.getStatusCode().value();
             throw new ModelGatewayException(status, "模型服务请求失败（HTTP " + status + "）");
         }
-    }
-
-    private Map<String, Object> requestPayload(String input) {
-        if (!configured()) {
-            throw new IllegalStateException("博客生成助手尚未配置模型服务，请设置 BLOG_AGENT_API_KEY 和 BLOG_AGENT_MODEL");
-        }
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("model", properties.getModel());
-        payload.put("store", false);
-        payload.put("instructions", instructions());
-        payload.put("input", "用户输入：\n" + input);
-        if (properties.isWebSearchEnabled()) payload.put("tools", List.of(Map.of("type", "web_search")));
-        return payload;
-    }
-
-    private boolean configured() {
-        return StringUtils.hasText(properties.getApiKey()) && StringUtils.hasText(properties.getModel());
     }
 
     private String extractOutputText(JsonNode response) {
