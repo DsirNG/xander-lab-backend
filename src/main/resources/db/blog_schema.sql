@@ -19,6 +19,7 @@ CREATE TABLE `sys_user` (
                             `email` varchar(100) DEFAULT NULL COMMENT '邮箱',
                             `avatar` varchar(255) DEFAULT NULL COMMENT '头像URL',
                             `role` varchar(20) DEFAULT 'USER' COMMENT '角色: ADMIN, USER',
+                            `tier` varchar(20) NOT NULL DEFAULT 'FREE' COMMENT '订阅等级: FREE, PLUS, PRO, VIP',
                             `status` int DEFAULT '1' COMMENT '状态: 1=正常, 0=禁用',
                             `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                             `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

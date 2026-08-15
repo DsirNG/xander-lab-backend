@@ -35,6 +35,9 @@ public class User {
     /** 角色：ADMIN, USER, GUEST */
     private String role;
 
+    /** 订阅等级：FREE, PLUS, PRO, VIP */
+    private String tier;
+
     /** 状态：1=启用, 0=禁用 */
     private Integer status;
 
