@@ -40,16 +40,20 @@ class AgentConversationControllerTest {
         AgentConversation ready = new AgentConversation();
         ready.setId(7L);
         ready.setUserId(42L);
+        ready.setTitle("你好智能体");
         ready.setStatus("ready");
         ready.setRunVersion(1L);
-        when(service.create(42L)).thenReturn(ready);
+        when(service.create(42L, "你好智能体")).thenReturn(ready);
         when(service.get(7L, 42L)).thenReturn(ready);
         when(service.listMessages(7L, 42L)).thenReturn(List.of());
         UserContext.setUserId(42L);
+        AgentConversationMessageRequest request = new AgentConversationMessageRequest();
+        request.setContent("你好智能体");
 
-        AgentConversationVO body = controller.create().getData();
+        AgentConversationVO body = controller.create(request).getData();
 
         assertThat(body.getConversation()).isSameAs(ready);
+        verify(service).create(42L, "你好智能体");
         verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any());
     }
 

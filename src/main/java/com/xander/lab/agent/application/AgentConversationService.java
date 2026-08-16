@@ -45,7 +45,6 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 public class AgentConversationService {
     private static final int TOOL_DELTA_FLUSH_CHARS = 256;
-    private static final int ANSWER_DELTA_FLUSH_CHARS = 16;
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
     private static final String DEFAULT_TITLE = "新对话";
 
@@ -69,15 +68,18 @@ public class AgentConversationService {
     private final BillingService billingService;
 
     /**
-     * 仅创建会话壳（ready、无消息、不启动轮次）。首条消息由前端随后经
-     * /messages/stream 发送，避免首轮以空监听器在服务端运行、首次回复只能
-     * 靠 /events 轮询恢复而整体一次性出现。
+     * 根据首条消息生成标题并创建会话壳（ready、无消息、不启动轮次）。
+     * 首条消息随后由 /messages/stream 原子持久化并执行，避免创建接口抢先启动 worker。
      */
     @Transactional
-    public AgentConversation create(Long userId) {
+    public AgentConversation create(Long userId, String message) {
+        String initialMessage = defaultText(message, "").trim();
+        if (!StringUtils.hasText(initialMessage)) {
+            throw new IllegalArgumentException("消息内容不能为空");
+        }
         AgentConversation conversation = new AgentConversation();
         conversation.setUserId(userId);
-        conversation.setTitle(DEFAULT_TITLE);
+        conversation.setTitle(excerpt(initialMessage, 40));
         conversation.setStatus("ready");
         conversation.setRunVersion(1L);
         conversation.setCancelRequested(0);
@@ -194,15 +196,11 @@ public class AgentConversationService {
             AnswerProgress answerProgress = new AnswerProgress(conversationId, userId, runVersion, listener);
             JsonNode decision;
             try {
-                try {
-                    ModelCallResult call = modelClient.decideNextStepStream(
-                            context, toolRegistry.describeTools(), answerProgress::accept,
-                            () -> isCancelRequested(conversationId, userId, runVersion));
-                    decision = call.payload();
-                    usage.add(call.usage());
-                } finally {
-                    answerProgress.flush();
-                }
+                ModelCallResult call = modelClient.decideNextStepStream(
+                        context, toolRegistry.describeTools(), answerProgress::accept,
+                        () -> isCancelRequested(conversationId, userId, runVersion));
+                decision = call.payload();
+                usage.add(call.usage());
             } catch (CancellationException exception) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
@@ -703,13 +701,12 @@ public class AgentConversationService {
         }
     }
 
-    /** Coalesces streamed natural-language reply text into small replayable chunks. */
+    /** Persists and forwards each decoded upstream reply delta without re-chunking it. */
     private final class AnswerProgress {
         private final Long conversationId;
         private final Long userId;
         private final long runVersion;
         private final Consumer<AgentEvent> listener;
-        private final StringBuilder buffer = new StringBuilder();
 
         private AnswerProgress(Long conversationId, Long userId, long runVersion,
                                Consumer<AgentEvent> listener) {
@@ -721,17 +718,8 @@ public class AgentConversationService {
 
         private void accept(String delta) {
             if (delta == null || delta.isEmpty()) return;
-            buffer.append(normalizeAnswer(delta));
-            if (buffer.codePointCount(0, buffer.length()) >= ANSWER_DELTA_FLUSH_CHARS) {
-                flush();
-            }
-        }
-
-        private void flush() {
-            if (buffer.isEmpty()) return;
-            String delta = buffer.toString();
-            buffer.setLength(0);
-            appendActive(conversationId, userId, runVersion, "answer_delta", delta, listener);
+            appendActive(conversationId, userId, runVersion, "answer_delta",
+                    normalizeAnswer(delta), listener);
         }
     }
 

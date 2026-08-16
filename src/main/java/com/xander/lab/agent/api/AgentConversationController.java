@@ -50,11 +50,12 @@ public class AgentConversationController {
         this.agentHeartbeatScheduler = agentHeartbeatScheduler;
     }
 
-    /** 仅创建会话壳（ready）；首条消息由前端随后经 /messages/stream 发送并实时流式返回。 */
+    /** 根据首条消息确定标题并创建 ready 会话壳；消息执行仍由 /messages/stream 负责。 */
     @PostMapping
-    public Result<AgentConversationVO> create() {
+    public Result<AgentConversationVO> create(
+            @Valid @RequestBody AgentConversationMessageRequest request) {
         Long userId = UserContext.getUserId();
-        AgentConversation conversation = service.create(userId);
+        AgentConversation conversation = service.create(userId, request.getContent());
         return Result.success(buildVO(conversation.getId(), userId));
     }
 
