@@ -118,6 +118,22 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void agentImagesGalleryReadRequiresAuthentication() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "GET", "/api/blog/media/images/agent");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+
+        request.addHeader("Authorization", "Bearer valid-token");
+        when(authService.validateAccessToken("valid-token")).thenReturn(true);
+        when(jwtUtil.getSubject("valid-token")).thenReturn("42");
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(UserContext.getUserId()).isEqualTo(42L);
+    }
+
+    @Test
     void agentConversationMessageStreamRequiresAuthentication() {
         MockHttpServletRequest request = new MockHttpServletRequest(
                 "POST", "/api/agent/conversations/9/messages/stream");

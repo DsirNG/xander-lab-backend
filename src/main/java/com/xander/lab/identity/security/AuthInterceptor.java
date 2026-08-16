@@ -35,6 +35,8 @@ public class AuthInterceptor implements HandlerInterceptor {
             "DELETE:/api/blog/posts/*",
             "POST:/api/blog/media/images",
             "GET:/api/blog/media/images",
+            // 智能体生成图片画廊属于用户私有素材，读取需要登录。
+            "GET:/api/blog/media/images/agent",
             "POST:/api/blog-agent/tasks",
             "POST:/api/blog-agent/tasks/*",
             // Agent tasks contain private user material, so their reads are protected too.

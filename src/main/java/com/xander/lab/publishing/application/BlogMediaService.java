@@ -1,8 +1,10 @@
 package com.xander.lab.publishing.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
+import com.xander.lab.common.PageData;
 import com.xander.lab.integration.oss.OssService;
 import com.xander.lab.integration.oss.UploadResponse;
 import com.xander.lab.publishing.domain.BlogMediaAsset;
@@ -124,6 +126,23 @@ public class BlogMediaService {
             }
         }
         return null;
+    }
+
+    /** 分页返回当前用户智能体生成的图片（素材库中 sourceType=agent_generated），
+     * 供「我的图片」画廊使用。损坏或缺失的生成元数据不阻断展示。 */
+    public PageData<AgentImageVO> getAgentImages(Long userId, int page, int size) {
+        requireUser(userId);
+        int safePage = Math.max(page, 1);
+        int safeSize = Math.min(Math.max(size, 1), 60);
+        Page<BlogMediaAsset> result = assetMapper.selectPage(new Page<>(safePage, safeSize),
+                new LambdaQueryWrapper<BlogMediaAsset>()
+                        .eq(BlogMediaAsset::getUserId, userId)
+                        .eq(BlogMediaAsset::getSourceType, "agent_generated")
+                        .orderByDesc(BlogMediaAsset::getId));
+        List<AgentImageVO> records = result.getRecords().stream().map(AgentImageVO::from).toList();
+        Page<AgentImageVO> voPage = new Page<>(result.getCurrent(), result.getSize(), result.getTotal());
+        voPage.setRecords(records);
+        return PageData.of(voPage);
     }
 
     public List<BlogMediaAsset> getImages(Long userId, String scope, String keyword) {
