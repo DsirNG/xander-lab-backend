@@ -219,4 +219,59 @@
         ORDER BY COALESCE(p.published_at, p.updated_at) DESC, p.id DESC
     </select>
 
+    <!-- ============================================================
+         selectMyPostsAll: 当前用户全部文章（不分页）
+         status 传 null 时排除回收站（仅草稿+已发布）；传 -1 为回收站
+         unsyncedPlatform 非空时仅返回未成功同步到该平台的文章
+         ============================================================ -->
+    <select id="selectMyPostsAll" resultMap="PostListRM">
+        SELECT p.id,
+               p.title,
+               p.summary,
+               p.category_id                                    AS category,
+               c.name                                           AS categoryName,
+               p.cover_image,
+               p.user_id,
+               p.author,
+               p.published_at                                   AS date,
+               p.read_time                                      AS readTime,
+               p.tips,
+               p.views,
+               p.status,
+               EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'csdn' AND r.status = 'SUCCEEDED') AS csdnSynced,
+               EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'juejin' AND r.status = 'SUCCEEDED') AS juejinSynced,
+               GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
+        FROM blog_post p
+                 LEFT JOIN blog_category c ON c.id = p.category_id
+                 LEFT JOIN blog_post_tag pt ON pt.post_id = p.id
+                 LEFT JOIN blog_tag t ON t.id = pt.tag_id
+        WHERE p.user_id = #{userId}
+        <choose>
+            <when test="status != null">
+                AND p.status = #{status}
+            </when>
+            <otherwise>
+                AND p.status IN (0, 1)
+            </otherwise>
+        </choose>
+        <if test="search != null and search != ''">
+            AND (
+                p.title LIKE CONCAT('%', #{search}, '%')
+                OR p.summary LIKE CONCAT('%', #{search}, '%')
+            )
+        </if>
+        <if test="unsyncedPlatform != null and unsyncedPlatform != ''">
+            AND NOT EXISTS (
+                SELECT 1
+                FROM blog_publish_record r
+                WHERE r.task_id = -p.id
+                  AND r.platform = #{unsyncedPlatform}
+                  AND r.status = 'SUCCEEDED'
+            )
+        </if>
+        GROUP BY p.id, p.title, p.summary, p.category_id, c.name, p.user_id,
+                 p.author, p.published_at, p.read_time, p.tips, p.views, p.status
+        ORDER BY COALESCE(p.published_at, p.updated_at) DESC, p.id DESC
+    </select>
+
 </mapper>

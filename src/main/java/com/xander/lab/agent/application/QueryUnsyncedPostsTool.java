@@ -4,27 +4,22 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.common.PageData;
 import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.application.BlogService;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Lists the current user's blog posts that have NOT been successfully synced
- * to the given external platform (juejin / csdn). The tool aggregates every
- * page internally so the agent never has to paginate; it returns all unsynced
- * posts in a single call, filtered server-side.
+ * to the given external platform (juejin / csdn). A single SQL query returns
+ * all matching posts without pagination, so the agent never has to page
+ * through results.
  */
 @Component
 public class QueryUnsyncedPostsTool implements AgentTool {
-
-    /** Upper bound on internally scanned pages to keep a single call bounded. */
-    private static final int MAX_PAGES = 20;
 
     private final BlogService blogService;
 
@@ -72,33 +67,11 @@ public class QueryUnsyncedPostsTool implements AgentTool {
         String search = args.path("search").asText("");
         try {
             UserContext.setUserId(userId);
-            List<BlogPostVO> unsynced = new ArrayList<>();
-            int page = 1;
-            boolean hasMore = true;
-            boolean truncated = false;
-            while (hasMore) {
-                onProgress.checkCancellation();
-                if (page > MAX_PAGES) {
-                    truncated = true;
-                    break;
-                }
-                PageData<BlogPostVO> result = blogService.getMyBlogs(status, search, page, 50);
-                for (BlogPostVO post : result.getRecords()) {
-                    boolean synced = "csdn".equals(platform)
-                            ? Boolean.TRUE.equals(post.getCsdnSynced())
-                            : Boolean.TRUE.equals(post.getJuejinSynced());
-                    if (!synced) {
-                        unsynced.add(post);
-                    }
-                }
-                hasMore = result.isHasMore();
-                page++;
-            }
+            List<BlogPostVO> unsynced = blogService.listMyPostsAll(status, search, platform);
             ObjectNode outcome = JsonNodeFactory.instance.objectNode();
             outcome.put("ok", true);
             outcome.put("platform", platform);
             outcome.put("total", unsynced.size());
-            outcome.put("truncated", truncated);
             ArrayNode posts = outcome.putArray("posts");
             for (BlogPostVO post : unsynced) {
                 ObjectNode item = posts.addObject();

@@ -45,4 +45,14 @@ public interface BlogPostMapper extends BaseMapper<BlogPost> {
                                        @Param("userId") Long userId,
                                        @Param("status") Integer status,
                                        @Param("search") String search);
+
+    /**
+     * 当前用户全部文章（不分页，可选状态/关键词筛选；unsyncedPlatform 非空时
+     * 只返回未成功同步到该平台的文章，platform 取 'juejin' / 'csdn'）
+     * 对应 XML: BlogPostMapper.xml -> selectMyPostsAll
+     */
+    List<BlogPostVO> selectMyPostsAll(@Param("userId") Long userId,
+                                      @Param("status") Integer status,
+                                      @Param("search") String search,
+                                      @Param("unsyncedPlatform") String unsyncedPlatform);
 }

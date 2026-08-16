@@ -265,15 +265,7 @@ public class BlogService {
         Page<BlogPostVO> pageParam = new Page<>(safePage, safeSize);
         blogPostMapper.selectMyPostList(pageParam, userId, statusFilter, search);
 
-        List<BlogPostVO> records = pageParam.getRecords().stream()
-                .peek(vo -> {
-                    if (vo.getTags() == null || vo.getTags().isEmpty()) {
-                        vo.setTags(blogTagMapper.selectTagNamesByPostId(vo.getId()));
-                    } else {
-                        vo.parseTags();
-                    }
-                })
-                .collect(Collectors.toList());
+        List<BlogPostVO> records = fillTags(pageParam.getRecords());
 
         PageData<BlogPostVO> result = new PageData<>();
         result.setRecords(records);
@@ -283,6 +275,35 @@ public class BlogService {
         result.setPages(pageParam.getPages());
         result.setHasMore(result.getCurrent() < result.getPages());
         return result;
+    }
+
+    /**
+     * 查询当前用户全部文章（不分页）。unsyncedPlatform 非空（'juejin' / 'csdn'）
+     * 时仅返回未成功同步到该平台的文章，供智能体一次调用拿全量，无需逐页聚合。
+     */
+    public List<BlogPostVO> listMyPostsAll(Integer status, String search, String unsyncedPlatform) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        Integer statusFilter = null;
+        if (status != null) {
+            statusFilter = normalizeManagedStatus(status);
+        }
+        List<BlogPostVO> records = blogPostMapper.selectMyPostsAll(userId, statusFilter, search, unsyncedPlatform);
+        return fillTags(records);
+    }
+
+    private List<BlogPostVO> fillTags(List<BlogPostVO> records) {
+        return records.stream()
+                .peek(vo -> {
+                    if (vo.getTags() == null || vo.getTags().isEmpty()) {
+                        vo.setTags(blogTagMapper.selectTagNamesByPostId(vo.getId()));
+                    } else {
+                        vo.parseTags();
+                    }
+                })
+                .collect(Collectors.toList());
     }
 
     public BlogPostVO getManagedBlogById(Long userId, Long id) {
