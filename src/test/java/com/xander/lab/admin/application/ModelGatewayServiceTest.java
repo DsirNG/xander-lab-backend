@@ -109,7 +109,7 @@ class ModelGatewayServiceTest {
         List<ModelEndpoint> endpoints = service.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE);
 
         assertThat(endpoints).hasSize(1);
-        assertThat(endpoints.get(0).apiStyle()).isEqualTo(ModelGateway.API_STYLE_IMAGES_GENERATIONS);
+        assertThat(endpoints.get(0).apiStyle()).isEqualTo(ModelGateway.API_STYLE_CHAT_COMPLETIONS);
     }
 
     @Test

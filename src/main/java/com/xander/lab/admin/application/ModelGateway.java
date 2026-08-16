@@ -38,7 +38,7 @@ public interface ModelGateway {
     /** 未配置接口风格时按功能取的默认值。 */
     static String defaultApiStyle(String featureKey) {
         return FEATURE_BLOG_AGENT_IMAGE.equals(featureKey)
-                ? API_STYLE_IMAGES_GENERATIONS : API_STYLE_RESPONSES;
+                ? API_STYLE_CHAT_COMPLETIONS : API_STYLE_RESPONSES;
     }
 
     /**

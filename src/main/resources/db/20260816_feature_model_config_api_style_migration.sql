@@ -6,7 +6,7 @@
 --   IMAGES_GENERATIONS = POST /images/generations（prompt + size，OpenAI 传统图片接口）
 --   CHAT_COMPLETIONS   = POST /chat/completions（messages + modalities，gpt-image 系列）
 --   RESPONSES          = POST /responses（Responses API，文本类功能）
--- 为空时按功能取默认：blog_agent_image=IMAGES_GENERATIONS，其余=RESPONSES。
+-- 为空时按功能取默认：blog_agent_image=CHAT_COMPLETIONS（OpenAI 图片生成主推形态），其余=RESPONSES。
 
 START TRANSACTION;
 

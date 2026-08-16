@@ -102,7 +102,7 @@ public class BlogAgentImageClient {
         }
         return List.of(new ModelEndpoint(0L, properties.getBaseUrl(),
                 properties.getApiKey(), properties.getImageModel(),
-                ModelGateway.API_STYLE_IMAGES_GENERATIONS));
+                ModelGateway.API_STYLE_CHAT_COMPLETIONS));
     }
 
     /** 每个端点一个 RestClient，按 baseUrl|apiKey 缓存复用；超时取自 blog.agent 属性。 */

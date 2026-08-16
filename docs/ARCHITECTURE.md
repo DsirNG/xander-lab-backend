@@ -93,7 +93,7 @@ style (`IMAGES_GENERATIONS` / `CHAT_COMPLETIONS` / `RESPONSES`) is configured pe
 slot in `feature_model_config` (`primary_api_style` / `fallback_api_style`);
 the same model may need different request shapes per provider (e.g. `gpt-image-2`
 on some gateways only works through `/chat/completions`). `ModelGatewayService`
-resolves blanks to per-feature defaults (`blog_agent_image`→`IMAGES_GENERATIONS`,
+resolves blanks to per-feature defaults (`blog_agent_image`→`CHAT_COMPLETIONS`,
 text features→`RESPONSES`). Clients dispatch on the style; today
 `BlogAgentImageClient` consumes both `IMAGES_GENERATIONS` and
 `CHAT_COMPLETIONS`, text clients still use `/responses`. The

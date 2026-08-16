@@ -195,12 +195,33 @@ class BlogAgentImageClientTest {
     }
 
     @Test
-    void imagesGenerationsStyleDecodesBase64ViaEnvironmentFallback() throws Exception {
+    void environmentFallbackDefaultsToChatCompletionsStyle() throws Exception {
+        byte[] png = new byte[]{(byte) 0x89, 'P', 'N', 'G', 9, 9};
+        String dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(png);
+        server = startServer("/chat/completions",
+                "{\"choices\":[{\"message\":{\"content\":["
+                        + "{\"type\":\"image_url\",\"image_url\":{\"url\":\"" + dataUrl + "\"}}"
+                        + "]}}]}");
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl), new ObjectMapper());
+
+        BlogAgentImageClient.GeneratedImage image = client.generate("draw a robot");
+
+        assertThat(image.contentType()).isEqualTo("image/png");
+        assertThat(image.extension()).isEqualTo("png");
+        assertThat(image.bytes()).containsExactly(png);
+    }
+
+    @Test
+    void imagesGenerationsStyleDecodesBase64WhenConfiguredExplicitly() throws Exception {
         byte[] png = new byte[]{(byte) 0x89, 'P', 'N', 'G', 9, 9};
         server = startServer("/images/generations",
                 "{\"data\":[{\"b64_json\":\"" + Base64.getEncoder().encodeToString(png) + "\"}]}");
         String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl), new ObjectMapper());
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl),
+                new ObjectMapper(),
+                feature -> List.of(new ModelGateway.ModelEndpoint(1L, baseUrl, "test-key",
+                        "dall-e-3", ModelGateway.API_STYLE_IMAGES_GENERATIONS)));
 
         BlogAgentImageClient.GeneratedImage image = client.generate("draw a robot");
 
