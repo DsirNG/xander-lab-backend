@@ -36,9 +36,20 @@ platform credentials.
 `agent` invokes business capabilities only through `AgentTool` adapters. The
 `blog_generate` adapter calls the `blogagent` application service and returns a
 durable blog task ID; ownership of the generated task, sources, versions, and
-publication hand-off remains in `blogagent`. The orchestration UI may link to a
-tool result for review, but the blog generation workflow is not a second agent
-or a source of orchestration conversation state.
+publication hand-off remains in `blogagent`. Additional adapters delegate to
+the owning modules without duplicating their state: `image_generate` renders an
+illustration through the blog-agent image client and persists it via
+`publishing` media storage; `publish_post` hands a task or post to the
+`publishing`/`integration` sync services and charges the platform flat rate;
+`query_posts` reads the user's own posts through `publishing`; `schedule_plan`
+and `email_reminder` create durable records in `automation`. Agent tools never
+own schedules, platform credentials, or publication records, and they must not
+rely on a request thread context: every tool receives an explicit user id, and
+tools that cross into `publishing`/`automation` services establish the
+`UserContext` explicitly when the underlying service still reads it from the
+thread. The orchestration UI may link to a tool result for review, but the blog
+generation workflow is not a second agent or a source of orchestration
+conversation state.
 
 `automation` consumes `publishing` only through application services
 (`PublicationService` for publishing, `BlogService` for reading back titles of
