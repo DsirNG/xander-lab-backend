@@ -334,7 +334,7 @@ public class AgentModelClient {
         void accept(String delta) {
             source.append(delta);
             DecisionSnapshot snapshot = inspect(source.toString());
-            if (!Boolean.TRUE.equals(snapshot.done()) || snapshot.reply() == null) return;
+            if (snapshot.reply() == null) return;
             String reply = snapshot.reply();
             int safeEnd = reply.length();
             if (safeEnd > 0 && Character.isHighSurrogate(reply.charAt(safeEnd - 1))) safeEnd--;
