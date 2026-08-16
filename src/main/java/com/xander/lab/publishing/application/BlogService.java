@@ -278,10 +278,12 @@ public class BlogService {
     }
 
     /**
-     * 查询当前用户全部文章（不分页）。unsyncedPlatform 非空（'juejin' / 'csdn'）
-     * 时仅返回未成功同步到该平台的文章，供智能体一次调用拿全量，无需逐页聚合。
+     * 通用查询当前用户文章（不分页），筛选条件可任意组合：
+     * status 限定草稿/已发布/回收站；search 标题摘要关键词；
+     * juejinSynced / csdnSynced：true 仅已成功同步、false 仅未同步、null 不限；
+     * limit 非空时仅返回最新前 N 条。供智能体一次调用拿全量，无需逐页聚合。
      */
-    public List<BlogPostVO> listMyPostsAll(Integer status, String search, String unsyncedPlatform) {
+    public List<BlogPostVO> listMyPosts(Integer status, String search, Boolean juejinSynced, Boolean csdnSynced, Integer limit) {
         Long userId = UserContext.getUserId();
         if (userId == null) {
             throw new IllegalArgumentException("未登录或登录已过期");
@@ -290,7 +292,7 @@ public class BlogService {
         if (status != null) {
             statusFilter = normalizeManagedStatus(status);
         }
-        List<BlogPostVO> records = blogPostMapper.selectMyPostsAll(userId, statusFilter, search, unsyncedPlatform);
+        List<BlogPostVO> records = blogPostMapper.selectMyPostsAll(userId, statusFilter, search, juejinSynced, csdnSynced, limit);
         return fillTags(records);
     }
 

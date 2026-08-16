@@ -29,7 +29,8 @@ class QueryUnsyncedPostsToolTest {
         BlogService blogService = mock(BlogService.class);
         BlogPostVO first = post(1L, "未同步文章一", false, true);
         BlogPostVO second = post(2L, "未同步文章二", false, false);
-        when(blogService.listMyPostsAll(eq(null), eq(""), eq("juejin"))).thenReturn(List.of(first, second));
+        when(blogService.listMyPosts(eq(null), eq(""), eq(Boolean.FALSE), eq(null), eq(null)))
+                .thenReturn(List.of(first, second));
 
         QueryUnsyncedPostsTool tool = new QueryUnsyncedPostsTool(blogService);
         JsonNode result = tool.execute(42L, JsonNodeFactory.instance.objectNode(), new RecordingProgress());
@@ -43,14 +44,14 @@ class QueryUnsyncedPostsToolTest {
         assertThat(firstItem.path("title").asText()).isEqualTo("未同步文章一");
         assertThat(firstItem.path("url").asText()).isEqualTo("/blog/1/");
         assertThat(firstItem.path("tags")).hasSize(1);
-        verify(blogService).listMyPostsAll(eq(null), eq(""), eq("juejin"));
+        verify(blogService).listMyPosts(eq(null), eq(""), eq(Boolean.FALSE), eq(null), eq(null));
     }
 
     @Test
     void csdnPlatformAndStatusArePassedThrough() {
         BlogService blogService = mock(BlogService.class);
         BlogPostVO csdnUnsynced = post(3L, "CSDN 未同步", true, false);
-        when(blogService.listMyPostsAll(eq(BlogService.STATUS_PUBLISHED), eq(""), eq("csdn")))
+        when(blogService.listMyPosts(eq(BlogService.STATUS_PUBLISHED), eq(""), eq(null), eq(Boolean.FALSE), eq(null)))
                 .thenReturn(List.of(csdnUnsynced));
 
         QueryUnsyncedPostsTool tool = new QueryUnsyncedPostsTool(blogService);
@@ -62,13 +63,13 @@ class QueryUnsyncedPostsToolTest {
         assertThat(result.path("platform").asText()).isEqualTo("csdn");
         assertThat(result.path("total").asLong()).isEqualTo(1L);
         assertThat(result.path("posts").get(0).path("id").asLong()).isEqualTo(3L);
-        verify(blogService).listMyPostsAll(eq(BlogService.STATUS_PUBLISHED), eq(""), eq("csdn"));
+        verify(blogService).listMyPosts(eq(BlogService.STATUS_PUBLISHED), eq(""), eq(null), eq(Boolean.FALSE), eq(null));
     }
 
     @Test
     void clearsUserContextAfterExecution() {
         BlogService blogService = mock(BlogService.class);
-        when(blogService.listMyPostsAll(eq(null), eq(""), eq("juejin")))
+        when(blogService.listMyPosts(eq(null), eq(""), eq(Boolean.FALSE), eq(null), eq(null)))
                 .thenAnswer(invocation -> {
                     assertThat(UserContext.getUserId()).isEqualTo(42L);
                     return List.of();

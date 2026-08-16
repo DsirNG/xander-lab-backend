@@ -67,7 +67,8 @@ public class QueryUnsyncedPostsTool implements AgentTool {
         String search = args.path("search").asText("");
         try {
             UserContext.setUserId(userId);
-            List<BlogPostVO> unsynced = blogService.listMyPostsAll(status, search, platform);
+            boolean juejin = "juejin".equals(platform);
+            List<BlogPostVO> unsynced = blogService.listMyPosts(status, search, juejin ? Boolean.FALSE : null, juejin ? null : Boolean.FALSE, null);
             ObjectNode outcome = JsonNodeFactory.instance.objectNode();
             outcome.put("ok", true);
             outcome.put("platform", platform);

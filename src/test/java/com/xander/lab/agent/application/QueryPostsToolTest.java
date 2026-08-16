@@ -91,6 +91,36 @@ class QueryPostsToolTest {
         assertThat(UserContext.getUserId()).isNull();
     }
 
+    @Test
+    void filtersBySyncStateAndLimitWithoutPagination() {
+        BlogService blogService = mock(BlogService.class);
+        BlogPostVO post = new BlogPostVO();
+        post.setId(7L);
+        post.setTitle("CSDN 已同步文章");
+        post.setStatus(BlogService.STATUS_PUBLISHED);
+        post.setDate(LocalDate.of(2026, 8, 2));
+        post.setCategoryName("后端");
+        post.setTags(List.of("java"));
+        when(blogService.listMyPosts(eq(null), eq(""), eq(null), eq(Boolean.TRUE), eq(3)))
+                .thenReturn(List.of(post));
+
+        QueryPostsTool tool = new QueryPostsTool(blogService);
+        JsonNode args = JsonNodeFactory.instance.objectNode()
+                .put("csdnSynced", true)
+                .put("limit", 3);
+        JsonNode result = tool.execute(42L, args, new RecordingProgress());
+
+        assertThat(result.path("ok").asBoolean()).isTrue();
+        assertThat(result.path("total").asLong()).isEqualTo(1L);
+        assertThat(result.path("posts")).hasSize(1);
+        JsonNode first = result.path("posts").get(0);
+        assertThat(first.path("id").asLong()).isEqualTo(7L);
+        assertThat(first.path("url").asText()).isEqualTo("/blog/7/");
+        assertThat(result.path("page").isMissingNode()).isTrue();
+        assertThat(result.path("hasMore").isMissingNode()).isTrue();
+        verify(blogService).listMyPosts(eq(null), eq(""), eq(null), eq(Boolean.TRUE), eq(3));
+    }
+
     private static final class RecordingProgress implements AgentTool.ProgressListener {
         @Override
         public void onProgress(String message) {

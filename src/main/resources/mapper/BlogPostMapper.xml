@@ -220,9 +220,10 @@
     </select>
 
     <!-- ============================================================
-         selectMyPostsAll: 当前用户全部文章（不分页）
+         selectMyPostsAll: 当前用户文章列表（不分页，筛选可组合）
          status 传 null 时排除回收站（仅草稿+已发布）；传 -1 为回收站
-         unsyncedPlatform 非空时仅返回未成功同步到该平台的文章
+         juejinSynced/csdnSynced：true=仅已成功同步、false=仅未同步、null=不限
+         limit 非空时仅返回最新前 N 条
          ============================================================ -->
     <select id="selectMyPostsAll" resultMap="PostListRM">
         SELECT p.id,
@@ -260,18 +261,44 @@
                 OR p.summary LIKE CONCAT('%', #{search}, '%')
             )
         </if>
-        <if test="unsyncedPlatform != null and unsyncedPlatform != ''">
-            AND NOT EXISTS (
-                SELECT 1
-                FROM blog_publish_record r
-                WHERE r.task_id = -p.id
-                  AND r.platform = #{unsyncedPlatform}
-                  AND r.status = 'SUCCEEDED'
-            )
+        <if test="juejinSynced != null">
+            <choose>
+                <when test="juejinSynced">
+                    AND EXISTS (
+                        SELECT 1 FROM blog_publish_record r
+                        WHERE r.task_id = -p.id AND r.platform = 'juejin' AND r.status = 'SUCCEEDED'
+                    )
+                </when>
+                <otherwise>
+                    AND NOT EXISTS (
+                        SELECT 1 FROM blog_publish_record r
+                        WHERE r.task_id = -p.id AND r.platform = 'juejin' AND r.status = 'SUCCEEDED'
+                    )
+                </otherwise>
+            </choose>
+        </if>
+        <if test="csdnSynced != null">
+            <choose>
+                <when test="csdnSynced">
+                    AND EXISTS (
+                        SELECT 1 FROM blog_publish_record r
+                        WHERE r.task_id = -p.id AND r.platform = 'csdn' AND r.status = 'SUCCEEDED'
+                    )
+                </when>
+                <otherwise>
+                    AND NOT EXISTS (
+                        SELECT 1 FROM blog_publish_record r
+                        WHERE r.task_id = -p.id AND r.platform = 'csdn' AND r.status = 'SUCCEEDED'
+                    )
+                </otherwise>
+            </choose>
         </if>
         GROUP BY p.id, p.title, p.summary, p.category_id, c.name, p.user_id,
                  p.author, p.published_at, p.read_time, p.tips, p.views, p.status
         ORDER BY COALESCE(p.published_at, p.updated_at) DESC, p.id DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+        </if>
     </select>
 
 </mapper>
