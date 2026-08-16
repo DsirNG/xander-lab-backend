@@ -36,6 +36,8 @@ class QueryPostsToolTest {
         post.setDate(LocalDate.of(2026, 8, 1));
         post.setCategoryName("后端");
         post.setTags(List.of("spring", "quartz"));
+        post.setJuejinSynced(false);
+        post.setCsdnSynced(true);
         page.setRecords(List.of(post));
         page.setTotal(1L);
         page.setCurrent(1L);
@@ -60,6 +62,9 @@ class QueryPostsToolTest {
         assertThat(first.path("id").asLong()).isEqualTo(3L);
         assertThat(first.path("title").asText()).isEqualTo("Spring 定时任务");
         assertThat(first.path("status").asText()).isEqualTo("published");
+        assertThat(first.path("url").asText()).isEqualTo("/blog/3/");
+        assertThat(first.path("juejinSynced").asBoolean()).isFalse();
+        assertThat(first.path("csdnSynced").asBoolean()).isTrue();
         assertThat(first.path("tags")).hasSize(2);
         verify(blogService).getMyBlogs(eq(BlogService.STATUS_PUBLISHED), eq("定时"), eq(1), eq(10));
     }

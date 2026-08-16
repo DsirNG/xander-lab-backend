@@ -34,7 +34,8 @@ public class QueryPostsTool implements AgentTool {
     @Override
     public String description() {
         return "查询当前用户自己的博客文章列表（草稿 / 已发布 / 回收站），可搜索标题或摘要。"
-                + "当用户问“我写过哪些文章”、“有哪些草稿”、“找一下某篇文章”时使用本工具。"
+                + "当用户问“我写过哪些文章”、“有哪些草稿”、“找一下某篇文章”、“哪些文章还没同步到掘金/CSDN”时使用本工具。"
+                + "每篇文章返回 juejinSynced / csdnSynced（是否已成功同步到对应平台）与 url（本站访问链接）。"
                 + "参数 status 可选 draft / published / trashed，默认全部；page 从 1 开始，size 默认 10。";
     }
 
@@ -85,6 +86,9 @@ public class QueryPostsTool implements AgentTool {
                 item.put("status", statusText(post.getStatus()));
                 item.put("date", post.getDate() == null ? "" : post.getDate().toString());
                 item.put("category", defaultText(post.getCategoryName(), ""));
+                item.put("url", "/blog/" + post.getId() + "/");
+                item.put("juejinSynced", Boolean.TRUE.equals(post.getJuejinSynced()));
+                item.put("csdnSynced", Boolean.TRUE.equals(post.getCsdnSynced()));
                 ArrayNode tags = item.putArray("tags");
                 if (post.getTags() != null) post.getTags().forEach(tags::add);
             }
