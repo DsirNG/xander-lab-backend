@@ -332,6 +332,28 @@ class AgentConversationServiceTest {
     }
 
     @Test
+    void preservesDecodedUpstreamAnswerDeltaBoundaries() {
+        stubTransactions();
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "第一段第二段");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Consumer<String> deltas = invocation.getArgument(2);
+            deltas.accept("第一段");
+            deltas.accept("第二段");
+            return call(decision);
+        });
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> deltas = new java.util.ArrayList<>();
+
+        service.executeTurn(7L, 42L, "你好", event -> {
+            if ("answer_delta".equals(event.getEventType())) deltas.add(event.getDataContent());
+        });
+
+        assertThat(deltas).containsExactly("第一段", "第二段");
+    }
+
+    @Test
     void escapedBackticksInReplyAreNormalizedForMarkdownRendering() {
         stubTransactions();
         ObjectNode decision = decisionNode(true, "", null, null);

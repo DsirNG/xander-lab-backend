@@ -45,7 +45,6 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 public class AgentConversationService {
     private static final int TOOL_DELTA_FLUSH_CHARS = 256;
-    private static final int ANSWER_DELTA_FLUSH_CHARS = 16;
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
     private static final String DEFAULT_TITLE = "新对话";
 
@@ -194,15 +193,11 @@ public class AgentConversationService {
             AnswerProgress answerProgress = new AnswerProgress(conversationId, userId, runVersion, listener);
             JsonNode decision;
             try {
-                try {
-                    ModelCallResult call = modelClient.decideNextStepStream(
-                            context, toolRegistry.describeTools(), answerProgress::accept,
-                            () -> isCancelRequested(conversationId, userId, runVersion));
-                    decision = call.payload();
-                    usage.add(call.usage());
-                } finally {
-                    answerProgress.flush();
-                }
+                ModelCallResult call = modelClient.decideNextStepStream(
+                        context, toolRegistry.describeTools(), answerProgress::accept,
+                        () -> isCancelRequested(conversationId, userId, runVersion));
+                decision = call.payload();
+                usage.add(call.usage());
             } catch (CancellationException exception) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
@@ -703,13 +698,12 @@ public class AgentConversationService {
         }
     }
 
-    /** Coalesces streamed natural-language reply text into small replayable chunks. */
+    /** Persists and forwards each decoded upstream reply delta without re-chunking it. */
     private final class AnswerProgress {
         private final Long conversationId;
         private final Long userId;
         private final long runVersion;
         private final Consumer<AgentEvent> listener;
-        private final StringBuilder buffer = new StringBuilder();
 
         private AnswerProgress(Long conversationId, Long userId, long runVersion,
                                Consumer<AgentEvent> listener) {
@@ -721,17 +715,8 @@ public class AgentConversationService {
 
         private void accept(String delta) {
             if (delta == null || delta.isEmpty()) return;
-            buffer.append(normalizeAnswer(delta));
-            if (buffer.codePointCount(0, buffer.length()) >= ANSWER_DELTA_FLUSH_CHARS) {
-                flush();
-            }
-        }
-
-        private void flush() {
-            if (buffer.isEmpty()) return;
-            String delta = buffer.toString();
-            buffer.setLength(0);
-            appendActive(conversationId, userId, runVersion, "answer_delta", delta, listener);
+            appendActive(conversationId, userId, runVersion, "answer_delta",
+                    normalizeAnswer(delta), listener);
         }
     }
 
