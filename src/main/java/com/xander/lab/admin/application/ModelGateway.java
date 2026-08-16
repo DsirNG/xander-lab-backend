@@ -26,6 +26,21 @@ public interface ModelGateway {
     /** 功能标识：图生3D 视觉重建与修复。 */
     String FEATURE_IMG2THREE_VISION = "img2three_vision";
 
+    /** 接口风格：POST /images/generations（prompt + size，OpenAI 传统图片接口）。 */
+    String API_STYLE_IMAGES_GENERATIONS = "IMAGES_GENERATIONS";
+
+    /** 接口风格：POST /chat/completions（messages + modalities，gpt-image 系列走该形态）。 */
+    String API_STYLE_CHAT_COMPLETIONS = "CHAT_COMPLETIONS";
+
+    /** 接口风格：POST /responses（Responses API，文本类功能）。 */
+    String API_STYLE_RESPONSES = "RESPONSES";
+
+    /** 未配置接口风格时按功能取的默认值。 */
+    static String defaultApiStyle(String featureKey) {
+        return FEATURE_BLOG_AGENT_IMAGE.equals(featureKey)
+                ? API_STYLE_IMAGES_GENERATIONS : API_STYLE_RESPONSES;
+    }
+
     /**
      * 返回某功能的有序候选端点（主优先，兜底其次）。
      * 网关关闭时返回空列表，调用方回退到自己的环境变量配置；网关启用后，
@@ -46,7 +61,14 @@ public interface ModelGateway {
      * @param baseUrl    OpenAI 兼容 API 基础地址（已去除末尾斜杠）
      * @param apiKey     解密后的明文 API 密钥，仅存在于内存
      * @param model      该端点上使用的模型名
+     * @param apiStyle   接口风格（IMAGES_GENERATIONS / CHAT_COMPLETIONS / RESPONSES），
+     *                   由 ModelGatewayService 按功能配置补默认值；环境变量回退时由调用方提供
      */
-    record ModelEndpoint(long providerId, String baseUrl, String apiKey, String model) {
+    record ModelEndpoint(long providerId, String baseUrl, String apiKey, String model, String apiStyle) {
+
+        /** 兼容仅依赖环境变量的调用方：不指定接口风格，由客户端按功能默认。 */
+        public ModelEndpoint(long providerId, String baseUrl, String apiKey, String model) {
+            this(providerId, baseUrl, apiKey, model, "");
+        }
     }
 }

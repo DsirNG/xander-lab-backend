@@ -95,8 +95,34 @@ class ModelGatewayServiceTest {
         assertThat(endpoints.get(0).baseUrl()).isEqualTo("https://api.example.com/v1");
         assertThat(endpoints.get(0).apiKey()).isEqualTo("sk-secret");
         assertThat(endpoints.get(0).model()).isEqualTo("gpt-a");
+        assertThat(endpoints.get(0).apiStyle()).isEqualTo(ModelGateway.API_STYLE_RESPONSES);
         assertThat(endpoints.get(1).providerId()).isEqualTo(2L);
         assertThat(endpoints.get(1).model()).isEqualTo("gpt-b");
+        assertThat(endpoints.get(1).apiStyle()).isEqualTo(ModelGateway.API_STYLE_RESPONSES);
+    }
+
+    @Test
+    void appliesPerFeatureApiStyleDefaultsWhenConfigLeavesStyleBlank() {
+        when(configMapper.selectOne(any())).thenReturn(config(true, 1L, "gpt-image-2", null, null));
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+
+        List<ModelEndpoint> endpoints = service.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE);
+
+        assertThat(endpoints).hasSize(1);
+        assertThat(endpoints.get(0).apiStyle()).isEqualTo(ModelGateway.API_STYLE_IMAGES_GENERATIONS);
+    }
+
+    @Test
+    void passesThroughConfiguredApiStyles() {
+        FeatureModelConfig configured = config(true, 1L, "gpt-image-2", null, null);
+        configured.setPrimaryApiStyle(ModelGateway.API_STYLE_CHAT_COMPLETIONS);
+        when(configMapper.selectOne(any())).thenReturn(configured);
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+
+        List<ModelEndpoint> endpoints = service.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE);
+
+        assertThat(endpoints).hasSize(1);
+        assertThat(endpoints.get(0).apiStyle()).isEqualTo(ModelGateway.API_STYLE_CHAT_COMPLETIONS);
     }
 
     @Test

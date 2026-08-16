@@ -47,15 +47,18 @@ public class ModelGatewayService implements ModelGateway {
             throw new FeatureModelNotConfiguredException(featureKey);
         }
         List<ModelEndpoint> endpoints = new ArrayList<>(2);
-        addEndpoint(endpoints, config.getPrimaryProviderId(), config.getPrimaryModel());
-        addEndpoint(endpoints, config.getFallbackProviderId(), config.getFallbackModel());
+        addEndpoint(endpoints, config.getPrimaryProviderId(), config.getPrimaryModel(),
+                config.getPrimaryApiStyle(), featureKey);
+        addEndpoint(endpoints, config.getFallbackProviderId(), config.getFallbackModel(),
+                config.getFallbackApiStyle(), featureKey);
         if (endpoints.isEmpty()) {
             throw new FeatureModelNotConfiguredException(featureKey);
         }
         return endpoints;
     }
 
-    private void addEndpoint(List<ModelEndpoint> endpoints, Long providerId, String model) {
+    private void addEndpoint(List<ModelEndpoint> endpoints, Long providerId, String model,
+                             String apiStyle, String featureKey) {
         if (providerId == null || !StringUtils.hasText(model)) {
             return;
         }
@@ -75,8 +78,10 @@ public class ModelGatewayService implements ModelGateway {
         if (!StringUtils.hasText(apiKey)) {
             return;
         }
+        String resolvedStyle = StringUtils.hasText(apiStyle)
+                ? apiStyle.trim() : ModelGateway.defaultApiStyle(featureKey);
         endpoints.add(new ModelEndpoint(provider.getId(),
-                trimTrailingSlash(provider.getBaseUrl()), apiKey, model.trim()));
+                trimTrailingSlash(provider.getBaseUrl()), apiKey, model.trim(), resolvedStyle));
     }
 
     private String trimTrailingSlash(String value) {

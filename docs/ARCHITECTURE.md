@@ -87,8 +87,18 @@ flipping `sys_user.status`, forbids self-bans and ADMIN targets, and revokes
 every Redis session of the banned user).
 
 `ModelGateway.candidates(featureKey)` returns an ordered list of
-`ModelEndpoint` (base URL, API key, model name). Feature keys are stable
-constants (`agent`, `blog_agent`, `blog_agent_image`, `img2three_vision`). The
+`ModelEndpoint` (base URL, API key, model name, API style). Feature keys are stable
+constants (`agent`, `blog_agent`, `blog_agent_image`, `img2three_vision`). API
+style (`IMAGES_GENERATIONS` / `CHAT_COMPLETIONS` / `RESPONSES`) is configured per
+slot in `feature_model_config` (`primary_api_style` / `fallback_api_style`);
+the same model may need different request shapes per provider (e.g. `gpt-image-2`
+on some gateways only works through `/chat/completions`). `ModelGatewayService`
+resolves blanks to per-feature defaults (`blog_agent_image`→`IMAGES_GENERATIONS`,
+text features→`RESPONSES`). Clients dispatch on the style; today
+`BlogAgentImageClient` consumes both `IMAGES_GENERATIONS` and
+`CHAT_COMPLETIONS`, text clients still use `/responses`. The
+`20260816_feature_model_config_api_style_migration.sql` marker key is
+`20260816_feature_model_config_api_style`. The
 gateway is disabled by default and requires
 `MODEL_PROVIDER_ENCRYPTION_KEY` (Base64 32 bytes) when enabled; the
 `admin_model_gateway_migration.sql` marker key is `20260815_admin_model_gateway`

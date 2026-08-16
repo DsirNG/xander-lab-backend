@@ -84,7 +84,8 @@ public class BlogAgentImageClient {
                 if (index == endpoints.size() - 1) {
                     throw e;
                 }
-                log.warn("博客插图主模型端点（provider {}）失败，切换兜底模型", endpoint.providerId());
+                log.warn("图片生成主模型端点（provider {}，接口风格 {}）失败，切换兜底模型",
+                        endpoint.providerId(), endpoint.apiStyle());
             }
         }
         throw lastFailure;
@@ -100,7 +101,8 @@ public class BlogAgentImageClient {
             throw new IllegalStateException("博客生成助手图片模型尚未配置");
         }
         return List.of(new ModelEndpoint(0L, properties.getBaseUrl(),
-                properties.getApiKey(), properties.getImageModel()));
+                properties.getApiKey(), properties.getImageModel(),
+                ModelGateway.API_STYLE_IMAGES_GENERATIONS));
     }
 
     /** 每个端点一个 RestClient，按 baseUrl|apiKey 缓存复用；超时取自 blog.agent 属性。 */
@@ -118,6 +120,14 @@ public class BlogAgentImageClient {
     }
 
     private GeneratedImage generateOnce(ModelEndpoint endpoint, String prompt) {
+        if (ModelGateway.API_STYLE_CHAT_COMPLETIONS.equals(endpoint.apiStyle())) {
+            return generateOnceChatCompletions(endpoint, prompt);
+        }
+        return generateOnceImagesGenerations(endpoint, prompt);
+    }
+
+    /** OpenAI 传统图片接口：POST /images/generations，响应在 data[0].b64_json / url。 */
+    private GeneratedImage generateOnceImagesGenerations(ModelEndpoint endpoint, String prompt) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", endpoint.model());
         payload.put("prompt", prompt);
@@ -134,19 +144,97 @@ public class BlogAgentImageClient {
         JsonNode image = response == null ? objectMapper.createObjectNode() : response.path("data").path(0);
         String base64 = image.path("b64_json").asText();
         if (StringUtils.hasText(base64)) {
-            long maximumEncodedLength = ((long) MAX_IMAGE_BYTES + 2L) / 3L * 4L;
-            if (base64.length() > maximumEncodedLength) {
-                throw new IllegalStateException("图片模型返回的图片超过 10MB 限制");
-            }
-            byte[] bytes = Base64.getDecoder().decode(base64);
-            if (bytes.length > MAX_IMAGE_BYTES) {
-                throw new IllegalStateException("图片模型返回的图片超过 10MB 限制");
-            }
-            return new GeneratedImage(bytes, "image/png", "png");
+            return fromBase64(base64);
         }
         String url = image.path("url").asText();
         if (!StringUtils.hasText(url)) throw new IllegalStateException("图片模型没有返回可读取的图片");
         return download(url);
+    }
+
+    /**
+     * 聊天补全图片接口：POST /chat/completions（gpt-image 系列）。
+     * 请求带 messages + modalities=["image"]，响应图片在 choices[0].message.content
+     * 的 image_url 片段（data URL 或 https 地址）。
+     */
+    private GeneratedImage generateOnceChatCompletions(ModelEndpoint endpoint, String prompt) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", endpoint.model());
+        payload.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+        payload.put("modalities", List.of("image"));
+        payload.put("size", properties.getImageSize());
+        payload.put("n", 1);
+
+        JsonNode response = generationClientFor(endpoint).post()
+                .uri("/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(payload)
+                .retrieve()
+                .body(JsonNode.class);
+
+        String url = extractImageUrl(response);
+        if (!StringUtils.hasText(url)) throw new IllegalStateException("图片模型没有返回可读取的图片");
+        if (url.startsWith("data:")) {
+            return fromDataUrl(url);
+        }
+        return download(url);
+    }
+
+    /** 从 chat/completions 响应中取第一个图片地址（content 兼容字符串或片段数组）。 */
+    private String extractImageUrl(JsonNode response) {
+        if (response == null) return null;
+        JsonNode content = response.path("choices").path(0).path("message").path("content");
+        if (content.isTextual()) {
+            String text = content.asText();
+            return (text.startsWith("data:") || text.startsWith("http")) ? text : null;
+        }
+        if (content.isArray()) {
+            for (JsonNode part : content) {
+                String url = part.path("image_url").path("url").asText();
+                if (!StringUtils.hasText(url)) {
+                    url = part.path("url").asText();
+                }
+                if (StringUtils.hasText(url)) return url;
+            }
+        }
+        return null;
+    }
+
+    private GeneratedImage fromBase64(String base64) {
+        checkEncodedSize(base64);
+        byte[] bytes = Base64.getDecoder().decode(base64);
+        if (bytes.length > MAX_IMAGE_BYTES) {
+            throw new IllegalStateException("图片模型返回的图片超过 10MB 限制");
+        }
+        return new GeneratedImage(bytes, "image/png", "png");
+    }
+
+    /** data:image/png;base64,.... 形式：校验 mime 并解码，避免任意 data 协议进入下载器。 */
+    private GeneratedImage fromDataUrl(String dataUrl) {
+        int comma = dataUrl.indexOf(',');
+        if (comma <= 0) throw new IllegalStateException("图片模型返回的图片地址无效");
+        String meta = dataUrl.substring(5, comma);
+        int semicolon = meta.indexOf(';');
+        String mime = (semicolon > 0 ? meta.substring(0, semicolon) : meta).trim().toLowerCase(Locale.ROOT);
+        if (!mime.startsWith("image/")) {
+            throw new IllegalStateException("图片模型返回的图片地址不是图片类型");
+        }
+        String base64 = dataUrl.substring(comma + 1);
+        checkEncodedSize(base64);
+        byte[] bytes = Base64.getDecoder().decode(base64);
+        if (bytes.length > MAX_IMAGE_BYTES) {
+            throw new IllegalStateException("图片模型返回的图片超过 10MB 限制");
+        }
+        String extension = mime.contains("jpeg") ? "jpg"
+                : mime.contains("webp") ? "webp"
+                : mime.contains("gif") ? "gif" : "png";
+        return new GeneratedImage(bytes, mime, extension);
+    }
+
+    private void checkEncodedSize(String base64) {
+        long maximumEncodedLength = ((long) MAX_IMAGE_BYTES + 2L) / 3L * 4L;
+        if (base64.length() > maximumEncodedLength) {
+            throw new IllegalStateException("图片模型返回的图片超过 10MB 限制");
+        }
     }
 
     private GeneratedImage download(String url) {

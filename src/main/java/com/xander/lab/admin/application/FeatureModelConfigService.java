@@ -35,6 +35,12 @@ public class FeatureModelConfigService {
 
     private static final int MODEL_MAX = 100;
 
+    /** 合法接口风格白名单（与 ModelGateway.API_STYLE_* 保持一致）。 */
+    private static final List<String> API_STYLES = List.of(
+            ModelGateway.API_STYLE_IMAGES_GENERATIONS,
+            ModelGateway.API_STYLE_CHAT_COMPLETIONS,
+            ModelGateway.API_STYLE_RESPONSES);
+
     private final ModelGatewayProperties properties;
     private final FeatureModelConfigMapper configMapper;
     private final ModelProviderMapper providerMapper;
@@ -47,7 +53,7 @@ public class FeatureModelConfigService {
                         .filter(row -> key.equals(row.getFeatureKey()))
                         .findFirst()
                         .map(this::toView)
-                        .orElseGet(() -> new FeatureConfigView(key, false, null, null, null, null, null)))
+                        .orElseGet(() -> new FeatureConfigView(key, false, null, null, null, null, null, null, null)))
                 .toList();
     }
 
@@ -60,10 +66,12 @@ public class FeatureModelConfigService {
         boolean enabled = request.enabled() != null && request.enabled();
         String primaryModel = trimModel(request.primaryModel());
         String fallbackModel = trimModel(request.fallbackModel());
-        validateSlot(featureKey, "primary", request.primaryProviderId(), primaryModel);
-        validateSlot(featureKey, "fallback", request.fallbackProviderId(), fallbackModel);
-        if (!enabled && (request.primaryProviderId() != null || primaryModel != null
-                || request.fallbackProviderId() != null || fallbackModel != null)) {
+        String primaryApiStyle = trimStyle(featureKey, request.primaryApiStyle());
+        String fallbackApiStyle = trimStyle(featureKey, request.fallbackApiStyle());
+        validateSlot(featureKey, "primary", request.primaryProviderId(), primaryModel, primaryApiStyle);
+        validateSlot(featureKey, "fallback", request.fallbackProviderId(), fallbackModel, fallbackApiStyle);
+        if (!enabled && (request.primaryProviderId() != null || primaryModel != null || primaryApiStyle != null
+                || request.fallbackProviderId() != null || fallbackModel != null || fallbackApiStyle != null)) {
             throw new IllegalArgumentException("功能配置未启用时请清空模型槽位，或先启用该配置");
         }
 
@@ -77,8 +85,10 @@ public class FeatureModelConfigService {
         config.setEnabled(enabled);
         config.setPrimaryProviderId(enabled ? request.primaryProviderId() : null);
         config.setPrimaryModel(enabled ? primaryModel : null);
+        config.setPrimaryApiStyle(enabled ? primaryApiStyle : null);
         config.setFallbackProviderId(enabled ? request.fallbackProviderId() : null);
         config.setFallbackModel(enabled ? fallbackModel : null);
+        config.setFallbackApiStyle(enabled ? fallbackApiStyle : null);
         config.setUpdatedAt(now);
         if (existing == null) {
             configMapper.insert(config);
@@ -92,15 +102,17 @@ public class FeatureModelConfigService {
     }
 
     /**
-     * 槽位校验：供应商与模型必须同时填写；供应商必须存在且处于启用状态，
-     * 防止把已停用的供应商配置到线上功能。
+     * 槽位校验：供应商、模型、接口风格必须同时填写；供应商必须存在且处于启用状态，
+     * 防止把已停用的供应商配置到线上功能。接口风格不在白名单内直接拒绝，
+     * 避免客户端拿到未知形态无从分发。
      */
-    private void validateSlot(String featureKey, String slot, Long providerId, String model) {
+    private void validateSlot(String featureKey, String slot, Long providerId, String model, String apiStyle) {
         boolean providerSet = providerId != null;
         boolean modelSet = model != null;
-        if (providerSet != modelSet) {
+        boolean styleSet = apiStyle != null;
+        if (providerSet != modelSet || providerSet != styleSet) {
             throw new IllegalArgumentException(
-                    featureKey + " 的 " + slot + " 供应商与模型必须同时填写");
+                    featureKey + " 的 " + slot + " 供应商、模型与接口风格必须同时填写");
         }
         if (!providerSet) {
             return;
@@ -109,6 +121,24 @@ public class FeatureModelConfigService {
         if (provider == null || !Boolean.TRUE.equals(provider.getEnabled())) {
             throw new IllegalArgumentException(slot + " 供应商不存在或已停用");
         }
+    }
+
+    private String trimStyle(String featureKey, String style) {
+        if (style == null) return null;
+        String trimmed = style.trim();
+        if (trimmed.isEmpty()) return null;
+        if (!API_STYLES.contains(trimmed)) {
+            throw new IllegalArgumentException("接口风格必须是 " + String.join(" / ", API_STYLES));
+        }
+        if (ModelGateway.FEATURE_BLOG_AGENT_IMAGE.equals(featureKey)
+                && ModelGateway.API_STYLE_RESPONSES.equals(trimmed)) {
+            throw new IllegalArgumentException("图片生成功能不支持 RESPONSES 接口风格");
+        }
+        if (!ModelGateway.FEATURE_BLOG_AGENT_IMAGE.equals(featureKey)
+                && ModelGateway.API_STYLE_IMAGES_GENERATIONS.equals(trimmed)) {
+            throw new IllegalArgumentException("文本功能不支持 IMAGES_GENERATIONS 接口风格");
+        }
+        return trimmed;
     }
 
     private String trimModel(String model) {
@@ -130,8 +160,8 @@ public class FeatureModelConfigService {
 
     private FeatureConfigView toView(FeatureModelConfig config) {
         return new FeatureConfigView(config.getFeatureKey(), Boolean.TRUE.equals(config.getEnabled()),
-                config.getPrimaryProviderId(), config.getPrimaryModel(),
-                config.getFallbackProviderId(), config.getFallbackModel(),
+                config.getPrimaryProviderId(), config.getPrimaryModel(), config.getPrimaryApiStyle(),
+                config.getFallbackProviderId(), config.getFallbackModel(), config.getFallbackApiStyle(),
                 config.getUpdatedAt());
     }
 }

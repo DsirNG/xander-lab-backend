@@ -1,11 +1,22 @@
 package com.xander.lab.blogagent.infrastructure;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import com.xander.lab.admin.application.ModelGateway;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpHeaders;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -14,6 +25,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Security-boundary tests for model-provided image download URLs and bodies. */
 class BlogAgentImageClientTest {
+
+    private HttpServer server;
+
+    @AfterEach
+    void stopServer() {
+        if (server != null) {
+            server.stop(0);
+        }
+    }
 
     @Test
     void clampsNonPositiveTimeouts() {
@@ -118,6 +138,100 @@ class BlogAgentImageClientTest {
         assertThat(image.bytes()).containsExactly(bytes);
         assertThat(image.contentType()).isEqualTo("image/png");
         assertThat(image.extension()).isEqualTo("png");
+    }
+
+    @Test
+    void chatCompletionsStyleDecodesDataUrlImage() throws Exception {
+        byte[] png = new byte[]{(byte) 0x89, 'P', 'N', 'G', 1, 2, 3};
+        String dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(png);
+        server = startServer("/chat/completions",
+                "{\"choices\":[{\"message\":{\"content\":["
+                        + "{\"type\":\"output_text\",\"text\":\"ok\"},"
+                        + "{\"type\":\"image_url\",\"image_url\":{\"url\":\"" + dataUrl + "\"}}"
+                        + "]}}]}");
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl),
+                new ObjectMapper(),
+                feature -> List.of(new ModelGateway.ModelEndpoint(1L, baseUrl, "test-key",
+                        "gpt-image-2", ModelGateway.API_STYLE_CHAT_COMPLETIONS)));
+
+        BlogAgentImageClient.GeneratedImage image = client.generate("draw a robot");
+
+        assertThat(image.contentType()).isEqualTo("image/png");
+        assertThat(image.extension()).isEqualTo("png");
+        assertThat(image.bytes()).containsExactly(png);
+    }
+
+    @Test
+    void chatCompletionsStyleRejectsNonImageDataUrl() throws Exception {
+        server = startServer("/chat/completions",
+                "{\"choices\":[{\"message\":{\"content\":["
+                        + "{\"type\":\"image_url\",\"image_url\":{\"url\":\"data:text/html;base64,PGI%2B\"}}"
+                        + "]}}]}");
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl),
+                new ObjectMapper(),
+                feature -> List.of(new ModelGateway.ModelEndpoint(1L, baseUrl, "test-key",
+                        "gpt-image-2", ModelGateway.API_STYLE_CHAT_COMPLETIONS)));
+
+        assertThatThrownBy(() -> client.generate("draw a robot"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("不是图片类型");
+    }
+
+    @Test
+    void chatCompletionsStyleThrowsWhenNoImagePartReturned() throws Exception {
+        server = startServer("/chat/completions",
+                "{\"choices\":[{\"message\":{\"content\":\"only text\"}}]}");
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl),
+                new ObjectMapper(),
+                feature -> List.of(new ModelGateway.ModelEndpoint(1L, baseUrl, "test-key",
+                        "gpt-image-2", ModelGateway.API_STYLE_CHAT_COMPLETIONS)));
+
+        assertThatThrownBy(() -> client.generate("draw a robot"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("没有返回可读取的图片");
+    }
+
+    @Test
+    void imagesGenerationsStyleDecodesBase64ViaEnvironmentFallback() throws Exception {
+        byte[] png = new byte[]{(byte) 0x89, 'P', 'N', 'G', 9, 9};
+        server = startServer("/images/generations",
+                "{\"data\":[{\"b64_json\":\"" + Base64.getEncoder().encodeToString(png) + "\"}]}");
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl), new ObjectMapper());
+
+        BlogAgentImageClient.GeneratedImage image = client.generate("draw a robot");
+
+        assertThat(image.contentType()).isEqualTo("image/png");
+        assertThat(image.extension()).isEqualTo("png");
+        assertThat(image.bytes()).containsExactly(png);
+    }
+
+    private HttpServer startServer(String context, String responseBody) throws IOException {
+        HttpServer httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        httpServer.createContext(context, exchange -> {
+            exchange.getRequestBody().readAllBytes();
+            byte[] body = responseBody.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.length);
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(body);
+            }
+        });
+        httpServer.start();
+        return httpServer;
+    }
+
+    private BlogAgentProperties properties(String baseUrl) {
+        BlogAgentProperties properties = new BlogAgentProperties();
+        properties.setBaseUrl(baseUrl);
+        properties.setApiKey("test-key");
+        properties.setImageModel("gpt-image-2");
+        properties.setConnectTimeoutMillis(2_000);
+        properties.setReadTimeoutMillis(2_000);
+        return properties;
     }
 
     private HttpHeaders headers(Map<String, String> values) {

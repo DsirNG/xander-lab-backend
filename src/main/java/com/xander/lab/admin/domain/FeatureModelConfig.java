@@ -28,11 +28,17 @@ public class FeatureModelConfig {
     /** 主供应商使用的主模型名。 */
     private String primaryModel;
 
+    /** 主槽位接口风格：IMAGES_GENERATIONS / CHAT_COMPLETIONS / RESPONSES；空=按功能取默认。 */
+    private String primaryApiStyle;
+
     /** 兜底供应商 model_provider.id；主供应商请求重试耗尽后切换，null=不使用兜底。 */
     private Long fallbackProviderId;
 
     /** 兜底供应商使用的兜底模型名。 */
     private String fallbackModel;
+
+    /** 兜底槽位接口风格：IMAGES_GENERATIONS / CHAT_COMPLETIONS / RESPONSES；空=按功能取默认。 */
+    private String fallbackApiStyle;
 
     /** true=启用管理台配置（优先于环境变量），false=回退到环境变量配置。 */
     private Boolean enabled;

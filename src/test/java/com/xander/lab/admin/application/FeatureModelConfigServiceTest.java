@@ -61,35 +61,40 @@ class FeatureModelConfigServiceTest {
         when(configMapper.selectList(any())).thenReturn(List.of());
 
         service.update("agent", new UpdateFeatureConfigRequest(
-                true, 1L, "gpt-4o", 2L, "gpt-4o-mini"));
+                true, 1L, "gpt-4o", ModelGateway.API_STYLE_RESPONSES,
+                2L, "gpt-4o-mini", ModelGateway.API_STYLE_RESPONSES));
 
         ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
         verify(configMapper).insert(captured.capture());
         assertThat(captured.getValue().getFeatureKey()).isEqualTo("agent");
         assertThat(captured.getValue().getPrimaryModel()).isEqualTo("gpt-4o");
+        assertThat(captured.getValue().getPrimaryApiStyle()).isEqualTo(ModelGateway.API_STYLE_RESPONSES);
         assertThat(captured.getValue().getFallbackProviderId()).isEqualTo(2L);
+        assertThat(captured.getValue().getFallbackApiStyle()).isEqualTo(ModelGateway.API_STYLE_RESPONSES);
     }
 
     @Test
-    void updateNormalizesBlankModelsToNull() {
+    void updateNormalizesBlankModelsAndStylesToNull() {
         when(configMapper.selectOne(any())).thenReturn(null);
         when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
         when(configMapper.selectList(any())).thenReturn(List.of());
 
         service.update("blog_agent", new UpdateFeatureConfigRequest(
-                true, 1L, "  gpt-4o  ", null, "   "));
+                true, 1L, "  gpt-4o  ", "  RESPONSES  ", null, "   ", " "));
 
         ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
         verify(configMapper).insert(captured.capture());
         assertThat(captured.getValue().getPrimaryModel()).isEqualTo("gpt-4o");
+        assertThat(captured.getValue().getPrimaryApiStyle()).isEqualTo(ModelGateway.API_STYLE_RESPONSES);
         assertThat(captured.getValue().getFallbackModel()).isNull();
         assertThat(captured.getValue().getFallbackProviderId()).isNull();
+        assertThat(captured.getValue().getFallbackApiStyle()).isNull();
     }
 
     @Test
     void updateRejectsUnknownFeatureKey() {
         assertThatThrownBy(() -> service.update("unknown", new UpdateFeatureConfigRequest(
-                true, 1L, "m", null, null)))
+                true, 1L, "m", null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("未知的功能标识");
     }
@@ -97,9 +102,45 @@ class FeatureModelConfigServiceTest {
     @Test
     void updateRejectsSlotWithProviderButNoModel() {
         assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
-                true, 1L, null, null, null)))
+                true, 1L, null, null, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("同时填写");
+        verify(configMapper, never()).insert(any());
+    }
+
+    @Test
+    void updateRejectsSlotWithProviderButNoApiStyle() {
+        assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-4o", null, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("同时填写");
+        verify(configMapper, never()).insert(any());
+    }
+
+    @Test
+    void updateRejectsUnknownApiStyle() {
+        assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-4o", "WEIRD", null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("接口风格必须是");
+        verify(configMapper, never()).insert(any());
+    }
+
+    @Test
+    void updateRejectsResponsesStyleForImageFeature() {
+        assertThatThrownBy(() -> service.update("blog_agent_image", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-image-2", ModelGateway.API_STYLE_RESPONSES, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("不支持 RESPONSES");
+        verify(configMapper, never()).insert(any());
+    }
+
+    @Test
+    void updateRejectsImagesStyleForTextFeature() {
+        assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-4o", ModelGateway.API_STYLE_IMAGES_GENERATIONS, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("不支持 IMAGES_GENERATIONS");
         verify(configMapper, never()).insert(any());
     }
 
@@ -108,7 +149,7 @@ class FeatureModelConfigServiceTest {
         when(providerMapper.selectById(9L)).thenReturn(null);
 
         assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
-                true, 9L, "gpt-4o", null, null)))
+                true, 9L, "gpt-4o", ModelGateway.API_STYLE_RESPONSES, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("不存在或已停用");
     }
@@ -118,7 +159,7 @@ class FeatureModelConfigServiceTest {
         when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
 
         assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
-                false, 1L, "gpt-4o", null, null)))
+                false, 1L, "gpt-4o", ModelGateway.API_STYLE_RESPONSES, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("未启用");
         verify(configMapper, never()).insert(any());
@@ -133,13 +174,14 @@ class FeatureModelConfigServiceTest {
         when(configMapper.selectOne(any())).thenReturn(existing);
         when(configMapper.selectList(any())).thenReturn(List.of());
 
-        service.update("agent", new UpdateFeatureConfigRequest(false, null, null, null, null));
+        service.update("agent", new UpdateFeatureConfigRequest(false, null, null, null, null, null, null));
 
         ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
         verify(configMapper).updateById(captured.capture());
         assertThat(captured.getValue().getEnabled()).isFalse();
         assertThat(captured.getValue().getPrimaryProviderId()).isNull();
         assertThat(captured.getValue().getPrimaryModel()).isNull();
+        assertThat(captured.getValue().getPrimaryApiStyle()).isNull();
     }
 
     private ModelProvider enabledProvider(Long id) {
