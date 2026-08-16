@@ -16,8 +16,10 @@ import java.util.concurrent.ScheduledFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,28 +31,26 @@ class AgentConversationControllerTest {
     }
 
     @Test
-    void createStartsAlreadyClaimedInitialTurnOnServer() {
+    void createReturnsReadyConversationWithoutStartingTurn() {
         AgentConversationService service = mock(AgentConversationService.class);
         AgentEventService eventService = mock(AgentEventService.class);
         TaskExecutor directExecutor = Runnable::run;
         AgentConversationController controller = new AgentConversationController(
                 service, eventService, directExecutor, directExecutor, mock(TaskScheduler.class));
-        AgentConversation running = new AgentConversation();
-        running.setId(7L);
-        running.setUserId(42L);
-        running.setStatus("running");
-        running.setRunVersion(1L);
-        when(service.create(42L, "你好智能体")).thenReturn(running);
-        when(service.get(7L, 42L)).thenReturn(running);
+        AgentConversation ready = new AgentConversation();
+        ready.setId(7L);
+        ready.setUserId(42L);
+        ready.setStatus("ready");
+        ready.setRunVersion(1L);
+        when(service.create(42L)).thenReturn(ready);
+        when(service.get(7L, 42L)).thenReturn(ready);
         when(service.listMessages(7L, 42L)).thenReturn(List.of());
         UserContext.setUserId(42L);
-        AgentConversationMessageRequest request = new AgentConversationMessageRequest();
-        request.setContent("你好智能体");
 
-        AgentConversationVO body = controller.create(request).getData();
+        AgentConversationVO body = controller.create().getData();
 
-        assertThat(body.getConversation()).isSameAs(running);
-        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(1L), any());
+        assertThat(body.getConversation()).isSameAs(ready);
+        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any());
     }
 
     @Test

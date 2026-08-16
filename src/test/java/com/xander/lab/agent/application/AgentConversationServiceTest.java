@@ -192,14 +192,43 @@ class AgentConversationServiceTest {
     }
 
     @Test
-    void createAtomicallyStartsAndPersistsUserMessage() {
+    void createReturnsReadyShellWithoutPersistingMessage() {
         when(conversationMapper.insert(any())).thenReturn(1);
 
-        AgentConversation result = service.create(42L, "你好");
+        AgentConversation result = service.create(42L);
 
-        assertThat(result.getTitle()).isEqualTo("你好");
-        assertThat(result.getStatus()).isEqualTo("running");
+        assertThat(result.getTitle()).isEqualTo("新对话");
+        assertThat(result.getStatus()).isEqualTo("ready");
+        assertThat(result.getRunVersion()).isEqualTo(1L);
+        org.mockito.Mockito.verifyNoInteractions(messageMapper);
+    }
+
+    @Test
+    void prepareTurnSetsTitleFromFirstUserMessageOnReadyShell() {
+        stubTransactions();
+        AgentConversation ready = conversation("ready");
+        ready.setTitle("新对话");
+        when(conversationMapper.selectById(7L)).thenReturn(ready);
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+
+        AgentConversation claimed = service.prepareTurn(7L, 42L, "帮我写一篇关于 React 的文章");
+
+        assertThat(claimed.getTitle()).isEqualTo("帮我写一篇关于 React 的文章");
         verify(messageMapper).insert(argThatMessage("user", "message", null));
+        verify(conversationMapper).updateById(ready);
+    }
+
+    @Test
+    void prepareTurnKeepsExistingTitleUntouched() {
+        stubTransactions();
+        AgentConversation existing = conversation("ready");
+        existing.setTitle("已有标题");
+        when(conversationMapper.selectById(7L)).thenReturn(existing);
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+
+        service.prepareTurn(7L, 42L, "新消息");
+
+        org.mockito.Mockito.verify(conversationMapper, org.mockito.Mockito.never()).updateById(any());
     }
 
     @Test

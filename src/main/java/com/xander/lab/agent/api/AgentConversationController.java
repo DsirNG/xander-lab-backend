@@ -50,17 +50,11 @@ public class AgentConversationController {
         this.agentHeartbeatScheduler = agentHeartbeatScheduler;
     }
 
+    /** 仅创建会话壳（ready）；首条消息由前端随后经 /messages/stream 发送并实时流式返回。 */
     @PostMapping
-    public Result<AgentConversationVO> create(@Valid @RequestBody AgentConversationMessageRequest request) {
+    public Result<AgentConversationVO> create() {
         Long userId = UserContext.getUserId();
-        var conversation = service.create(userId, request.getContent());
-        try {
-            startClaimedTurn(conversation.getId(), userId, conversation.getRunVersion());
-        } catch (RuntimeException exception) {
-            // The durable conversation id is returned even when scheduling fails, avoiding duplicate retry-created sessions.
-            service.failClaimedTurn(conversation.getId(), userId, conversation.getRunVersion(),
-                    "智能体执行队列繁忙，请稍后重试");
-        }
+        AgentConversation conversation = service.create(userId);
         return Result.success(buildVO(conversation.getId(), userId));
     }
 
@@ -180,16 +174,6 @@ public class AgentConversationController {
                 .conversation(service.get(conversationId, userId))
                 .messages(service.listMessages(conversationId, userId))
                 .build();
-    }
-
-    private void startClaimedTurn(Long conversationId, Long userId, long runVersion) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                service.executeClaimedTurn(conversationId, userId, runVersion, ignored -> { });
-            } catch (RuntimeException exception) {
-                log.debug("initial agent turn ended exceptionally for conversation {}", conversationId);
-            }
-        }, agentTaskExecutor);
     }
 
     private SseEmitter createEmitter(Long conversationId, HttpServletResponse response) {

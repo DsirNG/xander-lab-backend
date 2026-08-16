@@ -47,6 +47,7 @@ public class AgentConversationService {
     private static final int TOOL_DELTA_FLUSH_CHARS = 256;
     private static final int ANSWER_DELTA_FLUSH_CHARS = 16;
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
+    private static final String DEFAULT_TITLE = "新对话";
 
     /**
      * 模型常把 Markdown 反引号转义成 \`；CommonMark 会把 \` 渲染成裸反引号。
@@ -67,23 +68,22 @@ public class AgentConversationService {
     private final ScheduledExecutorService agentLeaseRenewer;
     private final BillingService billingService;
 
+    /**
+     * 仅创建会话壳（ready、无消息、不启动轮次）。首条消息由前端随后经
+     * /messages/stream 发送，避免首轮以空监听器在服务端运行、首次回复只能
+     * 靠 /events 轮询恢复而整体一次性出现。
+     */
     @Transactional
-    public AgentConversation create(Long userId, String message) {
-        String initialMessage = defaultText(message, "").trim();
-        if (!StringUtils.hasText(initialMessage)) {
-            throw new IllegalArgumentException("消息内容不能为空");
-        }
+    public AgentConversation create(Long userId) {
         AgentConversation conversation = new AgentConversation();
         conversation.setUserId(userId);
-        conversation.setTitle(excerpt(initialMessage, 40));
-        // The initial user message and running intent commit together; the controller only starts the claimed worker.
-        conversation.setStatus("running");
+        conversation.setTitle(DEFAULT_TITLE);
+        conversation.setStatus("ready");
         conversation.setRunVersion(1L);
         conversation.setCancelRequested(0);
         conversation.setCreatedAt(LocalDateTime.now());
         conversation.setUpdatedAt(LocalDateTime.now());
         conversationMapper.insert(conversation);
-        saveMessage(conversation.getId(), "user", "message", null, initialMessage);
         return conversation;
     }
 
@@ -98,6 +98,10 @@ public class AgentConversationService {
             long runVersion = claimConversation(conversationId, userId);
             saveMessage(conversationId, "user", "message", null, userMessage);
             AgentConversation claimed = requireOwned(conversationId, userId);
+            if (isDefaultTitle(claimed.getTitle())) {
+                claimed.setTitle(excerpt(userMessage, 40));
+                conversationMapper.updateById(claimed);
+            }
             if (!Long.valueOf(runVersion).equals(claimed.getRunVersion())) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
             }
@@ -635,6 +639,10 @@ public class AgentConversationService {
 
     private String defaultText(String value, String fallback) {
         return StringUtils.hasText(value) ? value.trim() : fallback;
+    }
+
+    private boolean isDefaultTitle(String title) {
+        return !StringUtils.hasText(title) || DEFAULT_TITLE.equals(title);
     }
 
     private String excerpt(String value, int length) {
