@@ -19,6 +19,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AgentModelClientTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private HttpServer server;
+    private JsonNode requestPayload;
 
     @AfterEach
     void tearDown() {
@@ -89,9 +90,32 @@ class AgentModelClientTest {
                 .hasMessageNotContaining("secret vendor detail");
     }
 
+    @Test
+    void exposesWebSearchAndDescribesItWhenEnabled() throws Exception {
+        startServer(List.of("{\"thought\":\"\",\"done\":true,\"reply\":\"已核验\",\"action\":null}"));
+
+        client(true).decideNextStep("查找三个前端链接", "blog_generate: 生成博客");
+
+        assertThat(requestPayload.path("tools").path(0).path("type").asText()).isEqualTo("web_search");
+        assertThat(requestPayload.path("instructions").asText())
+                .contains("平台已提供 web_search")
+                .contains("不要声称平台不支持网页搜索");
+    }
+
+    @Test
+    void omitsWebSearchAndDescribesItAsDisabledWhenTurnedOff() throws Exception {
+        startServer(List.of("{\"thought\":\"\",\"done\":true,\"reply\":\"未搜索\",\"action\":null}"));
+
+        client(false).decideNextStep("普通对话", "blog_generate: 生成博客");
+
+        assertThat(requestPayload.has("tools")).isFalse();
+        assertThat(requestPayload.path("instructions").asText()).contains("当前未启用");
+    }
+
     private void startServer(List<String> outputDeltas) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/responses", exchange -> {
+            requestPayload = objectMapper.readTree(exchange.getRequestBody());
             exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
             exchange.sendResponseHeaders(200, 0);
             for (String delta : outputDeltas) {
@@ -113,11 +137,15 @@ class AgentModelClientTest {
     }
 
     private AgentModelClient client() {
+        return client(false);
+    }
+
+    private AgentModelClient client(boolean webSearchEnabled) {
         AgentModelProperties properties = new AgentModelProperties();
         properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
         properties.setApiKey("test-key");
         properties.setModel("test-model");
-        properties.setWebSearchEnabled(false);
+        properties.setWebSearchEnabled(webSearchEnabled);
         return new AgentModelClient(properties, objectMapper);
     }
 }

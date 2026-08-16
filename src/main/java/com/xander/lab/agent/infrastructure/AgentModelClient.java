@@ -238,7 +238,7 @@ public class AgentModelClient {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("store", false);
-        payload.put("instructions", instructions(toolDescriptions));
+        payload.put("instructions", instructions(toolDescriptions, properties.isWebSearchEnabled()));
         payload.put("input", context);
         if (properties.isWebSearchEnabled()) {
             payload.put("tools", List.of(Map.of("type", "web_search")));
@@ -268,9 +268,15 @@ public class AgentModelClient {
         }
     }
 
-    private String instructions(String toolDescriptions) {
+    private String instructions(String toolDescriptions, boolean webSearchEnabled) {
+        String webSearchInstructions = webSearchEnabled
+                ? "网页搜索能力：平台已提供 web_search。用户需要最新信息、外部事实核验、资料来源或链接时，"
+                + "应直接使用网页搜索；不要声称平台不支持网页搜索。只有搜索工具实际调用失败时，"
+                + "才能如实说明失败原因。网页搜索由模型服务执行，不属于下方业务工具 action。\n"
+                : "网页搜索能力：当前未启用。不要编造搜索结果或声称已经联网核验。\n";
         return "你是 Xander Lab 博客工作台的智能体调度器。你的任务是把用户的对话诉求拆解成可执行步骤，"
                 + "通过调用工具完成任务，并在完成后用中文回复用户。\n"
+                + webSearchInstructions
                 + "可调用工具：\n" + toolDescriptions + "\n"
                 + "决策规则：\n"
                 + "1. 需要执行操作时，调用工具并等待工具结果；不要臆造工具结果。\n"
