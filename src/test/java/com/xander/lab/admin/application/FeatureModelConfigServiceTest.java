@@ -140,8 +140,31 @@ class FeatureModelConfigServiceTest {
         assertThatThrownBy(() -> service.update("agent", new UpdateFeatureConfigRequest(
                 true, 1L, "gpt-4o", ModelGateway.API_STYLE_IMAGES_GENERATIONS, null, null, null)))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("不支持 IMAGES_GENERATIONS");
+                .hasMessageContaining("图片专用接口风格");
         verify(configMapper, never()).insert(any());
+    }
+
+    @Test
+    void updateRejectsChatPromptStyleForTextFeature() {
+        assertThatThrownBy(() -> service.update("blog_agent", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-4o", ModelGateway.API_STYLE_CHAT_PROMPT, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("图片专用接口风格");
+        verify(configMapper, never()).insert(any());
+    }
+
+    @Test
+    void updateAcceptsChatPromptStyleForImageFeature() {
+        when(configMapper.selectOne(any())).thenReturn(null);
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+        when(configMapper.selectList(any())).thenReturn(List.of());
+
+        service.update("blog_agent_image", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-image-2", ModelGateway.API_STYLE_CHAT_PROMPT, null, null, null));
+
+        ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
+        verify(configMapper).insert(captured.capture());
+        assertThat(captured.getValue().getPrimaryApiStyle()).isEqualTo(ModelGateway.API_STYLE_CHAT_PROMPT);
     }
 
     @Test

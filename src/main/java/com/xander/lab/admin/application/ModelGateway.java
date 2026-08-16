@@ -29,8 +29,11 @@ public interface ModelGateway {
     /** 接口风格：POST /images/generations（prompt + size，OpenAI 传统图片接口）。 */
     String API_STYLE_IMAGES_GENERATIONS = "IMAGES_GENERATIONS";
 
-    /** 接口风格：POST /chat/completions（messages + modalities，gpt-image 系列走该形态）。 */
+    /** 接口风格：POST /chat/completions（messages + modalities，OpenAI 官方 gpt-image 形态）。 */
     String API_STYLE_CHAT_COMPLETIONS = "CHAT_COMPLETIONS";
+
+    /** 接口风格：POST /chat/completions（顶层 prompt + size + n，聚合网关的 gpt-image 形态，如 okinto）。 */
+    String API_STYLE_CHAT_PROMPT = "CHAT_PROMPT";
 
     /** 接口风格：POST /responses（Responses API，文本类功能）。 */
     String API_STYLE_RESPONSES = "RESPONSES";

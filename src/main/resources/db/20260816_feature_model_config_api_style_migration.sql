@@ -4,7 +4,8 @@
 --
 -- 取值：
 --   IMAGES_GENERATIONS = POST /images/generations（prompt + size，OpenAI 传统图片接口）
---   CHAT_COMPLETIONS   = POST /chat/completions（messages + modalities，gpt-image 系列）
+--   CHAT_COMPLETIONS   = POST /chat/completions（messages + modalities，OpenAI 官方 gpt-image 形态）
+--   CHAT_PROMPT        = POST /chat/completions（顶层 prompt + size + n，聚合网关 gpt-image 形态，如 okinto）
 --   RESPONSES          = POST /responses（Responses API，文本类功能）
 -- 为空时按功能取默认：blog_agent_image=CHAT_COMPLETIONS（OpenAI 图片生成主推形态），其余=RESPONSES。
 

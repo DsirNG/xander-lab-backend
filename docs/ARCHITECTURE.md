@@ -89,14 +89,18 @@ every Redis session of the banned user).
 `ModelGateway.candidates(featureKey)` returns an ordered list of
 `ModelEndpoint` (base URL, API key, model name, API style). Feature keys are stable
 constants (`agent`, `blog_agent`, `blog_agent_image`, `img2three_vision`). API
-style (`IMAGES_GENERATIONS` / `CHAT_COMPLETIONS` / `RESPONSES`) is configured per
-slot in `feature_model_config` (`primary_api_style` / `fallback_api_style`);
-the same model may need different request shapes per provider (e.g. `gpt-image-2`
-on some gateways only works through `/chat/completions`). `ModelGatewayService`
+style is configured per
+slot in `feature_model_config` (`primary_api_style` / `fallback_api_style`):
+`IMAGES_GENERATIONS` (/images/generations, legacy),
+`CHAT_COMPLETIONS` (/chat/completions with messages+modalities, official OpenAI),
+`CHAT_PROMPT` (/chat/completions with top-level prompt, aggregator gateways like okinto),
+`RESPONSES` (text features). `ModelGatewayService`
 resolves blanks to per-feature defaults (`blog_agent_image`→`CHAT_COMPLETIONS`,
-text features→`RESPONSES`). Clients dispatch on the style; today
-`BlogAgentImageClient` consumes both `IMAGES_GENERATIONS` and
-`CHAT_COMPLETIONS`, text clients still use `/responses`. The
+text features→`RESPONSES`).
+Clients dispatch on the style; today
+`BlogAgentImageClient` consumes `IMAGES_GENERATIONS`, `CHAT_COMPLETIONS` and
+`CHAT_PROMPT` (responses accepted from both `choices[0].message.content` and
+`data[0]`), text clients still use `/responses`. The
 `20260816_feature_model_config_api_style_migration.sql` marker key is
 `20260816_feature_model_config_api_style`. The
 gateway is disabled by default and requires

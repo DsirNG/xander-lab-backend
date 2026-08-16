@@ -84,11 +84,26 @@ public class BlogAgentImageClient {
                 if (index == endpoints.size() - 1) {
                     throw e;
                 }
-                log.warn("图片生成主模型端点（provider {}，接口风格 {}）失败，切换兜底模型",
-                        endpoint.providerId(), endpoint.apiStyle());
+                // 切换兜底属于已处理的降级，但必须记录失败原因，否则线上只能看到切换看不到根因。
+                log.warn("图片生成主模型端点（provider {}，接口风格 {}）调用失败，切换兜底模型，原因：{}",
+                        endpoint.providerId(), endpoint.apiStyle(), failureReason(e));
             }
         }
         throw lastFailure;
+    }
+
+    /** 提取可日志化的失败原因：截断供应商响应体与换行，避免日志刷屏或泄露超长内容。 */
+    static String failureReason(RuntimeException e) {
+        String message = e.getMessage();
+        if (message == null) return e.getClass().getSimpleName();
+        int newline = message.indexOf('\n');
+        if (newline >= 0) {
+            message = message.substring(0, newline);
+        }
+        if (message.length() > 300) {
+            message = message.substring(0, 300) + "...";
+        }
+        return message;
     }
 
     /** 解析候选端点：网关启用时由功能模型配置驱动（未配置由网关抛错）；网关关闭时回退环境变量（原行为）。 */
@@ -121,7 +136,10 @@ public class BlogAgentImageClient {
 
     private GeneratedImage generateOnce(ModelEndpoint endpoint, String prompt) {
         if (ModelGateway.API_STYLE_CHAT_COMPLETIONS.equals(endpoint.apiStyle())) {
-            return generateOnceChatCompletions(endpoint, prompt);
+            return generateOnceChatCompletions(endpoint, prompt, true);
+        }
+        if (ModelGateway.API_STYLE_CHAT_PROMPT.equals(endpoint.apiStyle())) {
+            return generateOnceChatCompletions(endpoint, prompt, false);
         }
         return generateOnceImagesGenerations(endpoint, prompt);
     }
@@ -153,14 +171,19 @@ public class BlogAgentImageClient {
 
     /**
      * 聊天补全图片接口：POST /chat/completions（gpt-image 系列）。
-     * 请求带 messages + modalities=["image"]，响应图片在 choices[0].message.content
-     * 的 image_url 片段（data URL 或 https 地址）。
+     * messages 形态（OpenAI 官方）带 messages + modalities=["image"]；
+     * prompt 形态（聚合网关，如 okinto）带顶层 prompt + size + n。
+     * 响应图片兼容 choices[0].message.content 的 image_url 片段与 data[0] 的 b64_json/url。
      */
-    private GeneratedImage generateOnceChatCompletions(ModelEndpoint endpoint, String prompt) {
+    private GeneratedImage generateOnceChatCompletions(ModelEndpoint endpoint, String prompt, boolean messagesStyle) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", endpoint.model());
-        payload.put("messages", List.of(Map.of("role", "user", "content", prompt)));
-        payload.put("modalities", List.of("image"));
+        if (messagesStyle) {
+            payload.put("messages", List.of(Map.of("role", "user", "content", prompt)));
+            payload.put("modalities", List.of("image"));
+        } else {
+            payload.put("prompt", prompt);
+        }
         payload.put("size", properties.getImageSize());
         payload.put("n", 1);
 
@@ -172,10 +195,20 @@ public class BlogAgentImageClient {
                 .body(JsonNode.class);
 
         String url = extractImageUrl(response);
-        if (!StringUtils.hasText(url)) throw new IllegalStateException("图片模型没有返回可读取的图片");
-        if (url.startsWith("data:")) {
-            return fromDataUrl(url);
+        if (StringUtils.hasText(url)) {
+            if (url.startsWith("data:")) {
+                return fromDataUrl(url);
+            }
+            return download(url);
         }
+        // 部分网关在 chat 路径上仍返回 images/generations 形态（data[0]）。
+        JsonNode image = response == null ? objectMapper.createObjectNode() : response.path("data").path(0);
+        String base64 = image.path("b64_json").asText();
+        if (StringUtils.hasText(base64)) {
+            return fromBase64(base64);
+        }
+        url = image.path("url").asText();
+        if (!StringUtils.hasText(url)) throw new IllegalStateException("图片模型没有返回可读取的图片");
         return download(url);
     }
 

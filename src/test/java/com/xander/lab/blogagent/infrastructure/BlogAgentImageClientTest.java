@@ -43,6 +43,19 @@ class BlogAgentImageClientTest {
     }
 
     @Test
+    void summarizesFailuresForLoggingWithoutRawBodies() {
+        assertThat(BlogAgentImageClient.failureReason(new IllegalStateException(
+                "400 Bad Request: [{\"error\":{\"message\":\"invalid size\"}}]\nsecond line")))
+                .isEqualTo("400 Bad Request: [{\"error\":{\"message\":\"invalid size\"}}]");
+        assertThat(BlogAgentImageClient.failureReason(new IllegalStateException((String) null)))
+                .isEqualTo("IllegalStateException");
+        String longMessage = "x".repeat(500);
+        assertThat(BlogAgentImageClient.failureReason(new IllegalStateException(longMessage)))
+                .hasSize(303)
+                .endsWith("...");
+    }
+
+    @Test
     void acceptsOnlyCredentialFreeHttpsUrlsWhoseEveryAddressIsPublic() throws Exception {
         InetAddress publicAddress = InetAddress.getByAddress(new byte[]{8, 8, 8, 8});
 
@@ -230,10 +243,50 @@ class BlogAgentImageClientTest {
         assertThat(image.bytes()).containsExactly(png);
     }
 
+    @Test
+    void chatPromptStyleSendsTopLevelPromptAndReadsUrlContent() throws Exception {
+        byte[] png = new byte[]{(byte) 0x89, 'P', 'N', 'G', 7, 7};
+        String dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(png);
+        server = startServer("/chat/completions",
+                "{\"choices\":[{\"message\":{\"content\":\"" + dataUrl + "\"}}]}");
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl),
+                new ObjectMapper(),
+                feature -> List.of(new ModelGateway.ModelEndpoint(1L, baseUrl, "test-key",
+                        "gpt-image-2", ModelGateway.API_STYLE_CHAT_PROMPT)));
+
+        BlogAgentImageClient.GeneratedImage image = client.generate("draw a robot");
+
+        assertThat(image.bytes()).containsExactly(png);
+        assertThat(lastRequestBody).contains("\"prompt\"")
+                .contains("\"gpt-image-2\"")
+                .doesNotContain("modalities")
+                .doesNotContain("\"messages\"");
+    }
+
+    @Test
+    void chatPromptStyleFallsBackToDataPayload() throws Exception {
+        byte[] png = new byte[]{(byte) 0x89, 'P', 'N', 'G', 6, 6};
+        server = startServer("/chat/completions",
+                "{\"data\":[{\"b64_json\":\"" + Base64.getEncoder().encodeToString(png) + "\"}]}");
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl),
+                new ObjectMapper(),
+                feature -> List.of(new ModelGateway.ModelEndpoint(1L, baseUrl, "test-key",
+                        "gpt-image-2", ModelGateway.API_STYLE_CHAT_PROMPT)));
+
+        BlogAgentImageClient.GeneratedImage image = client.generate("draw a robot");
+
+        assertThat(image.contentType()).isEqualTo("image/png");
+        assertThat(image.bytes()).containsExactly(png);
+    }
+
+    private String lastRequestBody;
+
     private HttpServer startServer(String context, String responseBody) throws IOException {
         HttpServer httpServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         httpServer.createContext(context, exchange -> {
-            exchange.getRequestBody().readAllBytes();
+            lastRequestBody = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             byte[] body = responseBody.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, body.length);

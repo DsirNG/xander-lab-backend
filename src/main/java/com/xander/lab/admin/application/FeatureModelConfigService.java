@@ -39,6 +39,7 @@ public class FeatureModelConfigService {
     private static final List<String> API_STYLES = List.of(
             ModelGateway.API_STYLE_IMAGES_GENERATIONS,
             ModelGateway.API_STYLE_CHAT_COMPLETIONS,
+            ModelGateway.API_STYLE_CHAT_PROMPT,
             ModelGateway.API_STYLE_RESPONSES);
 
     private final ModelGatewayProperties properties;
@@ -135,8 +136,9 @@ public class FeatureModelConfigService {
             throw new IllegalArgumentException("图片生成功能不支持 RESPONSES 接口风格");
         }
         if (!ModelGateway.FEATURE_BLOG_AGENT_IMAGE.equals(featureKey)
-                && ModelGateway.API_STYLE_IMAGES_GENERATIONS.equals(trimmed)) {
-            throw new IllegalArgumentException("文本功能不支持 IMAGES_GENERATIONS 接口风格");
+                && (ModelGateway.API_STYLE_IMAGES_GENERATIONS.equals(trimmed)
+                        || ModelGateway.API_STYLE_CHAT_PROMPT.equals(trimmed))) {
+            throw new IllegalArgumentException("文本功能不支持图片专用接口风格");
         }
         return trimmed;
     }
