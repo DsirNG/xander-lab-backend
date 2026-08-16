@@ -25,6 +25,15 @@ import java.util.Map;
 @Component
 public class ImageGenerationTool implements AgentTool {
 
+    /**
+     * 独立图片工具专属风格，与博客智能体插图风格（BlogAgentService 中的
+     * "准确、克制、专业的知识插图"）相互独立，避免工具产出与博客插图同质化。
+     */
+    static final String TOOL_IMAGE_STYLE =
+            "为知识内容生成一张构图完整、风格鲜明、适合展示的独立配图或封面图，"
+                    + "画面主次分明、层次丰富，不要添加水印。"
+                    + "如果包含文字，确保文字简短清晰。要求：";
+
     private final BlogAgentImageClient imageClient;
     private final BlogMediaService mediaService;
     private final BlogAgentProperties properties;
@@ -80,7 +89,7 @@ public class ImageGenerationTool implements AgentTool {
             throw new IllegalStateException("图片生成模型尚未配置，暂不能生成图片");
         }
         onProgress.onProgress("正在根据描述生成图片…");
-        BlogAgentImageClient.GeneratedImage generated = imageClient.generate(prompt);
+        BlogAgentImageClient.GeneratedImage generated = imageClient.generate(TOOL_IMAGE_STYLE + prompt);
         onProgress.checkCancellation();
 
         String title = defaultText(args.path("title").asText(), "AI 生成图片");
@@ -108,6 +117,7 @@ public class ImageGenerationTool implements AgentTool {
             return objectMapper.writeValueAsString(Map.of(
                     "title", title,
                     "prompt", prompt,
+                    "style", "tool",
                     "model", defaultText(properties.getImageModel(), ""),
                     "size", defaultText(properties.getImageSize(), "")));
         } catch (Exception e) {
