@@ -19,6 +19,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -127,6 +128,28 @@ public class EmailReminderService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的任务状态筛选");
         }
         return normalized;
+    }
+
+    /** 当前用户全部定时邮件任务（不分页），status / search 可组合筛选；
+     * 供智能体一次调用拿全量，无需逐页查询。 */
+    @Transactional(readOnly = true)
+    public List<EmailReminderTaskVO> listAll(Long userId, String status, String search) {
+        requireUser(userId);
+        String statusFilter = normalizeListStatus(status);
+        String keyword = search == null ? "" : search.strip();
+        LambdaQueryWrapper<EmailReminderTask> wrapper = new LambdaQueryWrapper<EmailReminderTask>()
+                .eq(EmailReminderTask::getUserId, userId)
+                .isNull(EmailReminderTask::getDeletedAt)
+                .eq(statusFilter != null, EmailReminderTask::getStatus, statusFilter)
+                .and(!keyword.isEmpty(), q -> q
+                        .like(EmailReminderTask::getSubject, keyword)
+                        .or()
+                        .like(EmailReminderTask::getRecipientEmail, keyword))
+                .orderByDesc(EmailReminderTask::getCreatedAt)
+                .orderByDesc(EmailReminderTask::getId);
+        return taskMapper.selectList(wrapper).stream()
+                .map(this::toVO)
+                .toList();
     }
 
     @Transactional

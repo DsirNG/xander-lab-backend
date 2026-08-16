@@ -33,6 +33,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** C-end use cases for daily content plans: CRUD, lifecycle transitions,
  * manual test trigger, run history, and next-fire preview. */
@@ -41,6 +42,14 @@ import java.util.Locale;
 public class BlogContentPlanService {
 
     private static final String UNAUTHORIZED_MESSAGE = "未登录或登录已过期";
+
+    private static final Set<String> PLAN_STATUSES = Set.of(
+            BlogContentPlan.STATUS_ACTIVE,
+            BlogContentPlan.STATUS_RUNNING,
+            BlogContentPlan.STATUS_PAUSED,
+            BlogContentPlan.STATUS_CANCELLED,
+            BlogContentPlan.STATUS_FINISHED,
+            BlogContentPlan.STATUS_FAILED);
 
     private final BlogContentPlanMapper planMapper;
     private final BlogPlanRunMapper runMapper;
@@ -185,6 +194,37 @@ public class BlogContentPlanService {
                 .page(result.getCurrent())
                 .size(result.getSize())
                 .build();
+    }
+
+    /** 当前用户全部计划（不分页），status 非空时按状态过滤（如 ACTIVE / FAILED），
+     * ALL 或空表示全部；供智能体一次调用拿全量，无需逐页查询。 */
+    @Transactional(readOnly = true)
+    public List<BlogContentPlanVO> listAll(Long userId, String status) {
+        requireUser(userId);
+        String normalized = normalizeListStatus(status);
+        LambdaQueryWrapper<BlogContentPlan> wrapper = ownedWrapper(userId);
+        if (normalized != null) {
+            wrapper.eq(BlogContentPlan::getStatus, normalized);
+        }
+        wrapper.orderByDesc(BlogContentPlan::getCreatedAt)
+                .orderByDesc(BlogContentPlan::getId);
+        return planMapper.selectList(wrapper).stream()
+                .map(plan -> toVO(plan, userId))
+                .toList();
+    }
+
+    private String normalizeListStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return null;
+        }
+        String normalized = status.strip().toUpperCase(Locale.ROOT);
+        if ("ALL".equals(normalized)) {
+            return null;
+        }
+        if (!PLAN_STATUSES.contains(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的计划状态筛选");
+        }
+        return normalized;
     }
 
     @Transactional(readOnly = true)
