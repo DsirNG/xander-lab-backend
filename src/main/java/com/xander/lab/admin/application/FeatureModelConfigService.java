@@ -71,6 +71,10 @@ public class FeatureModelConfigService {
         String fallbackApiStyle = trimStyle(featureKey, request.fallbackApiStyle());
         validateSlot(featureKey, "primary", request.primaryProviderId(), primaryModel, primaryApiStyle);
         validateSlot(featureKey, "fallback", request.fallbackProviderId(), fallbackModel, fallbackApiStyle);
+        if (request.primaryProviderId() != null && request.primaryProviderId().equals(request.fallbackProviderId())
+                && java.util.Objects.equals(primaryModel, fallbackModel)) {
+            throw new IllegalArgumentException("主模型与兜底模型不能相同（同供应商+同模型时兜底无意义，请配置其他供应商或模型）");
+        }
         if (!enabled && (request.primaryProviderId() != null || primaryModel != null || primaryApiStyle != null
                 || request.fallbackProviderId() != null || fallbackModel != null || fallbackApiStyle != null)) {
             throw new IllegalArgumentException("功能配置未启用时请清空模型槽位，或先启用该配置");

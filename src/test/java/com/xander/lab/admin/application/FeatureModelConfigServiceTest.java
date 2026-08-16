@@ -207,6 +207,34 @@ class FeatureModelConfigServiceTest {
         assertThat(captured.getValue().getPrimaryApiStyle()).isNull();
     }
 
+    @Test
+    void updateRejectsDuplicatePrimaryAndFallbackSlot() {
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+
+        assertThatThrownBy(() -> service.update("blog_agent_image", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-image-2", ModelGateway.API_STYLE_CHAT_PROMPT,
+                1L, "gpt-image-2", ModelGateway.API_STYLE_CHAT_COMPLETIONS)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("兜底无意义");
+        verify(configMapper, never()).insert(any());
+        verify(configMapper, never()).updateById(any());
+    }
+
+    @Test
+    void updateAllowsSameProviderWithDifferentFallbackModel() {
+        when(configMapper.selectOne(any())).thenReturn(null);
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+        when(configMapper.selectList(any())).thenReturn(List.of());
+
+        service.update("blog_agent_image", new UpdateFeatureConfigRequest(
+                true, 1L, "gpt-image-2", ModelGateway.API_STYLE_CHAT_PROMPT,
+                1L, "gpt-image-1", ModelGateway.API_STYLE_CHAT_PROMPT));
+
+        ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
+        verify(configMapper).insert(captured.capture());
+        assertThat(captured.getValue().getFallbackModel()).isEqualTo("gpt-image-1");
+    }
+
     private ModelProvider enabledProvider(Long id) {
         ModelProvider provider = new ModelProvider();
         provider.setId(id);
