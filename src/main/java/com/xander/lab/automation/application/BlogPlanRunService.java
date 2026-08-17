@@ -15,6 +15,8 @@ import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
+import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
+import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
 import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
@@ -46,6 +48,8 @@ public class BlogPlanRunService {
     private final PublicationService publicationService;
     private final BlogService blogService;
     private final CsdnCredentialService csdnCredentialService;
+    private final JuejinCredentialService juejinCredentialService;
+    private final JuejinBlogSyncService juejinBlogSyncService;
     private final BlogPlanSseService sseService;
     private final TransactionTemplate transactionTemplate;
 
@@ -76,6 +80,8 @@ public class BlogPlanRunService {
         run.setStatus(BlogPlanRun.STATUS_GENERATING);
         run.setCsdnStatus(plan.getSyncCsdn() == Boolean.TRUE
                 ? BlogPlanRun.CSDN_PENDING : BlogPlanRun.CSDN_UNSET);
+        run.setJuejinStatus(plan.getSyncJuejin() == Boolean.TRUE
+                ? BlogPlanRun.JUEJIN_PENDING : BlogPlanRun.JUEJIN_UNSET);
         run.setProcessingToken(processingToken);
         run.setClaimedAt(Instant.now());
         run.setStartedAt(Instant.now());
@@ -112,6 +118,10 @@ public class BlogPlanRunService {
 
             if (plan.getSyncCsdn() == Boolean.TRUE) {
                 publishCsdn(run.getId(), plan, ready);
+            }
+
+            if (plan.getSyncJuejin() == Boolean.TRUE) {
+                publishJuejin(run.getId(), plan);
             }
 
             finishSucceeded(run.getId());
@@ -225,6 +235,50 @@ public class BlogPlanRunService {
             run.setCsdnStatus(BlogPlanRun.CSDN_FAILED);
             run.setCsdnErrorCode(code);
             run.setCsdnErrorMessage(limit(message, 1000));
+            runMapper.updateById(run);
+        });
+    }
+
+    /** Best-effort 掘金 sync: mirrors the locally published post to the user's
+     * 掘金 account. A 掘金 failure never fails the run; the run stays SUCCEEDED
+     * with the failure recorded on the run row plus a notification. */
+    private void publishJuejin(Long runId, BlogContentPlan plan) {
+        Long userId = plan.getUserId();
+        if (!juejinCredentialService.isAuthorized(userId)) {
+            updateJuejinFailure(runId, "AUTH_REQUIRED",
+                    "掘金尚未授权，本次已跳过同步，请先在个人中心完成掘金授权");
+            return;
+        }
+        try {
+            BlogPlanRun run = requireRun(runId);
+            if (run.getLocalPostId() == null) {
+                throw new IllegalStateException("本地文章不存在，无法同步掘金");
+            }
+            PublishResult result = juejinBlogSyncService.sync(
+                    userId, run.getLocalPostId(), null, null);
+            transactionTemplate.executeWithoutResult(status -> {
+                BlogPlanRun latest = requireRun(runId);
+                latest.setJuejinStatus(BlogPlanRun.JUEJIN_SUCCEEDED);
+                latest.setJuejinExternalId(result.externalId());
+                latest.setJuejinUrl(result.url());
+                runMapper.updateById(latest);
+            });
+        } catch (RuntimeException e) {
+            String message = limit(rootMessage(e), 1000);
+            updateJuejinFailure(runId, "PUBLISH_FAILED", message);
+            notifyUser(userId, BlogNotification.TYPE_JUEJIN_FAILED,
+                    "掘金同步失败",
+                    "计划《" + plan.getTopic() + "》已在本站发布，但同步掘金失败：" + message,
+                    plan.getId(), runId);
+        }
+    }
+
+    private void updateJuejinFailure(Long runId, String code, String message) {
+        transactionTemplate.executeWithoutResult(status -> {
+            BlogPlanRun run = requireRun(runId);
+            run.setJuejinStatus(BlogPlanRun.JUEJIN_FAILED);
+            run.setJuejinErrorCode(code);
+            run.setJuejinErrorMessage(limit(message, 1000));
             runMapper.updateById(run);
         });
     }
@@ -358,6 +412,11 @@ public class BlogPlanRunService {
                 .csdnErrorMessage(run.getCsdnErrorMessage())
                 .csdnExternalId(run.getCsdnExternalId())
                 .csdnUrl(run.getCsdnUrl())
+                .juejinStatus(run.getJuejinStatus())
+                .juejinErrorCode(run.getJuejinErrorCode())
+                .juejinErrorMessage(run.getJuejinErrorMessage())
+                .juejinExternalId(run.getJuejinExternalId())
+                .juejinUrl(run.getJuejinUrl())
                 .startedAt(run.getStartedAt())
                 .finishedAt(run.getFinishedAt())
                 .createdAt(run.getCreatedAt())

@@ -21,6 +21,7 @@ public class BlogContentPlanVO {
     private String timezone;
     private String triggerTime;
     private Boolean syncCsdn;
+    private Boolean syncJuejin;
     /** True for one-shot plans: fires exactly once, then auto-finishes. */
     private Boolean runOnce;
     private Instant nextRunAt;
@@ -31,4 +32,6 @@ public class BlogContentPlanVO {
     private Instant updatedAt;
     /** Whether the CSDN platform is currently authorized for this user. */
     private Boolean csdnAuthorized;
+    /** Whether the 掘金 platform is currently authorized for this user. */
+    private Boolean juejinAuthorized;
 }

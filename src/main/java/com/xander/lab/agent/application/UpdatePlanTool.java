@@ -41,7 +41,7 @@ public class UpdatePlanTool implements AgentTool {
         return "对当前用户已有的定时发文计划执行暂停、恢复、取消、删除或编辑操作。"
                 + "参数 planId 为计划 id（可用 query_plans 查询），action 取值 PAUSE/PAUSED 暂停、"
                 + "RESUME 恢复、CANCEL/CANCELLED 取消、DELETE 删除、EDIT 编辑。"
-                + "当用户想修改计划的主题、触发时间、是否同步 CSDN、目标读者或文风时，使用 action=EDIT"
+                + "当用户想修改计划的主题、触发时间、是否同步 CSDN/掘金、目标读者或文风时，使用 action=EDIT"
                 + "并传入对应字段（topic/triggerTime/syncCsdn/audience/tone 等），直接修改即可，不要去取消旧计划再新建。"
                 + "当用户说“把 X 计划暂停/停掉/恢复/取消/删除”、“先别发这个了”、“把 X 计划的主题改成……、时间改到……”时使用本工具。"
                 + "注意：取消/删除不可恢复，执行前请先向用户确认。";
@@ -75,6 +75,9 @@ public class UpdatePlanTool implements AgentTool {
         ObjectNode syncCsdn = properties.putObject("syncCsdn");
         syncCsdn.put("type", "boolean");
         syncCsdn.put("description", "是否同步发布到 CSDN（仅 EDIT 时可选）");
+        ObjectNode syncJuejin = properties.putObject("syncJuejin");
+        syncJuejin.put("type", "boolean");
+        syncJuejin.put("description", "是否同步发布到掘金（仅 EDIT 时可选）");
         ObjectNode audience = properties.putObject("audience");
         audience.put("type", "string");
         audience.put("description", "新的目标读者（仅 EDIT 时可选）");
@@ -155,6 +158,9 @@ public class UpdatePlanTool implements AgentTool {
         request.setTriggerTimes(stringArray(args.path("triggerTimes")));
         if (args.path("syncCsdn").isBoolean()) {
             request.setSyncCsdn(args.path("syncCsdn").asBoolean());
+        }
+        if (args.path("syncJuejin").isBoolean()) {
+            request.setSyncJuejin(args.path("syncJuejin").asBoolean());
         }
         request.setAudience(defaultText(args.path("audience").asText(""), null));
         request.setTone(defaultText(args.path("tone").asText(""), null));

@@ -35,7 +35,7 @@ public class QueryPlansTool implements AgentTool {
         return "查询当前用户的所有定时发文计划，一次调用返回全部（不分页），可按状态筛选。"
                 + "当用户问“我有哪些定时发文计划”、“接下来/明天什么时候发文”、“有哪些计划在运行/暂停/失败/已完成”时使用本工具。"
                 + "参数 status 可选 ACTIVE / PAUSED / RUNNING / FINISHED / FAILED / CANCELLED，省略或 ALL 返回全部；"
-                + "每项返回 id、topic、status、triggerTimes（每日触发时间）、nextRunAt（下次触发时间）、syncCsdn、runOnce 等信息。";
+                + "每项返回 id、topic、status、triggerTimes（每日触发时间）、nextRunAt（下次触发时间）、syncCsdn、syncJuejin、runOnce 等信息。";
     }
 
     @Override
@@ -69,6 +69,7 @@ public class QueryPlansTool implements AgentTool {
             item.put("status", defaultText(plan.getStatus(), ""));
             item.put("timezone", defaultText(plan.getTimezone(), ""));
             item.put("syncCsdn", Boolean.TRUE.equals(plan.getSyncCsdn()));
+            item.put("syncJuejin", Boolean.TRUE.equals(plan.getSyncJuejin()));
             item.put("runOnce", Boolean.TRUE.equals(plan.getRunOnce()));
             item.put("nextRunAt", plan.getNextRunAt() == null ? "" : plan.getNextRunAt().toString());
             item.put("lastRunAt", plan.getLastRunAt() == null ? "" : plan.getLastRunAt().toString());

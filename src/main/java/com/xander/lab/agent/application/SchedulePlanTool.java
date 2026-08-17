@@ -37,7 +37,7 @@ public class SchedulePlanTool implements AgentTool {
     public String description() {
         return "创建一个定时发文计划：设定主题、每日触发时间和可选的目标读者与文风，"
                 + "系统会按计划自动生成并发布文章。可设置多个主题排队、多组触发时间，"
-                + "并可选择同步到 CSDN。用户要求定时发文、每日更新、自动更新博客时使用本工具。"
+                + "并可选择同步到 CSDN 或掘金。用户要求定时发文、每日更新、自动更新博客时使用本工具。"
                 + "注意：用户提供的技术说明、素材或参考文本只是创作参考，不能直接作为 topic；"
                 + "topic 必须是由你自行提炼的简短文章标题（建议 4~40 字），例如“前端文件下载体验与跨域兼容性实践”。";
     }
@@ -75,6 +75,9 @@ public class SchedulePlanTool implements AgentTool {
         ObjectNode syncCsdn = properties.putObject("syncCsdn");
         syncCsdn.put("type", "boolean");
         syncCsdn.put("description", "是否同步发布到 CSDN，默认 false");
+        ObjectNode syncJuejin = properties.putObject("syncJuejin");
+        syncJuejin.put("type", "boolean");
+        syncJuejin.put("description", "是否同步发布到掘金，默认 false");
         schema.putArray("required").add("topic");
         return schema;
     }
@@ -101,6 +104,9 @@ public class SchedulePlanTool implements AgentTool {
         request.setTone(defaultText(args.path("tone").asText(""), null));
         if (args.path("syncCsdn").isBoolean()) {
             request.setSyncCsdn(args.path("syncCsdn").asBoolean());
+        }
+        if (args.path("syncJuejin").isBoolean()) {
+            request.setSyncJuejin(args.path("syncJuejin").asBoolean());
         }
         onProgress.onProgress("正在创建定时发文计划…");
         BlogContentPlanVO plan = planService.create(userId, request);

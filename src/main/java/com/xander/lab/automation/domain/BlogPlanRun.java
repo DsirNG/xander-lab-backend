@@ -33,6 +33,12 @@ public class BlogPlanRun {
     public static final String CSDN_FAILED = "FAILED";
     public static final String CSDN_SKIPPED = "SKIPPED";
 
+    public static final String JUEJIN_UNSET = "UNSET";
+    public static final String JUEJIN_PENDING = "PENDING";
+    public static final String JUEJIN_SUCCEEDED = "SUCCEEDED";
+    public static final String JUEJIN_FAILED = "FAILED";
+    public static final String JUEJIN_SKIPPED = "SKIPPED";
+
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long planId;
@@ -51,6 +57,11 @@ public class BlogPlanRun {
     private String csdnErrorMessage;
     private String csdnExternalId;
     private String csdnUrl;
+    private String juejinStatus;
+    private String juejinErrorCode;
+    private String juejinErrorMessage;
+    private String juejinExternalId;
+    private String juejinUrl;
     private String processingToken;
     private Instant claimedAt;
     private Instant startedAt;

@@ -16,6 +16,7 @@ public class BlogNotification {
 
     public static final String TYPE_REVIEW_REJECTED = "REVIEW_REJECTED";
     public static final String TYPE_CSDN_FAILED = "CSDN_FAILED";
+    public static final String TYPE_JUEJIN_FAILED = "JUEJIN_FAILED";
     public static final String TYPE_RUN_FAILED = "RUN_FAILED";
     public static final String TYPE_PLAN_STALLED = "PLAN_STALLED";
 

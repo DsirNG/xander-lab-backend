@@ -34,6 +34,9 @@ public class BlogContentPlanAiGenerateRequest {
     /** Whether each generated plan also publishes its article to CSDN. */
     private Boolean syncCsdn;
 
+    /** Whether each generated plan also publishes its article to 掘金. */
+    private Boolean syncJuejin;
+
     @Size(max = 120, message = "目标读者不能超过 120 个字符")
     private String audience;
 

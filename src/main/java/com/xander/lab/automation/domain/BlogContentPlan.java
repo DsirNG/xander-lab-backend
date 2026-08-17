@@ -48,6 +48,7 @@ public class BlogContentPlan {
     /** Index of the next topic from `topicsJson` to use (0-based) */
     private Integer nextTopicIndex;
     private Boolean syncCsdn;
+    private Boolean syncJuejin;
     /** True for one-shot plans (AI 生成计划): the plan fires exactly once at
      * `nextRunAt` and auto-finishes instead of rescheduling daily. */
     private Boolean runOnce;

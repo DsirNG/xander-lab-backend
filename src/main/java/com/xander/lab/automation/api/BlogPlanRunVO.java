@@ -25,6 +25,11 @@ public class BlogPlanRunVO {
     private String csdnErrorMessage;
     private String csdnExternalId;
     private String csdnUrl;
+    private String juejinStatus;
+    private String juejinErrorCode;
+    private String juejinErrorMessage;
+    private String juejinExternalId;
+    private String juejinUrl;
     private Instant startedAt;
     private Instant finishedAt;
     private Instant createdAt;

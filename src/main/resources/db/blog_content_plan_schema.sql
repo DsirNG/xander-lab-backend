@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS `blog_content_plan` (
   `topics_json` TEXT NULL COMMENT 'JSON 数组：多天主题队列，依次使用，最后一个后回到第一个',
   `next_topic_index` INT NULL DEFAULT 0 COMMENT '主题队列下一个待用下标（0 起，循环使用）',
   `sync_csdn` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否同步发布到 CSDN（0 否 / 1 是）',
+  `sync_juejin` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否同步发布到掘金（0 否 / 1 是）',
   `run_once` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '一次性计划：到点只执行一次，执行完自动完结（0 每日循环 / 1 一次性）',
   `next_run_at` TIMESTAMP(3) NULL DEFAULT NULL COMMENT '下次计划触发时间（UTC 绝对时刻；一次性计划完结/失败后为空）',
   `last_run_at` TIMESTAMP(3) NULL COMMENT '最近一次触发时间（UTC）',
@@ -65,6 +66,11 @@ CREATE TABLE IF NOT EXISTS `blog_plan_run` (
   `csdn_error_message` VARCHAR(1000) NULL COMMENT 'CSDN 发布失败原因（脱敏）',
   `csdn_external_id` VARCHAR(128) NULL COMMENT 'CSDN 文章 ID',
   `csdn_url` VARCHAR(1000) NULL COMMENT 'CSDN 文章 URL',
+  `juejin_status` VARCHAR(16) NULL COMMENT '掘金发布状态：PENDING/SUCCEEDED/FAILED/SKIPPED/UNSET',
+  `juejin_error_code` VARCHAR(64) NULL COMMENT '掘金发布规范化错误码，如 AUTH_REQUIRED',
+  `juejin_error_message` VARCHAR(1000) NULL COMMENT '掘金发布失败原因（脱敏）',
+  `juejin_external_id` VARCHAR(128) NULL COMMENT '掘金文章 ID',
+  `juejin_url` VARCHAR(1000) NULL COMMENT '掘金文章 URL',
   `processing_token` CHAR(36) NULL COMMENT '执行认领令牌，配合并发防重复执行',
   `claimed_at` TIMESTAMP(3) NULL COMMENT '执行认领时间（UTC）',
   `started_at` TIMESTAMP(3) NULL COMMENT '实际开始执行时间（UTC）',
@@ -87,12 +93,13 @@ CREATE TABLE IF NOT EXISTS `blog_plan_run` (
 -- type:
 --   REVIEW_REJECTED -> generated content failed the compliance gate, reason in message
 --   CSDN_FAILED     -> local publish succeeded but CSDN sync failed
+--   JUEJIN_FAILED   -> local publish succeeded but 掘金 sync failed
 --   RUN_FAILED      -> the whole run failed before publishing
 --   PLAN_STALLED    -> a run claimed by a crashed instance was recovered into FAILED
 CREATE TABLE IF NOT EXISTS `blog_notification` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '通知主键',
   `user_id` BIGINT NOT NULL COMMENT '所属用户ID，关联 sys_user.id',
-  `type` VARCHAR(24) NOT NULL COMMENT '通知类型：REVIEW_REJECTED/CSDN_FAILED/RUN_FAILED/PLAN_STALLED',
+  `type` VARCHAR(24) NOT NULL COMMENT '通知类型：REVIEW_REJECTED/CSDN_FAILED/JUEJIN_FAILED/RUN_FAILED/PLAN_STALLED',
   `title` VARCHAR(200) NOT NULL COMMENT '通知标题',
   `message` VARCHAR(1000) NOT NULL COMMENT '通知正文（可直接展示）',
   `plan_id` BIGINT NULL COMMENT '关联计划ID，关联 blog_content_plan.id',

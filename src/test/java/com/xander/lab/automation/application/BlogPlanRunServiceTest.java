@@ -12,6 +12,8 @@ import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
+import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
+import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.publishing.domain.PublishCommand;
@@ -45,6 +47,8 @@ class BlogPlanRunServiceTest {
     @Mock private PublicationService publicationService;
     @Mock private BlogService blogService;
     @Mock private CsdnCredentialService csdnCredentialService;
+    @Mock private JuejinCredentialService juejinCredentialService;
+    @Mock private JuejinBlogSyncService juejinBlogSyncService;
     @Mock private BlogContentPlanMapper planMapper;
     @Mock private com.xander.lab.automation.infrastructure.BlogPlanSseService sseService;
     @Mock private TransactionTemplate transactionTemplate;
@@ -52,7 +56,8 @@ class BlogPlanRunServiceTest {
     private BlogPlanRunService newService() {
         wireTransactionTemplate();
         return new BlogPlanRunService(runMapper, planMapper, notificationMapper, agentService,
-                publicationService, blogService, csdnCredentialService, sseService, transactionTemplate);
+                publicationService, blogService, csdnCredentialService, juejinCredentialService,
+                juejinBlogSyncService, sseService, transactionTemplate);
     }
 
     private void wireTransactionTemplate() {
@@ -233,6 +238,94 @@ class BlogPlanRunServiceTest {
         assertThat(notification.getValue().getType()).isEqualTo(BlogNotification.TYPE_CSDN_FAILED);
     }
 
+    /** A plan with 掘金 sync enabled mirrors the locally published post to 掘金
+     * and records the external id + url on the run row. */
+    @Test
+    void juejinSyncSucceedsAndRecordsExternalIdAndUrl() {
+        mockRunRow();
+        BlogAgentTask task = task(104L);
+        BlogAgentTaskVO ready = readyVo(task);
+        when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
+                .thenReturn(task);
+        when(agentService.run(task.getId(), 7L)).thenReturn(ready);
+        when(agentService.reviewCompliance(task.getId(), 7L))
+                .thenReturn(new ComplianceReview(true, null));
+        when(agentService.get(task.getId(), 7L)).thenReturn(ready);
+        when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
+                .thenReturn(new PublishResult("local", "58", null));
+        when(juejinCredentialService.isAuthorized(7L)).thenReturn(true);
+        when(juejinBlogSyncService.sync(7L, 58L, null, null))
+                .thenReturn(new PublishResult("juejin", "jj-58", "https://juejin.cn/post/58"));
+
+        BlogPlanRunService service = newService();
+        service.executeRun(runRow(), plan(false, true));
+
+        verify(juejinBlogSyncService).sync(7L, 58L, null, null);
+        BlogPlanRun updated = updatedRun();
+        assertThat(updated.getStatus()).isEqualTo(BlogPlanRun.STATUS_SUCCEEDED);
+        assertThat(updated.getJuejinStatus()).isEqualTo(BlogPlanRun.JUEJIN_SUCCEEDED);
+        assertThat(updated.getJuejinExternalId()).isEqualTo("jj-58");
+        assertThat(updated.getJuejinUrl()).isEqualTo("https://juejin.cn/post/58");
+    }
+
+    /** 掘金 failure after the local publish keeps the run SUCCEEDED and records
+     * the failure on the run row plus a notification. */
+    @Test
+    void juejinFailureAfterLocalPublishStillSucceedsButNotifies() {
+        mockRunRow();
+        BlogAgentTask task = task(104L);
+        BlogAgentTaskVO ready = readyVo(task);
+        when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
+                .thenReturn(task);
+        when(agentService.run(task.getId(), 7L)).thenReturn(ready);
+        when(agentService.reviewCompliance(task.getId(), 7L))
+                .thenReturn(new ComplianceReview(true, null));
+        when(agentService.get(task.getId(), 7L)).thenReturn(ready);
+        when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
+                .thenReturn(new PublishResult("local", "59", null));
+        when(juejinCredentialService.isAuthorized(7L)).thenReturn(true);
+        when(juejinBlogSyncService.sync(any(Long.class), any(Long.class), any(), any()))
+                .thenThrow(new RuntimeException("juejin 502"));
+
+        BlogPlanRunService service = newService();
+        service.executeRun(runRow(), plan(false, true));
+
+        BlogPlanRun updated = updatedRun();
+        assertThat(updated.getStatus()).isEqualTo(BlogPlanRun.STATUS_SUCCEEDED);
+        assertThat(updated.getReviewPass()).isTrue();
+        assertThat(updated.getJuejinStatus()).isEqualTo(BlogPlanRun.JUEJIN_FAILED);
+        assertThat(updated.getJuejinErrorMessage()).contains("juejin 502");
+
+        ArgumentCaptor<BlogNotification> notification = ArgumentCaptor.forClass(BlogNotification.class);
+        verify(notificationMapper).insert(notification.capture());
+        assertThat(notification.getValue().getType()).isEqualTo(BlogNotification.TYPE_JUEJIN_FAILED);
+    }
+
+    /** 掘金 not authorized: the run records AUTH_REQUIRED and never calls the publisher. */
+    @Test
+    void juejinUnauthorizedSkipsSyncWithAuthRequiredCode() {
+        mockRunRow();
+        BlogAgentTask task = task(104L);
+        BlogAgentTaskVO ready = readyVo(task);
+        when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
+                .thenReturn(task);
+        when(agentService.run(task.getId(), 7L)).thenReturn(ready);
+        when(agentService.reviewCompliance(task.getId(), 7L))
+                .thenReturn(new ComplianceReview(true, null));
+        when(agentService.get(task.getId(), 7L)).thenReturn(ready);
+        when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
+                .thenReturn(new PublishResult("local", "60", null));
+        when(juejinCredentialService.isAuthorized(7L)).thenReturn(false);
+
+        BlogPlanRunService service = newService();
+        service.executeRun(runRow(), plan(false, true));
+
+        BlogPlanRun updated = updatedRun();
+        assertThat(updated.getJuejinStatus()).isEqualTo(BlogPlanRun.JUEJIN_FAILED);
+        assertThat(updated.getJuejinErrorCode()).isEqualTo("AUTH_REQUIRED");
+        verify(juejinBlogSyncService, org.mockito.Mockito.never()).sync(any(), any(), any(), any());
+    }
+
     @Test
     void generationCrashMarksRunFailedAndNotifies() {
         mockRunRow();
@@ -287,6 +380,10 @@ class BlogPlanRunServiceTest {
     }
 
     private BlogContentPlan plan(boolean syncCsdn) {
+        return plan(syncCsdn, false);
+    }
+
+    private BlogContentPlan plan(boolean syncCsdn, boolean syncJuejin) {
         BlogContentPlan plan = new BlogContentPlan();
         plan.setId(1L);
         plan.setUserId(7L);
@@ -294,6 +391,7 @@ class BlogPlanRunServiceTest {
         plan.setTimezone("Asia/Shanghai");
         plan.setTriggerTime("09:00");
         plan.setSyncCsdn(syncCsdn);
+        plan.setSyncJuejin(syncJuejin);
         return plan;
     }
 }

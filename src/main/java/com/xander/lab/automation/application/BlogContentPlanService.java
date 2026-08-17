@@ -17,6 +17,7 @@ import com.xander.lab.automation.infrastructure.BlogContentPlanMapper;
 import com.xander.lab.automation.infrastructure.BlogPlanRunMapper;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
+import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -55,6 +56,7 @@ public class BlogContentPlanService {
     private final BlogPlanRunMapper runMapper;
     private final BlogPlanRunService runService;
     private final CsdnCredentialService csdnCredentialService;
+    private final JuejinCredentialService juejinCredentialService;
     private final BlogAgentService agentService;
 
     @Value("${blog-content-plan.max-active-per-user:50}")
@@ -104,6 +106,7 @@ public class BlogContentPlanService {
         plan.setTopicsJson(BlogContentPlan.toJson(topics));
         plan.setNextTopicIndex(0);
         plan.setSyncCsdn(request.getSyncCsdn() == null ? Boolean.FALSE : request.getSyncCsdn());
+        plan.setSyncJuejin(request.getSyncJuejin() == null ? Boolean.FALSE : request.getSyncJuejin());
         plan.setNextRunAt(nextRun);
         plan.setStatus(BlogContentPlan.STATUS_ACTIVE);
         planMapper.insert(plan);
@@ -172,6 +175,7 @@ public class BlogContentPlanService {
             plan.setNextTopicIndex(0);
             plan.setRunOnce(true);
             plan.setSyncCsdn(request.getSyncCsdn() == null ? Boolean.FALSE : request.getSyncCsdn());
+            plan.setSyncJuejin(request.getSyncJuejin() == null ? Boolean.FALSE : request.getSyncJuejin());
             plan.setNextRunAt(ZonedDateTime.of(startDate.plusDays(i), time, zone).toInstant());
             plan.setStatus(BlogContentPlan.STATUS_ACTIVE);
             planMapper.insert(plan);
@@ -253,6 +257,9 @@ public class BlogContentPlanService {
         }
         if (request.getSyncCsdn() != null) {
             plan.setSyncCsdn(request.getSyncCsdn());
+        }
+        if (request.getSyncJuejin() != null) {
+            plan.setSyncJuejin(request.getSyncJuejin());
         }
         if (request.getAudience() != null) {
             plan.setAudience(strip(request.getAudience()));
@@ -454,6 +461,7 @@ public class BlogContentPlanService {
                 .timezone(plan.getTimezone())
                 .triggerTime(plan.getTriggerTime())
                 .syncCsdn(plan.getSyncCsdn())
+                .syncJuejin(plan.getSyncJuejin())
                 .runOnce(plan.getRunOnce())
                 .nextRunAt(plan.getNextRunAt())
                 .lastRunAt(plan.getLastRunAt())
@@ -462,6 +470,7 @@ public class BlogContentPlanService {
                 .createdAt(plan.getCreatedAt())
                 .updatedAt(plan.getUpdatedAt())
                 .csdnAuthorized(csdnCredentialService.isAuthorized(userId))
+                .juejinAuthorized(juejinCredentialService.isAuthorized(userId))
                 .build();
     }
 

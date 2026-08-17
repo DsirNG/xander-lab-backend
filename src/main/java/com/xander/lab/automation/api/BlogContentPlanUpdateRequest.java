@@ -30,6 +30,8 @@ public class BlogContentPlanUpdateRequest {
 
     private Boolean syncCsdn;
 
+    private Boolean syncJuejin;
+
     @Size(max = 120, message = "目标读者不能超过 120 个字符")
     private String audience;
 
