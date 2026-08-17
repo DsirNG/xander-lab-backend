@@ -74,7 +74,7 @@ public class JuejinCatalogService {
     }
 
     /** 拉取全部接口数据并幂等落库；远程调用在事务外，落库在单独事务内批量 upsert。 */
-    void sync(JuejinClient.Credential credential) {
+    public void sync(JuejinClient.Credential credential) {
         List<JuejinCategory> categories = new ArrayList<>();
         List<JuejinTag> tags = new ArrayList<>();
         LocalDateTime now = LocalDateTime.now();
