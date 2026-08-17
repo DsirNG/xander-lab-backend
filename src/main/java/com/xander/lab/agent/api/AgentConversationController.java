@@ -12,8 +12,10 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.scheduling.TaskScheduler;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -136,6 +138,35 @@ public class AgentConversationController {
             failClaimedStream(id, userId, runVersion, emitter, subscriberOpen, heartbeat);
         }
         return emitter;
+    }
+
+    /**
+     * 非流式触发端点：微信小程序无法读取 SSE 流，仅原子 claim 并在后台执行，
+     * 事件全部落库、不向任何订阅者投递，前端以快照轮询作为状态事实来源。
+     * 返回 runVersion 作为本轮执行标识；调度失败时标记 claim 失败并返回 503。
+     */
+    @PostMapping("/{id}/messages")
+    public Result<Long> triggerMessage(@PathVariable Long id,
+                                       @Valid @RequestBody AgentConversationMessageRequest request) {
+        Long userId = UserContext.getUserId();
+        AgentConversation claimed = service.prepareTurn(id, userId, request.getContent());
+        long runVersion = claimed.getRunVersion();
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    service.executeClaimedTurn(id, userId, runVersion, event -> {
+                    });
+                } catch (Exception exception) {
+                    // executeClaimedTurn persists and delivers the durable error event.
+                    log.debug("agent claimed turn ended exceptionally for conversation {}", id);
+                }
+            }, agentTaskExecutor);
+        } catch (RuntimeException exception) {
+            service.failClaimedTurn(id, userId, runVersion, "智能体执行队列繁忙，请稍后重试");
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "智能体执行队列繁忙，请稍后重试", exception);
+        }
+        return Result.success(runVersion);
     }
 
     @GetMapping(value = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
