@@ -98,7 +98,7 @@ public class McpOAuthService {
         String normalizedRedirectUri = validateRedirectUri(redirectUri);
         if (!redirectUris(client).contains(normalizedRedirectUri)) throw invalidRequest("redirect_uri is not registered");
         Set<String> scopes = parseScopes(scope);
-        if (resource != null && !resource.isBlank() && !isMcpResource(resource)) throw invalidRequest("resource is not an Xander MCP endpoint");
+        if (resource != null && !resource.isBlank() && !isMcpResource(resource)) throw invalidRequest("resource is not an DinQorAI MCP endpoint");
         if (resource != null && !resource.isBlank()) {
             Set<String> resourceScopes = resourceScopes(resource);
             // A scope the endpoint never enforces is useless; rejecting it keeps grants honest.
@@ -116,7 +116,7 @@ public class McpOAuthService {
                 properties.getPublicBaseUrl() + "/profile?mcpOAuthRequest=" + url(requestId));
     }
 
-    /** Returns the pending consent details only to an already authenticated Xander Lab user. */
+    /** Returns the pending consent details only to an already authenticated DinQorAI user. */
     public AuthorizationRequestView pendingAuthorization(String requestId, String webAuthorization) {
         Long userId = requireWebUser(webAuthorization);
         AuthorizationRequest request = requireAuthorizationRequest(requestId);
@@ -313,9 +313,9 @@ public class McpOAuthService {
     }
 
     private Long requireWebUser(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) throw new McpOAuthException("login_required", 401, "Xander Lab login is required");
+        if (authorization == null || !authorization.startsWith("Bearer ")) throw new McpOAuthException("login_required", 401, "DinQorAI login is required");
         String token = authorization.substring(7);
-        if (!authService.validateAccessToken(token)) throw new McpOAuthException("login_required", 401, "Xander Lab login is required");
+        if (!authService.validateAccessToken(token)) throw new McpOAuthException("login_required", 401, "DinQorAI login is required");
         return Long.parseLong(jwtUtil.getSubject(token));
     }
 

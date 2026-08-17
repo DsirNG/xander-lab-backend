@@ -14,7 +14,7 @@ CREATE TABLE `mcp_oauth_client` (
 
 CREATE TABLE `mcp_oauth_grant` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'OAuth user consent grant primary key',
-  `user_id` BIGINT NOT NULL COMMENT 'Xander Lab user who approved the MCP client',
+  `user_id` BIGINT NOT NULL COMMENT 'DinQorAI user who approved the MCP client',
   `client_id` VARCHAR(128) NOT NULL COMMENT 'Registered OAuth client identifier receiving this grant',
   `scopes` VARCHAR(512) NOT NULL COMMENT 'Space-delimited approved MCP capability scopes',
   `status` VARCHAR(16) NOT NULL COMMENT 'ACTIVE permits token use; REVOKED invalidates all issued tokens',

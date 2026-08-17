@@ -15,7 +15,7 @@ class BlogHtmlPreviewControllerTest {
 
     @Test
     void createPreviewReturnsSessionVo() {
-        when(service.frameAncestorsCsp()).thenReturn("https://xander.dsircity.top");
+        when(service.frameAncestorsCsp()).thenReturn("https://dinqor.cn");
         when(service.create("<p>hi</p>", null))
                 .thenReturn(new BlogHtmlPreviewService.GeneratedSession(
                         "abcdef0123456789", "http://localhost:30002/blog-html/abcdef0123456789/raw"));
@@ -33,14 +33,14 @@ class BlogHtmlPreviewControllerTest {
     @Test
     void renderPageAppliesHardeningHeadersAndBody() {
         when(service.renderPage("abcdef0123456789")).thenReturn("<html><body>hi</body></html>");
-        when(service.frameAncestorsCsp()).thenReturn("https://xander.dsircity.top");
+        when(service.frameAncestorsCsp()).thenReturn("https://dinqor.cn");
 
         ResponseEntity<String> response = controller.renderPage("abcdef0123456789");
 
         assertThat(response.getBody()).isEqualTo("<html><body>hi</body></html>");
         assertThat(response.getHeaders().getFirst("Content-Security-Policy"))
                 .contains("default-src 'none'")
-                .contains("frame-ancestors https://xander.dsircity.top");
+                .contains("frame-ancestors https://dinqor.cn");
         assertThat(response.getHeaders().getFirst("Cache-Control")).contains("no-store");
         assertThat(response.getHeaders().getFirst("X-Content-Type-Options")).isEqualTo("nosniff");
         assertThat(response.getHeaders().getFirst("Content-Type")).isEqualTo("text/html;charset=UTF-8");

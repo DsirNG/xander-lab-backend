@@ -15,10 +15,10 @@ public class BlogHtmlPreviewProperties {
     /**
      * URL pattern for the sandbox page; the single {@code %s} placeholder is
      * the session id. Production uses a per-session subdomain, e.g.
-     * {@code https://%s.blogHTML.xander.dsircity.top/raw}; local development
+     * {@code https://%s.blogHTML.dinqor.cn/raw}; local development
      * can point at {@code http://localhost:30002/blog-html/%s/raw}.
      */
-    private String pageUrlPattern = "https://%s.blogHTML.xander.dsircity.top/raw";
+    private String pageUrlPattern = "https://%s.blogHTML.dinqor.cn/raw";
 
     /**
      * Space-separated origins allowed to embed the sandbox page, applied as
@@ -26,7 +26,7 @@ public class BlogHtmlPreviewProperties {
      * {@code frame-ancestors} is ignored in meta tags, so the header is
      * authoritative.
      */
-    private String frameAncestors = "https://xander.dsircity.top";
+    private String frameAncestors = "https://dinqor.cn";
 
     /** Seconds before a preview session expires and its code is evicted. */
     private int ttlSeconds = 1800;

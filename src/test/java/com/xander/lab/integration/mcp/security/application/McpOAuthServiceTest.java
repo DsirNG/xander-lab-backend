@@ -48,12 +48,12 @@ class McpOAuthServiceTest {
 
     private static final String CLIENT_ID = "client-1";
     private static final String FAMILY = "family-1";
-    private static final String BASE_URL = "https://xander.dsircity.top";
+    private static final String BASE_URL = "https://dinqor.cn";
     private static final String AUTHORIZATION_REQUEST_JSON = "{\"requestId\":\"req-1\",\"clientId\":\"client-1\","
             + "\"redirectUri\":\"https://client.example/cb\",\"scopes\":[\"blog:read\",\"blog:write\"],"
             + "\"state\":\"state-1\","
             + "\"codeChallenge\":\"challenge-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMM\","
-            + "\"resource\":\"https://xander.dsircity.top/api/mcp\",\"createdAt\":\"2026-08-14T10:00:00\"}";
+            + "\"resource\":\"https://dinqor.cn/api/mcp\",\"createdAt\":\"2026-08-14T10:00:00\"}";
 
     @BeforeAll
     static void registerMybatisEntities() {

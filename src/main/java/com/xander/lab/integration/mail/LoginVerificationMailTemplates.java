@@ -16,15 +16,15 @@ public final class LoginVerificationMailTemplates {
     }
 
     public static String buildSubject() {
-        return "【Xander Lab】登录验证码";
+        return "【DinQorAI】登录验证码";
     }
 
     public static String buildPlainText(String code) {
         String safeCode = code == null ? "" : code.strip();
         return """
-                Xander Lab 登录验证码
+                DinQorAI 登录验证码
 
-                您正在登录 Xander Lab，请输入以下验证码：
+                您正在登录 DinQorAI，请输入以下验证码：
 
                 %s
 
@@ -32,10 +32,10 @@ public final class LoginVerificationMailTemplates {
 
                 安全提醒：
                 · 验证码仅用于本次登录，请勿告诉他人。
-                · Xander Lab 不会通过电话、短信或邮件向您索要验证码。
+                · DinQorAI 不会通过电话、短信或邮件向您索要验证码。
                 · 如非本人操作，请忽略本邮件。
 
-                — Xander Lab 安全中心
+                — DinQorAI 安全中心
                 本邮件由系统自动发送，请勿直接回复
                 """.formatted(safeCode, CODE_EXPIRE_MINUTES);
     }
@@ -49,7 +49,7 @@ public final class LoginVerificationMailTemplates {
                 <head>
                   <meta charset="UTF-8">
                   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <title>Xander Lab 登录验证码</title>
+                  <title>DinQorAI 登录验证码</title>
                 </head>
                 <body style="margin:0;padding:0;background:#f6f8fb;font-family:%s;color:#1f2937;">
                   <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background:#f6f8fb;padding:32px 12px;">
@@ -58,14 +58,14 @@ public final class LoginVerificationMailTemplates {
                         <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e5e7eb;">
                           <tr>
                             <td style="padding:28px 32px 20px;border-bottom:1px solid #e5e7eb;">
-                              <div style="font-size:16px;font-weight:700;color:#111827;">Xander Lab</div>
+                              <div style="font-size:16px;font-weight:700;color:#111827;">DinQorAI</div>
                               <div style="margin-top:8px;font-size:24px;line-height:1.35;font-weight:700;color:#111827;">登录验证码</div>
                             </td>
                           </tr>
                           <tr>
                             <td style="padding:24px 32px 8px;">
                               <p style="margin:0;font-size:15px;line-height:1.7;color:#374151;">
-                                您正在登录 Xander Lab。请在登录页输入下方验证码，验证码将在 <strong>%d 分钟</strong> 后失效。
+                                您正在登录 DinQorAI。请在登录页输入下方验证码，验证码将在 <strong>%d 分钟</strong> 后失效。
                               </p>
                             </td>
                           </tr>
@@ -83,13 +83,13 @@ public final class LoginVerificationMailTemplates {
                           <tr>
                             <td style="padding:0 32px 28px;">
                               <p style="margin:0;font-size:13px;line-height:1.7;color:#6b7280;">
-                                请勿将验证码告诉任何人。Xander Lab 不会通过电话、短信或邮件向您索要验证码；若非本人操作，请忽略本邮件。
+                                请勿将验证码告诉任何人。DinQorAI 不会通过电话、短信或邮件向您索要验证码；若非本人操作，请忽略本邮件。
                               </p>
                             </td>
                           </tr>
                           <tr>
                             <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 32px;text-align:center;font-size:12px;color:#9ca3af;">
-                              本邮件由 Xander Lab 自动发送，请勿直接回复
+                              本邮件由 DinQorAI 自动发送，请勿直接回复
                             </td>
                           </tr>
                         </table>

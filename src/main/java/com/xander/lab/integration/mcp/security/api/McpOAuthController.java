@@ -38,7 +38,7 @@ public class McpOAuthController {
         String resolvedResource = resource == null || resource.isBlank() ? base + "/api/mcp" : resource;
         if (!List.of(base + "/api/mcp", base + "/api/mcp/csdn", base + "/api/mcp/dual",
                 base + "/api/mcp/juejin").contains(resolvedResource)) {
-            throw new McpOAuthException("invalid_request", 400, "resource is not an Xander MCP endpoint");
+            throw new McpOAuthException("invalid_request", 400, "resource is not an DinQorAI MCP endpoint");
         }
         return Map.of(
                 "resource", resolvedResource,

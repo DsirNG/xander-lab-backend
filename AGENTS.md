@@ -1,4 +1,4 @@
-# Xander Lab Backend Rules
+# DinQorAI Backend Rules
 
 ## API and authentication
 

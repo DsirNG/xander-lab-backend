@@ -39,7 +39,7 @@ public class BlogMcpApplicationService {
         asUser(userId -> { blogService.deleteBlog(id); return null; });
     }
 
-    /** Returns the Xander Lab user represented by the client bound to this request. */
+    /** Returns the DinQorAI user represented by the client bound to this request. */
     public Long currentUserId() {
         return McpOAuthRequestContext.userId();
     }

@@ -181,12 +181,12 @@ cancel-request and execution-generation upgrades.
 
 Production serves preview pages on a dedicated wildcard domain so every session
 is an independent origin. Example nginx server block (DNS must map
-`*.blogHTML.xander.dsircity.top` to the host):
+`*.blogHTML.dinqor.cn` to the host):
 
 ```nginx
 server {
     listen 443 ssl;
-    server_name ~^(?<sid>[0-9a-f]{16})\.blogHTML\.xander\.dsircity\.top$;
+    server_name ~^(?<sid>[0-9a-f]{16})\.blogHTML\.dinqor\.cn$;
     # existing TLS config ...
 
     location /raw {
@@ -197,6 +197,6 @@ server {
 ```
 
 The blog site must allow embedding the preview origin, e.g. CSP
-`frame-src 'self' https://*.blogHTML.xander.dsircity.top`; the sandbox page
+`frame-src 'self' https://*.blogHTML.dinqor.cn`; the sandbox page
 itself restricts embedders via its own `frame-ancestors` header
 (`BLOG_HTML_FRAME_ANCESTORS`).

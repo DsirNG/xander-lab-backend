@@ -161,7 +161,7 @@ public class Img2ThreeModelClient {
     }
 
     private String instructions() {
-        return "你是 Xander Lab 的过程式 Three.js 重建助手，灵感来自 img2threejs。"
+        return "你是 DinQorAI 的过程式 Three.js 重建助手，灵感来自 img2threejs。"
                 + "根据一张参考图，输出可在浏览器用白名单几何拼出的近似 3D 模型。"
                 + "优先硬表面物体；无法辨认时诚实简化，不要伪造照片里不存在的精细细节。"
                 + "输出必须是且仅是 JSON："

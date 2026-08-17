@@ -11,8 +11,8 @@
     <groupId>com.xander</groupId>
     <artifactId>xander-lab-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>xander-lab-backend</name>
-    <description>Xander Lab Backend Project</description>
+    <name>dinqorai-backend</name>
+    <description>DinQorAI Backend Project</description>
     <properties>
         <java.version>17</java.version>
         <mcp.sdk.version>2.0.0</mcp.sdk.version>

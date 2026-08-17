@@ -16,9 +16,9 @@ class CsdnImageHtmlRewriterTest {
 
         String html = "<p>before</p><img src=\"https://example.com/a.png\" alt=\"a\"><p>after</p>";
 
-        String rewritten = rewriter.rewrite(html, "cookie", "apiKey", "123", "https://xander.dsircity.top/blog/123");
+        String rewritten = rewriter.rewrite(html, "cookie", "apiKey", "123", "https://dinqor.cn/blog/123");
 
-        assertThat(rewritten).contains("<a href=\"https://xander.dsircity.top/blog/123\" target=\"_blank\">原文链接</a>");
+        assertThat(rewritten).contains("<a href=\"https://dinqor.cn/blog/123\" target=\"_blank\">原文链接</a>");
         assertThat(rewritten).contains("https://csdn.example.com/123/rewritten.png");
         assertThat(rewritten).doesNotContain("https://example.com/a.png");
     }

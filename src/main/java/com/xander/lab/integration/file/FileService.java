@@ -124,14 +124,14 @@ public class FileService {
         switch (type) {
             case "blog" -> {
                 sb.append("ID,标题,分类,作者,发布日期,浏览量\n");
-                sb.append("1,Spring Boot 入门指南,后端开发,Xander,2024-01-15,1280\n");
-                sb.append("2,React 18 新特性详解,前端开发,Xander,2024-02-20,980\n");
-                sb.append("3,MySQL 性能优化实践,数据库,Xander,2024-03-10,756\n");
+                sb.append("1,Spring Boot 入门指南,后端开发,DinQorAI,2024-01-15,1280\n");
+                sb.append("2,React 18 新特性详解,前端开发,DinQorAI,2024-02-20,980\n");
+                sb.append("3,MySQL 性能优化实践,数据库,DinQorAI,2024-03-10,756\n");
             }
             case "user" -> {
                 sb.append("ID,用户名,昵称,角色,注册时间\n");
                 sb.append("1,admin,管理员,ADMIN,2024-01-01\n");
-                sb.append("2,xander,Xander,USER,2024-01-02\n");
+                sb.append("2,dinqorai,DinQorAI,USER,2024-01-02\n");
                 sb.append("3,demo,演示用户,GUEST,2024-01-03\n");
             }
             default -> {

@@ -6,10 +6,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling
-public class XanderLabBackendApplication {
+public class DinQorAIApplication {
 
     public static void main(String[] args) {
-        SpringApplication.run(XanderLabBackendApplication.class, args);
+        SpringApplication.run(DinQorAIApplication.class, args);
     }
 
 }

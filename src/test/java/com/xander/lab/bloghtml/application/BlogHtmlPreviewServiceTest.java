@@ -96,7 +96,7 @@ class BlogHtmlPreviewServiceTest {
 
     @Test
     void frameAncestorsCspExposesConfiguredValue() {
-        properties.setFrameAncestors("https://xander.dsircity.top");
-        assertThat(service.frameAncestorsCsp()).isEqualTo("https://xander.dsircity.top");
+        properties.setFrameAncestors("https://dinqor.cn");
+        assertThat(service.frameAncestorsCsp()).isEqualTo("https://dinqor.cn");
     }
 }

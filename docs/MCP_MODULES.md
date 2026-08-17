@@ -19,5 +19,5 @@ encrypted credentials, an HTTP publisher over juejin.cn content_api
 (draft create + publish), and a sync application service; its QR authorization
 handoff arrives in a later change. Neither platform module reads the other's
 credentials. Client authorization is shared OAuth infrastructure only; each
-request is mapped to the consenting Xander Lab user and the business flows
+request is mapped to the consenting DinQorAI user and the business flows
 remain separate.

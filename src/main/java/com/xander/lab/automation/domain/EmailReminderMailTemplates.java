@@ -203,7 +203,7 @@ public final class EmailReminderMailTemplates {
                 + "box-shadow:0 18px 50px rgba(26,35,50,.08);\">"
                 + "<tr><td style=\"height:6px;background:#1d4ed8;font-size:0;line-height:0;\">&nbsp;</td></tr>"
                 + "<tr><td style=\"padding:36px 40px 12px;\">"
-                + "<div style=\"font-size:11px;letter-spacing:.22em;color:#1d4ed8;font-weight:700;\">XANDER LAB</div>"
+                + "<div style=\"font-size:11px;letter-spacing:.22em;color:#1d4ed8;font-weight:700;\">DINQOR AI</div>"
                 + "<h1 style=\"margin:18px 0 0;font-size:28px;line-height:1.3;font-weight:700;color:#0f172a;"
                 + "letter-spacing:-.02em;\">" + subject + "</h1>"
                 + "</td></tr>"
@@ -215,7 +215,7 @@ public final class EmailReminderMailTemplates {
                 + metaRow(time, zone)
                 + "</td></tr></table>"
                 + "<div style=\"margin-top:16px;font-size:11px;letter-spacing:.04em;color:#94a3b8;\">"
-                + "Xander Lab · Scheduled Mail</div>"
+                + "DinQorAI · Scheduled Mail</div>"
                 + "</td></tr></table></body>";
         return document(subject, inner);
     }
@@ -230,7 +230,7 @@ public final class EmailReminderMailTemplates {
                 + "style=\"max-width:540px;background:#ffffff;\">"
                 + "<tr><td style=\"padding:42px 36px 10px;\">"
                 + "<div style=\"width:36px;height:3px;background:#171717;\"></div>"
-                + "<div style=\"margin-top:22px;font-size:11px;letter-spacing:.18em;color:#737373;\">XANDER LAB</div>"
+                + "<div style=\"margin-top:22px;font-size:11px;letter-spacing:.18em;color:#737373;\">DINQOR AI</div>"
                 + "<h1 style=\"margin:14px 0 0;font-size:30px;line-height:1.25;font-weight:600;color:#0a0a0a;"
                 + "letter-spacing:-.03em;\">" + subject + "</h1>"
                 + "</td></tr>"
@@ -271,7 +271,7 @@ public final class EmailReminderMailTemplates {
                 + "<span style=\"color:#c2410c;\"> · " + zone + "</span>"
                 + "</td></tr></table>"
                 + "</td></tr></table>"
-                + "<div style=\"margin-top:16px;font-size:11px;color:#b08968;\">Xander Lab</div>"
+                + "<div style=\"margin-top:16px;font-size:11px;color:#b08968;\">DinQorAI</div>"
                 + "</td></tr></table></body>";
         return document(subject, inner);
     }
@@ -287,7 +287,7 @@ public final class EmailReminderMailTemplates {
                 + "border:1px solid #c5d5d8;\">"
                 + "<tr><td style=\"padding:30px 32px;background:#0f766e;color:#ecfdf5;\">"
                 + "<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\"><tr>"
-                + "<td style=\"font-size:11px;letter-spacing:.2em;opacity:.85;\">XANDER LAB</td>"
+                + "<td style=\"font-size:11px;letter-spacing:.2em;opacity:.85;\">DINQOR AI</td>"
                 + "<td align=\"right\" style=\"font-size:11px;opacity:.75;\">NOTICE</td>"
                 + "</tr></table>"
                 + "<h1 style=\"margin:16px 0 0;font-size:24px;line-height:1.35;font-weight:700;color:#fff;\">"
@@ -301,7 +301,7 @@ public final class EmailReminderMailTemplates {
                 + "计划发送时间：" + time + "<br>时区：" + zone
                 + "</div>"
                 + "</td></tr></table>"
-                + "<div style=\"margin-top:14px;font-size:11px;color:#7a9694;\">由 Xander Lab 发送</div>"
+                + "<div style=\"margin-top:14px;font-size:11px;color:#7a9694;\">由 DinQorAI 发送</div>"
                 + "</td></tr></table></body>";
         return document(subject, inner);
     }

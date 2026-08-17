@@ -89,6 +89,6 @@ public class JuejinMcpApplicationService {
         public Long localPostId() { return localPostId; }
     }
 
-    /** Raised when the MCP caller has not completed Xander Lab authorization. */
+    /** Raised when the MCP caller has not completed DinQorAI authorization. */
     public static class McpAuthorizationRequiredException extends RuntimeException { }
 }

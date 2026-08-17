@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 /**
- * Keeps the HTTP response status aligned with Xander Lab's shared Result body.
+ * Keeps the HTTP response status aligned with DinQorAI's shared Result body.
  */
 @RestControllerAdvice
 public class ResultStatusResponseBodyAdvice implements ResponseBodyAdvice<Object> {

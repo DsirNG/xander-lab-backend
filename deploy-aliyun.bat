@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Xander Lab Backend - 阿里云镜像仓库部署脚本 (Windows)
+:: DinQorAI Backend - 阿里云镜像仓库部署脚本 (Windows)
 
 :: 默认配置
 set TAG=latest

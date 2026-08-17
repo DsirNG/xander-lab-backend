@@ -1,12 +1,12 @@
 # Remote MCP Authorization
 
-Xander Lab exposes standard Streamable HTTP MCP resources at `/api/mcp`,
+DinQorAI exposes standard Streamable HTTP MCP resources at `/api/mcp`,
 `/api/mcp/csdn`, `/api/mcp/dual`, and `/api/mcp/juejin`. An external MCP host
 needs only an endpoint URL. It discovers OAuth requirements from the HTTP 401
 challenge and the `/.well-known/oauth-protected-resource` metadata endpoint.
 
 The OAuth server implements dynamic public-client registration and Authorization
-Code with mandatory S256 PKCE. After the user logs into Xander Lab and approves
+Code with mandatory S256 PKCE. After the user logs into DinQorAI and approves
 scopes in the profile consent page, the host receives an opaque bearer token.
 All MCP requests use:
 

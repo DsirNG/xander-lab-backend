@@ -2,9 +2,9 @@
 
 ## 1. Goal
 
-Xander Lab must expose interoperable remote MCP servers. A user can give an
+DinQorAI must expose interoperable remote MCP servers. A user can give an
 external MCP client one endpoint URL, and the client can discover tools and
-complete user authorization without knowing Xander Lab source code, receiving
+complete user authorization without knowing DinQorAI source code, receiving
 a shared server secret, or manually creating a client secret.
 
 The server keeps three independent product capabilities:
@@ -18,7 +18,7 @@ The server keeps three independent product capabilities:
 
 The dual server orchestrates the blog and CSDN application services. It never
 reads CSDN credentials. CSDN credentials remain encrypted and scoped by the
-Xander Lab user ID in `integration.mcp.csdn`. The Juejin module stores its own
+DinQorAI user ID in `integration.mcp.csdn`. The Juejin module stores its own
 per-user encrypted credentials in `integration.mcp.juejin` and never touches
 CSDN credentials.
 
@@ -26,8 +26,8 @@ CSDN credentials.
 
 - Do not merge the blog, CSDN, and dual business modules into one module.
 - Do not expose a global `MCP_SERVER_TOKEN` to end users or third-party clients.
-- Do not ask users for a Xander Lab password in an MCP-specific HTML page.
-- Do not make an MCP token a replacement for the existing Xander Lab web JWT.
+- Do not ask users for a DinQorAI password in an MCP-specific HTML page.
+- Do not make an MCP token a replacement for the existing DinQorAI web JWT.
 
 ## 3. External Contract
 
@@ -69,24 +69,24 @@ rate-limits registrations, and persists the client ID and redirect URI set.
    the user to `/api/mcp/oauth/authorize` with `response_type=code`,
    `client_id`, `redirect_uri`, `scope`, `state`, `code_challenge`, and
    `code_challenge_method=S256`.
-4. The authorization endpoint redirects to a Xander Lab frontend consent page.
+4. The authorization endpoint redirects to a DinQorAI frontend consent page.
    That page reuses the normal login experience. It never collects passwords
    itself.
 5. The logged-in user approves the requested scopes. The frontend calls a
-   protected approval API using the existing Xander Lab web JWT.
+   protected approval API using the existing DinQorAI web JWT.
 6. The backend issues a short-lived, single-use authorization code and redirects
    the browser to the registered client redirect URI.
 7. The MCP host exchanges the code and PKCE verifier for an opaque access token
    and rotating refresh token.
-8. Every MCP request resolves the Xander Lab user from the access-token grant.
+8. Every MCP request resolves the DinQorAI user from the access-token grant.
    Tool discovery uses `tools/list`; tool behavior is learned from schemas and
    descriptions, not from source code.
 
-For CSDN work, the MCP host first receives Xander Lab OAuth authorization. The
+For CSDN work, the MCP host first receives DinQorAI OAuth authorization. The
 user's CSDN account is then checked or bound through CSDN MCP's existing QR
 authorization flow. A token can never select another user's CSDN credential.
 The Juejin MCP follows the same pattern: the Juejin credential is bound per
-Xander Lab user (QR authorization handoff planned) and publish tools always
+DinQorAI user (QR authorization handoff planned) and publish tools always
 resolve the credential of the calling user.
 
 ## 5. Scopes
@@ -155,7 +155,7 @@ two additional areas:
 - **Authorized MCP clients**: client name, scopes, authorized time, last used
   time, and a revoke action.
 - **OAuth consent page**: requested client identity, endpoint, scopes, and
-  approve/reject actions after normal Xander Lab login.
+  approve/reject actions after normal DinQorAI login.
 
 The page never displays a global server token, generated client secret, CSDN
 cookies, or any OAuth token.
@@ -178,7 +178,7 @@ cookies, or any OAuth token.
 
 ## 10. Acceptance Criteria
 
-- A fresh compatible MCP host connects using only `https://xander.dsircity.top/api/mcp`.
+- A fresh compatible MCP host connects using only `https://api.dinqor.cn/api/mcp`.
 - The host discovers authorization requirements without proprietary headers.
 - A user can log in, approve scopes, and revoke a client from the profile page.
 - `tools/list` describes tools without source-code knowledge.

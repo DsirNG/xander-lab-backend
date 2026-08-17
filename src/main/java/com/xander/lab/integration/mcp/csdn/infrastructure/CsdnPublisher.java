@@ -52,7 +52,7 @@ public class CsdnPublisher implements BlogPublisher {
         // CSDN sync uses a negative publication task id to isolate its record;
         // the backlink must always point to the real positive blog post id.
         long blogPostId = Math.abs(command.taskId());
-        String originalUrl = "https://xander.dsircity.top/blog/" + blogPostId;
+        String originalUrl = "https://dinqor.cn/blog/" + blogPostId;
         htmlContent = imageHtmlRewriter.rewrite(htmlContent, cookie, properties.getApiKey(), String.valueOf(command.taskId()), originalUrl);
         List<String> coverImages = resolveCoverImages(command.coverImage(), htmlContent);
         try {

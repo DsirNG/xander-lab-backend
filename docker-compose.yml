@@ -15,7 +15,7 @@ services:
       - SPRING_PROFILES_ACTIVE=prod
       - JAVA_OPTS=-Xms512m -Xmx512m
       # nginx 反代会保留浏览器 Origin 头，CORS 白名单必须包含线上页面地址以及本地开发环境
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://xander.dsircity.top}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://dinqor.cn}
       # 图片转 Three.js 配置
       - IMG2THREE_AGENT_BASE_URL=${IMG2THREE_AGENT_BASE_URL:-}
       - IMG2THREE_AGENT_API_KEY=${IMG2THREE_AGENT_API_KEY:-}
@@ -51,7 +51,7 @@ services:
       - MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS=${MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS:-3600}
       - MCP_OAUTH_REFRESH_TOKEN_TTL_SECONDS=${MCP_OAUTH_REFRESH_TOKEN_TTL_SECONDS:-2592000}
       - MCP_BLOG_ENABLED=${MCP_BLOG_ENABLED:-false}
-      - MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://xander.dsircity.top}
+      - MCP_PUBLIC_BASE_URL=${MCP_PUBLIC_BASE_URL:-https://dinqor.cn}
       - CSDN_PUBLISH_ENABLED=${CSDN_PUBLISH_ENABLED:-false}
       - CSDN_API_BASE_URL=${CSDN_API_BASE_URL:-https://bizapi.csdn.net}
       - CSDN_API_KEY=${CSDN_API_KEY:-203803574}
@@ -77,7 +77,7 @@ services:
       retries: 3
       start_period: 60s
     labels:
-      - "com.xander-lab.description=Xander Lab Backend Application"
+      - "com.xander-lab.description=DinQorAI Backend Application"
       - "com.xander-lab.version=1.0.0"
 
   selenium:

@@ -13,7 +13,7 @@ public class HealthController {
     public Map<String, Object> health() {
         Map<String, Object> status = new HashMap<>();
         status.put("status", "UP");
-        status.put("message", "Xander Lab Backend is running");
+        status.put("message", "DinQorAI Backend is running");
         status.put("timestamp", System.currentTimeMillis());
         return status;
     }

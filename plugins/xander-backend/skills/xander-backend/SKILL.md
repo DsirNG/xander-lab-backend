@@ -1,6 +1,6 @@
 ---
 name: xander-backend
-description: Implement, modify, review, or troubleshoot Xander Lab's Spring Boot backend. Use for API controllers, authentication, Result responses, exceptions, MyBatis, Redis, database migrations, and long-running task workflows.
+description: Implement, modify, review, or troubleshoot DinQorAI's Spring Boot backend. Use for API controllers, authentication, Result responses, exceptions, MyBatis, Redis, database migrations, and long-running task workflows.
 ---
 
 # Xander Backend

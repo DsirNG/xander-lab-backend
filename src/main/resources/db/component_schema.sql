@@ -1,5 +1,5 @@
 -- ============================================================
--- Xander Lab - 组件库 SQL 表结构 (V2 - 支持自增 ID & 动态沙箱)
+-- DinQorAI - 组件库 SQL 表结构 (V2 - 支持自增 ID & 动态沙箱)
 -- 数据库: xander_lab
 -- ============================================================
 
@@ -93,12 +93,12 @@ INSERT INTO `component_category` (`id`, `name_zh`, `name_en`, `description_zh`, 
 -- 2. 插入 Toast 组件 (ID: 1)
 INSERT INTO `component_item` 
 (`id`, `category_id`, `title_zh`, `title_en`, `description_zh`, `description_en`, `tag_zh`, `tag_en`, `icon_key`, `sort`, `author`, `version`, `status`) VALUES
-(1, 'feedback', 'Toast 通知', 'Toast Notifications', '包含物理特性的高级反馈系统。', 'Premium feedback system with physics-based interactions.', '交互', 'Interaction', 'Zap', 1, 'Xander', '1.2.0', 1);
+(1, 'feedback', 'Toast 通知', 'Toast Notifications', '包含物理特性的高级反馈系统。', 'Premium feedback system with physics-based interactions.', '交互', 'Interaction', 'Zap', 1, 'DinQorAI', '1.2.0', 1);
 
 -- 3. 插入 CustomSelect 组件 (ID: 2)
 INSERT INTO `component_item` 
 (`id`, `category_id`, `title_zh`, `title_en`, `description_zh`, `description_en`, `tag_zh`, `tag_en`, `icon_key`, `sort`, `author`, `version`, `status`) VALUES
-(2, 'ui-kit', '自定义选择器', 'Custom Select', '支持自定义样式的标准单选组件。', 'Standard single selection with custom styling capabilities.', '表单', 'Form', 'ChevronsUpDown', 2, 'Xander', '1.0.1', 1);
+(2, 'ui-kit', '自定义选择器', 'Custom Select', '支持自定义样式的标准单选组件。', 'Standard single selection with custom styling capabilities.', '表单', 'Form', 'ChevronsUpDown', 2, 'DinQorAI', '1.0.1', 1);
 
 -- 4. 插入指南页关联
 INSERT INTO `component_detail_page` (`component_id`, `page_type`, `component_key`, `sort`) VALUES 

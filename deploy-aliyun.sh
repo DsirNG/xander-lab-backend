@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Xander Lab Backend - 阿里云镜像仓库部署脚本
+# DinQorAI Backend - 阿里云镜像仓库部署脚本
 # 功能：
 #   1. 打包镜像
 #   2. 上传到阿里云个人镜像仓库

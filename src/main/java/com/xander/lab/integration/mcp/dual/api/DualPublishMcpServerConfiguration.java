@@ -45,7 +45,7 @@ public class DualPublishMcpServerConfiguration {
     }
 
     private McpServerFeatures.SyncToolSpecification startCsdnLoginTool() {
-        return tool("start_csdn_login", "Starts CSDN QR authorization for the bound Xander Lab user.", emptySchema(), ignored -> {
+        return tool("start_csdn_login", "Starts CSDN QR authorization for the bound DinQorAI user.", emptySchema(), ignored -> {
             McpOAuthRequestContext.requireScope("csdn:authorize");
             var view = dualService.startCsdnAuthorization();
             return result(Map.of("ok", true, "status", view.status(), "qrCodeDataUrl", view.qrCodeDataUrl()));
