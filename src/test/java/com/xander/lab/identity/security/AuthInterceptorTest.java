@@ -239,4 +239,104 @@ class AuthInterceptorTest {
         assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
         assertThat(response.getStatus()).isEqualTo(401);
     }
+
+    @Test
+    void blogAgentTaskListRequiresAuthentication() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/blog-agent/tasks");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+
+        request.addHeader("Authorization", "Bearer valid-token");
+        when(authService.validateAccessToken("valid-token")).thenReturn(true);
+        when(jwtUtil.getSubject("valid-token")).thenReturn("42");
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(UserContext.getUserId()).isEqualTo(42L);
+    }
+
+    @Test
+    void blogPlanWriteRoutesRequireAuthentication() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest aiRequest = new MockHttpServletRequest("POST", "/api/blog-plans/ai-generate");
+        MockHttpServletRequest topicRequest = new MockHttpServletRequest("POST", "/api/blog-plans/topics/generate");
+        MockHttpServletRequest triggerRequest = new MockHttpServletRequest("POST", "/api/blog-plans/9/trigger");
+
+        assertThat(interceptor.preHandle(aiRequest, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(interceptor.preHandle(topicRequest, response, new Object())).isFalse();
+        assertThat(interceptor.preHandle(triggerRequest, response, new Object())).isFalse();
+    }
+
+    @Test
+    void blogPlanReadRoutesRequireAuthentication() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest runsRequest = new MockHttpServletRequest("GET", "/api/blog-plans/9/runs");
+        MockHttpServletRequest nextRequest = new MockHttpServletRequest("GET", "/api/blog-plans/9/next");
+
+        assertThat(interceptor.preHandle(runsRequest, response, new Object())).isFalse();
+        assertThat(interceptor.preHandle(nextRequest, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void blogSyncWriteRoutesRequireAuthentication() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest csdnRequest = new MockHttpServletRequest("POST", "/api/blog/posts/5/sync/csdn");
+        MockHttpServletRequest juejinRequest = new MockHttpServletRequest("POST", "/api/blog/posts/5/sync/juejin");
+
+        assertThat(interceptor.preHandle(csdnRequest, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(interceptor.preHandle(juejinRequest, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void uploadRoutesRequireAuthentication() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest singleRequest = new MockHttpServletRequest("POST", "/api/upload");
+        MockHttpServletRequest batchRequest = new MockHttpServletRequest("POST", "/api/upload/batch");
+        MockHttpServletRequest ossRequest = new MockHttpServletRequest("POST", "/api/upload/oss");
+
+        assertThat(interceptor.preHandle(singleRequest, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(interceptor.preHandle(batchRequest, response, new Object())).isFalse();
+        assertThat(interceptor.preHandle(ossRequest, response, new Object())).isFalse();
+    }
+
+    @Test
+    void conversationShareDeleteRequiresAuthentication() {
+        MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/api/agent/conversations/9/share");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void downloadAndExportRoutesStayPublic() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest downloadRequest = new MockHttpServletRequest("GET", "/api/download/a1b2c3.png");
+        MockHttpServletRequest csvRequest = new MockHttpServletRequest("GET", "/api/export/csv");
+        MockHttpServletRequest excelRequest = new MockHttpServletRequest("GET", "/api/export/excel");
+
+        assertThat(interceptor.preHandle(downloadRequest, response, new Object())).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(interceptor.preHandle(csvRequest, response, new Object())).isTrue();
+        assertThat(interceptor.preHandle(excelRequest, response, new Object())).isTrue();
+    }
+
+    @Test
+    void notificationTestBroadcastMovedUnderAdminPrefix() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockHttpServletRequest legacyRequest = new MockHttpServletRequest("PATCH", "/api/notifications/admin/test-broadcast");
+        MockHttpServletRequest adminRequest = new MockHttpServletRequest("PATCH", "/api/admin/notifications/test-broadcast");
+
+        // 旧路由不再被通配 PATCH:/api/notifications/* 兜底，也不在公开列表内。
+        assertThat(interceptor.preHandle(legacyRequest, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+        // 新 admin 路由匿名访问 401。
+        assertThat(interceptor.preHandle(adminRequest, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
 }

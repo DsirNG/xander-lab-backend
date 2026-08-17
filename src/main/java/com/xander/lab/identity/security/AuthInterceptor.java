@@ -40,12 +40,15 @@ public class AuthInterceptor implements HandlerInterceptor {
             "POST:/api/blog-agent/tasks",
             "POST:/api/blog-agent/tasks/*",
             // Agent tasks contain private user material, so their reads are protected too.
+            "GET:/api/blog-agent/tasks",
             "GET:/api/blog-agent/tasks/*",
             // Agent conversations contain private user material, so all access requires login.
             "POST:/api/agent/conversations",
             "GET:/api/agent/conversations",
             "GET:/api/agent/conversations/*",
             "POST:/api/agent/conversations/*",
+            // 撤销分享链接同样属于私有写操作，需显式登记而非依赖兜底。
+            "DELETE:/api/agent/conversations/*",
             "POST:/api/img2three/tasks",
             "POST:/api/img2three/tasks/*",
             "GET:/api/img2three/tasks",
@@ -59,12 +62,19 @@ public class AuthInterceptor implements HandlerInterceptor {
             "GET:/api/blog-plans/*",
             "PATCH:/api/blog-plans/*",
             "DELETE:/api/blog-plans/*",
+            // AI 生成、主题队列、手动触发等写操作全部需要登录，显式登记而非依赖兜底。
+            "POST:/api/blog-plans/*",
             "GET:/api/notifications",
             "GET:/api/notifications/*",
             "PATCH:/api/notifications/*",
+            // 同步发布到 CSDN / 掘金属于私有写操作，显式登记（公开的浏览计数 /view 在其上方特判）。
+            "POST:/api/blog/posts/*",
             "POST:/api/component/items",
             "POST:/api/studio/upload",
             "POST:/api/studio/save",
+            // 文件上传涉及用户素材，写操作全部需要登录。
+            "POST:/api/upload",
+            "POST:/api/upload/*",
             // 工作流项目/画布属于用户私有内容，读与写都需要登录。
             "GET:/api/flow/projects",
             "GET:/api/flow/projects/*",
@@ -106,7 +116,12 @@ public class AuthInterceptor implements HandlerInterceptor {
             "GET:/api/component/tags",
             "GET:/api/studio/preview/*",
             "GET:/api/studio/project/*",
-            "GET:/api/agent/conversations/shared/*"
+            "GET:/api/agent/conversations/shared/*",
+            // 本地存储文件以不可猜测的 UUID 文件名分享（博客配图、头像等需匿名展示），显式公开登记。
+            "GET:/api/download/*",
+            // 导出接口当前返回模拟数据，供前端 download() 演示，显式公开登记。
+            "GET:/api/export/csv",
+            "GET:/api/export/excel"
     );
 
     /** 完全排除的路径（独立鉴权体系，如 MCP 传输与 OAuth 端点） */

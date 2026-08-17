@@ -165,11 +165,13 @@ admin:
     encryption-key: ${MODEL_PROVIDER_ENCRYPTION_KEY:}
 
 # Leave credentials in application-local.yml or environment variables; never commit them.
+# 微信小程序登录通道：AppID/AppSecret 由管理台加密维护（wechat_credential 表），
+# 此处仅保留接口地址、超时与凭据加密密钥来源。
 wechat:
+  credential:
+    # Base64 编码的 32 字节 AES 密钥，用于加密 wechat_credential 表的 AppSecret 静态存储。
+    encryption-key: ${WECHAT_CREDENTIAL_ENCRYPTION_KEY:}
   miniapp:
-    # 微信小程序登录通道：未配置时 /api/auth/wechat-login 返回业务错误，不影响其它登录方式。
-    app-id: ${WECHAT_MINI_APP_ID:}
-    app-secret: ${WECHAT_MINI_APP_SECRET:}
     code-2-session-url: ${WECHAT_MINI_CODE_2_SESSION_URL:https://api.weixin.qq.com/sns/jscode2session}
     connect-timeout-millis: ${WECHAT_MINI_CONNECT_TIMEOUT_MILLIS:5000}
     read-timeout-millis: ${WECHAT_MINI_READ_TIMEOUT_MILLIS:5000}

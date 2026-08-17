@@ -2,6 +2,7 @@ package com.xander.lab.identity.infrastructure.wechat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.identity.application.WechatCredentialService;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -11,7 +12,8 @@ import org.springframework.web.client.RestClientResponseException;
  * 微信小程序 jscode2session 客户端：用登录 code 换取 openid。
  *
  * <p>适配器边界职责：调用微信接口、解析响应为 {@link WechatSession}，把传输异常
- * 归一化为受控异常；不对外暴露微信原始错误细节。未配置凭据时直接抛出
+ * 归一化为受控异常；不对外暴露微信原始错误细节。凭据（AppID/AppSecret）来自
+ * {@link WechatCredentialService}（管理台加密维护），未配置时直接抛出
  * {@link IllegalStateException}，由调用方转成业务错误提示。
  */
 @Component
@@ -21,11 +23,14 @@ public class WechatMiniAppClient {
     private static final int SUCCESS_CODE = 0;
 
     private final WechatMiniAppProperties properties;
+    private final WechatCredentialService wechatCredentialService;
     private final RestClient client;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public WechatMiniAppClient(WechatMiniAppProperties properties) {
+    public WechatMiniAppClient(WechatMiniAppProperties properties,
+                               WechatCredentialService wechatCredentialService) {
         this.properties = properties;
+        this.wechatCredentialService = wechatCredentialService;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeoutMillis()));
         factory.setReadTimeout(Math.toIntExact(properties.getReadTimeoutMillis()));
@@ -44,14 +49,15 @@ public class WechatMiniAppClient {
      * @throws IllegalStateException 凭据未配置、网络失败或微信服务错误（无授权失败场景，均为受控业务失败）
      */
     public WechatSession code2Session(String code) {
-        if (!properties.isConfigured()) {
+        WechatCredentialService.ResolvedCredential credential = wechatCredentialService.resolve();
+        if (credential == null) {
             throw new IllegalStateException("微信登录未配置，请联系管理员");
         }
         try {
             String body = client.get()
                     .uri(uriBuilder -> uriBuilder
-                            .queryParam("appid", properties.getAppId())
-                            .queryParam("secret", properties.getAppSecret())
+                            .queryParam("appid", credential.appId())
+                            .queryParam("secret", credential.appSecret())
                             .queryParam("js_code", code)
                             .queryParam("grant_type", "authorization_code")
                             .build())

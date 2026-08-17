@@ -4,20 +4,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * 微信小程序登录相关配置。
+ * 微信小程序登录通道的传输配置（接口地址与超时）。
  *
- * <p>来自环境变量（生产）或本地配置，凭据不落入源码。三项均未配置时微信登录通道
- * 默认关闭，登录接口返回明确的业务错误而非启动失败，保证未接入微信的平台不受影响。
+ * <p>AppID 与 AppSecret 不再来自本配置：由管理台加密维护（{@code wechat_credential} 表，
+ * 经 WechatCredentialService 读取），避免凭据进入环境变量或源码。
  */
 @Component
 @ConfigurationProperties(prefix = "wechat.miniapp")
 public class WechatMiniAppProperties {
-
-    /** 微信小程序 AppID */
-    private String appId = "";
-
-    /** 微信小程序 AppSecret（仅用于服务端换取 openid，绝不随响应或日志外泄） */
-    private String appSecret = "";
 
     /** jscode2session 接口地址，默认官方地址，可覆盖以支持代理 */
     private String code2SessionUrl = "https://api.weixin.qq.com/sns/jscode2session";
@@ -27,27 +21,6 @@ public class WechatMiniAppProperties {
 
     /** 读取超时（毫秒）；微信接口响应小，5 秒足够 */
     private long readTimeoutMillis = 5000;
-
-    /** 微信通道是否已配置可用 */
-    public boolean isConfigured() {
-        return !appId.isBlank() && !appSecret.isBlank();
-    }
-
-    public String getAppId() {
-        return appId;
-    }
-
-    public void setAppId(String appId) {
-        this.appId = appId;
-    }
-
-    public String getAppSecret() {
-        return appSecret;
-    }
-
-    public void setAppSecret(String appSecret) {
-        this.appSecret = appSecret;
-    }
 
     public String getCode2SessionUrl() {
         return code2SessionUrl;
