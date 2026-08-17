@@ -31,6 +31,16 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void preflightOptionsPassesThroughWithoutToken() {
+        // CORS 预检（OPTIONS）不带凭据，必须放行返回 2xx，否则真实跨域请求会被浏览器拦截。
+        MockHttpServletRequest request = new MockHttpServletRequest("OPTIONS", "/api/admin/wechat-credential");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
     void protectedRouteRejectsMissingToken() {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/blog/posts");
         MockHttpServletResponse response = new MockHttpServletResponse();

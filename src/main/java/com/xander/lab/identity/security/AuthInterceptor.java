@@ -141,6 +141,13 @@ public class AuthInterceptor implements HandlerInterceptor {
         // 提取并存储客户端IP（所有请求都执行，供后续业务使用）
         UserContext.setClientIp(extractClientIp(request));
 
+        // 预检请求（OPTIONS）不携带凭据，由 CORS 配置决定放行；
+        // 必须早于 /api/admin 等鉴权分支提前返回 2xx，否则真实请求会被拦截。
+        if ("OPTIONS".equals(method)) {
+            trySetUserContext(request);
+            return true;
+        }
+
         // 完全排除的路径直接放行
         for (String pattern : EXCLUDED_PATTERNS) {
             if (path.contains(pattern)) {
