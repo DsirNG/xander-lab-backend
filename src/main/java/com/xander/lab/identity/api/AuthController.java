@@ -71,6 +71,24 @@ public class AuthController {
     }
 
     /**
+     * 微信小程序登录
+     * 前端调用：post('/api/auth/wechat-login', { code: '临时登录凭证' })
+     * 与 /login 一致：业务失败统一映射 code=1001；微信通道未配置或服务不可用视为业务失败。
+     *
+     * @param request 微信登录请求体
+     * @return accessToken + refreshToken + 用户信息
+     */
+    @PostMapping("/wechat-login")
+    public Result<TokenResponse> wechatLogin(@Valid @RequestBody WechatLoginRequest request, HttpServletRequest httpRequest) {
+        try {
+            TokenResponse response = authService.wechatLogin(request.getCode(), clientIp(httpRequest));
+            return Result.success(response);
+        } catch (IllegalArgumentException e) {
+            return Result.error(1001, e.getMessage());
+        }
+    }
+
+    /**
      * 刷新 Access Token（无感刷新）
      * 前端 axios 封装在收到 401 时自动调用此接口
      *

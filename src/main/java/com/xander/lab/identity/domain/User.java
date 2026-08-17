@@ -32,6 +32,9 @@ public class User {
     /** 头像 URL */
     private String avatar;
 
+    /** 微信小程序 openid（登录渠道绑定，NULL=未绑定微信；对外隐藏，仅作渠道账号映射） */
+    private String openid;
+
     /** 角色：ADMIN, USER, GUEST */
     private String role;
 

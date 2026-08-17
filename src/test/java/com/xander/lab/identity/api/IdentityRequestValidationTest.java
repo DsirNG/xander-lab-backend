@@ -50,6 +50,13 @@ class IdentityRequestValidationTest {
     }
 
     @Test
+    void wechatLoginRequiresCode() {
+        WechatLoginRequest request = new WechatLoginRequest();
+
+        assertThat(validator.validate(request)).hasSize(1);
+    }
+
+    @Test
     void validRegistrationPassesValidation() {
         RegisterRequest request = new RegisterRequest();
         request.setEmail("alice@example.com");

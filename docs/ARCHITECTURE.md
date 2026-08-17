@@ -5,7 +5,7 @@ feature; deployment and database topology stay unchanged.
 
 ## Business Modules
 
-- `identity` (migrated): owns users, login, token refresh, JWT validation and request authorization.
+- `identity` (migrated): owns users, login, token refresh, JWT validation and request authorization. It also owns the WeChat Mini Program login channel: `wechat.miniapp` credentials (env-only), the jscode2session client, and the `sys_user.openid` binding column (`sys_user_wechat_openid_migration.sql`).
 - `agent` (new): owns durable orchestration conversations, messages, replayable SSE events, model decisions, and the registry of user-scoped tools. It does not own the business state created by a tool.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions.
 - `publishing` (migrated): owns blog posts, categories, tags, view records, publication commands, generic publication contracts, durable publication records, and blog media uploads.

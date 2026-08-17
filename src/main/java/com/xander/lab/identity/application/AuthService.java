@@ -7,16 +7,22 @@ import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
 import com.xander.lab.identity.infrastructure.UserMapper;
+import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient;
+import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient.WechatSession;
 import com.xander.lab.identity.security.JwtUtil;
 import com.xander.lab.integration.mail.MailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -38,6 +44,7 @@ public class AuthService {
     private final StringRedisTemplate redisTemplate;
     private final PasswordEncoder passwordEncoder;
     private final BillingService billingService;
+    private final WechatMiniAppClient wechatMiniAppClient;
 
 /**
      * 发送登录验证码
@@ -200,6 +207,80 @@ public class AuthService {
             sb.append(String.format("%02x", b));
         }
         return sb.toString();
+    }
+
+    /**
+     * 微信小程序登录：code 换 openid 后绑定或注册账号，返回与密码登录一致的 token 对。
+     * 限流：同一 IP 每 60 秒最多 20 次，防恶意刷登录；微信通道未配置或服务不可用时
+     * 归一化为 400 业务错误（IllegalArgumentException），不暴露微信原始错误。
+     */
+    public TokenResponse wechatLogin(String code, String clientIp) {
+        checkRateLimit("login:ip", sanitize(clientIp), 20, 60);
+
+        WechatSession session;
+        try {
+            session = wechatMiniAppClient.code2Session(code);
+        } catch (IllegalStateException e) {
+            // 微信通道未配置或服务不可用：登录失败，不暴露原始错误细节
+            throw new IllegalArgumentException(e.getMessage());
+        }
+        if (!session.isOk()) {
+            log.warn("[Auth] 微信 code 校验失败: errcode={}", session.errcode());
+            throw new IllegalArgumentException("微信登录失败，请重试");
+        }
+
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getOpenid, session.openid()));
+        if (user == null) {
+            user = registerWechatUser(session.openid());
+        }
+        if (user.getStatus() == 0) {
+            throw new IllegalArgumentException("账号已被禁用，请联系管理员");
+        }
+        return generateTokenResponse(user);
+    }
+
+    /**
+     * 首次微信登录自动注册：openid 作为绑定凭证，username 取 openid 哈希避免暴露渠道标识。
+     * 并发注册由 uk_openid 唯一索引兜底，冲突时重查已有账号继续登录（幂等）。
+     */
+    private User registerWechatUser(String openid) {
+        String username = "wx_" + sha256Hex(openid).substring(0, 16);
+        try {
+            User user = new User();
+            user.setUsername(username);
+            user.setPassword(generateRandomPassword());
+            user.setNickname("微信用户" + (1000 + CODE_RANDOM.nextInt(9000)));
+            user.setOpenid(openid);
+            user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + username);
+            user.setRole("USER");
+            user.setStatus(1);
+            user.setCreatedAt(LocalDateTime.now());
+            user.setUpdatedAt(LocalDateTime.now());
+            userMapper.insert(user);
+            billingService.grantRegister(user.getId(), "user:" + user.getId());
+            log.info("[Auth] 微信用户自动注册 userId={}", user.getId());
+            return user;
+        } catch (DuplicateKeyException e) {
+            User existing = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getOpenid, openid));
+            if (existing != null) {
+                return existing;
+            }
+            throw e;
+        }
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 不可用", e);
+        }
     }
 
     /**

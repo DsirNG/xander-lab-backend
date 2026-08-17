@@ -51,6 +51,32 @@ class AuthControllerTest {
     }
 
     @Test
+    void wechatLoginReturnsTokenResponse() {
+        WechatLoginRequest request = new WechatLoginRequest();
+        request.setCode("wx-login-code");
+        TokenResponse token = TokenResponse.builder().accessToken("access").build();
+        when(authService.wechatLogin(eq("wx-login-code"), any())).thenReturn(token);
+
+        Result<TokenResponse> result = controller.wechatLogin(request, httpRequest);
+
+        assertThat(result.getData()).isSameAs(token);
+        verify(authService).wechatLogin(eq("wx-login-code"), any());
+    }
+
+    @Test
+    void wechatLoginMapsChannelFailureToBusinessError() {
+        WechatLoginRequest request = new WechatLoginRequest();
+        request.setCode("bad-code");
+        when(authService.wechatLogin(eq("bad-code"), any()))
+                .thenThrow(new IllegalArgumentException("微信登录失败，请重试"));
+
+        Result<TokenResponse> result = controller.wechatLogin(request, httpRequest);
+
+        assertThat(result.getCode()).isEqualTo(1001);
+        assertThat(result.getData()).isNull();
+    }
+
+    @Test
     void refreshFailureUsesRealUnauthorizedStatus() {
         RefreshTokenRequest request = new RefreshTokenRequest();
         request.setRefreshToken("invalid");

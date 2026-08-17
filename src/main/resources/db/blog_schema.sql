@@ -18,13 +18,15 @@ CREATE TABLE `sys_user` (
                             `nickname` varchar(50) DEFAULT NULL COMMENT '昵称',
                             `email` varchar(100) DEFAULT NULL COMMENT '邮箱',
                             `avatar` varchar(255) DEFAULT NULL COMMENT '头像URL',
+                            `openid` varchar(64) DEFAULT NULL COMMENT '微信小程序 openid（登录渠道绑定，NULL=未绑定微信）',
                             `role` varchar(20) DEFAULT 'USER' COMMENT '角色: ADMIN, USER',
                             `tier` varchar(20) NOT NULL DEFAULT 'FREE' COMMENT '订阅等级: FREE, PLUS, PRO, VIP',
                             `status` int DEFAULT '1' COMMENT '状态: 1=正常, 0=禁用',
                             `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                             `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                             UNIQUE KEY `uk_username` (`username`),
-                            UNIQUE KEY `uk_email` (`email`)
+                            UNIQUE KEY `uk_email` (`email`),
+                            UNIQUE KEY `uk_openid` (`openid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统用户表';
 
 -- ------------------------------------------------------------

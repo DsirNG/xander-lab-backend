@@ -165,6 +165,15 @@ admin:
     encryption-key: ${MODEL_PROVIDER_ENCRYPTION_KEY:}
 
 # Leave credentials in application-local.yml or environment variables; never commit them.
+wechat:
+  miniapp:
+    # 微信小程序登录通道：未配置时 /api/auth/wechat-login 返回业务错误，不影响其它登录方式。
+    app-id: ${WECHAT_MINI_APP_ID:}
+    app-secret: ${WECHAT_MINI_APP_SECRET:}
+    code-2-session-url: ${WECHAT_MINI_CODE_2_SESSION_URL:https://api.weixin.qq.com/sns/jscode2session}
+    connect-timeout-millis: ${WECHAT_MINI_CONNECT_TIMEOUT_MILLIS:5000}
+    read-timeout-millis: ${WECHAT_MINI_READ_TIMEOUT_MILLIS:5000}
+
 agent:
   conversation:
     max-steps: ${AGENT_CONVERSATION_MAX_STEPS:20}

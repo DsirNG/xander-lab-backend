@@ -6,6 +6,8 @@ import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
 import com.xander.lab.identity.infrastructure.UserMapper;
+import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient;
+import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient.WechatSession;
 import com.xander.lab.identity.security.JwtUtil;
 import com.xander.lab.integration.mail.MailService;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,14 +45,17 @@ class AuthServiceTest {
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private SetOperations<String, String> setOperations;
+    @Mock private WechatMiniAppClient wechatMiniAppClient;
 
     private AuthService service;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    private BillingService billingService;
 
     @BeforeEach
     void setUp() {
+        billingService = mock(BillingService.class);
         service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate, passwordEncoder,
-                mock(BillingService.class));
+                billingService, wechatMiniAppClient);
         // 速率限制默认放行（increment 返回 1），只被涉及限流的用例使用
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(valueOperations.increment(anyString())).thenReturn(1L);
@@ -171,6 +176,94 @@ class AuthServiceTest {
         when(jwtUtil.getAccessTokenExpire()).thenReturn(60_000L);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
+    }
+
+    @Test
+    void wechatLoginIssuesTokenForExistingBoundUser() {
+        User user = user(21L, "wx_user", "secret", 1);
+        user.setOpenid("oWX-openid-001");
+        when(wechatMiniAppClient.code2Session("wx-code")).thenReturn(sessionOk("oWX-openid-001"));
+        when(userMapper.selectOne(any())).thenReturn(user);
+        stubTokenIssuance();
+
+        TokenResponse response = service.wechatLogin("wx-code", "127.0.0.1");
+
+        assertThat(response.getAccessToken()).isEqualTo("access-token");
+        assertThat(response.getUserInfo().getUsername()).isEqualTo("wx_user");
+        verify(userMapper, never()).insert(any());
+    }
+
+    @Test
+    void wechatLoginAutoRegistersFirstTimeUserAndGrantsBonus() {
+        when(wechatMiniAppClient.code2Session("first-code")).thenReturn(sessionOk("oWX-new-user"));
+        when(userMapper.selectOne(any())).thenReturn(null);
+        when(userMapper.insert(any())).thenAnswer(invocation -> {
+            User inserted = invocation.getArgument(0);
+            inserted.setId(99L);
+            return 1;
+        });
+        stubTokenIssuance();
+
+        TokenResponse response = service.wechatLogin("first-code", "127.0.0.1");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).insert(captor.capture());
+        assertThat(captor.getValue().getOpenid()).isEqualTo("oWX-new-user");
+        assertThat(captor.getValue().getUsername()).startsWith("wx_").hasSize(19);
+        assertThat(captor.getValue().getNickname()).startsWith("微信用户");
+        assertThat(captor.getValue().getPassword()).matches("[0-9a-f]{64}");
+        assertThat(response.getUserInfo().getUsername()).isEqualTo(captor.getValue().getUsername());
+        verify(billingService).grantRegister(99L, "user:99");
+    }
+
+    @Test
+    void wechatLoginFailsWhenWechatCodeIsRejected() {
+        when(wechatMiniAppClient.code2Session("bad-code"))
+                .thenReturn(new WechatSession(40029, "invalid code", null, null, null));
+
+        assertThatThrownBy(() -> service.wechatLogin("bad-code", "127.0.0.1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("微信登录失败");
+        verify(userMapper, never()).selectOne(any());
+        verify(userMapper, never()).insert(any());
+    }
+
+    @Test
+    void wechatLoginMapsUnconfiguredChannelToBusinessError() {
+        when(wechatMiniAppClient.code2Session(anyString()))
+                .thenThrow(new IllegalStateException("微信登录未配置，请联系管理员"));
+
+        assertThatThrownBy(() -> service.wechatLogin("code", "127.0.0.1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("未配置");
+    }
+
+    @Test
+    void wechatLoginRejectsDisabledAccount() {
+        User user = user(22L, "wx_banned", "secret", 0);
+        user.setOpenid("oWX-banned");
+        when(wechatMiniAppClient.code2Session("code")).thenReturn(sessionOk("oWX-banned"));
+        when(userMapper.selectOne(any())).thenReturn(user);
+
+        assertThatThrownBy(() -> service.wechatLogin("code", "127.0.0.1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("禁用");
+        verify(jwtUtil, never()).generateAccessToken(anyString(), any(Map.class));
+    }
+
+    @Test
+    void wechatLoginIsRateLimitedPerIp() {
+        when(valueOperations.increment(anyString())).thenReturn(21L);
+
+        assertThatThrownBy(() -> service.wechatLogin("code", "10.0.0.1"))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode().value())
+                .isEqualTo(429);
+        verify(wechatMiniAppClient, never()).code2Session(anyString());
+    }
+
+    private WechatSession sessionOk(String openid) {
+        return new WechatSession(0, null, openid, "session-key", null);
     }
 
     private User user(Long id, String username, String password, int status) {
