@@ -37,7 +37,9 @@ public class SchedulePlanTool implements AgentTool {
     public String description() {
         return "创建一个定时发文计划：设定主题、每日触发时间和可选的目标读者与文风，"
                 + "系统会按计划自动生成并发布文章。可设置多个主题排队、多组触发时间，"
-                + "并可选择同步到 CSDN。用户要求定时发文、每日更新、自动更新博客时使用本工具。";
+                + "并可选择同步到 CSDN。用户要求定时发文、每日更新、自动更新博客时使用本工具。"
+                + "注意：用户提供的技术说明、素材或参考文本只是创作参考，不能直接作为 topic；"
+                + "topic 必须是由你自行提炼的简短文章标题（建议 4~40 字），例如“前端文件下载体验与跨域兼容性实践”。";
     }
 
     @Override
@@ -48,7 +50,8 @@ public class SchedulePlanTool implements AgentTool {
         ObjectNode properties = schema.putObject("properties");
         ObjectNode topic = properties.putObject("topic");
         topic.put("type", "string");
-        topic.put("description", "文章主题（必填）");
+        topic.put("description", "文章主题（必填）：应为简短自成一体的标题（建议 4~40 字，最多 120 字）。"
+                + "用户提供的素材只能作参考，必须由你提炼成简短选题，不能把素材原文直接作为主题。");
         ObjectNode triggerTimes = properties.putObject("triggerTimes");
         triggerTimes.put("type", "array");
         triggerTimes.set("items", factory.objectNode().put("type", "string").put("description", "HH:mm"));
@@ -82,6 +85,11 @@ public class SchedulePlanTool implements AgentTool {
         String topic = args.path("topic").asText("");
         if (!StringUtils.hasText(topic)) {
             throw new IllegalArgumentException("定时发文计划工具缺少参数 topic");
+        }
+        if (topic.trim().length() > 120) {
+            throw new IllegalArgumentException(
+                    "文章主题过长：" + topic.trim().length()
+                            + " 字。用户素材只能作参考，请提炼为不超过 120 字的简短文章标题，不要把素材原文直接作为主题。");
         }
         BlogContentPlanCreateRequest request = new BlogContentPlanCreateRequest();
         request.setTopic(topic.trim());

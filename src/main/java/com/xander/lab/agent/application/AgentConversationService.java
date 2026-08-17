@@ -232,6 +232,7 @@ public class AgentConversationService {
             AgentTool tool = StringUtils.hasText(toolName) ? toolRegistry.get(toolName) : null;
             if (tool == null) {
                 lastError = JsonNodeFactory.instance.objectNode()
+                        .put("ok", false)
                         .put("error", "未知工具 " + toolName + "，请从可用工具中选择")
                         .put("availableTools", String.join(", ", toolRegistry.names()));
                 continue;
@@ -276,6 +277,7 @@ public class AgentConversationService {
                 progress.flushToolDelta();
                 failures++;
                 ObjectNode errorNode = JsonNodeFactory.instance.objectNode();
+                errorNode.put("ok", false);
                 errorNode.put("tool", toolName);
                 errorNode.put("error", safeMessage(e));
                 saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName, errorNode.toString());

@@ -8,11 +8,14 @@ import com.xander.lab.automation.application.EmailReminderService;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.Locale;
+
 /**
  * Manages a scheduled email reminder (定时邮件提醒): pause, resume or delete
  * an existing task owned by the current user. State transitions are enforced
  * by the reminder service; the tool only translates the user's request into
- * the matching action.
+ * the matching action. The pause action accepts both PAUSE and PAUSED because
+ * the model may reuse the task status vocabulary.
  */
 @Component
 public class UpdateEmailReminderTool implements AgentTool {
@@ -31,7 +34,7 @@ public class UpdateEmailReminderTool implements AgentTool {
     @Override
     public String description() {
         return "对当前用户已有的定时邮件提醒任务执行暂停、恢复或删除操作。"
-                + "参数 taskId 为任务 id（可用 query_email_reminders 查询），action 取值 PAUSE / RESUME / DELETE。"
+                + "参数 taskId 为任务 id（可用 query_email_reminders 查询），action 取值 PAUSE / PAUSED / RESUME / DELETE。"
                 + "当用户说“把发给 X 的邮件提醒暂停/停掉/恢复/删除”、“先别发这个了”时使用本工具。"
                 + "注意：删除不可恢复，执行前请先向用户确认。";
     }
@@ -48,8 +51,8 @@ public class UpdateEmailReminderTool implements AgentTool {
         ObjectNode action = properties.putObject("action");
         action.put("type", "string");
         action.set("enum", JsonNodeFactory.instance.arrayNode()
-                .add("PAUSE").add("RESUME").add("DELETE"));
-        action.put("description", "操作类型：PAUSE 暂停 / RESUME 恢复 / DELETE 删除（必填）");
+                .add("PAUSE").add("PAUSED").add("RESUME").add("DELETE"));
+        action.put("description", "操作类型：PAUSE/PAUSED 暂停 / RESUME 恢复 / DELETE 删除（必填）");
         schema.putArray("required").add("taskId").add("action");
         return schema;
     }
@@ -58,20 +61,17 @@ public class UpdateEmailReminderTool implements AgentTool {
     public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         long taskId = args.path("taskId").asLong(-1L);
-        String action = args.path("action").asText("").trim().toUpperCase();
         if (taskId <= 0) {
             throw new IllegalArgumentException("定时邮件工具缺少参数 taskId");
         }
-        if (!StringUtils.hasText(action)) {
-            throw new IllegalArgumentException("定时邮件工具缺少参数 action");
-        }
+        String action = normalizeAction(args.path("action").asText(""));
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("taskId", taskId);
         outcome.put("action", action);
         switch (action) {
-            case "PAUSE", "RESUME" -> {
+            case "PAUSED", "RESUME" -> {
                 onProgress.onProgress("正在" + actionText(action) + "定时邮件提醒…");
                 String targetStatus = "RESUME".equals(action)
                         ? EmailReminderService.STATUS_PENDING
@@ -88,17 +88,24 @@ public class UpdateEmailReminderTool implements AgentTool {
                 emailReminderService.delete(userId, taskId);
                 outcome.put("hint", "定时邮件提醒已删除。");
             }
-            default -> throw new IllegalArgumentException("操作类型只支持 PAUSE / RESUME / DELETE");
+            default -> throw new IllegalArgumentException("操作类型只支持 PAUSE / PAUSED / RESUME / DELETE");
         }
         return outcome;
     }
 
-    private String actionText(String action) {
+    /** Lenient action normalization: accepts both PAUSE and the PAUSED status. */
+    private String normalizeAction(String raw) {
+        String action = StringUtils.hasText(raw) ? raw.trim().toUpperCase(Locale.ROOT) : "";
         return switch (action) {
-            case "PAUSE" -> "暂停";
-            case "RESUME" -> "恢复";
-            default -> "删除";
+            case "PAUSE", "PAUSED" -> "PAUSED";
+            case "RESUME" -> "RESUME";
+            case "DELETE" -> "DELETE";
+            default -> throw new IllegalArgumentException("操作类型只支持 PAUSE / PAUSED / RESUME / DELETE");
         };
+    }
+
+    private String actionText(String action) {
+        return "PAUSED".equals(action) ? "暂停" : "恢复";
     }
 
     private String defaultText(String value, String fallback) {

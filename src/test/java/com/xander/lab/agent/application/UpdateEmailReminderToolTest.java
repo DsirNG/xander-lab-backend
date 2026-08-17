@@ -37,9 +37,32 @@ class UpdateEmailReminderToolTest {
         JsonNode result = tool.execute(42L, args, new RecordingProgress());
 
         assertThat(result.path("ok").asBoolean()).isTrue();
-        assertThat(result.path("action").asText()).isEqualTo("PAUSE");
+        assertThat(result.path("action").asText()).isEqualTo("PAUSED");
         assertThat(result.path("recipientEmail").asText()).isEqualTo("alice@example.com");
         assertThat(result.path("status").asText()).isEqualTo("PAUSED");
+        verify(emailReminderService).updateStatus(eq(42L), eq(1L), eq(EmailReminderService.STATUS_PAUSED));
+    }
+
+    @Test
+    void pausesReminderWithStatusVocabularyAlias() {
+        EmailReminderService emailReminderService = mock(EmailReminderService.class);
+        EmailReminderTaskVO paused = EmailReminderTaskVO.builder()
+                .id(1L)
+                .recipientEmail("alice@example.com")
+                .subject("每周技术周报")
+                .status("PAUSED")
+                .build();
+        when(emailReminderService.updateStatus(eq(42L), eq(1L), eq(EmailReminderService.STATUS_PAUSED)))
+                .thenReturn(paused);
+
+        UpdateEmailReminderTool tool = new UpdateEmailReminderTool(emailReminderService);
+        JsonNode args = JsonNodeFactory.instance.objectNode()
+                .put("taskId", 1)
+                .put("action", "PAUSED");
+        JsonNode result = tool.execute(42L, args, new RecordingProgress());
+
+        assertThat(result.path("ok").asBoolean()).isTrue();
+        assertThat(result.path("action").asText()).isEqualTo("PAUSED");
         verify(emailReminderService).updateStatus(eq(42L), eq(1L), eq(EmailReminderService.STATUS_PAUSED));
     }
 
@@ -92,7 +115,7 @@ class UpdateEmailReminderToolTest {
         JsonNode badAction = JsonNodeFactory.instance.objectNode().put("taskId", 1).put("action", "RUN");
         assertThatThrownBy(() -> tool.execute(42L, badAction, new RecordingProgress()))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("PAUSE / RESUME / DELETE");
+                .hasMessageContaining("PAUSE / PAUSED / RESUME / DELETE");
     }
 
     private static final class RecordingProgress implements AgentTool.ProgressListener {
