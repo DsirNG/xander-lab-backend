@@ -456,6 +456,22 @@ public class AuthService {
     }
 
     /**
+     * 校验 Access Token 并返回其用户 ID；无效（签名/过期/已被登出）返回 null。
+     * 供非 HTTP 通道（如 WebSocket 握手）复用同一套鉴权语义。
+     */
+    public Long getUserIdFromAccessToken(String token) {
+        if (!validateAccessToken(token)) {
+            return null;
+        }
+        try {
+            return Long.valueOf(jwtUtil.getSubject(token));
+        } catch (RuntimeException exception) {
+            log.debug("access token subject parse failed: {}", exception.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * FlowCraft 注册（邮箱 + 密码 + 用户名）
      * 邮箱唯一，重复注册抛异常
      * 限流：同一邮箱每 60 秒最多 1 次，同一 IP 每 60 秒最多 5 次

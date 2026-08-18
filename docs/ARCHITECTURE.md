@@ -129,7 +129,7 @@ empty except for shared infrastructure:
 
 Authenticated orchestration routes live under `/api/agent/conversations`.
 Creating a conversation and reading its snapshot use the shared `Result`
-envelope. A turn is delivered by `POST /{id}/messages/stream`; recovery uses
+envelope. A turn is delivered by `POST /{id}/messages/stream`; clients that cannot read SSE (WeChat mini-program) use the non-stream trigger `POST /{id}/messages` (claims the turn, runs it in background, returns the run version immediately, then polls snapshots). Live streaming for those clients uses the WebSocket endpoint `/ws/agent?conversationId=&runVersion=` (token via `Authorization` header or `token` query), which replays the same durable event stream frame-by-frame and closes after the terminal event. Recovery uses
 `GET /{id}/events` with `Last-Event-ID` or `afterEventId`. The durable event ID
 is the resume cursor and clients must ignore an event ID they have already
 applied.

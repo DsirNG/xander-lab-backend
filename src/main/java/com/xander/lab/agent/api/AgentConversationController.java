@@ -259,32 +259,9 @@ public class AgentConversationController {
     private void followEvents(Long conversationId, Long userId, long runVersion, long initialCursor,
                               SseEmitter emitter, AtomicBoolean subscriberOpen,
                               ScheduledFuture<?> heartbeat) {
-        long cursor = initialCursor;
         try {
-            while (subscriberOpen.get()) {
-                List<AgentEvent> events = eventService.listAfter(conversationId, runVersion, cursor);
-                if (events.isEmpty()) {
-                    var snapshot = service.get(conversationId, userId);
-                    boolean sameRun = Long.valueOf(runVersion).equals(snapshot.getRunVersion());
-                    if (!sameRun || !"running".equals(snapshot.getStatus())) {
-                        AgentEvent terminal = eventService.latestTerminal(conversationId, runVersion);
-                        if (terminal != null && terminal.getId() != null && terminal.getId() > cursor) {
-                            send(conversationId, emitter, subscriberOpen, terminal);
-                        }
-                        return;
-                    }
-                    Thread.sleep(500);
-                    continue;
-                }
-                for (AgentEvent event : events) {
-                    if (event.getId() != null) cursor = event.getId();
-                    send(conversationId, emitter, subscriberOpen, event);
-                    if ("complete".equals(event.getEventType())
-                            || "error".equals(event.getEventType())) {
-                        return;
-                    }
-                }
-            }
+            eventService.follow(conversationId, userId, runVersion, initialCursor,
+                    event -> send(conversationId, emitter, subscriberOpen, event));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         } catch (RuntimeException exception) {

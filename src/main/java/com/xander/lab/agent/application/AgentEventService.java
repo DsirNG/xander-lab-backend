@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.agent.domain.AgentEvent;
+import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.infrastructure.AgentEventMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import lombok.RequiredArgsConstructor;
@@ -86,6 +87,42 @@ public class AgentEventService {
                 .orderByDesc(AgentEvent::getId)
                 .last("LIMIT 1"));
         return events.isEmpty() ? null : events.get(0);
+    }
+
+    /**
+     * 从游标开始跟随一轮执行：重放已持久化事件，无新事件时轮询等待，
+     * 直到该轮出现终态（complete/error）或会话被新一轮次取代为止。
+     * SSE 与 WebSocket 订阅共用此逻辑；订阅端断开只影响本次跟随，不打断持久化执行。
+     */
+    public void follow(Long conversationId, Long userId, long runVersion, long initialCursor,
+                       Consumer<AgentEvent> sink) throws InterruptedException {
+        long cursor = initialCursor;
+        while (true) {
+            List<AgentEvent> events = listAfter(conversationId, runVersion, cursor);
+            if (events.isEmpty()) {
+                AgentConversation snapshot = conversationMapper.selectById(conversationId);
+                boolean sameRun = snapshot != null
+                        && Long.valueOf(runVersion).equals(snapshot.getRunVersion())
+                        && userId != null && userId.equals(snapshot.getUserId());
+                if (!sameRun || !"running".equals(snapshot.getStatus())) {
+                    AgentEvent terminal = latestTerminal(conversationId, runVersion);
+                    if (terminal != null && terminal.getId() != null && terminal.getId() > cursor) {
+                        sink.accept(terminal);
+                    }
+                    return;
+                }
+                Thread.sleep(500);
+                continue;
+            }
+            for (AgentEvent event : events) {
+                if (event.getId() != null) cursor = event.getId();
+                sink.accept(event);
+                if ("complete".equals(event.getEventType())
+                        || "error".equals(event.getEventType())) {
+                    return;
+                }
+            }
+        }
     }
 
     private String serialize(Object data) {
