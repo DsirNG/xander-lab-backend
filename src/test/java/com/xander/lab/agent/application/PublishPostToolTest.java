@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.blogagent.application.BlogAgentService;
+import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.domain.PublishResult;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,6 +26,29 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PublishPostToolTest {
+
+    @AfterEach
+    void clearThreadContext() {
+        UserContext.clear();
+    }
+
+    @Test
+    void resolvesUserContextForCallerAndClearsItAfter() {
+        BlogAgentService blogAgentService = mock(BlogAgentService.class);
+        when(blogAgentService.publish(eq(9L), eq(42L)))
+                .thenAnswer(invocation -> {
+                    assertThat(UserContext.getUserId()).isEqualTo(42L);
+                    return post(9L, "本地发布", 1);
+                });
+        PublishPostTool tool = new PublishPostTool(
+                blogAgentService, mock(BlogService.class),
+                mock(CsdnBlogSyncService.class), mock(JuejinBlogSyncService.class),
+                mock(BillingService.class));
+        tool.execute(42L,
+                JsonNodeFactory.instance.objectNode().put("taskId", 9L), new RecordingProgress());
+
+        assertThat(UserContext.getUserId()).isNull();
+    }
 
     @Test
     void publishesGeneratedTaskLocallyByDefault() {

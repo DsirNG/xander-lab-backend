@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.billing.domain.BillingBiz;
 import com.xander.lab.blogagent.application.BlogAgentService;
+import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.publishing.api.BlogPostVO;
@@ -84,39 +85,46 @@ public class PublishPostTool implements AgentTool {
         }
         onProgress.onProgress("正在准备发布文章…");
 
-        BlogPostVO local = resolveLocalPost(userId, taskId, postId);
-        if (local == null || local.getId() == null) {
-            throw new IllegalStateException("未找到可发布的文章，请先完成文章生成");
-        }
-        onProgress.checkCancellation();
+        // 智能体轮次在线程池线程上执行，请求线程的 UserContext 不会自动传递；
+        // 本站发布链路（createBlog 等）依赖 UserContext 归属文章，需在此显式恢复并清理。
+        try {
+            UserContext.setUserId(userId);
+            BlogPostVO local = resolveLocalPost(userId, taskId, postId);
+            if (local == null || local.getId() == null) {
+                throw new IllegalStateException("未找到可发布的文章，请先完成文章生成");
+            }
+            onProgress.checkCancellation();
 
-        ObjectNode outcome = JsonNodeFactory.instance.objectNode();
-        outcome.put("ok", true);
-        outcome.put("postId", local.getId());
-        outcome.put("title", defaultText(local.getTitle(), ""));
-        outcome.put("platform", platform);
-        if ("csdn".equals(platform)) {
-            if (postId > 0 && Boolean.TRUE.equals(local.getCsdnSynced())) {
-                outcome.put("hint", "该文章已同步过 CSDN，未重复发布。");
-                return outcome;
+            ObjectNode outcome = JsonNodeFactory.instance.objectNode();
+            outcome.put("ok", true);
+            outcome.put("postId", local.getId());
+            outcome.put("title", defaultText(local.getTitle(), ""));
+            outcome.put("platform", platform);
+            if ("csdn".equals(platform)) {
+                if (postId > 0 && Boolean.TRUE.equals(local.getCsdnSynced())) {
+                    outcome.put("hint", "该文章已同步过 CSDN，未重复发布。");
+                    return outcome;
+                }
+                onProgress.onProgress("正在同步到 CSDN…");
+                PublishResult result = csdnBlogSyncService.sync(userId, local.getId());
+                chargePlatformPublish(userId, BillingBiz.CSDN_PUBLISH, local.getId(), "CSDN 发布成功");
+                fillPlatformResult(outcome, result);
+            } else if ("juejin".equals(platform)) {
+                if (postId > 0 && Boolean.TRUE.equals(local.getJuejinSynced())) {
+                    outcome.put("hint", "该文章已同步过掘金，未重复发布。");
+                    return outcome;
+                }
+                onProgress.onProgress("正在同步到掘金…");
+                PublishResult result = juejinBlogSyncService.sync(userId, local.getId(), null, null);
+                chargePlatformPublish(userId, BillingBiz.JUEJIN_PUBLISH, local.getId(), "掘金发布成功");
+                fillPlatformResult(outcome, result);
+            } else {
+                outcome.put("hint", "文章已发布到本站。");
             }
-            onProgress.onProgress("正在同步到 CSDN…");
-            PublishResult result = csdnBlogSyncService.sync(userId, local.getId());
-            chargePlatformPublish(userId, BillingBiz.CSDN_PUBLISH, local.getId(), "CSDN 发布成功");
-            fillPlatformResult(outcome, result);
-        } else if ("juejin".equals(platform)) {
-            if (postId > 0 && Boolean.TRUE.equals(local.getJuejinSynced())) {
-                outcome.put("hint", "该文章已同步过掘金，未重复发布。");
-                return outcome;
-            }
-            onProgress.onProgress("正在同步到掘金…");
-            PublishResult result = juejinBlogSyncService.sync(userId, local.getId(), null, null);
-            chargePlatformPublish(userId, BillingBiz.JUEJIN_PUBLISH, local.getId(), "掘金发布成功");
-            fillPlatformResult(outcome, result);
-        } else {
-            outcome.put("hint", "文章已发布到本站。");
+            return outcome;
+        } finally {
+            UserContext.clear();
         }
-        return outcome;
     }
 
     private BlogPostVO resolveLocalPost(Long userId, long taskId, long postId) {
