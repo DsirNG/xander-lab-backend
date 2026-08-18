@@ -1,6 +1,7 @@
 package com.xander.lab.integration.mcp.juejin.infrastructure;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -14,6 +15,7 @@ public class JuejinCategory {
     @TableId(type = IdType.INPUT) private Long categoryId;
     private String categoryName;
     /** query_category_list 返回的展示排序（rank 升序）。 */
+    @TableField("`rank`")
     private Integer rank;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
