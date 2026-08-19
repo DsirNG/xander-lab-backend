@@ -12,9 +12,9 @@ public interface AgentMessageMapper extends BaseMapper<AgentMessage> {
     /** Inserts only while the supplied owner and execution generation are still active. */
     @Insert("""
             INSERT INTO agent_message
-                (conversation_id, role, kind, tool_name, content, created_at)
+                (conversation_id, role, kind, tool_name, content)
             SELECT #{message.conversationId}, #{message.role}, #{message.kind},
-                   #{message.toolName}, #{message.content}, #{message.createdAt}
+                   #{message.toolName}, #{message.content}
             FROM agent_conversation
             WHERE id = #{message.conversationId}
               AND user_id = #{userId}

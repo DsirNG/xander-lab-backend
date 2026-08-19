@@ -16,14 +16,13 @@ public interface JuejinCategoryMapper extends BaseMapper<JuejinCategory> {
      */
     @Insert("""
             INSERT INTO juejin_category
-                (category_id, category_name, `rank`, created_at, updated_at)
+                (category_id, category_name, `rank`)
             VALUES
-                (#{categoryId}, #{categoryName}, #{rank}, #{createdAt}, #{updatedAt})
+                (#{categoryId}, #{categoryName}, #{rank})
             AS new
             ON DUPLICATE KEY UPDATE
                 category_name = new.category_name,
-                `rank` = new.`rank`,
-                updated_at = new.updated_at
+                `rank` = new.`rank`
             """)
     int upsert(JuejinCategory category);
 

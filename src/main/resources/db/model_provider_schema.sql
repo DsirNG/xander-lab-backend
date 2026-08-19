@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS `model_provider` (
   `description` VARCHAR(500) NULL COMMENT '供应商备注，仅管理台展示',
   `enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '1=启用 0=停用；停用的供应商不会被任何功能选中',
   `priority` INT NOT NULL DEFAULT 0 COMMENT '管理台展示排序，数字越小越靠前',
-  `created_at` DATETIME NOT NULL COMMENT '创建时间',
-  `updated_at` DATETIME NOT NULL COMMENT '最近更新时间',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_model_provider_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='模型供应商管理（管理台配置的 OpenAI 兼容网关）';

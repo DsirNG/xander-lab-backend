@@ -83,8 +83,6 @@ public class AgentConversationService {
         conversation.setStatus("ready");
         conversation.setRunVersion(1L);
         conversation.setCancelRequested(0);
-        conversation.setCreatedAt(LocalDateTime.now());
-        conversation.setUpdatedAt(LocalDateTime.now());
         conversationMapper.insert(conversation);
         return conversation;
     }

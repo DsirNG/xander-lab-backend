@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS `feature_model_config` (
   `fallback_model` VARCHAR(100) NULL COMMENT '兜底供应商使用的兜底模型名',
   `fallback_api_style` VARCHAR(30) NULL COMMENT '兜底槽位接口风格：IMAGES_GENERATIONS=/images/generations、CHAT_COMPLETIONS=/chat/completions（messages+modalities）、CHAT_PROMPT=/chat/completions（顶层 prompt，聚合网关如 okinto）、RESPONSES=/responses；为空按功能取默认',
   `enabled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=启用管理台配置（优先于环境变量） 0=回退到环境变量配置',
-  `updated_at` DATETIME NOT NULL COMMENT '最近更新时间（创建时与创建时间一致）',
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近更新时间（创建时与创建时间一致）',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_feature_model_config_feature` (`feature_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='各功能使用的模型与兜底模型配置（管理台维护）';

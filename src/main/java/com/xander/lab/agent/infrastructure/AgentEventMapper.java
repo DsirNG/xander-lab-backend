@@ -14,9 +14,9 @@ public interface AgentEventMapper extends BaseMapper<AgentEvent> {
     @Insert("""
             <script>
             INSERT INTO agent_event
-                (conversation_id, run_version, event_type, data_content, created_at)
+                (conversation_id, run_version, event_type, data_content)
             SELECT #{event.conversationId}, #{event.runVersion}, #{event.eventType},
-                   #{event.dataContent}, #{event.createdAt}
+                   #{event.dataContent}
             FROM agent_conversation
             WHERE id = #{event.conversationId}
               AND user_id = #{userId}

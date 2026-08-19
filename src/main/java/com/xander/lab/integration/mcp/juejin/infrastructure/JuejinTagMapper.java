@@ -17,14 +17,13 @@ public interface JuejinTagMapper extends BaseMapper<JuejinTag> {
      */
     @Insert("""
             INSERT INTO juejin_tag
-                (tag_id, tag_name, category_id, created_at, updated_at)
+                (tag_id, tag_name, category_id)
             VALUES
-                (#{tagId}, #{tagName}, #{categoryId}, #{createdAt}, #{updatedAt})
+                (#{tagId}, #{tagName}, #{categoryId})
             AS new
             ON DUPLICATE KEY UPDATE
                 tag_name = new.tag_name,
-                category_id = IFNULL(new.category_id, juejin_tag.category_id),
-                updated_at = new.updated_at
+                category_id = IFNULL(new.category_id, juejin_tag.category_id)
             """)
     int upsert(JuejinTag tag);
 

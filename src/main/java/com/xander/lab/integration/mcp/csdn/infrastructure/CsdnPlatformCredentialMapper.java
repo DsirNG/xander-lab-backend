@@ -13,17 +13,16 @@ public interface CsdnPlatformCredentialMapper extends BaseMapper<CsdnPlatformCre
      */
     @Insert("""
             INSERT INTO csdn_platform_credential
-                (user_id, encrypted_cookie, csdn_username, status, authorized_at, last_validated_at, created_at, updated_at)
+                (user_id, encrypted_cookie, csdn_username, status, authorized_at, last_validated_at)
             VALUES
-                (#{userId}, #{encryptedCookie}, #{csdnUsername}, #{status}, #{authorizedAt}, #{lastValidatedAt}, #{createdAt}, #{updatedAt})
+                (#{userId}, #{encryptedCookie}, #{csdnUsername}, #{status}, #{authorizedAt}, #{lastValidatedAt})
             AS new
             ON DUPLICATE KEY UPDATE
                 encrypted_cookie = new.encrypted_cookie,
                 csdn_username = new.csdn_username,
                 status = new.status,
                 authorized_at = new.authorized_at,
-                last_validated_at = new.last_validated_at,
-                updated_at = new.updated_at
+                last_validated_at = new.last_validated_at
             """)
     int upsert(CsdnPlatformCredential credential);
 }

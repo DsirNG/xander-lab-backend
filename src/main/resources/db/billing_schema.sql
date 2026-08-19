@@ -5,8 +5,8 @@
 CREATE TABLE IF NOT EXISTS sys_user_points (
     user_id BIGINT NOT NULL COMMENT '用户主键（sys_user.id）',
     balance BIGINT NOT NULL DEFAULT 0 COMMENT '当前积分余额，允许为负（先耗后扣导致的小额欠费）',
-    created_at DATETIME NOT NULL COMMENT '开户时间',
-    updated_at DATETIME NOT NULL COMMENT '最近变动时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '开户时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近变动时间',
     PRIMARY KEY (user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '用户积分账户：余额可为 0 或负，回复按新请求每次判断是否过低';
 
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS points_ledger (
     output_tokens BIGINT NULL COMMENT '输出 token 数（token 计费时非空）',
     cached_tokens BIGINT NULL COMMENT '缓存命中 token 数（token 计费时非空）',
     remark VARCHAR(500) NULL COMMENT '业务说明',
-    created_at DATETIME NOT NULL COMMENT '流水时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '流水时间',
     PRIMARY KEY (id),
     UNIQUE KEY uk_ledger_biz (biz_type, biz_key),
     KEY idx_ledger_user_time (user_id, created_at)

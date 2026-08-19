@@ -16,7 +16,6 @@ import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
-import java.time.LocalDateTime;
 import java.util.Base64;
 
 /** Encrypts and persists per-user Juejin browser credentials. */
@@ -60,8 +59,7 @@ public class JuejinCredentialService {
         mapper.update(null, new UpdateWrapper<JuejinPlatformCredential>()
                 .eq("user_id", userId)
                 .eq("status", "ACTIVE")
-                .set("status", "EXPIRED")
-                .set("updated_at", LocalDateTime.now()));
+                .set("status", "EXPIRED"));
     }
 
     /** Decrypted per-user request context; throws when no ACTIVE credential exists. */
@@ -82,11 +80,6 @@ public class JuejinCredentialService {
             value.setEncryptedCookie(encrypt(credential));
             value.setJuejinUsername(username);
             value.setStatus("ACTIVE");
-            LocalDateTime now = LocalDateTime.now();
-            value.setAuthorizedAt(now);
-            value.setLastValidatedAt(now);
-            value.setCreatedAt(now);
-            value.setUpdatedAt(now);
             mapper.upsert(value);
         } catch (Exception e) {
             throw new IllegalStateException("Unable to save Juejin authorization", e);

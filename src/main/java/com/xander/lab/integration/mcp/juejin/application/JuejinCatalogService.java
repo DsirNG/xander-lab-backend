@@ -77,7 +77,6 @@ public class JuejinCatalogService {
     public void sync(JuejinClient.Credential credential) {
         List<JuejinCategory> categories = new ArrayList<>();
         List<JuejinTag> tags = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
         JsonNode categoryResponse = client.queryCategories(credential);
         for (JsonNode item : categoryResponse.path("data")) {
             JsonNode category = item.path("category");
@@ -86,16 +85,12 @@ public class JuejinCatalogService {
             row.setCategoryId(category.path("category_id").asLong());
             row.setCategoryName(category.path("category_name").asText(""));
             row.setRank(category.path("rank").asInt(0));
-            row.setCreatedAt(now);
-            row.setUpdatedAt(now);
             categories.add(row);
             for (JsonNode hot : item.path("hot_tags")) {
                 JuejinTag tag = new JuejinTag();
                 tag.setTagId(hot.path("tag_id").asLong());
                 tag.setTagName(hot.path("tag_name").asText(""));
                 tag.setCategoryId(row.getCategoryId());
-                tag.setCreatedAt(now);
-                tag.setUpdatedAt(now);
                 tags.add(tag);
             }
         }
@@ -107,8 +102,6 @@ public class JuejinCatalogService {
                 JuejinTag tag = new JuejinTag();
                 tag.setTagId(item.path("tag_id").asLong());
                 tag.setTagName(item.path("tag").path("tag_name").asText(""));
-                tag.setCreatedAt(now);
-                tag.setUpdatedAt(now);
                 tags.add(tag);
             }
             if (!response.path("has_more").asBoolean(false)) break;

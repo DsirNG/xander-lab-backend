@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -37,7 +36,7 @@ public class AgentEventService {
                 .eq(com.xander.lab.agent.domain.AgentConversation::getUserId, userId)
                 .eq(com.xander.lab.agent.domain.AgentConversation::getStatus, "running")
                 .eq(com.xander.lab.agent.domain.AgentConversation::getRunVersion, runVersion)
-                .set(com.xander.lab.agent.domain.AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                .setSql("updated_at = CURRENT_TIMESTAMP"));
         if (touched != 1) throw new AgentRunSupersededException(conversationId, runVersion);
         return storeForRun(conversationId, userId, runVersion, eventType, data, true);
     }
@@ -50,7 +49,6 @@ public class AgentEventService {
         event.setRunVersion(runVersion);
         event.setEventType(eventType);
         event.setDataContent(serialize(data));
-        event.setCreatedAt(LocalDateTime.now());
         int inserted = eventMapper.insertForRun(event, userId, requireRunning);
         if (inserted != 1 || event.getId() == null) {
             if (inserted == 0) throw new AgentRunSupersededException(conversationId, runVersion);
