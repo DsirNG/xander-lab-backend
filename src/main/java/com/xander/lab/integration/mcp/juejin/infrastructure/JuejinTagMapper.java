@@ -23,7 +23,7 @@ public interface JuejinTagMapper extends BaseMapper<JuejinTag> {
             AS new
             ON DUPLICATE KEY UPDATE
                 tag_name = new.tag_name,
-                category_id = IFNULL(new.category_id, category_id),
+                category_id = IFNULL(new.category_id, juejin_tag.category_id),
                 updated_at = new.updated_at
             """)
     int upsert(JuejinTag tag);
