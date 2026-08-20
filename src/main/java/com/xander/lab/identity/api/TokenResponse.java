@@ -33,6 +33,15 @@ public class TokenResponse {
     /** 用户信息 */
     private UserInfo userInfo;
 
+    /** 是否需要在微信登录流程中绑定邮箱（邮箱为空时 true，前端据此弹出绑定引导） */
+    private boolean needsEmailBinding;
+
+    /** 首次微信登录（openid 未注册）为 true：未建号，返回待绑定凭证由前端引导绑定或跳过 */
+    private boolean pendingBind;
+
+    /** 待绑定凭证（pendingBind 为 true 时非空，10 分钟有效，仅用于绑定/跳过端点） */
+    private String pendingBindToken;
+
     @Data
     @Builder
     @NoArgsConstructor

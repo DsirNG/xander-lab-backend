@@ -3,9 +3,11 @@ package com.xander.lab.identity.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.common.Constants;
+import com.xander.lab.common.Result;
 import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
+import com.xander.lab.identity.infrastructure.AccountMergeMapper;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient.WechatSession;
@@ -25,8 +27,11 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 /**
  * 认证服务
@@ -38,6 +43,9 @@ public class AuthService {
 
     private static final SecureRandom CODE_RANDOM = new SecureRandom();
 
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+
     private final JwtUtil jwtUtil;
     private final MailService mailService;
     private final UserMapper userMapper;
@@ -45,6 +53,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final BillingService billingService;
     private final WechatMiniAppClient wechatMiniAppClient;
+    private final AccountMergeMapper accountMergeMapper;
 
 /**
      * 发送登录验证码
@@ -57,8 +66,9 @@ public class AuthService {
         // 生成 6 位随机验证码
         String code = String.valueOf(100000 + CODE_RANDOM.nextInt(900000));
 
-        // 存入 Redis (有效期 5 分钟)
-        String key = Constants.REDIS_CODE_PREFIX + email;
+        // 入参邮箱按与校验方一致的规范化形式存储（大小写不敏感），发送给原始地址
+        String keyEmail = email == null ? "" : email.trim().toLowerCase();
+        String key = Constants.REDIS_CODE_PREFIX + keyEmail;
         redisTemplate.opsForValue().set(key, code, Constants.CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
 
         // 发送邮件
@@ -98,8 +108,8 @@ public class AuthService {
         User user;
 
         if ("code".equalsIgnoreCase(request.getType())) {
-            // 验证码登录逻辑
-            String key = Constants.REDIS_CODE_PREFIX + account;
+            // 验证码登录逻辑（键与 sendCode 写入的规范化形式一致）
+            String key = Constants.REDIS_CODE_PREFIX + account.trim().toLowerCase();
             String cachedCode = redisTemplate.opsForValue().get(key);
             
             if (cachedCode == null || !cachedCode.equals(request.getCode())) {
@@ -210,9 +220,13 @@ public class AuthService {
     }
 
     /**
-     * 微信小程序登录：code 换 openid 后绑定或注册账号，返回与密码登录一致的 token 对。
-     * 限流：同一 IP 每 60 秒最多 20 次，防恶意刷登录；微信通道未配置或服务不可用时
-     * 归一化为 400 业务错误（IllegalArgumentException），不暴露微信原始错误。
+     * 微信小程序登录：code 换 openid 后按「先绑定后建号」策略处理。
+     * <ul>
+     *   <li>openid 已注册（或已绑定邮箱的既有账号）→ 直接签发 token。</li>
+     *   <li>openid 未注册 → 不建号，返回待绑定凭证（pendingBind=true），
+     *       由前端引导绑定邮箱（邮箱是 PC 端账号；若已是既有账号则合并为同一账号）或跳过建号。</li>
+     * </ul>
+     * 限流：同一 IP 每 60 秒最多 20 次；微信通道未配置或服务不可用时归一化为 400 业务错误。
      */
     public TokenResponse wechatLogin(String code, String clientIp) {
         checkRateLimit("login:ip", sanitize(clientIp), 20, 60);
@@ -230,17 +244,210 @@ public class AuthService {
         }
 
         User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getOpenid, session.openid()));
-        if (user == null) {
-            user = registerWechatUser(session.openid());
+        if (user != null) {
+            if (user.getStatus() == 0) {
+                throw new IllegalArgumentException("账号已被禁用，请联系管理员");
+            }
+            return generateTokenResponse(user);
         }
-        if (user.getStatus() == 0) {
-            throw new IllegalArgumentException("账号已被禁用，请联系管理员");
-        }
-        return generateTokenResponse(user);
+
+        // 首次登录：未建号，返回待绑定凭证；绑定邮箱或跳过后再签发正式 token
+        return TokenResponse.builder()
+                .pendingBind(true)
+                .pendingBindToken(jwtUtil.generateBindToken(session.openid()))
+                .needsEmailBinding(true)
+                .build();
     }
 
     /**
-     * 首次微信登录自动注册：openid 作为绑定凭证，username 取 openid 哈希避免暴露渠道标识。
+     * 首次微信登录「绑定邮箱」：校验验证码后把 openid 与邮箱建立绑定并签发 token。
+     * 邮箱如果已是 PC 端既有账号，则直接给该账号挂载 openid（微信与 PC 为同一账号）。
+     * 幂等：重复提交/并发时重查已有账号，不重复建号。
+     */
+    public TokenResponse bindWechat(String pendingBindToken, String email, String code, String clientIp) {
+        checkRateLimit("bind:ip", sanitize(clientIp), 20, 60);
+        String openid = resolveOpenidFromPendingToken(pendingBindToken);
+        String normalized = normalizeEmail(email);
+        verifyEmailCode(normalized, code);
+
+        User existingByOpenid = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getOpenid, openid));
+        if (existingByOpenid != null) {
+            if (existingByOpenid.getStatus() == 0) {
+                throw new IllegalArgumentException("账号已被禁用，请联系管理员");
+            }
+            // 跳过绑定建过的临时账号再补绑：邮箱若已是既有 PC 账号，则合并而非重复绑邮箱
+            if (existingByOpenid.getEmail() == null || existingByOpenid.getEmail().isBlank()) {
+                User byEmail = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getEmail, normalized));
+                if (byEmail != null) {
+                    if (byEmail.getStatus() == 0) {
+                        throw new IllegalArgumentException("账号已被禁用，请联系管理员");
+                    }
+                    if (byEmail.getOpenid() != null && !byEmail.getOpenid().equals(openid)) {
+                        throw new IllegalArgumentException("该邮箱已绑定其他微信账号");
+                    }
+                    if (!byEmail.getId().equals(existingByOpenid.getId())) {
+                        mergeWechatUserInto(existingByOpenid, byEmail);
+                        return generateTokenResponse(byEmail);
+                    }
+                    return generateTokenResponse(existingByOpenid); // 幂等
+                }
+                attachEmail(existingByOpenid, normalized);
+            }
+            return generateTokenResponse(existingByOpenid);
+        }
+
+        User existingByEmail = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getEmail, normalized));
+        if (existingByEmail != null) {
+            if (existingByEmail.getStatus() == 0) {
+                throw new IllegalArgumentException("账号已被禁用，请联系管理员");
+            }
+            if (existingByEmail.getOpenid() != null && !existingByEmail.getOpenid().equals(openid)) {
+                throw new IllegalArgumentException("该邮箱已绑定其他微信账号");
+            }
+            if (existingByEmail.getOpenid() == null) {
+                attachOpenid(existingByEmail, openid);
+            }
+            return generateTokenResponse(existingByEmail); // 微信与 PC 为同一账号
+        }
+
+        User created = createUserWithEmail(normalized, openid);
+        return generateTokenResponse(created);
+    }
+
+    /**
+     * 首次微信登录「跳过绑定」：给 openid 创建临时微信账号并签发 token（needsEmailBinding=true）。
+     * 幂等：并发注册由 uk_openid 唯一索引兜底，冲突时重查已有账号继续登录。
+     */
+    public TokenResponse createWechatUser(String pendingBindToken, String clientIp) {
+        checkRateLimit("bind:ip", sanitize(clientIp), 20, 60);
+        String openid = resolveOpenidFromPendingToken(pendingBindToken);
+
+        User existing = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getOpenid, openid));
+        if (existing != null) {
+            if (existing.getStatus() == 0) {
+                throw new IllegalArgumentException("账号已被禁用，请联系管理员");
+            }
+            return generateTokenResponse(existing);
+        }
+        return generateTokenResponse(registerWechatUser(openid));
+    }
+
+    /**
+     * 账号设置补绑邮箱：已登录的未绑定微信账号（跳过过绑定）绑定邮箱。
+     * 邮箱已是既有 PC 账号时执行合并：迁转名下的对话/计划/提醒/任务/积分后删除临时账号，
+     * 从微信与 PC 登录都指向同一账号。token 无效或缺失返回 401。
+     */
+    public TokenResponse bindWechatExisting(String bearerToken, String email, String code, String clientIp) {
+        String token;
+        try {
+            token = extractToken(bearerToken);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        if (!jwtUtil.isValid(token)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        String userId = jwtUtil.getSubject(token);
+        User temp = userMapper.selectById(userId);
+        if (temp == null || temp.getOpenid() == null || temp.getOpenid().isBlank()) {
+            throw new IllegalArgumentException("当前账号不是可绑定邮箱的微信账号");
+        }
+        if (temp.getStatus() == 0) {
+            throw new IllegalArgumentException("账号已被禁用，请联系管理员");
+        }
+        if (temp.getEmail() != null && !temp.getEmail().isBlank()) {
+            throw new IllegalArgumentException("当前账号已绑定邮箱");
+        }
+
+        checkRateLimit("bind:ip", sanitize(clientIp), 20, 60);
+        String normalized = normalizeEmail(email);
+        verifyEmailCode(normalized, code);
+
+        User existingByEmail = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getEmail, normalized));
+        if (existingByEmail != null) {
+            if (existingByEmail.getStatus() == 0) {
+                throw new IllegalArgumentException("账号已被禁用，请联系管理员");
+            }
+            if (existingByEmail.getOpenid() != null && !existingByEmail.getOpenid().equals(temp.getOpenid())) {
+                throw new IllegalArgumentException("该邮箱已绑定其他微信账号");
+            }
+            if (existingByEmail.getId().equals(temp.getId())) {
+                return generateTokenResponse(temp); // 幂等
+            }
+            mergeWechatUserInto(temp, existingByEmail);
+            return generateTokenResponse(existingByEmail);
+        }
+
+        // 邮箱未注册：直接挂到当前微信账号
+        attachEmail(temp, normalized);
+        return generateTokenResponse(temp);
+    }
+
+    /** 校验并消费邮箱验证码（sendCode 以“规范化邮箱”为键写入，此处用同一键读取） */
+    private void verifyEmailCode(String email, String code) {
+        if (code == null || code.isBlank()) {
+            throw new IllegalArgumentException("请输入验证码");
+        }
+        String key = Constants.REDIS_CODE_PREFIX + email;
+        String cachedCode = redisTemplate.opsForValue().get(key);
+        if (cachedCode == null || !cachedCode.equals(code.trim())) {
+            throw new IllegalArgumentException("验证码错误或已过期");
+        }
+        redisTemplate.delete(key);
+    }
+
+    private String normalizeEmail(String email) {
+        String normalized = email == null ? "" : email.trim().toLowerCase();
+        if (!EMAIL_PATTERN.matcher(normalized).matches()) {
+            throw new IllegalArgumentException("邮箱格式不正确");
+        }
+        return normalized;
+    }
+
+    /** 校验待绑定凭证有效性并取出 openid */
+    private String resolveOpenidFromPendingToken(String pendingBindToken) {
+        if (pendingBindToken == null || !jwtUtil.isValid(pendingBindToken) || !jwtUtil.isBindToken(pendingBindToken)) {
+            throw new IllegalArgumentException("绑定凭证无效或已过期，请重新登录");
+        }
+        return jwtUtil.getSubject(pendingBindToken);
+    }
+
+    /**
+     * 首次微信绑定邮箱：邮箱没有既有账号时创建新账号（username=邮箱，与 PC 注册约定一致，
+     * 密码为随机口令仅存哈希；账号实时已通过验证码验证邮箱归属，后续可用验证码登录）。
+     */
+    private User createUserWithEmail(String email, String openid) {
+        User user = new User();
+        user.setUsername(email);
+        user.setPassword(generateRandomPassword());
+        user.setNickname(email.contains("@") ? email.split("@")[0] : email);
+        user.setEmail(email);
+        user.setOpenid(openid);
+        user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + email);
+        user.setRole("USER");
+        user.setStatus(1);
+        user.setCreatedAt(LocalDateTime.now());
+        user.setUpdatedAt(LocalDateTime.now());
+        try {
+            userMapper.insert(user);
+        } catch (DuplicateKeyException e) {
+            // 并发建号：uk_openid / uk_email 冲突时重查已有账号，保证幂等
+            User existing = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                    .eq(User::getOpenid, openid)
+                    .or()
+                    .eq(User::getEmail, email));
+            if (existing != null) {
+                return existing;
+            }
+            throw e;
+        }
+        billingService.grantRegister(user.getId(), "user:" + user.getId());
+        log.info("[Auth] 微信绑定邮箱新建账号 userId={}", user.getId());
+        return user;
+    }
+
+    /**
+     * 首次微信登录自动注册（跳过绑定路径）：openid 作为绑定凭证，username 取 openid 哈希。
      * 并发注册由 uk_openid 唯一索引兜底，冲突时重查已有账号继续登录（幂等）。
      */
     private User registerWechatUser(String openid) {
@@ -267,6 +474,72 @@ public class AuthService {
             }
             throw e;
         }
+    }
+
+    /** 把微信临时账号名下数据迁到既有账号：迁移业务数据、合并积分、清理登录态后删除临时号。
+     *  先迁走数据再删行，避免外键级联误删用户数据；先解绑 openid 再挂到目标账号规避唯一键冲突。 */
+    private void mergeWechatUserInto(User temp, User target) {
+        String openid = temp.getOpenid();
+        // 1. 迁转名下的业务数据到既有账号（子记录随外键级联跟随）
+        accountMergeMapper.reparentAgentConversations(temp.getId(), target.getId());
+        accountMergeMapper.reparentBlogAgentTasks(temp.getId(), target.getId());
+        accountMergeMapper.reparentBlogContentPlans(temp.getId(), target.getId());
+        accountMergeMapper.reparentBlogNotifications(temp.getId(), target.getId());
+        accountMergeMapper.reparentBlogPublishRecords(temp.getId(), target.getId());
+        accountMergeMapper.reparentBlogMediaAssets(temp.getId(), target.getId());
+        accountMergeMapper.reparentEmailReminders(temp.getId(), target.getId());
+        accountMergeMapper.reparentImg2threeTasks(temp.getId(), target.getId());
+        accountMergeMapper.reparentFlowProjects(temp.getId(), target.getId());
+        accountMergeMapper.reparentFlowAiTasks(temp.getId(), target.getId());
+        accountMergeMapper.reparentStudioProjects(temp.getId(), target.getId());
+        // 2. 积分余额并入目标账号（含账户行删除）
+        billingService.transferBalance(temp.getId(), target.getId(),
+                "merge:" + temp.getId() + ":" + target.getId(), "账号合并转入");
+        // 3. 撤销临时账号的登录态
+        revokeUserTokens(temp.getId());
+        // 4. 解绑临时号 openid → 挂到目标账号 → 删除临时号
+        User detach = new User();
+        detach.setId(temp.getId());
+        detach.setOpenid(null);
+        userMapper.updateById(detach);
+        attachOpenid(target, openid);
+        userMapper.deleteById(temp.getId());
+        log.info("[Auth] 微信账号合并: temp={} -> target={} openid={}", temp.getId(), target.getId(), openid);
+    }
+
+    private void revokeUserTokens(Long userId) {
+        String userIdStr = String.valueOf(userId);
+        String setKey = Constants.REDIS_USER_TOKENS_PREFIX + userIdStr;
+        try {
+            Set<String> tokens = new HashSet<>(redisTemplate.opsForSet().members(setKey));
+            for (String token : tokens) {
+                if (token != null) {
+                    redisTemplate.delete(Constants.REDIS_TOKEN_PREFIX + token);
+                }
+            }
+        } catch (RuntimeException e) {
+            log.warn("[Auth] 撤销临时账号 {} 的 token 失败: {}", userId, e.getMessage());
+            return;
+        }
+        redisTemplate.delete(setKey);
+    }
+
+    private void attachOpenid(User user, String openid) {
+        User update = new User();
+        update.setId(user.getId());
+        update.setOpenid(openid);
+        update.setUpdatedAt(LocalDateTime.now());
+        userMapper.updateById(update);
+        user.setOpenid(openid);
+    }
+
+    private void attachEmail(User user, String email) {
+        User update = new User();
+        update.setId(user.getId());
+        update.setEmail(email);
+        update.setUpdatedAt(LocalDateTime.now());
+        userMapper.updateById(update);
+        user.setEmail(email);
     }
 
     private String sha256Hex(String value) {
@@ -364,6 +637,7 @@ public class AuthService {
                 .refreshToken(refreshToken)
                 .tokenType(Constants.TOKEN_PREFIX.trim())
                 .expiresIn(jwtUtil.getAccessTokenExpire() / 1000)
+                .needsEmailBinding(user.getEmail() == null || user.getEmail().isBlank())
                 .userInfo(buildUserInfo(user))
                 .build();
     }

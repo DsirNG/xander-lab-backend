@@ -9,6 +9,9 @@ public final class BillingBiz {
     /** 注册赠送 */
     public static final String GRANT_REGISTER = "grant";
 
+    /** 账号合并转入（微信账号并入既有 PC 账号时的余额转移） */
+    public static final String MERGE_CREDIT = "merge-credit";
+
     /** 博客智能体：一次成功生成（run） */
     public static final String BLOG_AGENT_RUN = "blog-agent-run";
 

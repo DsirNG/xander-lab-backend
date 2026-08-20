@@ -89,6 +89,60 @@ public class AuthController {
     }
 
     /**
+     * 首次微信登录「绑定邮箱」
+     * POST /api/auth/wechat-bind  body: { pendingBindToken, email, code }
+     * 邮箱已是既有 PC 账号时合并为同一账号；否则新建带邮箱与 openid 的账号。
+     */
+    @PostMapping("/wechat-bind")
+    public Result<TokenResponse> wechatBind(@Valid @RequestBody WechatBindRequest request, HttpServletRequest httpRequest) {
+        try {
+            TokenResponse response = authService.bindWechat(
+                    request.getPendingBindToken(), request.getEmail(), request.getCode(), clientIp(httpRequest));
+            return Result.success(response);
+        } catch (IllegalArgumentException e) {
+            return Result.badRequest(e.getMessage());
+        }
+    }
+
+    /**
+     * 首次微信登录「跳过绑定」：给 openid 创建临时微信账号并签发 token。
+     * POST /api/auth/wechat-skip  body: { pendingBindToken }
+     */
+    @PostMapping("/wechat-skip")
+    public Result<TokenResponse> wechatSkip(@RequestBody WechatBindRequest request, HttpServletRequest httpRequest) {
+        try {
+            TokenResponse response = authService.createWechatUser(request.getPendingBindToken(), clientIp(httpRequest));
+            return Result.success(response);
+        } catch (IllegalArgumentException e) {
+            return Result.badRequest(e.getMessage());
+        }
+    }
+
+    /**
+     * 账号设置补绑邮箱（已登录的未绑定微信账号）
+     * POST /api/auth/wechat-bind-existing  body: { email, code }，携带 Authorization 头。
+     * 邮箱已是既有 PC 账号时执行账号合并；否则把邮箱挂到当前微信账号。
+     */
+    @PostMapping("/wechat-bind-existing")
+    public ResponseEntity<Result<TokenResponse>> wechatBindExisting(
+            @Valid @RequestBody WechatBindRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            HttpServletRequest httpRequest) {
+        if (authorization == null || authorization.isBlank()) {
+            return unauthorizedResponse();
+        }
+        try {
+            TokenResponse response = authService.bindWechatExisting(
+                    authorization, request.getEmail(), request.getCode(), clientIp(httpRequest));
+            return ResponseEntity.ok(Result.success(response));
+        } catch (IllegalArgumentException e) {
+            // 业务校验失败（验证码/邮箱/已绑定）映射为 400；token 无效由服务抛 401 交给全局异常处理。
+            return ResponseEntity.badRequest()
+                    .body(Result.badRequest(e.getMessage()));
+        }
+    }
+
+    /**
      * 刷新 Access Token（无感刷新）
      * 前端 axios 封装在收到 401 时自动调用此接口
      *

@@ -37,6 +37,10 @@ public class JwtUtil {
     @Value("${jwt.refresh-token-expire:604800000}")
     private long refreshTokenExpire;
 
+    /** 微信绑定凭证 Token 有效期（毫秒），默认 10 分钟 */
+    @Value("${jwt.bind-token-expire:600000}")
+    private long bindTokenExpire;
+
     /**
      * 启动时校验签名密钥：缺失或长度不足（HMAC-SHA 至少 32 字节）直接拒绝启动，
      * 防止生产环境因未配置 JWT_SECRET 而使用已知默认密钥造成 Token 可被伪造
@@ -73,6 +77,25 @@ public class JwtUtil {
      */
     public String generateRefreshToken(String subject) {
         return buildToken(subject, Map.of("type", "refresh"), refreshTokenExpire);
+    }
+
+    /**
+     * 生成微信绑定凭证 Token（subject 为 openid，短时效），用于「首次微信登录先绑定后建号」流程
+     */
+    public String generateBindToken(String subject) {
+        return buildToken(subject, Map.of("type", "bind"), bindTokenExpire);
+    }
+
+    /**
+     * 判断是否为微信绑定凭证 Token（type=bind）
+     */
+    public boolean isBindToken(String token) {
+        try {
+            Claims claims = parseToken(token);
+            return "bind".equals(claims.get("type", String.class));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private String buildToken(String subject, Map<String, Object> claims, long expireMs) {

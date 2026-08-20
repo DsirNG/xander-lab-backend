@@ -5,6 +5,7 @@ import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
+import com.xander.lab.identity.infrastructure.AccountMergeMapper;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient.WechatSession;
@@ -29,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -46,6 +48,7 @@ class AuthServiceTest {
     @Mock private ValueOperations<String, String> valueOperations;
     @Mock private SetOperations<String, String> setOperations;
     @Mock private WechatMiniAppClient wechatMiniAppClient;
+    @Mock private AccountMergeMapper accountMergeMapper;
 
     private AuthService service;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -55,7 +58,7 @@ class AuthServiceTest {
     void setUp() {
         billingService = mock(BillingService.class);
         service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate, passwordEncoder,
-                billingService, wechatMiniAppClient);
+                billingService, wechatMiniAppClient, accountMergeMapper);
         // 速率限制默认放行（increment 返回 1），只被涉及限流的用例使用
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(valueOperations.increment(anyString())).thenReturn(1L);
@@ -194,26 +197,156 @@ class AuthServiceTest {
     }
 
     @Test
-    void wechatLoginAutoRegistersFirstTimeUserAndGrantsBonus() {
+    void wechatLoginFirstTimeReturnsPendingBindTokenInsteadOfAutoRegistering() {
         when(wechatMiniAppClient.code2Session("first-code")).thenReturn(sessionOk("oWX-new-user"));
         when(userMapper.selectOne(any())).thenReturn(null);
+        when(jwtUtil.generateBindToken("oWX-new-user")).thenReturn("bind-token");
+
+        TokenResponse response = service.wechatLogin("first-code", "127.0.0.1");
+
+        assertThat(response.isPendingBind()).isTrue();
+        assertThat(response.getPendingBindToken()).isEqualTo("bind-token");
+        assertThat(response.getAccessToken()).isNull();
+        // 未建号：不得自动注册、不得发 token、不触发注册赠送
+        verify(userMapper, never()).insert(any());
+        verify(jwtUtil, never()).generateAccessToken(anyString(), any(Map.class));
+        verify(billingService, never()).grantRegister(any(), any());
+    }
+
+    @Test
+    void bindWechatCreatesUserWithEmailWhenEmailIsNew() {
+        when(jwtUtil.isValid("bind-token")).thenReturn(true);
+        when(jwtUtil.isBindToken("bind-token")).thenReturn(true);
+        when(jwtUtil.getSubject("bind-token")).thenReturn("oWX-new-user");
+        when(userMapper.selectOne(any())).thenReturn(null);
+        when(valueOperations.get(Constants.REDIS_CODE_PREFIX + "new@example.com")).thenReturn("123456");
         when(userMapper.insert(any())).thenAnswer(invocation -> {
             User inserted = invocation.getArgument(0);
-            inserted.setId(99L);
+            inserted.setId(88L);
             return 1;
         });
         stubTokenIssuance();
 
-        TokenResponse response = service.wechatLogin("first-code", "127.0.0.1");
+        TokenResponse response = service.bindWechat("bind-token", "NEW@EXAMPLE.com", "123456", "127.0.0.1");
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).insert(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("new@example.com"); // 规范化小写
         assertThat(captor.getValue().getOpenid()).isEqualTo("oWX-new-user");
-        assertThat(captor.getValue().getUsername()).startsWith("wx_").hasSize(19);
-        assertThat(captor.getValue().getNickname()).startsWith("微信用户");
-        assertThat(captor.getValue().getPassword()).matches("[0-9a-f]{64}");
-        assertThat(response.getUserInfo().getUsername()).isEqualTo(captor.getValue().getUsername());
-        verify(billingService).grantRegister(99L, "user:99");
+        assertThat(captor.getValue().getUsername()).isEqualTo("new@example.com");
+        assertThat(captor.getValue().getPassword()).matches("[0-9a-f]{64}"); // 随机口令仅存哈希
+        assertThat(response.getUserInfo().getEmail()).isEqualTo("new@example.com");
+        // 验证码一次性消费
+        verify(valueOperations).get(Constants.REDIS_CODE_PREFIX + "new@example.com");
+        verify(redisTemplate).delete(Constants.REDIS_CODE_PREFIX + "new@example.com");
+        verify(billingService).grantRegister(88L, "user:88");
+    }
+
+    @Test
+    void bindWechatMergesIntoExistingPcAccountByEmail() {
+        User temp = user(30L, "wx_temp", "secret", 1);
+        temp.setOpenid("oWX-merge");
+        User pc = user(31L, "pc@example.com", "secret", 1);
+        pc.setEmail("pc@example.com");
+        when(jwtUtil.isValid("bind-token")).thenReturn(true);
+        when(jwtUtil.isBindToken("bind-token")).thenReturn(true);
+        when(jwtUtil.getSubject("bind-token")).thenReturn("oWX-merge");
+        when(userMapper.selectOne(any())).thenReturn(null, pc); // openid 无既有账号 → 邮箱已存在
+        when(valueOperations.get(Constants.REDIS_CODE_PREFIX + "pc@example.com")).thenReturn("654321");
+        stubTokenIssuance();
+
+        TokenResponse response = service.bindWechat("bind-token", "pc@example.com", "654321", "127.0.0.1");
+
+        // 邮箱已有 PC 账号：不建新号，openid 挂到既有账号（微信与 PC 同一账号）
+        verify(userMapper, never()).insert(any());
+        verify(userMapper).updateById(argThat(u -> u.getId().equals(31L) && "oWX-merge".equals(u.getOpenid())));
+        assertThat(response.getUserInfo().getUsername()).isEqualTo("pc@example.com");
+    }
+
+    @Test
+    void skipBindCreatesTempWechatUser() {
+        when(jwtUtil.isValid("bind-token")).thenReturn(true);
+        when(jwtUtil.isBindToken("bind-token")).thenReturn(true);
+        when(jwtUtil.getSubject("bind-token")).thenReturn("oWX-skip");
+        when(userMapper.selectOne(any())).thenReturn(null);
+        when(userMapper.insert(any())).thenAnswer(invocation -> {
+            User inserted = invocation.getArgument(0);
+            inserted.setId(77L);
+            return 1;
+        });
+        stubTokenIssuance();
+
+        TokenResponse response = service.createWechatUser("bind-token", "127.0.0.1");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).insert(captor.capture());
+        assertThat(captor.getValue().getOpenid()).isEqualTo("oWX-skip");
+        assertThat(captor.getValue().getEmail()).isNull(); // 临时账号未绑定邮箱
+        assertThat(response.isNeedsEmailBinding()).isTrue();
+        verify(billingService).grantRegister(77L, "user:77");
+    }
+
+    @Test
+    void bindExistingOnTempUserMergesBusinessDataAndBalanceIntoPcAccount() {
+        User temp = user(40L, "wx_temp", "secret", 1);
+        temp.setOpenid("oWX-existing");
+        User pc = user(41L, "pc@example.com", "secret", 1);
+        pc.setEmail("pc@example.com");
+        // PC 账号尚未绑定过微信，处于可合并状态
+        pc.setOpenid(null);
+        when(jwtUtil.isValid("access")).thenReturn(true);
+        when(jwtUtil.getSubject("access")).thenReturn("40");
+        when(userMapper.selectById("40")).thenReturn(temp);
+        when(userMapper.selectOne(any())).thenReturn(pc); // 邮箱已是既有 PC 账号
+        when(valueOperations.get(Constants.REDIS_CODE_PREFIX + "pc@example.com")).thenReturn("111222");
+        stubTokenIssuance();
+
+        TokenResponse response = service.bindWechatExisting("Bearer access", "pc@example.com", "111222", "127.0.0.1");
+
+        // 业务数据迁转至目标账号
+        verify(accountMergeMapper).reparentAgentConversations(40L, 41L);
+        verify(accountMergeMapper).reparentBlogAgentTasks(40L, 41L);
+        verify(accountMergeMapper).reparentFlowProjects(40L, 41L);
+        // 积分并入目标账号
+        verify(billingService).transferBalance(40L, 41L, "merge:40:41", "账号合并转入");
+        // 临时账号删除，openid 挂到目标账号
+        verify(userMapper).deleteById(40L);
+        verify(userMapper).updateById(argThat(u -> u.getId().equals(41L) && "oWX-existing".equals(u.getOpenid())));
+        assertThat(response.getUserInfo().getUsername()).isEqualTo("pc@example.com");
+    }
+
+    @Test
+    void bindExistingInvalidTokenReturnsUnauthorized() {
+        when(jwtUtil.isValid("bad-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.bindWechatExisting("Bearer bad-token", "a@b.com", "000000", "127.0.0.1"))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(e -> ((ResponseStatusException) e).getStatusCode().value())
+                .isEqualTo(401);
+        verify(accountMergeMapper, never()).reparentAgentConversations(any(), any());
+    }
+
+    @Test
+    void bindWechatAfterSkipMergesTempUserIntoPcAccount() {
+        User temp = user(50L, "wx_skip", "secret", 1);
+        temp.setOpenid("oWX-skip");
+        User pc = user(51L, "pc@example.com", "secret", 1);
+        pc.setEmail("pc@example.com");
+        pc.setOpenid(null);
+        when(jwtUtil.isValid("bind-token")).thenReturn(true);
+        when(jwtUtil.isBindToken("bind-token")).thenReturn(true);
+        when(jwtUtil.getSubject("bind-token")).thenReturn("oWX-skip");
+        when(userMapper.selectOne(any())).thenReturn(temp, pc); // 先查 openid 命中临时号，再查邮箱命中 PC 号
+        when(valueOperations.get(Constants.REDIS_CODE_PREFIX + "pc@example.com")).thenReturn("555666");
+        stubTokenIssuance();
+
+        TokenResponse response = service.bindWechat("bind-token", "pc@example.com", "555666", "127.0.0.1");
+
+        // 临时号数据/积分并入 PC 账号并删除临时号，openid 挂到 PC 账号
+        verify(billingService).transferBalance(50L, 51L, "merge:50:51", "账号合并转入");
+        verify(userMapper).deleteById(50L);
+        verify(userMapper).updateById(argThat(u -> u.getId().equals(51L) && "oWX-skip".equals(u.getOpenid())));
+        assertThat(response.getUserInfo().getUsername()).isEqualTo("pc@example.com");
     }
 
     @Test

@@ -120,6 +120,22 @@ public class BillingService {
                 properties.getGrantRegister(), null, null, null, null, "注册赠送");
     }
 
+    /** 账号合并：把来源账号积分余额整体转入目标账号（产生一笔转入流水），并删除来源账户行。
+     *  幂等：来源账户不存在或余额为 0 时直接返回；bizKey 保证同一合并只入账一次。 */
+    @Transactional
+    public void transferBalance(Long fromUserId, Long toUserId, String bizKey, String remark) {
+        if (!properties.isEnabled() || fromUserId == null || toUserId == null || fromUserId.equals(toUserId)) {
+            return;
+        }
+        PointAccount from = accountMapper.selectById(fromUserId);
+        if (from == null || from.getBalance() == 0) {
+            return;
+        }
+        recordAndDeduct(toUserId, BillingBiz.MERGE_CREDIT, bizKey, null, from.getBalance(),
+                null, null, null, null, remark == null ? "账号合并转入" : remark);
+        accountMapper.deleteById(fromUserId);
+    }
+
     /** 按单价折算积分：input/output/cached 分开计费，四舍五入后至少 1 分。 */
     private long tokenToPoints(ModelUsage usage) {
         BillingProperties.Price price = properties.getPrice();
@@ -150,7 +166,7 @@ public class BillingService {
         if (account == null) {
             throw new IllegalStateException("积分账户不存在");
         }
-        boolean credit = BillingBiz.GRANT_REGISTER.equals(bizType);
+        boolean credit = BillingBiz.GRANT_REGISTER.equals(bizType) || BillingBiz.MERGE_CREDIT.equals(bizType);
         long after = credit ? account.getBalance() + points : account.getBalance() - points;
 
         PointsLedger ledger = new PointsLedger();
