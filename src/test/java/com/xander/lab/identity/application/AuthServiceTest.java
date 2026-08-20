@@ -311,6 +311,8 @@ class AuthServiceTest {
         verify(billingService).transferBalance(40L, 41L, "merge:40:41", "账号合并转入");
         // 临时账号删除，openid 挂到目标账号
         verify(userMapper).deleteById(40L);
+        // 解绑 openid 用显式 SQL 而非 updateById：null 字段会被 MyBatis-Plus 跳过生成空 SET（回归）
+        verify(userMapper).clearOpenid(40L);
         verify(userMapper).updateById(argThat(u -> u.getId().equals(41L) && "oWX-existing".equals(u.getOpenid())));
         assertThat(response.getUserInfo().getUsername()).isEqualTo("pc@example.com");
     }
@@ -345,6 +347,7 @@ class AuthServiceTest {
         // 临时号数据/积分并入 PC 账号并删除临时号，openid 挂到 PC 账号
         verify(billingService).transferBalance(50L, 51L, "merge:50:51", "账号合并转入");
         verify(userMapper).deleteById(50L);
+        verify(userMapper).clearOpenid(50L);
         verify(userMapper).updateById(argThat(u -> u.getId().equals(51L) && "oWX-skip".equals(u.getOpenid())));
         assertThat(response.getUserInfo().getUsername()).isEqualTo("pc@example.com");
     }

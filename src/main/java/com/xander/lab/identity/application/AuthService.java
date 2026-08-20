@@ -19,6 +19,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
@@ -263,7 +264,9 @@ public class AuthService {
      * 首次微信登录「绑定邮箱」：校验验证码后把 openid 与邮箱建立绑定并签发 token。
      * 邮箱如果已是 PC 端既有账号，则直接给该账号挂载 openid（微信与 PC 为同一账号）。
      * 幂等：重复提交/并发时重查已有账号，不重复建号。
+     * 整个绑定/合并过程在单个事务内执行，避免半合并残留状态。
      */
+    @Transactional
     public TokenResponse bindWechat(String pendingBindToken, String email, String code, String clientIp) {
         checkRateLimit("bind:ip", sanitize(clientIp), 20, 60);
         String openid = resolveOpenidFromPendingToken(pendingBindToken);
@@ -336,7 +339,9 @@ public class AuthService {
      * 账号设置补绑邮箱：已登录的未绑定微信账号（跳过过绑定）绑定邮箱。
      * 邮箱已是既有 PC 账号时执行合并：迁转名下的对话/计划/提醒/任务/积分后删除临时账号，
      * 从微信与 PC 登录都指向同一账号。token 无效或缺失返回 401。
+     * 整个绑定/合并过程在单个事务内执行，避免半合并残留状态。
      */
+    @Transactional
     public TokenResponse bindWechatExisting(String bearerToken, String email, String code, String clientIp) {
         String token;
         try {
@@ -498,10 +503,7 @@ public class AuthService {
         // 3. 撤销临时账号的登录态
         revokeUserTokens(temp.getId());
         // 4. 解绑临时号 openid → 挂到目标账号 → 删除临时号
-        User detach = new User();
-        detach.setId(temp.getId());
-        detach.setOpenid(null);
-        userMapper.updateById(detach);
+        userMapper.clearOpenid(temp.getId());
         attachOpenid(target, openid);
         userMapper.deleteById(temp.getId());
         log.info("[Auth] 微信账号合并: temp={} -> target={} openid={}", temp.getId(), target.getId(), openid);
