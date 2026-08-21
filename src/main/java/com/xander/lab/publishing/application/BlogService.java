@@ -277,6 +277,17 @@ public class BlogService {
         return result;
     }
 
+    /** 返回用户当前可管理的博客总数，不包含回收站文章。 */
+    @Transactional(readOnly = true)
+    public long countManagedBlogs(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        return blogPostMapper.selectCount(new LambdaQueryWrapper<BlogPost>()
+                .eq(BlogPost::getUserId, userId)
+                .in(BlogPost::getStatus, STATUS_DRAFT, STATUS_PUBLISHED));
+    }
+
     /**
      * 通用查询当前用户文章（不分页），筛选条件可任意组合：
      * status 限定草稿/已发布/回收站；search 标题摘要关键词；
