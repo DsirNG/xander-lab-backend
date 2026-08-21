@@ -24,6 +24,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -456,7 +457,7 @@ class AuthServiceTest {
     void updateProfileRejectsInvalidTokenWithUnauthorized() {
         when(jwtUtil.isValid("bad-token")).thenReturn(false);
 
-        assertThatThrownBy(() -> service.updateProfile("Bearer bad-token", "新昵称", null))
+        assertThatThrownBy(() -> service.updateProfile("Bearer bad-token", null, "新昵称", null))
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(e -> ((ResponseStatusException) e).getStatusCode().value())
                 .isEqualTo(401);
@@ -467,7 +468,7 @@ class AuthServiceTest {
     void updateProfileRejectsBlankNickname() {
         when(jwtUtil.isValid("access")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.updateProfile("Bearer access", "   ", null))
+        assertThatThrownBy(() -> service.updateProfile("Bearer access", null, "   ", null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("昵称");
         verify(userMapper, never()).updateById(any());
@@ -477,7 +478,7 @@ class AuthServiceTest {
     void updateProfileRejectsNonHttpAvatar() {
         when(jwtUtil.isValid("access")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.updateProfile("Bearer access", "新昵称", "ftp://x"))
+        assertThatThrownBy(() -> service.updateProfile("Bearer access", null, "新昵称", "ftp://x"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("http");
         verify(userMapper, never()).updateById(any());
@@ -491,7 +492,7 @@ class AuthServiceTest {
         when(jwtUtil.getSubject("access")).thenReturn("5");
         when(userMapper.selectById("5")).thenReturn(user);
 
-        TokenResponse.UserInfo info = service.updateProfile("Bearer access", " 新昵称 ", "https://example.com/a.png");
+        TokenResponse.UserInfo info = service.updateProfile("Bearer access", null, " 新昵称 ", "https://example.com/a.png");
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).updateById(captor.capture());
@@ -508,10 +509,41 @@ class AuthServiceTest {
         when(jwtUtil.getSubject("access")).thenReturn("5");
         when(userMapper.selectById("5")).thenReturn(user);
 
-        service.updateProfile("Bearer access", "新昵称", "  ");
+        service.updateProfile("Bearer access", null, "新昵称", "  ");
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).updateById(captor.capture());
         assertThat(captor.getValue().getAvatar()).isNull();
+    }
+
+    @Test
+    void changePasswordVerifiesCurrentPasswordAndStoresBcryptHash() {
+        User user = user(5L, "alice", "old-secret", 1);
+        when(jwtUtil.isValid("access")).thenReturn(true);
+        when(jwtUtil.getSubject("access")).thenReturn("5");
+        when(userMapper.selectById("5")).thenReturn(user);
+
+        service.changePassword("Bearer access", "old-secret", "new-secret");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).updateById(captor.capture());
+        assertThat(passwordEncoder.matches("new-secret", captor.getValue().getPassword())).isTrue();
+    }
+
+    @Test
+    void resetPasswordConsumesCodeUpdatesHashAndRevokesSessions() {
+        User user = user(6L, "alice", "old-secret", 1);
+        user.setEmail("alice@example.com");
+        when(valueOperations.get(Constants.REDIS_CODE_PREFIX + "alice@example.com")).thenReturn("123456");
+        when(userMapper.selectOne(any())).thenReturn(user);
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+        when(setOperations.members(Constants.REDIS_USER_TOKENS_PREFIX + "6")).thenReturn(Set.of());
+
+        service.resetPassword("Alice@example.com", "123456", "new-secret");
+
+        verify(redisTemplate).delete(Constants.REDIS_CODE_PREFIX + "alice@example.com");
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).updateById(captor.capture());
+        assertThat(passwordEncoder.matches("new-secret", captor.getValue().getPassword())).isTrue();
     }
 }

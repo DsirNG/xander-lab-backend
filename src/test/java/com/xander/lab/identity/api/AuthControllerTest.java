@@ -111,7 +111,7 @@ class AuthControllerTest {
         ResponseEntity<Result<TokenResponse.UserInfo>> response = controller.updateProfile(null, request);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
-        verify(authService, org.mockito.Mockito.never()).updateProfile(anyString(), anyString(), anyString());
+        verify(authService, org.mockito.Mockito.never()).updateProfile(anyString(), any(), anyString(), anyString());
     }
 
     @Test
@@ -120,7 +120,7 @@ class AuthControllerTest {
         request.setNickname("新昵称");
         request.setAvatar("https://example.com/a.png");
         TokenResponse.UserInfo updated = TokenResponse.UserInfo.builder().nickname("新昵称").build();
-        when(authService.updateProfile("Bearer token", "新昵称", "https://example.com/a.png")).thenReturn(updated);
+        when(authService.updateProfile("Bearer token", null, "新昵称", "https://example.com/a.png")).thenReturn(updated);
 
         ResponseEntity<Result<TokenResponse.UserInfo>> response = controller.updateProfile("Bearer token", request);
 
@@ -132,7 +132,7 @@ class AuthControllerTest {
     void updateProfileMapsValidationFailureToBadRequest() {
         ProfileUpdateRequest request = new ProfileUpdateRequest();
         request.setNickname("  ");
-        when(authService.updateProfile(eq("Bearer token"), anyString(), any()))
+        when(authService.updateProfile(eq("Bearer token"), any(), anyString(), any()))
                 .thenThrow(new IllegalArgumentException("昵称不能为空"));
 
         ResponseEntity<Result<TokenResponse.UserInfo>> response = controller.updateProfile("Bearer token", request);

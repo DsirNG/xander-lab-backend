@@ -10,6 +10,9 @@ import lombok.Data;
 @Data
 public class ProfileUpdateRequest {
 
+    @Size(min = 3, max = 30, message = "用户名长度需在 3-30 个字符之间")
+    private String username;
+
     /** 昵称（展示名） */
     @Size(min = 1, max = 30, message = "昵称长度需在 1-30 字符之间")
     private String nickname;

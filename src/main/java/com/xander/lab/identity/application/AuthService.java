@@ -678,7 +678,7 @@ public class AuthService {
      * token 无效或过期抛 {@link ResponseStatusException}（401），参数不合法抛
      * IllegalArgumentException（400）。
      */
-    public TokenResponse.UserInfo updateProfile(String bearerToken, String nickname, String avatar) {
+    public TokenResponse.UserInfo updateProfile(String bearerToken, String username, String nickname, String avatar) {
         String token;
         try {
             token = extractToken(bearerToken);
@@ -714,8 +714,21 @@ public class AuthService {
             throw new IllegalArgumentException("用户不存在");
         }
         // 只更新可修改字段，username/email 等登录凭据保持只读。
+        String normalizedUsername = username == null ? user.getUsername() : username.trim();
+        if (normalizedUsername.length() < 3 || normalizedUsername.length() > 30) {
+            throw new IllegalArgumentException("用户名长度需在 3-30 个字符之间");
+        }
+        if (!normalizedUsername.matches("^[A-Za-z0-9_@.+-]+$")) {
+            throw new IllegalArgumentException("用户名只能包含字母、数字及 _@.+-");
+        }
+        User existing = userMapper.selectOne(new LambdaQueryWrapper<User>()
+                .eq(User::getUsername, normalizedUsername));
+        if (existing != null && !existing.getId().equals(user.getId())) {
+            throw new IllegalArgumentException("该用户名已被使用");
+        }
         User update = new User();
         update.setId(Long.valueOf(userId));
+        update.setUsername(normalizedUsername);
         update.setNickname(trimmedNickname);
         if (normalizedAvatar != null) {
             update.setAvatar(normalizedAvatar);
@@ -724,11 +737,55 @@ public class AuthService {
         userMapper.updateById(update);
 
         // 重新查询以返回数据库中的最新值（含未修改的头像原值）。
+        user.setUsername(normalizedUsername);
         user.setNickname(trimmedNickname);
         if (normalizedAvatar != null) {
             user.setAvatar(normalizedAvatar);
         }
         return buildUserInfo(user);
+    }
+
+    public void changePassword(String bearerToken, String currentPassword, String newPassword) {
+        String token = extractToken(bearerToken);
+        if (!jwtUtil.isValid(token)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        User user = userMapper.selectById(jwtUtil.getSubject(token));
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        if (!matchesPassword(user, currentPassword)) {
+            throw new IllegalArgumentException("当前密码不正确");
+        }
+        validateNewPassword(newPassword);
+        updatePassword(user, newPassword);
+    }
+
+    public void resetPassword(String email, String code, String newPassword) {
+        String normalizedEmail = normalizeEmail(email);
+        validateNewPassword(newPassword);
+        verifyEmailCode(normalizedEmail, code);
+        User user = userMapper.selectOne(new LambdaQueryWrapper<User>().eq(User::getEmail, normalizedEmail));
+        if (user == null) {
+            throw new IllegalArgumentException("该邮箱尚未绑定账户");
+        }
+        updatePassword(user, newPassword);
+        revokeUserTokens(user.getId());
+    }
+
+    private void validateNewPassword(String password) {
+        if (password == null || password.length() < 6 || password.length() > 72) {
+            throw new IllegalArgumentException("新密码长度需在 6-72 个字符之间");
+        }
+    }
+
+    private void updatePassword(User user, String newPassword) {
+        User update = new User();
+        update.setId(user.getId());
+        update.setPassword(passwordEncoder.encode(newPassword));
+        update.setUpdatedAt(LocalDateTime.now());
+        userMapper.updateById(update);
+        user.setPassword(update.getPassword());
     }
 
     public String extractToken(String bearerToken) {

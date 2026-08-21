@@ -215,12 +215,35 @@ public class AuthController {
         }
         try {
             TokenResponse.UserInfo userInfo = authService.updateProfile(
-                    authorization, request.getNickname(), request.getAvatar());
+                    authorization, request.getUsername(), request.getNickname(), request.getAvatar());
             return ResponseEntity.ok(Result.success(userInfo));
         } catch (IllegalArgumentException e) {
             // 业务校验失败（昵称/头像不合法）映射为 400；token 无效由服务抛 401 交给全局异常处理。
             return ResponseEntity.badRequest()
                     .body(Result.error(400, e.getMessage()));
+        }
+    }
+
+    @PutMapping("/password")
+    public ResponseEntity<Result<Void>> changePassword(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        if (authorization == null || authorization.isBlank()) return unauthorizedResponse();
+        try {
+            authService.changePassword(authorization, request.getCurrentPassword(), request.getNewPassword());
+            return ResponseEntity.ok(Result.success());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Result.badRequest(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/reset-password")
+    public Result<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        try {
+            authService.resetPassword(request.getEmail(), request.getCode(), request.getNewPassword());
+            return Result.success();
+        } catch (IllegalArgumentException e) {
+            return Result.badRequest(e.getMessage());
         }
     }
 
