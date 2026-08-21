@@ -9,26 +9,22 @@ import java.util.Map;
 /**
  * 积分计费配置。
  *
- * <p>token 单价以「毫分 / 每 1K token」为单位：一次调用积分 =
- * round((input*inputPrice + cached*cachedPrice + output*outputPrice) / 1_000),
- * 至少 1 分。一口价（配图 / 邮件 / CSDN）直接按 biz_type 配置积分值。</p>
+ * <p>账本单位为「毫分」（1 分 = 1000 毫分，1 元 = 100_000 毫分），余额与流水全链路毫分，
+ * token 计费精确到毫分不再舍入到整分。token 单价以「毫分 / 每 1K token」为单位：
+ * 一次调用毫分 = round(input*inputPrice + cached*cachedPrice + output*outputPrice)，
+ * 至少 1 毫分。一口价（配图 / 邮件 / CSDN）直接按 biz_type 配置毫分值。</p>
  *
- * <p>支持按模型配置不同价格：models.{model}.price 优先级高于默认 price，
- * 未配置的模型使用默认价格。例如：</p>
+ * <p>支持按模型配置不同价格：models.{model}.price 优先级高于默认 price（数据库
+ * billing_model_price 又优先于本配置），未配置的模型使用默认价格。例如：</p>
  * <pre>
  * billing.models.gpt-5.6-terra.price.input-milli-per-1k-token=200
- * billing.models.gpt-image-2.price.input-milli-per-1k-token=500
  * </pre>
  *
  * <pre>
  * billing.enabled=true
- * billing.grant-register=2000
+ * billing.grant-register=2000000   # 2000 分 = 2,000,000 毫分
  * billing.price.input-milli-per-1k-token=500
- * billing.price.output-milli-per-1k-token=2000
- * billing.price.cached-milli-per-1k-token=50
- * billing.flat.blog-agent-illustration=50
- * billing.flat.email-reminder=5
- * billing.flat.csdn-publish=10
+ * billing.flat.blog-agent-illustration=50000
  * </pre>
  */
 @Component
@@ -38,18 +34,18 @@ public class BillingProperties {
     /** 积分开关；关闭后所有计费与余额预检短路，行为回到现状。 */
     private boolean enabled = true;
 
-    /** 注册赠送积分 */
-    private int grantRegister = 2000;
+    /** 注册赠送积分（毫分）：2000 分 */
+    private int grantRegister = 2_000_000;
 
-    /** 余额预检阈值：余额低于该值时拒绝发起新消耗 */
-    private int preCheckMinBalance = 1;
+    /** 余额预检阈值（毫分）：余额低于该值时拒绝发起新消耗，默认 1 分 */
+    private int preCheckMinBalance = 1_000;
 
-    /** 一口价：BillingBiz 业务名 -> 积分 */
+    /** 一口价：BillingBiz 业务名 -> 毫分 */
     private Map<String, Integer> flat = new LinkedHashMap<>(Map.of(
-            "blog-agent-illustration", 50,
-            "email-reminder", 5,
-            "csdn-publish", 10,
-            "juejin-publish", 10
+            "blog-agent-illustration", 50_000,
+            "email-reminder", 5_000,
+            "csdn-publish", 10_000,
+            "juejin-publish", 10_000
     ));
 
     /** 默认 token 单价（未配置模型专属价格时使用） */

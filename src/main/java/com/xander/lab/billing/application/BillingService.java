@@ -81,13 +81,28 @@ public class BillingService {
         return account == null ? 0L : account.getBalance();
     }
 
+    /** 分页返回当前用户的流水视图：delta 带符号（收入为正、消耗为负），供端上直接渲染 +/-。 */
     public PointsLedgerPage pageLedger(Long userId, int page, int size) {
         Page<PointsLedger> paged = ledgerMapper.selectPage(
                 new Page<>(Math.max(1, page), Math.min(Math.max(1, size), 100)),
                 new LambdaQueryWrapper<PointsLedger>()
                         .eq(PointsLedger::getUserId, userId)
                         .orderByDesc(PointsLedger::getId));
-        return new PointsLedgerPage(paged.getRecords(), paged.getTotal());
+        List<PointsLedgerItem> items = paged.getRecords().stream()
+                .map(BillingService::toItem)
+                .toList();
+        return new PointsLedgerPage(items, paged.getTotal());
+    }
+
+    private static PointsLedgerItem toItem(PointsLedger ledger) {
+        boolean credit = isCreditBiz(ledger.getBizType());
+        long amount = ledger.getAmount() == null ? 0L : ledger.getAmount();
+        return new PointsLedgerItem(
+                ledger.getId(), ledger.getBizType(), ledger.getBizKey(), ledger.getBizRef(),
+                credit ? amount : -amount, credit ? "credit" : "debit",
+                amount, ledger.getBalanceAfter(), ledger.getUnitPrice(),
+                ledger.getModel(), ledger.getInputTokens(), ledger.getOutputTokens(),
+                ledger.getCachedTokens(), ledger.getRemark(), ledger.getCreatedAt());
     }
 
     /** 当前余额与近日消耗汇总，供前端积分面板展示。 */
@@ -99,6 +114,7 @@ public class BillingService {
                         .ge(PointsLedger::getCreatedAt, LocalDateTime.now().toLocalDate().atStartOfDay()))
                 .stream().mapToLong(PointsLedger::getAmount).sum();
         return Map.of(
+                "unit", "milli-point",
                 "balance", balance,
                 "consumedToday", consumedToday,
                 "enablePreCheck", properties.isEnabled() && balance < properties.getPreCheckMinBalance());
@@ -125,6 +141,7 @@ public class BillingService {
                     "cachedWriteMilliPer1kToken", modelPrice.getCachedWriteMilliPer1kToken()));
         });
         return Map.of(
+                "unit", "milli-point",
                 "grantRegister", properties.getGrantRegister(),
                 "preCheckMinBalance", properties.getPreCheckMinBalance(),
                 "token", Map.of(
@@ -236,7 +253,7 @@ public class BillingService {
         accountMapper.deleteById(fromUserId);
     }
 
-    /** 按单价折算积分：单价为「毫分 / 每 1K token」，tokens×milli 折成毫分后再 /1000 得分，四舍五入至少 1 分。 */
+    /** 按单价折算毫分：单价为「毫分 / 每 1K token」，tokens×milli 即毫分，四舍五入后至少 1 毫分。 */
     private long tokenToPoints(ModelUsage usage, String model) {
         BillingProperties.Price price = resolvePrice(model);
         long input = Math.max(0L, usage.inputTokens());
@@ -245,7 +262,7 @@ public class BillingService {
         double milliPoints = input / 1000.0 * price.getInputMilliPer1kToken()
                 + output / 1000.0 * price.getOutputMilliPer1kToken()
                 + cached / 1000.0 * price.getCachedMilliPer1kToken();
-        return Math.max(1L, Math.round(milliPoints / 1000.0));
+        return Math.max(1L, Math.round(milliPoints));
     }
 
     /**
@@ -287,7 +304,7 @@ public class BillingService {
         if (account == null) {
             throw new IllegalStateException("积分账户不存在");
         }
-        boolean credit = BillingBiz.GRANT_REGISTER.equals(bizType) || BillingBiz.MERGE_CREDIT.equals(bizType);
+        boolean credit = isCreditBiz(bizType);
         long after = credit ? account.getBalance() + points : account.getBalance() - points;
 
         PointsLedger ledger = new PointsLedger();
@@ -327,6 +344,11 @@ public class BillingService {
                 + (model == null ? "" : " " + model);
     }
 
+    /** 收入类业务（余额增加）：注册赠送与账号合并转入，其余均为消耗。 */
+    private static boolean isCreditBiz(String bizType) {
+        return BillingBiz.GRANT_REGISTER.equals(bizType) || BillingBiz.MERGE_CREDIT.equals(bizType);
+    }
+
     private void ensureAccount(Long userId) {
         if (accountMapper.selectById(userId) != null) return;
         PointAccount account = new PointAccount();
@@ -341,6 +363,14 @@ public class BillingService {
         }
     }
 
-    public record PointsLedgerPage(List<PointsLedger> records, long total) {
+    /** 流水分页视图：amount 恒为正数，delta 带符号（credit=+amount / debit=-amount），单位毫分。 */
+    public record PointsLedgerItem(Long id, String bizType, String bizKey, String bizRef,
+                                   long delta, String direction, long amount, Long balanceAfter,
+                                   String unitPrice, String model, Long inputTokens,
+                                   Long outputTokens, Long cachedTokens, String remark,
+                                   LocalDateTime createdAt) {
+    }
+
+    public record PointsLedgerPage(List<PointsLedgerItem> records, long total) {
     }
 }

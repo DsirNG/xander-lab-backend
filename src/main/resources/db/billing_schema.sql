@@ -1,10 +1,11 @@
 -- 积分计费模块基线表。
 -- user_id 即 sys_user 主键；流水 biz_type+biz_key 联合唯一，保证幂等不重复扣费。
--- 单位：积分，最小 1 分；token 单价快照以「毫分 / 每 1K token」保存，仅作审计展示。
+-- 单位：毫分（1 分 = 1000 毫分），余额与流水全链路毫分；token 计费精确到毫分。
+-- token 单价快照以「毫分 / 每 1K token」保存，仅作审计展示。
 
 CREATE TABLE IF NOT EXISTS sys_user_points (
     user_id BIGINT NOT NULL COMMENT '用户主键（sys_user.id）',
-    balance BIGINT NOT NULL DEFAULT 0 COMMENT '当前积分余额，允许为负（先耗后扣导致的小额欠费）',
+    balance BIGINT NOT NULL DEFAULT 0 COMMENT '当前余额（毫分），允许为负（先耗后扣导致的小额欠费）',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '开户时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近变动时间',
     PRIMARY KEY (user_id)
@@ -13,11 +14,11 @@ CREATE TABLE IF NOT EXISTS sys_user_points (
 CREATE TABLE IF NOT EXISTS points_ledger (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '流水主键',
     user_id BIGINT NOT NULL COMMENT '用户主键（sys_user.id）',
-    biz_type VARCHAR(32) NOT NULL COMMENT '计费方向：grant/consume/refund，或业务枚举值',
+    biz_type VARCHAR(32) NOT NULL COMMENT '计费方向：grant/merge-credit 为收入，其余为消耗',
     biz_key VARCHAR(128) NOT NULL COMMENT '幂等键，与 biz_type 联合唯一：如 task:123:run、conv:5:run:2',
     biz_ref VARCHAR(128) NULL COMMENT '业务引用：taskId / conversationId+runVersion / planRunId 等',
-    amount BIGINT NOT NULL COMMENT '积分变动额（正数），方向由 biz_type 决定',
-    balance_after BIGINT NOT NULL COMMENT '变动后余额快照',
+    amount BIGINT NOT NULL COMMENT '毫分变动额（恒为正数），方向由 biz_type 决定',
+    balance_after BIGINT NOT NULL COMMENT '变动后余额快照（毫分）',
     unit_price VARCHAR(255) NULL COMMENT '扣费时单价快照（token 单价或一口价说明）',
     model VARCHAR(128) NULL COMMENT 'token 计费用的模型名（流水审计）',
     input_tokens BIGINT NULL COMMENT '输入 token 数（token 计费时非空）',
