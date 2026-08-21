@@ -97,7 +97,9 @@ public class AuthInterceptor implements HandlerInterceptor {
             // 积分余额与流水为私有数据，必须登录后才能读取。
             "GET:/api/points",
             "GET:/api/points/ledger",
-            "GET:/api/points/prices"
+            "GET:/api/points/prices",
+            // 个人概览聚合用户、积分与文章数量，全部属于当前用户私有数据。
+            "GET:/api/profile/overview"
     );
 
     /** 公开的读操作路径（支持通配符） */

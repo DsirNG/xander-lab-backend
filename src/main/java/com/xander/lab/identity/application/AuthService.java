@@ -618,6 +618,23 @@ public class AuthService {
         return buildUserInfo(user);
     }
 
+    /**
+     * 按已鉴权用户 ID 读取公开账户信息，供站内聚合读模型使用。
+     *
+     * <p>调用方必须先通过统一鉴权链路获得 userId；用户已被删除时按登录失效处理，
+     * 避免其他业务模块直接依赖 identity 的 mapper。</p>
+     */
+    public TokenResponse.UserInfo getUserInfo(Long userId) {
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        return buildUserInfo(user);
+    }
+
     private TokenResponse generateTokenResponse(User user) {
         String userIdStr = String.valueOf(user.getId());
         Map<String, Object> claims = Map.of("role", user.getRole(), "type", "access");

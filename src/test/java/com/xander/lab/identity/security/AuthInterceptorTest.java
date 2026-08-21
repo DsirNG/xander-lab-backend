@@ -50,6 +50,15 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void profileOverviewRequiresAuthentication() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/profile/overview");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
     void protectedRouteSetsAuthenticatedUser() {
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/blog/posts");
         request.addHeader("Authorization", "Bearer access-token");
