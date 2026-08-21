@@ -26,6 +26,7 @@ public class AgentEventService {
     private final AgentEventMapper eventMapper;
     private final AgentConversationMapper conversationMapper;
     private final ObjectMapper objectMapper;
+    private final AgentEventBus eventBus;
 
     /** Persists an event for the active generation and renews its lease. */
     @Transactional
@@ -54,6 +55,8 @@ public class AgentEventService {
             if (inserted == 0) throw new AgentRunSupersededException(conversationId, runVersion);
             throw new IllegalStateException("智能体事件持久化后未返回事件游标");
         }
+        // 落库成功即广播：在线订阅者（WS）即时收到，与持久化并行而非事后查库。
+        eventBus.publish(conversationId, event);
         return event;
     }
 
@@ -85,6 +88,15 @@ public class AgentEventService {
                 .orderByDesc(AgentEvent::getId)
                 .last("LIMIT 1"));
         return events.isEmpty() ? null : events.get(0);
+    }
+
+    /** 该轮是否仍在运行（同用户、同代次、running 状态）；供订阅端做取代/收尾的防御性检查。 */
+    public boolean isRunActive(Long conversationId, Long userId, long runVersion) {
+        AgentConversation snapshot = conversationMapper.selectById(conversationId);
+        return snapshot != null
+                && Long.valueOf(runVersion).equals(snapshot.getRunVersion())
+                && userId != null && userId.equals(snapshot.getUserId())
+                && "running".equals(snapshot.getStatus());
     }
 
     /**

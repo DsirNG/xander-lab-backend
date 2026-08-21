@@ -3,8 +3,11 @@ package com.xander.lab.agent.api;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xander.lab.agent.application.AgentEventBus;
 import com.xander.lab.agent.application.AgentEventService;
+import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
+import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -16,12 +19,20 @@ import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * 智能体会话事件流的 WebSocket 订阅端：小程序无法读取 SSE 流，
- * 改用 WS 逐事件推送（与 SSE 共用 {@link AgentEventService#follow} 的持久化事件重放逻辑）。
+ * 改用 WS 逐事件推送。推送与落库并行：事件落库后经进程内
+ * {@link AgentEventBus} 即时直推本订阅；连接建立时先从数据库重放历史补齐，
+ * 依赖事件 id 单调去重衔接两路，不丢不重。
+ *
+ * <p><b>多实例部署前置条件</b>：AgentEventBus 仅本实例有效。扩容为多实例前，
+ * 必须为总线引入跨实例广播（如 Redis pub/sub），否则本订阅收不到其他实例产生的事件。</p>
  * 帧格式与 SSE 事件一致：{"id":事件游标,"event":"answer_delta","data":...}。
  * 一轮终态（complete/error）推送后即关闭连接，下一轮由客户端重新建立。
  */
@@ -29,20 +40,43 @@ import java.util.concurrent.atomic.AtomicLong;
 public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
 
     private static final Duration HEARTBEAT_INTERVAL = Duration.ofSeconds(20);
+    /** 实时等待阶段的防御性检查周期：仅用于发现会话被新代次取代，不是事件获取路径。 */
+    static final long SUPERSEDED_CHECK_MILLIS = 5_000L;
 
     private final AgentEventService eventService;
+    private final AgentEventBus eventBus;
     private final ObjectMapper objectMapper;
     private final TaskExecutor agentSseExecutor;
     private final TaskScheduler agentHeartbeatScheduler;
+    private final AgentConversationMapper conversationMapper;
+    /** 取代检查周期；生产固定值，测试可注入更短周期避免用例等待真实时长。 */
+    private final long supersededCheckMillis;
 
     public AgentStreamWebSocketHandler(AgentEventService eventService,
+                                       AgentEventBus eventBus,
                                        ObjectMapper objectMapper,
                                        @Qualifier("agentSseExecutor") TaskExecutor agentSseExecutor,
-                                       @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler) {
+                                       @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler,
+                                       AgentConversationMapper conversationMapper) {
+        this(eventService, eventBus, objectMapper, agentSseExecutor, agentHeartbeatScheduler,
+                conversationMapper, SUPERSEDED_CHECK_MILLIS);
+    }
+
+    /** 测试专用：允许缩短取代检查周期。 */
+    AgentStreamWebSocketHandler(AgentEventService eventService,
+                                AgentEventBus eventBus,
+                                ObjectMapper objectMapper,
+                                TaskExecutor agentSseExecutor,
+                                TaskScheduler agentHeartbeatScheduler,
+                                AgentConversationMapper conversationMapper,
+                                long supersededCheckMillis) {
         this.eventService = eventService;
+        this.eventBus = eventBus;
         this.objectMapper = objectMapper;
         this.agentSseExecutor = agentSseExecutor;
         this.agentHeartbeatScheduler = agentHeartbeatScheduler;
+        this.conversationMapper = conversationMapper;
+        this.supersededCheckMillis = supersededCheckMillis;
     }
 
     @Override
@@ -85,17 +119,54 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
 
     private void stream(WebSocketSession session, Long userId, Long conversationId, long runVersion,
                         ScheduledFuture<?> heartbeat, AtomicLong lastSentAt) {
-        try {
-            eventService.follow(conversationId, userId, runVersion, 0L, event -> {
+        AtomicLong sentCursor = new AtomicLong(0);
+        Object sendLock = new Object();
+        java.util.concurrent.CountDownLatch terminal = new java.util.concurrent.CountDownLatch(1);
+        // 统一推送出口：按事件 id 单调去重，衔接「历史重放」与「总线实时」两路，不丢不重。
+        Consumer<AgentEvent> push = event -> {
+            if (event.getRunVersion() != null && event.getRunVersion() != runVersion) return;
+            synchronized (sendLock) {
+                Long id = event.getId();
+                if (id != null && id <= sentCursor.get()) return;
                 lastSentAt.set(System.currentTimeMillis());
                 sendJson(session, eventFrame(event));
-            });
+                if (id != null) sentCursor.set(id);
+                if ("complete".equals(event.getEventType()) || "error".equals(event.getEventType())) {
+                    terminal.countDown();
+                }
+            }
+        };
+        // 先挂实时订阅再重放历史：重放期间产生的增量先进总线，由去重出口保证顺序与唯一。
+        AgentEventBus.Subscription subscription = eventBus.subscribe(conversationId, push);
+        try {
+            long cursor = 0L;
+            while (terminal.getCount() > 0) {
+                List<AgentEvent> batch = eventService.listAfter(conversationId, runVersion, cursor);
+                if (batch.isEmpty()) break;
+                for (AgentEvent event : batch) {
+                    push.accept(event);
+                    if (event.getId() != null) cursor = Math.max(cursor, event.getId());
+                }
+            }
+            // 实时阶段：等待终态；周期性防御检查会话是否被新代次取代（非事件获取路径）。
+            while (!terminal.await(supersededCheckMillis, TimeUnit.MILLISECONDS)) {
+                AgentConversation snapshot = conversationMapper.selectById(conversationId);
+                boolean sameRun = snapshot != null
+                        && Long.valueOf(runVersion).equals(snapshot.getRunVersion())
+                        && userId != null && userId.equals(snapshot.getUserId());
+                if (!sameRun || !"running".equals(snapshot.getStatus())) {
+                    AgentEvent fallback = eventService.latestTerminal(conversationId, runVersion);
+                    if (fallback != null) push.accept(fallback);
+                    return;
+                }
+            }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         } catch (RuntimeException exception) {
             log.debug("agent ws event stream ended for conversation {}: {}",
                     conversationId, exception.getMessage());
         } finally {
+            subscription.close();
             heartbeat.cancel(false);
             closeQuietly(session, CloseStatus.NORMAL);
         }

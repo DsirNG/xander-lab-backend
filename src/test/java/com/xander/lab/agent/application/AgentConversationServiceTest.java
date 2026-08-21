@@ -97,7 +97,7 @@ class AgentConversationServiceTest {
         org.mockito.Mockito.lenient().when(messageMapper.insertForActiveRun(any(), any(), any(Long.class)))
                 .thenReturn(1);
         org.mockito.Mockito.lenient().when(eventMapper.selectList(any())).thenReturn(List.of());
-        eventService = new AgentEventService(eventMapper, conversationMapper, objectMapper);
+        eventService = new AgentEventService(eventMapper, conversationMapper, objectMapper, new AgentEventBus());
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class));

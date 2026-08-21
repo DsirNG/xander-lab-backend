@@ -38,7 +38,7 @@ class AgentEventServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AgentEventService(eventMapper, conversationMapper, new ObjectMapper());
+        service = new AgentEventService(eventMapper, conversationMapper, new ObjectMapper(), new AgentEventBus());
     }
 
     @Test
