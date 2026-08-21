@@ -3,9 +3,11 @@ package com.xander.lab.billing.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.billing.domain.ModelPrice;
 import com.xander.lab.billing.domain.PointAccount;
 import com.xander.lab.billing.domain.PointsLedger;
 import com.xander.lab.billing.infrastructure.BillingProperties;
+import com.xander.lab.billing.infrastructure.ModelPriceMapper;
 import com.xander.lab.billing.infrastructure.PointAccountMapper;
 import com.xander.lab.billing.infrastructure.PointsLedgerMapper;
 import com.xander.lab.common.ModelUsage;
@@ -36,6 +38,7 @@ public class BillingService {
     private final BillingProperties properties;
     private final PointAccountMapper accountMapper;
     private final PointsLedgerMapper ledgerMapper;
+    private final ModelPriceMapper modelPriceMapper;
 
     /** token 精确计费：按 usage 折成积分后扣减。网关未回 usage 时退回一口价。 */
     @Transactional
@@ -50,7 +53,7 @@ public class BillingService {
             }
             return;
         }
-        long points = tokenToPoints(usage);
+        long points = tokenToPoints(usage, model);
         if (points <= 0) points = 1;
         recordAndDeduct(userId, bizType, bizKey, bizRef, points, model,
                 usage.inputTokens(), usage.outputTokens(), usage.cachedTokens(), remark);
@@ -102,6 +105,25 @@ public class BillingService {
     }
 
     public Map<String, Object> priceList() {
+        Map<String, Object> modelPrices = new java.util.LinkedHashMap<>();
+        // 数据库价优先展示；yml 里配置但未入库的模型也一并列出，便于对照。
+        listModelPrices().forEach(p -> modelPrices.put(p.model(), Map.of(
+                "source", "db",
+                "enabled", p.enabled(),
+                "inputMilliPer1kToken", p.inputMilliPer1kToken(),
+                "outputMilliPer1kToken", p.outputMilliPer1kToken(),
+                "cachedMilliPer1kToken", p.cachedMilliPer1kToken(),
+                "cachedWriteMilliPer1kToken", p.cachedWriteMilliPer1kToken())));
+        properties.getModels().forEach((model, modelPrice) -> {
+            if (modelPrices.containsKey(model)) return;
+            BillingProperties.Price p = modelPrice.getPrice();
+            modelPrices.put(model, Map.of(
+                    "source", "yml",
+                    "inputMilliPer1kToken", p.getInputMilliPer1kToken(),
+                    "outputMilliPer1kToken", p.getOutputMilliPer1kToken(),
+                    "cachedMilliPer1kToken", p.getCachedMilliPer1kToken(),
+                    "cachedWriteMilliPer1kToken", modelPrice.getCachedWriteMilliPer1kToken()));
+        });
         return Map.of(
                 "grantRegister", properties.getGrantRegister(),
                 "preCheckMinBalance", properties.getPreCheckMinBalance(),
@@ -109,7 +131,85 @@ public class BillingService {
                         "inputMilliPer1kToken", properties.getPrice().getInputMilliPer1kToken(),
                         "outputMilliPer1kToken", properties.getPrice().getOutputMilliPer1kToken(),
                         "cachedMilliPer1kToken", properties.getPrice().getCachedMilliPer1kToken()),
+                "models", modelPrices,
                 "flat", properties.getFlat());
+    }
+
+    /** 全部模型定价（管理员视图），按模型名排序。 */
+    public List<ModelPriceView> listModelPrices() {
+        return modelPriceMapper.selectList(new LambdaQueryWrapper<ModelPrice>()
+                        .orderByAsc(ModelPrice::getModel))
+                .stream()
+                .map(BillingService::toView)
+                .toList();
+    }
+
+    /**
+     * 新增或更新模型定价（按 model 幂等 upsert）。
+     * 并发插入撞唯一键时回退为更新，保证最终一致。
+     */
+    @Transactional
+    public ModelPriceView upsertModelPrice(String model, long inputMilli, long outputMilli,
+                                           long cachedMilli, long cachedWriteMilli,
+                                           boolean enabled, String remark) {
+        if (model == null || model.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "模型名称不能为空");
+        }
+        if (inputMilli < 0 || outputMilli < 0 || cachedMilli < 0 || cachedWriteMilli < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "单价不能为负数");
+        }
+        String trimmed = model.trim();
+        LocalDateTime now = LocalDateTime.now();
+        ModelPrice existing = modelPriceMapper.selectOne(new LambdaQueryWrapper<ModelPrice>()
+                .eq(ModelPrice::getModel, trimmed)
+                .last("LIMIT 1"));
+        ModelPrice entity = existing == null ? new ModelPrice() : existing;
+        entity.setModel(trimmed);
+        entity.setInputMilliPer1kToken(inputMilli);
+        entity.setOutputMilliPer1kToken(outputMilli);
+        entity.setCachedMilliPer1kToken(cachedMilli);
+        entity.setCachedWriteMilliPer1kToken(cachedWriteMilli);
+        entity.setEnabled(enabled ? 1 : 0);
+        entity.setRemark(remark);
+        if (existing == null) {
+            entity.setCreatedAt(now);
+            try {
+                modelPriceMapper.insert(entity);
+            } catch (DuplicateKeyException duplicate) {
+                // 并发插入同一模型：转为更新已有行。
+                ModelPrice winner = modelPriceMapper.selectOne(new LambdaQueryWrapper<ModelPrice>()
+                        .eq(ModelPrice::getModel, trimmed)
+                        .last("LIMIT 1"));
+                if (winner == null) throw duplicate;
+                entity.setId(winner.getId());
+                entity.setCreatedAt(winner.getCreatedAt());
+                modelPriceMapper.updateById(entity);
+            }
+        } else {
+            modelPriceMapper.updateById(entity);
+        }
+        return toView(entity);
+    }
+
+    /** 删除模型定价；删除后该模型计费回退 application.yml 默认价。 */
+    @Transactional
+    public void deleteModelPrice(String model) {
+        if (model == null || model.isBlank()) return;
+        modelPriceMapper.delete(new LambdaQueryWrapper<ModelPrice>()
+                .eq(ModelPrice::getModel, model.trim()));
+    }
+
+    private static ModelPriceView toView(ModelPrice entity) {
+        return new ModelPriceView(entity.getModel(), entity.getInputMilliPer1kToken(),
+                entity.getOutputMilliPer1kToken(), entity.getCachedMilliPer1kToken(),
+                entity.getCachedWriteMilliPer1kToken(), entity.getEnabled() != null && entity.getEnabled() == 1,
+                entity.getRemark(), entity.getUpdatedAt());
+    }
+
+    /** 模型定价管理视图。 */
+    public record ModelPriceView(String model, long inputMilliPer1kToken, long outputMilliPer1kToken,
+                                 long cachedMilliPer1kToken, long cachedWriteMilliPer1kToken,
+                                 boolean enabled, String remark, LocalDateTime updatedAt) {
     }
 
     /** 注册赠送（幂等：同一 bizKey 只赠送一次）。 */
@@ -136,16 +236,37 @@ public class BillingService {
         accountMapper.deleteById(fromUserId);
     }
 
-    /** 按单价折算积分：input/output/cached 分开计费，四舍五入后至少 1 分。 */
-    private long tokenToPoints(ModelUsage usage) {
-        BillingProperties.Price price = properties.getPrice();
+    /** 按单价折算积分：单价为「毫分 / 每 1K token」，tokens×milli 折成毫分后再 /1000 得分，四舍五入至少 1 分。 */
+    private long tokenToPoints(ModelUsage usage, String model) {
+        BillingProperties.Price price = resolvePrice(model);
         long input = Math.max(0L, usage.inputTokens());
         long output = Math.max(0L, usage.outputTokens());
         long cached = Math.max(0L, usage.cachedTokens());
-        double inputPoints = input / 1000.0 * price.getInputMilliPer1kToken();
-        double outputPoints = output / 1000.0 * price.getOutputMilliPer1kToken();
-        double cachedPoints = cached / 1000.0 * price.getCachedMilliPer1kToken();
-        return Math.max(1L, Math.round(inputPoints + outputPoints + cachedPoints));
+        double milliPoints = input / 1000.0 * price.getInputMilliPer1kToken()
+                + output / 1000.0 * price.getOutputMilliPer1kToken()
+                + cached / 1000.0 * price.getCachedMilliPer1kToken();
+        return Math.max(1L, Math.round(milliPoints / 1000.0));
+    }
+
+    /**
+     * 解析模型单价：数据库 billing_model_price（enabled=1）优先，未配置或停用时回退 yml 默认价。
+     * 计费频率与模型调用成功次数同量级，直接查库即可，无需缓存。
+     */
+    private BillingProperties.Price resolvePrice(String model) {
+        if (model != null && !model.isBlank()) {
+            ModelPrice db = modelPriceMapper.selectOne(new LambdaQueryWrapper<ModelPrice>()
+                    .eq(ModelPrice::getModel, model)
+                    .eq(ModelPrice::getEnabled, 1)
+                    .last("LIMIT 1"));
+            if (db != null) {
+                BillingProperties.Price price = new BillingProperties.Price();
+                price.setInputMilliPer1kToken(db.getInputMilliPer1kToken());
+                price.setOutputMilliPer1kToken(db.getOutputMilliPer1kToken());
+                price.setCachedMilliPer1kToken(db.getCachedMilliPer1kToken());
+                return price;
+            }
+        }
+        return properties.priceForModel(model);
     }
 
     private long flatPrice(String bizType) {
@@ -199,9 +320,10 @@ public class BillingService {
     }
 
     private String unitPrice(String model) {
-        return properties.getPrice().getInputMilliPer1kToken()
-                + "/" + properties.getPrice().getOutputMilliPer1kToken()
-                + "/" + properties.getPrice().getCachedMilliPer1kToken()
+        BillingProperties.Price price = resolvePrice(model);
+        return price.getInputMilliPer1kToken()
+                + "/" + price.getOutputMilliPer1kToken()
+                + "/" + price.getCachedMilliPer1kToken()
                 + (model == null ? "" : " " + model);
     }
 

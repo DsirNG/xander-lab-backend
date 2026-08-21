@@ -13,6 +13,13 @@ import java.util.Map;
  * round((input*inputPrice + cached*cachedPrice + output*outputPrice) / 1_000),
  * 至少 1 分。一口价（配图 / 邮件 / CSDN）直接按 biz_type 配置积分值。</p>
  *
+ * <p>支持按模型配置不同价格：models.{model}.price 优先级高于默认 price，
+ * 未配置的模型使用默认价格。例如：</p>
+ * <pre>
+ * billing.models.gpt-5.6-terra.price.input-milli-per-1k-token=200
+ * billing.models.gpt-image-2.price.input-milli-per-1k-token=500
+ * </pre>
+ *
  * <pre>
  * billing.enabled=true
  * billing.grant-register=2000
@@ -45,7 +52,11 @@ public class BillingProperties {
             "juejin-publish", 10
     ));
 
+    /** 默认 token 单价（未配置模型专属价格时使用） */
     private Price price = new Price();
+
+    /** 按模型配置的专属价格：model -> ModelPrice */
+    private Map<String, ModelPrice> models = new LinkedHashMap<>();
 
     public static class Price {
         /** 输入 token 单价：毫分 / 每 1K token */
@@ -63,6 +74,18 @@ public class BillingProperties {
         public void setOutputMilliPer1kToken(long value) { this.outputMilliPer1kToken = value; }
     }
 
+    /** 模型专属价格配置，包含可选的 cache-write 单价。 */
+    public static class ModelPrice {
+        private Price price = new Price();
+        /** 缓存写入 token 单价：毫分 / 每 1K token */
+        private long cachedWriteMilliPer1kToken = 0L;
+
+        public Price getPrice() { return price; }
+        public void setPrice(Price price) { this.price = price; }
+        public long getCachedWriteMilliPer1kToken() { return cachedWriteMilliPer1kToken; }
+        public void setCachedWriteMilliPer1kToken(long value) { this.cachedWriteMilliPer1kToken = value; }
+    }
+
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
     public int getGrantRegister() { return grantRegister; }
@@ -73,9 +96,25 @@ public class BillingProperties {
     public void setFlat(Map<String, Integer> flat) { this.flat = flat; }
     public Price getPrice() { return price; }
     public void setPrice(Price price) { this.price = price; }
+    public Map<String, ModelPrice> getModels() { return models; }
+    public void setModels(Map<String, ModelPrice> models) { this.models = models; }
 
     /** 一口价，缺省返回 0（不扣费）。 */
     public long flatPoints(String key) {
         return flat.getOrDefault(key, 0).longValue();
+    }
+
+    /**
+     * 获取指定模型的 token 单价。
+     * 优先返回模型专属价格，未配置则回退到默认价格。
+     *
+     * @param model 模型名称，null 或未配置时返回默认价格
+     * @return 该模型对应的 Price 配置
+     */
+    public Price priceForModel(String model) {
+        if (model != null && models.containsKey(model)) {
+            return models.get(model).getPrice();
+        }
+        return price;
     }
 }

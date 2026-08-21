@@ -30,6 +30,21 @@ CREATE TABLE IF NOT EXISTS points_ledger (
     KEY idx_ledger_user_time (user_id, created_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '积分流水（审计）：(biz_type,biz_key) 唯一保证计费幂等';
 
+CREATE TABLE IF NOT EXISTS billing_model_price (
+    id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    model VARCHAR(128) NOT NULL COMMENT '模型名称，与模型网关返回的 model 字段一致（如 gpt-5.6-terra）',
+    input_milli_per_1k_token BIGINT NOT NULL COMMENT '输入 token 单价：毫分 / 每 1K token（¥2/M = 200）',
+    output_milli_per_1k_token BIGINT NOT NULL COMMENT '输出 token 单价：毫分 / 每 1K token（¥12/M = 1200）',
+    cached_milli_per_1k_token BIGINT NOT NULL DEFAULT 0 COMMENT '缓存读取 token 单价：毫分 / 每 1K token（¥0.2/M = 20）',
+    cached_write_milli_per_1k_token BIGINT NOT NULL DEFAULT 0 COMMENT '缓存写入 token 单价：毫分 / 每 1K token（¥2.5/M = 250）；当前 usage 无缓存写入计量，预留',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1=参与计费，0=停用后回退 application.yml 默认价',
+    remark VARCHAR(255) NULL COMMENT '备注：价目来源、生效说明等',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最近修改时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_model_price_model (model)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = '模型 token 定价（管理员维护）：计费时按 model 精确匹配，未配置回退 yml 默认价';
+
 -- 注册即送：给存量用户补齐账户行，方便计费开关打开后直接使用。
 INSERT IGNORE INTO sys_user_points (user_id, balance, created_at, updated_at)
 SELECT id, 2000, NOW(), NOW() FROM sys_user WHERE id NOT IN (SELECT user_id FROM sys_user_points);
