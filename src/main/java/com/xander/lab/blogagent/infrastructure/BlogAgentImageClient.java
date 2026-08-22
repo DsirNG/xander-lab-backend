@@ -2,6 +2,10 @@ package com.xander.lab.blogagent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.xander.lab.admin.application.ModelGateway;
 import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import lombok.extern.slf4j.Slf4j;
@@ -25,6 +29,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -39,6 +44,7 @@ public class BlogAgentImageClient {
     private static final Pattern HTTP_STATUS = Pattern.compile("(?i)(?:HTTP\\s*)?([1-5]\\d{2})\\b");
     private static final Pattern SECRET_TOKEN = Pattern.compile(
             "(?i)(?:bearer\\s+|(?:sk|key|token)-)[a-z0-9._~+/=-]{8,}");
+    private static final Pattern BASE64_TEXT = Pattern.compile("^[a-zA-Z0-9+/=_-]+$");
     private static final ObjectMapper ERROR_MAPPER = new ObjectMapper();
 
     private final BlogAgentProperties properties;
@@ -197,6 +203,7 @@ public class BlogAgentImageClient {
                 .body(payload)
                 .retrieve()
                 .body(JsonNode.class);
+        logImageModelResponse(endpoint, response);
 
         JsonNode image = response == null ? objectMapper.createObjectNode() : response.path("data").path(0);
         String base64 = image.path("b64_json").asText();
@@ -232,6 +239,7 @@ public class BlogAgentImageClient {
                 .body(payload)
                 .retrieve()
                 .body(JsonNode.class);
+        logImageModelResponse(endpoint, response);
 
         String url = extractImageUrl(response);
         if (StringUtils.hasText(url)) {
@@ -249,6 +257,85 @@ public class BlogAgentImageClient {
         url = image.path("url").asText();
         if (!StringUtils.hasText(url)) throw new IllegalStateException("图片模型没有返回可读取的图片");
         return download(url);
+    }
+
+    /**
+     * 临时诊断日志：在解析前保留供应商响应的完整 JSON 结构。
+     * 图片二进制、凭证和 URL 查询参数必须脱敏，避免单次响应写入数 MB 日志或泄露签名。
+     */
+    private void logImageModelResponse(ModelEndpoint endpoint, JsonNode response) {
+        try {
+            log.info("图片模型原始响应（已脱敏） provider={} model={} apiStyle={} response={}",
+                    endpoint.providerId(), endpoint.model(), endpoint.apiStyle(),
+                    objectMapper.writeValueAsString(responseForLogging(response)));
+        } catch (Exception exception) {
+            log.warn("图片模型原始响应序列化失败 provider={} model={} apiStyle={} reason={}",
+                    endpoint.providerId(), endpoint.model(), endpoint.apiStyle(),
+                    exception.getClass().getSimpleName());
+        }
+    }
+
+    static JsonNode responseForLogging(JsonNode response) {
+        return sanitizeResponseNode(response, "");
+    }
+
+    private static JsonNode sanitizeResponseNode(JsonNode node, String fieldName) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return NullNode.getInstance();
+        }
+        if (node.isObject()) {
+            ObjectNode sanitized = ERROR_MAPPER.createObjectNode();
+            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
+            while (fields.hasNext()) {
+                Map.Entry<String, JsonNode> field = fields.next();
+                sanitized.set(field.getKey(), sanitizeResponseNode(field.getValue(), field.getKey()));
+            }
+            return sanitized;
+        }
+        if (node.isArray()) {
+            ArrayNode sanitized = ERROR_MAPPER.createArrayNode();
+            node.forEach(value -> sanitized.add(sanitizeResponseNode(value, fieldName)));
+            return sanitized;
+        }
+        if (!node.isTextual()) {
+            return node.deepCopy();
+        }
+        return TextNode.valueOf(sanitizeResponseText(fieldName, node.asText()));
+    }
+
+    private static String sanitizeResponseText(String fieldName, String value) {
+        String normalizedField = fieldName == null ? "" : fieldName.toLowerCase(Locale.ROOT);
+        if (normalizedField.equals("b64_json")
+                || normalizedField.equals("base64")
+                || normalizedField.equals("image_base64")
+                || normalizedField.endsWith("_b64")) {
+            return "[REDACTED image bytes length=" + value.length() + "]";
+        }
+        if (normalizedField.contains("authorization")
+                || normalizedField.equals("api_key")
+                || normalizedField.equals("apikey")
+                || normalizedField.endsWith("token")) {
+            return "[REDACTED]";
+        }
+        if (value.regionMatches(true, 0, "data:image/", 0, "data:image/".length())) {
+            int comma = value.indexOf(',');
+            if (comma >= 0) {
+                return value.substring(0, comma + 1)
+                        + "[REDACTED image bytes length=" + (value.length() - comma - 1) + "]";
+            }
+        }
+        if (value.length() > 8192 && BASE64_TEXT.matcher(value).matches()) {
+            return "[REDACTED probable binary length=" + value.length() + "]";
+        }
+        String safe = SECRET_TOKEN.matcher(value).replaceAll("[REDACTED]");
+        if (safe.regionMatches(true, 0, "https://", 0, "https://".length())
+                || safe.regionMatches(true, 0, "http://", 0, "http://".length())) {
+            int query = safe.indexOf('?');
+            if (query >= 0) safe = safe.substring(0, query) + "?[REDACTED]";
+            int fragment = safe.indexOf('#');
+            if (fragment >= 0) safe = safe.substring(0, fragment) + "#[REDACTED]";
+        }
+        return safe;
     }
 
     /** 从 chat/completions 响应中取第一个图片地址（content 兼容字符串或片段数组）。 */

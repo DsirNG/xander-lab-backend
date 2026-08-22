@@ -1,5 +1,6 @@
 package com.xander.lab.blogagent.infrastructure;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -66,6 +67,27 @@ class BlogAgentImageClientTest {
         assertThat(BlogAgentImageClient.failureReason(new IllegalStateException(longMessage)))
                 .hasSize(303)
                 .endsWith("...");
+    }
+
+    @Test
+    void preservesImageResponseStructureWhileRedactingBinaryAndSignedUrls() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        String binary = "aGVsbG8=";
+        JsonNode original = mapper.readTree("""
+                {"created":123,"data":[{"b64_json":"%s","url":"https://cdn.example/image.png?token=secret#part"}],
+                 "choices":[{"message":{"content":"data:image/png;base64,%s"}}]}
+                """.formatted(binary, binary));
+
+        JsonNode sanitized = BlogAgentImageClient.responseForLogging(original);
+
+        assertThat(sanitized.path("created").asInt()).isEqualTo(123);
+        assertThat(sanitized.path("data").path(0).path("b64_json").asText())
+                .isEqualTo("[REDACTED image bytes length=8]");
+        assertThat(sanitized.path("data").path(0).path("url").asText())
+                .isEqualTo("https://cdn.example/image.png?[REDACTED]");
+        assertThat(sanitized.path("choices").path(0).path("message").path("content").asText())
+                .isEqualTo("data:image/png;base64,[REDACTED image bytes length=8]");
+        assertThat(original.path("data").path(0).path("b64_json").asText()).isEqualTo(binary);
     }
 
     @Test
