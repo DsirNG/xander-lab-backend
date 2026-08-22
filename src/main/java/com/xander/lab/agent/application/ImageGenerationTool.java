@@ -24,6 +24,8 @@ import java.util.Map;
 @Slf4j
 @Component
 public class ImageGenerationTool implements AgentTool {
+    private static final java.util.regex.Pattern HTTP_STATUS =
+            java.util.regex.Pattern.compile("(?i)(?:HTTP\\s*)?([1-5]\\d{2})\\b");
 
     /**
      * 独立图片工具专属风格，与博客智能体插图风格（BlogAgentService 中的
@@ -89,16 +91,36 @@ public class ImageGenerationTool implements AgentTool {
             throw new IllegalStateException("图片生成模型尚未配置，暂不能生成图片");
         }
         onProgress.onProgress("正在根据描述生成图片…");
-        BlogAgentImageClient.GeneratedImage generated = imageClient.generate(TOOL_IMAGE_STYLE + prompt);
+        BlogAgentImageClient.GeneratedImage generated;
+        try {
+            generated = imageClient.generate(TOOL_IMAGE_STYLE + prompt);
+        } catch (RuntimeException exception) {
+            log.warn("agent image model call failed userId={} type={} message={}",
+                    userId, exception.getClass().getSimpleName(), safeLogMessage(exception));
+            throw new IllegalStateException("图片生成模型调用失败，请检查图片模型接口配置或供应商状态", exception);
+        }
         onProgress.checkCancellation();
 
         String title = defaultText(args.path("title").asText(), "AI 生成图片");
         String fileName = "agent-image-" + System.currentTimeMillis() + "." + generated.extension();
         String meta = writeMeta(title, prompt);
-        BlogMediaAsset asset = mediaService.saveAgentImage(userId, null, fileName, generated, meta);
-        billingService.chargeFlat(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
-                "agent-image:" + asset.getId(), "asset:" + asset.getId(),
-                billingService.flatPoints(BillingBiz.BLOG_AGENT_ILLUSTRATION), "智能体生成图片");
+        BlogMediaAsset asset;
+        try {
+            asset = mediaService.saveAgentImage(userId, null, fileName, generated, meta);
+        } catch (RuntimeException exception) {
+            log.warn("agent image asset save failed userId={} type={} message={}",
+                    userId, exception.getClass().getSimpleName(), safeLogMessage(exception));
+            throw new IllegalStateException("图片已经生成，但保存到素材库失败", exception);
+        }
+        try {
+            billingService.chargeFlat(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+                    "agent-image:" + asset.getId(), "asset:" + asset.getId(),
+                    billingService.flatPoints(BillingBiz.BLOG_AGENT_ILLUSTRATION), "智能体生成图片");
+        } catch (RuntimeException exception) {
+            log.warn("agent image billing failed userId={} assetId={} type={} message={}",
+                    userId, asset.getId(), exception.getClass().getSimpleName(), safeLogMessage(exception));
+            throw new IllegalStateException("图片已经生成并保存，但积分扣费记录失败", exception);
+        }
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
@@ -128,5 +150,15 @@ public class ImageGenerationTool implements AgentTool {
 
     private String defaultText(String value, String fallback) {
         return StringUtils.hasText(value) ? value.trim() : fallback;
+    }
+
+    private String safeLogMessage(RuntimeException exception) {
+        String message = exception.getMessage();
+        if (!StringUtils.hasText(message)) return "-";
+        var status = HTTP_STATUS.matcher(message);
+        if (status.find()) return "HTTP " + status.group(1);
+        int newline = message.indexOf('\n');
+        String singleLine = newline >= 0 ? message.substring(0, newline) : message;
+        return singleLine.length() <= 300 ? singleLine : singleLine.substring(0, 300) + "...";
     }
 }

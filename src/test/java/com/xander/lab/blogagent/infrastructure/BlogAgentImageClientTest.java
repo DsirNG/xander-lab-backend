@@ -46,7 +46,7 @@ class BlogAgentImageClientTest {
     void summarizesFailuresForLoggingWithoutRawBodies() {
         assertThat(BlogAgentImageClient.failureReason(new IllegalStateException(
                 "400 Bad Request: [{\"error\":{\"message\":\"invalid size\"}}]\nsecond line")))
-                .isEqualTo("400 Bad Request: [{\"error\":{\"message\":\"invalid size\"}}]");
+                .isEqualTo("HTTP 400");
         assertThat(BlogAgentImageClient.failureReason(new IllegalStateException((String) null)))
                 .isEqualTo("IllegalStateException");
         String longMessage = "x".repeat(500);

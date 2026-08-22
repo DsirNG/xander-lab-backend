@@ -29,11 +29,13 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Component
 public class BlogAgentImageClient {
     static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+    private static final Pattern HTTP_STATUS = Pattern.compile("(?i)(?:HTTP\\s*)?([1-5]\\d{2})\\b");
 
     private final BlogAgentProperties properties;
     private final ObjectMapper objectMapper;
@@ -82,6 +84,8 @@ public class BlogAgentImageClient {
             } catch (RuntimeException e) {
                 lastFailure = e;
                 if (index == endpoints.size() - 1) {
+                    log.error("图片生成模型端点最终失败：provider={} model={} 接口风格={} 原因={}",
+                            endpoint.providerId(), endpoint.model(), endpoint.apiStyle(), failureReason(e));
                     throw e;
                 }
                 // 切换兜底属于已处理的降级，但必须记录失败原因，否则线上只能看到切换看不到根因。
@@ -92,10 +96,12 @@ public class BlogAgentImageClient {
         throw lastFailure;
     }
 
-    /** 提取可日志化的失败原因：截断供应商响应体与换行，避免日志刷屏或泄露超长内容。 */
+    /** 提取可日志化的失败原因：HTTP 异常只记录状态码，避免供应商响应体泄露到日志。 */
     static String failureReason(RuntimeException e) {
         String message = e.getMessage();
         if (message == null) return e.getClass().getSimpleName();
+        var status = HTTP_STATUS.matcher(message);
+        if (status.find()) return "HTTP " + status.group(1);
         int newline = message.indexOf('\n');
         if (newline >= 0) {
             message = message.substring(0, newline);
