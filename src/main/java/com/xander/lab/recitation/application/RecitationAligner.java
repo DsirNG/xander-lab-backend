@@ -69,10 +69,53 @@ public class RecitationAligner {
             }
         }
         Collections.reverse(reversed);
+        List<Difference> differences = groupDifferences(reversed, left);
         double penalty = missing + wrong + extra * 0.5d;
         double rawScore = left.length == 0 ? 0d : Math.max(0d, 100d * (1d - penalty / left.length));
         BigDecimal score = BigDecimal.valueOf(rawScore).setScale(2, RoundingMode.HALF_UP);
-        return new AlignmentResult(expected, actual, matches, missing, wrong, extra, score, reversed);
+        return new AlignmentResult(expected, actual, matches, missing, wrong, extra, score, differences);
+    }
+
+    /** 将连续的单字编辑合并为片段，并补充原文上下文，避免报告按字逐行展示。 */
+    private List<Difference> groupDifferences(List<Difference> source, int[] expected) {
+        if (source.isEmpty()) return List.of();
+        List<Difference> grouped = new ArrayList<>();
+        for (Difference current : source) {
+            if (!grouped.isEmpty() && canMerge(grouped.get(grouped.size() - 1), current)) {
+                Difference previous = grouped.remove(grouped.size() - 1);
+                grouped.add(new Difference(previous.type(), previous.expected() + current.expected(),
+                        previous.actual() + current.actual(), previous.expectedIndex(), "", "", false));
+            } else {
+                grouped.add(current);
+            }
+        }
+
+        List<Difference> enriched = new ArrayList<>(grouped.size());
+        for (Difference difference : grouped) {
+            int expectedLength = difference.expected().codePointCount(0, difference.expected().length());
+            int endIndex = Math.min(expected.length, difference.expectedIndex() + expectedLength);
+            boolean tailOmission = "MISSING".equals(difference.type()) && endIndex == expected.length;
+            enriched.add(new Difference(difference.type(), difference.expected(), difference.actual(),
+                    difference.expectedIndex(), codePointSlice(expected, Math.max(0, difference.expectedIndex() - 8),
+                    difference.expectedIndex()), codePointSlice(expected, endIndex,
+                    Math.min(expected.length, endIndex + 8)), tailOmission));
+        }
+        return enriched;
+    }
+
+    private boolean canMerge(Difference previous, Difference current) {
+        if (!previous.type().equals(current.type())) return false;
+        int previousExpectedLength = previous.expected().codePointCount(0, previous.expected().length());
+        if ("EXTRA".equals(previous.type())) {
+            return previous.expectedIndex() == current.expectedIndex();
+        }
+        return previous.expectedIndex() + previousExpectedLength == current.expectedIndex();
+    }
+
+    private String codePointSlice(int[] codePoints, int start, int end) {
+        StringBuilder result = new StringBuilder(Math.max(0, end - start));
+        for (int index = start; index < end; index++) result.appendCodePoint(codePoints[index]);
+        return result.toString();
     }
 
     private String codePoint(int codePoint) {
@@ -80,7 +123,17 @@ public class RecitationAligner {
     }
 
     /** 一处非匹配对齐。 */
-    public record Difference(String type, String expected, String actual, int expectedIndex) {
+    public record Difference(
+            String type,
+            String expected,
+            String actual,
+            int expectedIndex,
+            String contextBefore,
+            String contextAfter,
+            boolean tailOmission) {
+        private Difference(String type, String expected, String actual, int expectedIndex) {
+            this(type, expected, actual, expectedIndex, "", "", false);
+        }
     }
 
     /** 一次背诵的完整确定性对齐结果。 */
