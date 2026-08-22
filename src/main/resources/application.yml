@@ -164,6 +164,14 @@ admin:
     # Base64 编码的 32 字节 AES 密钥，用于加密 model_provider 的 API 密钥静态存储。
     encryption-key: ${MODEL_PROVIDER_ENCRYPTION_KEY:}
 
+# 中文背诵录音转写。先应用 recitation_migration.sql，并在管理台配置 recitation_asr 后再启用。
+recitation:
+  enabled: ${RECITATION_ENABLED:true}
+  max-audio-bytes: ${RECITATION_MAX_AUDIO_BYTES:20971520}
+  worker-batch-size: ${RECITATION_WORKER_BATCH_SIZE:10}
+  worker-poll-interval-ms: ${RECITATION_WORKER_POLL_INTERVAL_MS:2000}
+  stale-claim-seconds: ${RECITATION_STALE_CLAIM_SECONDS:120}
+
 # Leave credentials in application-local.yml or environment variables; never commit them.
 # 微信小程序登录通道：AppID/AppSecret 由管理台加密维护（wechat_credential 表），
 # 此处仅保留接口地址、超时与凭据加密密钥来源。

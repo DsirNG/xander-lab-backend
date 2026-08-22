@@ -39,6 +39,8 @@ services:
       - EMAIL_REMINDER_POLL_INTERVAL_MS=1000
       # 定时发文计划（AI 生成 + 自动发布），依赖已部署的数据库迁移
       - BLOG_CONTENT_PLAN_ENABLED=true
+      # 中文背诵音转文，需先应用 recitation_migration.sql 并配置管理台模型路由
+      - RECITATION_ENABLED=${RECITATION_ENABLED:-false}
       # 阿里云 OSS 配置
       - ALIYUN_OSS_ACCESS_KEY_ID=${ALIYUN_OSS_ACCESS_KEY_ID}
       - ALIYUN_OSS_ACCESS_KEY_SECRET=${ALIYUN_OSS_ACCESS_KEY_SECRET}

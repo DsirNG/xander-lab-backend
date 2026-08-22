@@ -18,8 +18,8 @@ public class FeatureModelConfig {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 功能标识：agent=智能体对话、blog_agent=博客生成、
-     *  blog_agent_image=博客插图、img2three_vision=图生3D 视觉重建（与 ModelGateway.FEATURE_* 保持一致）。 */
+    /** 功能标识：agent=智能体对话、blog_agent=博客生成、blog_agent_image=博客插图、
+     * img2three_vision=图生3D 视觉重建、recitation_asr=背诵音转文（与 ModelGateway.FEATURE_* 保持一致）。 */
     private String featureKey;
 
     /** 主供应商 model_provider.id；null 表示该功能未配置主模型。 */
@@ -28,7 +28,7 @@ public class FeatureModelConfig {
     /** 主供应商使用的主模型名。 */
     private String primaryModel;
 
-    /** 主槽位接口风格：IMAGES_GENERATIONS / CHAT_COMPLETIONS / RESPONSES；空=按功能取默认。 */
+    /** 主槽位接口风格：IMAGES_GENERATIONS / CHAT_COMPLETIONS / RESPONSES / DASHSCOPE_ASR。 */
     private String primaryApiStyle;
 
     /** 兜底供应商 model_provider.id；主供应商请求重试耗尽后切换，null=不使用兜底。 */
@@ -37,7 +37,7 @@ public class FeatureModelConfig {
     /** 兜底供应商使用的兜底模型名。 */
     private String fallbackModel;
 
-    /** 兜底槽位接口风格：IMAGES_GENERATIONS / CHAT_COMPLETIONS / RESPONSES；空=按功能取默认。 */
+    /** 兜底槽位接口风格：IMAGES_GENERATIONS / CHAT_COMPLETIONS / RESPONSES / DASHSCOPE_ASR。 */
     private String fallbackApiStyle;
 
     /** true=启用管理台配置（优先于环境变量），false=回退到环境变量配置。 */

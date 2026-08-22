@@ -16,6 +16,7 @@ feature; deployment and database topology stay unchanged.
 - `bloghtml` (new): owns short-lived blog HTML preview sessions. Session creation (`POST /api/blog-html/previews`) is public with per-IP Redis fixed-window rate limiting; code is stored in Redis with a TTL and served as a standalone sandbox page (`GET /blog-html/{id}/raw`) outside `/api` so iframes load it without auth, CORS or cookies. The page runs on an independent origin (per-session subdomain in production, a different port locally) and carries a strict CSP with `frame-ancestors` restricting embedders; this is the preview isolation pattern used by ChatGPT for its artifact pages.
 - `billing` (new): owns the points account (`sys_user_points`), the append-only points ledger (`points_ledger`) with a unique `(biz_type, biz_key)` idempotency key, priced model-usage charges, flat-price charges, balance pre-checks, and the `/api/points` endpoints. It must not own generation tasks, conversations, articles, reminders, or publications; feature modules call it only through `BillingService` ports and never through its mappers.
 - `profile` (new): owns the read-only `/api/profile/overview` composition used by the mini-program profile screen. It owns no persistence and reads account identity, point balance, and managed-blog count only through the `identity`, `billing`, and `publishing` application services.
+- `recitation` (new): owns user-scoped Chinese recitation materials, durable audio transcription attempts, and deterministic source/transcript alignment reports. Audio is stored through `integration.oss`; the background worker calls only the admin `ModelGateway` contract for the `recitation_asr` feature and keeps external model calls outside transactions. Submission and polling use conditional state transitions plus run tokens so multiple backend instances cannot overwrite one another.
 - `admin` (new): owns the backend admin console. It manages model providers (`model_provider`, AES-GCM encrypted API keys via `MODEL_PROVIDER_ENCRYPTION_KEY`), per-feature model routing (`feature_model_config` with primary + fallback endpoints), and exposes the read-side API for user bans; it never writes users or login sessions itself. `ModelGateway` is the shared contract that model clients consult for endpoint candidates; when the gateway is disabled (default), clients fall back to environment variables so existing behavior is preserved, but once the gateway is enabled every feature is driven solely by `feature_model_config` — an unconfigured feature fails with a clear "not configured" business error (HTTP 400) instead of falling back. User ban/enable mutations go through the `identity` application service (`UserAdminService`), which owns session revocation; the WeChat login credential is likewise managed through the `identity` application service (`WechatCredentialService`, via `/api/admin/wechat-credential`); `admin` owns neither identity tables nor Redis login keys.
 
 ## Module Documentation
@@ -89,15 +90,15 @@ every Redis session of the banned user).
 
 `ModelGateway.candidates(featureKey)` returns an ordered list of
 `ModelEndpoint` (base URL, API key, model name, API style). Feature keys are stable
-constants (`agent`, `blog_agent`, `blog_agent_image`, `img2three_vision`). API
+constants (`agent`, `blog_agent`, `blog_agent_image`, `img2three_vision`, `recitation_asr`). API
 style is configured per
 slot in `feature_model_config` (`primary_api_style` / `fallback_api_style`):
 `IMAGES_GENERATIONS` (/images/generations, legacy),
 `CHAT_COMPLETIONS` (/chat/completions with messages+modalities, official OpenAI),
 `CHAT_PROMPT` (/chat/completions with top-level prompt, aggregator gateways like okinto),
-`RESPONSES` (text features). `ModelGatewayService`
+`RESPONSES` (text features), `DASHSCOPE_ASR` (DashScope asynchronous recorded-audio transcription). `ModelGatewayService`
 resolves blanks to per-feature defaults (`blog_agent_image`→`CHAT_COMPLETIONS`,
-text features→`RESPONSES`).
+text features→`RESPONSES`, `recitation_asr`→`DASHSCOPE_ASR`).
 Clients dispatch on the style; today
 `BlogAgentImageClient` consumes `IMAGES_GENERATIONS`, `CHAT_COMPLETIONS` and
 `CHAT_PROMPT` (responses accepted from both `choices[0].message.content` and
@@ -109,7 +110,7 @@ gateway is disabled by default and requires
 `admin_model_gateway_migration.sql` marker key is `20260815_admin_model_gateway`
 and must be applied before production enablement. When enabled, an unconfigured
 feature throws `FeatureModelNotConfiguredException` (HTTP 400, no environment
-fallback): configure all four features in the admin console before users rely
+fallback): configure all five features in the admin console before users rely
 on them. Admin API key values are
 never returned to clients; views expose only `apiKeyConfigured`.
 

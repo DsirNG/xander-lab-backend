@@ -31,7 +31,8 @@ public class FeatureModelConfigService {
             ModelGateway.FEATURE_AGENT,
             ModelGateway.FEATURE_BLOG_AGENT,
             ModelGateway.FEATURE_BLOG_AGENT_IMAGE,
-            ModelGateway.FEATURE_IMG2THREE_VISION);
+            ModelGateway.FEATURE_IMG2THREE_VISION,
+            ModelGateway.FEATURE_RECITATION_ASR);
 
     private static final int MODEL_MAX = 100;
 
@@ -40,7 +41,8 @@ public class FeatureModelConfigService {
             ModelGateway.API_STYLE_IMAGES_GENERATIONS,
             ModelGateway.API_STYLE_CHAT_COMPLETIONS,
             ModelGateway.API_STYLE_CHAT_PROMPT,
-            ModelGateway.API_STYLE_RESPONSES);
+            ModelGateway.API_STYLE_RESPONSES,
+            ModelGateway.API_STYLE_DASHSCOPE_ASR);
 
     private final ModelGatewayProperties properties;
     private final FeatureModelConfigMapper configMapper;
@@ -143,6 +145,14 @@ public class FeatureModelConfigService {
                 && (ModelGateway.API_STYLE_IMAGES_GENERATIONS.equals(trimmed)
                         || ModelGateway.API_STYLE_CHAT_PROMPT.equals(trimmed))) {
             throw new IllegalArgumentException("文本功能不支持图片专用接口风格");
+        }
+        if (ModelGateway.FEATURE_RECITATION_ASR.equals(featureKey)
+                && !ModelGateway.API_STYLE_DASHSCOPE_ASR.equals(trimmed)) {
+            throw new IllegalArgumentException("背诵音转文功能只支持 DASHSCOPE_ASR 接口风格");
+        }
+        if (!ModelGateway.FEATURE_RECITATION_ASR.equals(featureKey)
+                && ModelGateway.API_STYLE_DASHSCOPE_ASR.equals(trimmed)) {
+            throw new IllegalArgumentException("DASHSCOPE_ASR 仅用于背诵音转文功能");
         }
         return trimmed;
     }

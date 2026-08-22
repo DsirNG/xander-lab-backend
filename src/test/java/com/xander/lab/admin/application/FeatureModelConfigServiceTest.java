@@ -42,14 +42,14 @@ class FeatureModelConfigServiceTest {
     }
 
     @Test
-    void listReturnsAllFourFeaturesWithDefaultEmptyViews() {
+    void listReturnsAllFiveFeaturesWithDefaultEmptyViews() {
         when(configMapper.selectList(any())).thenReturn(List.of());
 
         List<FeatureConfigView> views = service.listConfigs();
 
-        assertThat(views).hasSize(4);
+        assertThat(views).hasSize(5);
         assertThat(views).extracting(FeatureConfigView::featureKey)
-                .containsExactly("agent", "blog_agent", "blog_agent_image", "img2three_vision");
+                .containsExactly("agent", "blog_agent", "blog_agent_image", "img2three_vision", "recitation_asr");
         assertThat(views).allMatch(view -> !view.enabled());
     }
 
@@ -165,6 +165,30 @@ class FeatureModelConfigServiceTest {
         ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
         verify(configMapper).insert(captured.capture());
         assertThat(captured.getValue().getPrimaryApiStyle()).isEqualTo(ModelGateway.API_STYLE_CHAT_PROMPT);
+    }
+
+    @Test
+    void updateAcceptsDashScopeStyleForRecitationFeature() {
+        when(configMapper.selectOne(any())).thenReturn(null);
+        when(providerMapper.selectById(1L)).thenReturn(enabledProvider(1L));
+        when(configMapper.selectList(any())).thenReturn(List.of());
+
+        service.update(ModelGateway.FEATURE_RECITATION_ASR, new UpdateFeatureConfigRequest(
+                true, 1L, "paraformer-v2", ModelGateway.API_STYLE_DASHSCOPE_ASR, null, null, null));
+
+        ArgumentCaptor<FeatureModelConfig> captured = ArgumentCaptor.forClass(FeatureModelConfig.class);
+        verify(configMapper).insert(captured.capture());
+        assertThat(captured.getValue().getPrimaryApiStyle()).isEqualTo(ModelGateway.API_STYLE_DASHSCOPE_ASR);
+    }
+
+    @Test
+    void updateRejectsChatStyleForRecitationFeature() {
+        assertThatThrownBy(() -> service.update(ModelGateway.FEATURE_RECITATION_ASR,
+                new UpdateFeatureConfigRequest(true, 1L, "paraformer-v2",
+                        ModelGateway.API_STYLE_CHAT_COMPLETIONS, null, null, null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("DASHSCOPE_ASR");
+        verify(configMapper, never()).insert(any());
     }
 
     @Test
