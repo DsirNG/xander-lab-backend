@@ -57,6 +57,24 @@ class AgentModelClientTest {
     }
 
     @Test
+    void requestsLowReasoningEffortForLatencySensitiveGpt5AgentTurns() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"你好\",\"thought\":\"\",\"action\":null}"));
+
+        client(false, "gpt-5").decideNextStep("context", "tools");
+
+        assertThat(requestPayload.path("reasoning").path("effort").asText()).isEqualTo("low");
+    }
+
+    @Test
+    void omitsReasoningEffortForNonReasoningCompatibilityModels() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"你好\",\"thought\":\"\",\"action\":null}"));
+
+        client(false, "third-party-chat-model").decideNextStep("context", "tools");
+
+        assertThat(requestPayload.has("reasoning")).isFalse();
+    }
+
+    @Test
     void keepsToolDecisionJsonOutOfTheUserFacingStream() throws Exception {
         startServer(List.of(
                 "{\"thought\":\"需要生成博客\",\"done\":false,",
@@ -154,10 +172,14 @@ class AgentModelClientTest {
     }
 
     private AgentModelClient client(boolean webSearchEnabled) {
+        return client(webSearchEnabled, "test-model");
+    }
+
+    private AgentModelClient client(boolean webSearchEnabled, String model) {
         AgentModelProperties properties = new AgentModelProperties();
         properties.setBaseUrl("http://127.0.0.1:" + server.getAddress().getPort());
         properties.setApiKey("test-key");
-        properties.setModel("test-model");
+        properties.setModel(model);
         properties.setWebSearchEnabled(webSearchEnabled);
         return new AgentModelClient(properties, objectMapper);
     }

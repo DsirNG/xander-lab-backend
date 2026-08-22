@@ -21,6 +21,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
@@ -240,10 +241,33 @@ public class AgentModelClient {
         payload.put("store", false);
         payload.put("instructions", instructions(toolDescriptions, properties.isWebSearchEnabled()));
         payload.put("input", context);
+        String reasoningEffort = normalizedReasoningEffort(model);
+        if (reasoningEffort != null) {
+            payload.put("reasoning", Map.of("effort", reasoningEffort));
+        }
         if (properties.isWebSearchEnabled()) {
             payload.put("tools", List.of(Map.of("type", "web_search")));
         }
         return payload;
+    }
+
+    /** Only reasoning-capable model families receive this optional Responses API parameter. */
+    private String normalizedReasoningEffort(String model) {
+        String configured = properties.getReasoningEffort();
+        if (!StringUtils.hasText(configured) || !supportsReasoningEffort(model)) return null;
+        String normalized = configured.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("minimal", "low", "medium", "high", "xhigh").contains(normalized)) {
+            throw new IllegalStateException("AGENT_MODEL_REASONING_EFFORT 配置无效");
+        }
+        return normalized;
+    }
+
+    private boolean supportsReasoningEffort(String model) {
+        if (!StringUtils.hasText(model)) return false;
+        String normalized = model.trim().toLowerCase(Locale.ROOT);
+        if (normalized.contains("pro")) return false;
+        return normalized.startsWith("gpt-5")
+                || normalized.matches("o[134](?:-|$).*");
     }
 
     private void requireConfigured() {

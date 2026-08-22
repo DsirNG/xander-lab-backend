@@ -13,6 +13,8 @@ public class AgentModelProperties {
     private String apiKey;
     private String model;
     private boolean webSearchEnabled = true;
+    /** Reasoning effort for GPT-5/o-series models; blank disables the parameter. */
+    private String reasoningEffort = "low";
     /** TCP connect timeout in milliseconds. */
     private int connectTimeoutMillis = 15_000;
     /** Maximum time waiting for streamed model data in milliseconds. */

@@ -188,6 +188,7 @@ agent:
     api-key: ${AGENT_MODEL_API_KEY:${BLOG_AGENT_API_KEY:}}
     model: ${AGENT_MODEL:${BLOG_AGENT_MODEL:}}
     web-search-enabled: ${AGENT_MODEL_WEB_SEARCH_ENABLED:${BLOG_AGENT_WEB_SEARCH_ENABLED:true}}
+    reasoning-effort: ${AGENT_MODEL_REASONING_EFFORT:low}
     connect-timeout-millis: ${AGENT_MODEL_CONNECT_TIMEOUT_MILLIS:15000}
     read-timeout-millis: ${AGENT_MODEL_READ_TIMEOUT_MILLIS:300000}
 
