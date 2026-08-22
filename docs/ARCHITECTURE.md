@@ -127,11 +127,11 @@ empty except for shared infrastructure:
 5. FlowCraft and Img2Three live under `studio`; the UI component library lives under `components`.
 6. Shared cross-module contracts (`Result`, `PageData`, `HealthController`) live under `common`.
 
-## Agent HTTP and SSE Contract
+## Agent HTTP, SSE, and WebSocket Contract
 
 Authenticated orchestration routes live under `/api/agent/conversations`.
 Creating a conversation and reading its snapshot use the shared `Result`
-envelope. A turn is delivered by `POST /{id}/messages/stream`; clients that cannot read SSE (WeChat mini-program) use the non-stream trigger `POST /{id}/messages` (claims the turn, runs it in background, returns the run version immediately, then polls snapshots). Live streaming for those clients uses the WebSocket endpoint `/ws/agent?conversationId=&runVersion=` (token via `Authorization` header or `token` query), which replays the same durable event stream frame-by-frame and closes after the terminal event. Recovery uses
+envelope. A turn is delivered by `POST /{id}/messages/stream`; clients that cannot read SSE (WeChat mini-program) use the non-stream trigger `POST /{id}/messages` (claims the turn, runs it in background, and returns the run version immediately). Live streaming for those clients uses the WebSocket endpoint `/ws/agent?conversationId=&runVersion=` (token via `Authorization` header or `token` query), which replays the same durable event stream frame-by-frame and closes after the terminal event. Non-terminal WebSocket disconnects are reconnected with backoff; the client deduplicates replayed frames by durable event ID and reads one final conversation snapshot after `complete` or `error`, without periodic snapshot polling. Browser SSE recovery uses
 `GET /{id}/events` with `Last-Event-ID` or `afterEventId`. The durable event ID
 is the resume cursor and clients must ignore an event ID they have already
 applied.
