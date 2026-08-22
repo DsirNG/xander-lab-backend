@@ -241,7 +241,7 @@ public class AgentModelClient {
                 decision.putNull("action");
                 return ModelCallResult.of(decision, usage, endpoint.model());
             }
-            JsonNode decision = parseDecision(output.toString());
+            JsonNode decision = normalizeDecisionArgs(parseDecision(output.toString()));
             validateDecision(decision);
             return ModelCallResult.of(decision, usage, endpoint.model());
         } catch (JsonProcessingException exception) {
@@ -293,6 +293,9 @@ public class AgentModelClient {
         payload.put("store", false);
         payload.put("instructions", instructions(toolDescriptions, webSearchEnabled));
         payload.put("input", context);
+        if (StringUtils.hasText(toolDescriptions)) {
+            payload.put("text", structuredDecisionText());
+        }
         String reasoningEffort = normalizedReasoningEffort(model);
         if (reasoningEffort != null) {
             payload.put("reasoning", Map.of("effort", reasoningEffort));
@@ -301,6 +304,41 @@ public class AgentModelClient {
             payload.put("tools", List.of(Map.of("type", "web_search")));
         }
         return payload;
+    }
+
+    /**
+     * Tool turns use Responses structured output so JSON validity is enforced by the provider,
+     * rather than relying only on prompt adherence. Tool args are encoded as a JSON string in the
+     * strict schema, then normalized back to an object before orchestration.
+     */
+    private JsonNode structuredDecisionText() {
+        var text = objectMapper.createObjectNode();
+        var format = text.putObject("format");
+        format.put("type", "json_schema");
+        format.put("name", "agent_decision");
+        format.put("strict", true);
+
+        var schema = format.putObject("schema");
+        schema.put("type", "object");
+        var properties = schema.putObject("properties");
+        properties.putObject("done").put("type", "boolean");
+        properties.putObject("reply").put("type", "string");
+        properties.putObject("thought").put("type", "string");
+        var action = properties.putObject("action");
+        var actionVariants = action.putArray("anyOf");
+        var actionObject = actionVariants.addObject();
+        actionObject.put("type", "object");
+        var actionProperties = actionObject.putObject("properties");
+        actionProperties.putObject("tool").put("type", "string");
+        actionProperties.putObject("args")
+                .put("type", "string")
+                .put("description", "工具参数对象序列化后的单行 JSON 字符串");
+        actionObject.putArray("required").add("tool").add("args");
+        actionObject.put("additionalProperties", false);
+        actionVariants.addObject().put("type", "null");
+        schema.putArray("required").add("done").add("reply").add("thought").add("action");
+        schema.put("additionalProperties", false);
+        return text;
     }
 
     private boolean needsWebSearch(String context) {
@@ -387,7 +425,8 @@ public class AgentModelClient {
                 + "（如 ```html、```css、```js），以便前端提供代码复制与 HTML 预览。"
                 + "字段顺序必须严格为 done、reply、thought、action；把 reply 提前，便于尽早安全流式展示。JSON 结构：\n"
                 + "{\"done\":false,\"reply\":\"最终回复，done 为 true 时必须填写\",\"thought\":\"本步的简要思考\","
-                + "\"action\":{\"tool\":\"工具名\",\"args\":{\"工具参数名\":\"值\"}}}。\n"
+                + "\"action\":{\"tool\":\"工具名\",\"args\":\"{\\\"工具参数名\\\":\\\"值\\\"}\"}}。\n"
+                + "action.args 必须是工具参数对象序列化后的单行 JSON 字符串；"
                 + "当需要调用工具时 done 为 false 且 action 指向要调用的工具；"
                 + "当准备向用户输出最终结果时 done 为 true、reply 填写最终回复且 thought 必须为空，"
                 + "不要在 reply 之前生成用户不可见的思考内容。";
@@ -434,6 +473,22 @@ public class AgentModelClient {
                 }
             }
             throw new IllegalStateException("模型决策结果不是有效的 JSON，请重试", original);
+        }
+    }
+
+    private JsonNode normalizeDecisionArgs(JsonNode decision) {
+        JsonNode action = decision.path("action");
+        JsonNode args = action.path("args");
+        if (!action.isObject() || !args.isTextual()) return decision;
+        try {
+            JsonNode decoded = objectMapper.readTree(args.asText());
+            if (decoded == null || !decoded.isObject()) {
+                throw new IllegalStateException("模型工具参数不是有效的 JSON 对象，请重试");
+            }
+            ((com.fasterxml.jackson.databind.node.ObjectNode) action).set("args", decoded);
+            return decision;
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("模型工具参数不是有效的 JSON 对象，请重试", exception);
         }
     }
 

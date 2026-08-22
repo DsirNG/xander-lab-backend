@@ -55,6 +55,15 @@ class AgentModelClientTest {
                 .contains("字段顺序必须严格为 done、reply、thought、action")
                 .contains("thought 必须为空")
                 .contains("不要在 reply 之前生成用户不可见的思考内容");
+        assertThat(requestPayload.path("text").path("format").path("type").asText())
+                .isEqualTo("json_schema");
+        assertThat(requestPayload.path("text").path("format").path("name").asText())
+                .isEqualTo("agent_decision");
+        assertThat(requestPayload.path("text").path("format").path("strict").asBoolean())
+                .isTrue();
+        assertThat(requestPayload.path("text").path("format").path("schema")
+                .path("required").toString())
+                .isEqualTo("[\"done\",\"reply\",\"thought\",\"action\"]");
     }
 
     @Test
@@ -150,6 +159,20 @@ class AgentModelClientTest {
     }
 
     @Test
+    void decodesStrictStructuredToolArgumentsBeforeReturningTheDecision() throws Exception {
+        startServer(List.of(
+                "{\"done\":false,\"reply\":\"\",\"thought\":\"\",",
+                "\"action\":{\"tool\":\"image_generate\",",
+                "\"args\":\"{\\\"prompt\\\":\\\"小猫\\\"}\"}}"
+        ));
+
+        JsonNode decision = client().decideNextStep("生成图片：小猫", "tools").payload();
+
+        assertThat(decision.path("action").path("args").isObject()).isTrue();
+        assertThat(decision.path("action").path("args").path("prompt").asText()).isEqualTo("小猫");
+    }
+
+    @Test
     void streamsPlainTextDirectlyForAnOrdinaryConversationTurn() throws Exception {
         startServer(List.of("SSE 是", "服务端推送协议"));
         List<String> deltas = new ArrayList<>();
@@ -159,6 +182,7 @@ class AgentModelClientTest {
         JsonNode decision = call.payload();
 
         assertThat(requestPayload.has("tools")).isFalse();
+        assertThat(requestPayload.has("text")).isFalse();
         assertThat(requestPayload.path("instructions").asText())
                 .contains("对话助手")
                 .contains("本轮是普通对话，不提供业务工具")

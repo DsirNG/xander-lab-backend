@@ -142,54 +142,6 @@ class AgentConversationServiceTest {
     }
 
     @Test
-    void explicitImageRequestRoutesDirectlyAndFinishesWithoutTextModel() {
-        stubTransactions();
-        AtomicReference<String> prompt = new AtomicReference<>();
-        AgentTool imageTool = new AgentTool() {
-            @Override
-            public String name() { return "image_generate"; }
-
-            @Override
-            public String description() { return "生成图片"; }
-
-            @Override
-            public com.fasterxml.jackson.databind.JsonNode parametersSchema() {
-                return JsonNodeFactory.instance.objectNode();
-            }
-
-            @Override
-            public com.fasterxml.jackson.databind.JsonNode execute(
-                    Long userId, com.fasterxml.jackson.databind.JsonNode args,
-                    ProgressListener onProgress) {
-                prompt.set(args.path("prompt").asText());
-                return JsonNodeFactory.instance.objectNode()
-                        .put("ok", true)
-                        .put("title", "小猫")
-                        .put("url", "https://cdn.example/cat.png")
-                        .put("hint", "图片已生成并保存到你的素材库。");
-            }
-        };
-        service = new AgentConversationService(
-                conversationMapper, messageMapper, modelClient,
-                new AgentToolRegistry(List.of(imageTool)), properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class));
-        when(conversationMapper.update(any(), any())).thenReturn(1);
-        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
-        AtomicReference<String> answer = new AtomicReference<>();
-
-        AgentConversation result = service.executeTurn(7L, 42L, "生成图片：小猫", event -> {
-            if ("answer".equals(event.getEventType())) answer.set(event.getDataContent());
-        });
-
-        assertThat(result.getStatus()).isEqualTo("ready");
-        assertThat(prompt.get()).isEqualTo("生成图片：小猫");
-        assertThat(answer.get())
-                .contains("图片已生成")
-                .contains("![小猫](https://cdn.example/cat.png)");
-        org.mockito.Mockito.verifyNoInteractions(modelClient);
-    }
-
-    @Test
     void toolFailureIsFedBackAndTerminatesAfterLimit() {
         stubTransactions();
         org.mockito.Mockito.when(properties.getMaxToolFailures()).thenReturn(1);

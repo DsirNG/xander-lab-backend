@@ -212,27 +212,21 @@ public class AgentConversationService {
                     conversationId, userId, runVersion, listener,
                     step + 1, turnStartedNanos, modelStartedNanos);
             JsonNode decision;
-            if (step == 0 && isDirectImageRequest(latestUserMessage, allowedTools)) {
-                decision = directImageDecision(latestUserMessage);
-                log.info("agent direct image routing conversation={} run={} step={}",
-                        conversationId, runVersion, step + 1);
-            } else {
-                try {
-                    ModelCallResult call = modelClient.decideNextStepStream(
-                            context, toolDescriptions, answerProgress::accept,
-                            () -> isCancelRequested(conversationId, userId, runVersion));
-                    answerProgress.flush();
-                    decision = call.payload();
-                    usage.add(call.usage(), call.model());
-                    log.info("agent model decision conversation={} run={} step={} durationMs={} done={}",
-                            conversationId, runVersion, step + 1,
-                            elapsedMillis(modelStartedNanos), decision.path("done").asBoolean(false));
-                } catch (CancellationException exception) {
-                    String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
-                    saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
-                    appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                    return finalizeReady(conversationId, userId, runVersion, usage, listener);
-                }
+            try {
+                ModelCallResult call = modelClient.decideNextStepStream(
+                        context, toolDescriptions, answerProgress::accept,
+                        () -> isCancelRequested(conversationId, userId, runVersion));
+                answerProgress.flush();
+                decision = call.payload();
+                usage.add(call.usage(), call.model());
+                log.info("agent model decision conversation={} run={} step={} durationMs={} done={}",
+                        conversationId, runVersion, step + 1,
+                        elapsedMillis(modelStartedNanos), decision.path("done").asBoolean(false));
+            } catch (CancellationException exception) {
+                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
+                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
+                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
+                return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
             if (isCancelRequested(conversationId, userId, runVersion)) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
@@ -283,13 +277,6 @@ public class AgentConversationService {
                         listener);
                 failures = 0;
                 lastError = null;
-                if ("image_generate".equals(toolName) && result.path("ok").asBoolean(false)) {
-                    String reply = imageResultReply(result);
-                    saveActiveMessage(conversationId, userId, runVersion,
-                            "assistant", "answer", null, reply);
-                    appendActive(conversationId, userId, runVersion, "answer", reply, listener);
-                    return finalizeReady(conversationId, userId, runVersion, usage, listener);
-                }
             } catch (CancellationException exception) {
                 progress.flushToolDelta();
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
@@ -333,38 +320,6 @@ public class AgentConversationService {
         saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, exhausted);
         appendActive(conversationId, userId, runVersion, "answer", exhausted, listener);
         return finalizeReady(conversationId, userId, runVersion, usage, listener);
-    }
-
-    /** Explicit image-only requests do not need a text model round-trip to select the sole available tool. */
-    private boolean isDirectImageRequest(String userMessage, Set<String> allowedTools) {
-        if (!allowedTools.equals(Set.of("image_generate")) || !StringUtils.hasText(userMessage)) return false;
-        String normalized = userMessage.toLowerCase(java.util.Locale.ROOT);
-        return List.of("生成图片", "生成一张图片", "生成一幅图片", "画一张", "画一幅",
-                        "create an image", "generate an image", "generate image")
-                .stream().anyMatch(normalized::contains);
-    }
-
-    /** Builds the deterministic action while preserving the complete user prompt for the image model. */
-    private JsonNode directImageDecision(String userMessage) {
-        ObjectNode action = JsonNodeFactory.instance.objectNode();
-        action.put("tool", "image_generate");
-        action.putObject("args").put("prompt", userMessage);
-        ObjectNode decision = JsonNodeFactory.instance.objectNode();
-        decision.put("done", false);
-        decision.put("reply", "");
-        decision.put("thought", "");
-        decision.set("action", action);
-        return decision;
-    }
-
-    /** The image tool already returns a complete user-facing result, so no second routing call is necessary. */
-    private String imageResultReply(JsonNode result) {
-        String reply = defaultText(result.path("hint").asText(), "图片已生成并保存到你的素材库。");
-        String url = result.path("url").asText("");
-        if (!StringUtils.hasText(url)) return reply;
-        String title = defaultText(result.path("title").asText(), "生成的图片")
-                .replace("[", "").replace("]", "");
-        return reply + "\n\n![" + title + "](" + url + ")";
     }
 
     private JsonNode progressPayload(String tool, String message) {
