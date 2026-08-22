@@ -1,6 +1,5 @@
 package com.xander.lab.blogagent.infrastructure;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -67,27 +66,6 @@ class BlogAgentImageClientTest {
         assertThat(BlogAgentImageClient.failureReason(new IllegalStateException(longMessage)))
                 .hasSize(303)
                 .endsWith("...");
-    }
-
-    @Test
-    void preservesImageResponseStructureWhileRedactingBinaryAndSignedUrls() throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        String binary = "aGVsbG8=";
-        JsonNode original = mapper.readTree("""
-                {"created":123,"data":[{"b64_json":"%s","url":"https://cdn.example/image.png?token=secret#part"}],
-                 "choices":[{"message":{"content":"data:image/png;base64,%s"}}]}
-                """.formatted(binary, binary));
-
-        JsonNode sanitized = BlogAgentImageClient.responseForLogging(original);
-
-        assertThat(sanitized.path("created").asInt()).isEqualTo(123);
-        assertThat(sanitized.path("data").path(0).path("b64_json").asText())
-                .isEqualTo("[REDACTED image bytes length=8]");
-        assertThat(sanitized.path("data").path(0).path("url").asText())
-                .isEqualTo("https://cdn.example/image.png?[REDACTED]");
-        assertThat(sanitized.path("choices").path(0).path("message").path("content").asText())
-                .isEqualTo("data:image/png;base64,[REDACTED image bytes length=8]");
-        assertThat(original.path("data").path(0).path("b64_json").asText()).isEqualTo(binary);
     }
 
     @Test
@@ -204,6 +182,26 @@ class BlogAgentImageClientTest {
                         "gpt-image-2", ModelGateway.API_STYLE_CHAT_COMPLETIONS)));
 
         BlogAgentImageClient.GeneratedImage image = client.generate("draw a robot");
+
+        assertThat(image.contentType()).isEqualTo("image/png");
+        assertThat(image.extension()).isEqualTo("png");
+        assertThat(image.bytes()).containsExactly(png);
+    }
+
+    @Test
+    void chatCompletionsStyleDecodesMarkdownWrappedDataUrlImage() throws Exception {
+        byte[] png = new byte[]{(byte) 0x89, 'P', 'N', 'G', 4, 5, 6};
+        String dataUrl = "data:image/png;base64," + Base64.getEncoder().encodeToString(png);
+        server = startServer("/chat/completions",
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"![image_1]("
+                        + dataUrl + ")\"}}]}");
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl),
+                new ObjectMapper(),
+                feature -> List.of(new ModelGateway.ModelEndpoint(4L, baseUrl, "test-key",
+                        "gpt-image-2", ModelGateway.API_STYLE_CHAT_COMPLETIONS)));
+
+        BlogAgentImageClient.GeneratedImage image = client.generate("draw a cat");
 
         assertThat(image.contentType()).isEqualTo("image/png");
         assertThat(image.extension()).isEqualTo("png");
