@@ -134,16 +134,24 @@ class AgentModelClientTest {
     }
 
     @Test
-    void omitsAllToolsForAnOrdinaryConversationTurn() throws Exception {
-        startServer(List.of("{\"done\":true,\"reply\":\"SSE 是服务端推送协议\",\"thought\":\"\",\"action\":null}"));
+    void streamsPlainTextDirectlyForAnOrdinaryConversationTurn() throws Exception {
+        startServer(List.of("SSE 是", "服务端推送协议"));
+        List<String> deltas = new ArrayList<>();
 
-        client(true).decideNextStep("解释一下 SSE", "");
+        JsonNode decision = client(true)
+                .decideNextStepStream("解释一下 SSE", "", deltas::add)
+                .payload();
 
         assertThat(requestPayload.has("tools")).isFalse();
         assertThat(requestPayload.path("instructions").asText())
                 .contains("对话助手")
                 .contains("本轮是普通对话，不提供业务工具")
+                .contains("不要输出 JSON")
                 .doesNotContain("可调用业务工具");
+        assertThat(String.join("", deltas)).isEqualTo("SSE 是服务端推送协议");
+        assertThat(decision.path("done").asBoolean()).isTrue();
+        assertThat(decision.path("reply").asText()).isEqualTo("SSE 是服务端推送协议");
+        assertThat(decision.path("action").isNull()).isTrue();
     }
 
     @Test

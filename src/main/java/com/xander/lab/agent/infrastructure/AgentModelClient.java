@@ -108,8 +108,8 @@ public class AgentModelClient {
                 if (visibleDelta.get() || index == endpoints.size() - 1) {
                     throw exception;
                 }
-                log.warn("agent model endpoint {} failed, failing over to the next provider",
-                        endpoint.providerId());
+                log.warn("agent model endpoint {} failed, failing over to the next provider reason={} message={}",
+                        endpoint.providerId(), exception.getClass().getSimpleName(), exception.getMessage());
             }
         }
         throw lastFailure;
@@ -153,6 +153,7 @@ public class AgentModelClient {
         long requestStartedNanos = System.nanoTime();
         Map<String, Object> payload = requestPayload(endpoint.model(), context, toolDescriptions);
         payload.put("stream", true);
+        boolean directConversation = !StringUtils.hasText(toolDescriptions);
 
         HttpURLConnection connection = null;
         StringBuilder output = new StringBuilder();
@@ -196,13 +197,16 @@ public class AgentModelClient {
                                     endpoint.providerId(), endpoint.model(), headersMillis,
                                     elapsedMillis(requestStartedNanos));
                         }
-                        appendDecisionDelta(output, replyDecoder, event.path("delta").asText(""));
+                        appendOutputDelta(output, replyDecoder, event.path("delta").asText(""),
+                                directConversation, onAnswerDelta);
                     } else if ("response.output_text.done".equals(type) && output.isEmpty()) {
-                        appendDecisionDelta(output, replyDecoder, event.path("text").asText(""));
+                        appendOutputDelta(output, replyDecoder, event.path("text").asText(""),
+                                directConversation, onAnswerDelta);
                     } else if ("response.completed".equals(type)) {
                         if (output.isEmpty()) {
-                            appendDecisionDelta(output, replyDecoder,
-                                    defaultText(extractOutputText(event.path("response"))));
+                            appendOutputDelta(output, replyDecoder,
+                                    defaultText(extractOutputText(event.path("response"))),
+                                    directConversation, onAnswerDelta);
                         }
                         usage = ModelUsage.fromJson(event.path("response").path("usage"));
                         log.info("agent model completed provider={} model={} totalMs={}",
@@ -216,6 +220,14 @@ public class AgentModelClient {
 
             if (!StringUtils.hasText(output)) {
                 throw new IllegalStateException("模型没有返回决策结果");
+            }
+            if (directConversation) {
+                var decision = objectMapper.createObjectNode();
+                decision.put("done", true);
+                decision.put("reply", output.toString());
+                decision.put("thought", "");
+                decision.putNull("action");
+                return ModelCallResult.of(decision, usage);
             }
             JsonNode decision = objectMapper.readTree(stripCodeFence(output.toString()));
             validateDecision(decision);
@@ -247,6 +259,18 @@ public class AgentModelClient {
     private void appendDecisionDelta(StringBuilder output, DecisionReplyDecoder decoder, String delta) {
         if (!StringUtils.hasLength(delta)) return;
         output.append(delta);
+        decoder.accept(delta);
+    }
+
+    /** Plain chat bypasses the orchestration JSON envelope so its first upstream token is visible immediately. */
+    private void appendOutputDelta(StringBuilder output, DecisionReplyDecoder decoder, String delta,
+                                   boolean directConversation, Consumer<String> onAnswerDelta) {
+        if (!StringUtils.hasLength(delta)) return;
+        output.append(delta);
+        if (directConversation) {
+            onAnswerDelta.accept(delta);
+            return;
+        }
         decoder.accept(delta);
     }
 
@@ -325,6 +349,12 @@ public class AgentModelClient {
                 + "才能如实说明失败原因。网页搜索由模型服务执行，不属于下方业务工具 action。\n"
                 : "网页搜索能力：当前未启用。不要编造搜索结果或声称已经联网核验。\n";
         boolean hasBusinessTools = StringUtils.hasText(toolDescriptions);
+        if (!hasBusinessTools) {
+            return "你是 DinQorAI 博客工作台的对话助手。本轮无需业务操作，请直接、自然地用中文回答用户。\n"
+                    + webSearchInstructions
+                    + "本轮是普通对话，不提供业务工具；直接回答用户，不要虚构或请求调用业务工具。\n"
+                    + "直接输出给用户看的正文，不要输出 JSON、字段名、代码围栏或隐藏思考。";
+        }
         String roleInstructions = hasBusinessTools
                 ? "你是 DinQorAI 博客工作台的智能体调度器。你的任务是把用户的对话诉求拆解成可执行步骤，"
                 + "通过调用工具完成任务，并在完成后用中文回复用户。\n"
