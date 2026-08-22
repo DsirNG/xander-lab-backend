@@ -6,6 +6,8 @@ import com.sun.net.httpserver.HttpServer;
 import com.xander.lab.admin.application.ModelGateway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpClientErrorException;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -47,6 +49,17 @@ class BlogAgentImageClientTest {
         assertThat(BlogAgentImageClient.failureReason(new IllegalStateException(
                 "400 Bad Request: [{\"error\":{\"message\":\"invalid size\"}}]\nsecond line")))
                 .isEqualTo("HTTP 400");
+        HttpClientErrorException providerError = HttpClientErrorException.create(
+                HttpStatus.BAD_REQUEST,
+                "Bad Request",
+                org.springframework.http.HttpHeaders.EMPTY,
+                ("{\"error\":{\"code\":\"invalid_value\",\"type\":\"invalid_request_error\","
+                        + "\"param\":\"size\",\"message\":\"Invalid size; key-token-1234567890 must stay hidden\"}}")
+                        .getBytes(StandardCharsets.UTF_8),
+                StandardCharsets.UTF_8);
+        assertThat(BlogAgentImageClient.failureReason(providerError))
+                .isEqualTo("HTTP 400 code=invalid_value type=invalid_request_error param=size "
+                        + "message=Invalid size; [REDACTED] must stay hidden");
         assertThat(BlogAgentImageClient.failureReason(new IllegalStateException((String) null)))
                 .isEqualTo("IllegalStateException");
         String longMessage = "x".repeat(500);

@@ -11,6 +11,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -36,6 +37,9 @@ import java.util.regex.Pattern;
 public class BlogAgentImageClient {
     static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
     private static final Pattern HTTP_STATUS = Pattern.compile("(?i)(?:HTTP\\s*)?([1-5]\\d{2})\\b");
+    private static final Pattern SECRET_TOKEN = Pattern.compile(
+            "(?i)(?:bearer\\s+|(?:sk|key|token)-)[a-z0-9._~+/=-]{8,}");
+    private static final ObjectMapper ERROR_MAPPER = new ObjectMapper();
 
     private final BlogAgentProperties properties;
     private final ObjectMapper objectMapper;
@@ -96,8 +100,14 @@ public class BlogAgentImageClient {
         throw lastFailure;
     }
 
-    /** 提取可日志化的失败原因：HTTP 异常只记录状态码，避免供应商响应体泄露到日志。 */
+    /** 提取可日志化的失败原因：只读取供应商标准错误字段，并对内容脱敏、截断。 */
     static String failureReason(RuntimeException e) {
+        if (e instanceof RestClientResponseException response) {
+            StringBuilder reason = new StringBuilder("HTTP ")
+                    .append(response.getStatusCode().value());
+            appendProviderError(reason, response.getResponseBodyAsString());
+            return reason.toString();
+        }
         String message = e.getMessage();
         if (message == null) return e.getClass().getSimpleName();
         var status = HTTP_STATUS.matcher(message);
@@ -110,6 +120,29 @@ public class BlogAgentImageClient {
             message = message.substring(0, 300) + "...";
         }
         return message;
+    }
+
+    private static void appendProviderError(StringBuilder reason, String responseBody) {
+        if (!StringUtils.hasText(responseBody)) return;
+        try {
+            JsonNode root = ERROR_MAPPER.readTree(responseBody);
+            JsonNode error = root.path("error");
+            if (!error.isObject()) return;
+            appendErrorField(reason, "code", error.path("code").asText(null), 80);
+            appendErrorField(reason, "type", error.path("type").asText(null), 80);
+            appendErrorField(reason, "param", error.path("param").asText(null), 80);
+            appendErrorField(reason, "message", error.path("message").asText(null), 240);
+        } catch (IOException ignored) {
+            // 非 JSON 响应不写入日志，避免代理 HTML 或未知正文泄露。
+        }
+    }
+
+    private static void appendErrorField(StringBuilder reason, String name, String value, int maxLength) {
+        if (!StringUtils.hasText(value)) return;
+        String safe = value.replace('\r', ' ').replace('\n', ' ').trim();
+        safe = SECRET_TOKEN.matcher(safe).replaceAll("[REDACTED]");
+        if (safe.length() > maxLength) safe = safe.substring(0, maxLength) + "...";
+        reason.append(' ').append(name).append('=').append(safe);
     }
 
     /** 解析候选端点：网关启用时由功能模型配置驱动（未配置由网关抛错）；网关关闭时回退环境变量（原行为）。 */
