@@ -57,7 +57,7 @@ class AgentConversationControllerTest {
 
         assertThat(body.getConversation()).isSameAs(ready);
         verify(service).create(42L, "你好智能体");
-        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any());
+        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any(), any());
     }
 
     @Test
@@ -84,7 +84,7 @@ class AgentConversationControllerTest {
         SseEmitter emitter = controller.sendMessage(7L, request, new MockHttpServletResponse());
 
         assertThat(emitter).isNotNull();
-        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), any());
+        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), eq("继续"), any());
         verify(heartbeat).cancel(false);
     }
 
@@ -108,7 +108,7 @@ class AgentConversationControllerTest {
         Long runVersion = controller.triggerMessage(7L, request).getData();
 
         assertThat(runVersion).isEqualTo(9L);
-        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), any());
+        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), eq("继续"), any());
         verify(service, never()).failClaimedTurn(any(), any(), anyLong(), any());
     }
 
@@ -134,7 +134,7 @@ class AgentConversationControllerTest {
         assertThatThrownBy(() -> controller.triggerMessage(7L, request))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode().value()).isEqualTo(503));
-        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any());
+        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any(), any());
         verify(service).failClaimedTurn(eq(7L), eq(42L), eq(9L), eq("智能体执行队列繁忙，请稍后重试"));
     }
 }

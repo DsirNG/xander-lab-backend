@@ -28,6 +28,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -113,6 +114,13 @@ public class AgentConversationService {
     /** Runs one already-claimed turn; all model and tool network calls remain outside transactions. */
     public AgentConversation executeClaimedTurn(Long conversationId, Long userId, long runVersion,
                                                 Consumer<AgentEvent> onEvent) {
+        return executeClaimedTurn(conversationId, userId, runVersion, null, onEvent);
+    }
+
+    /** Runs a claimed turn with its current input available for low-cost tool selection. */
+    public AgentConversation executeClaimedTurn(Long conversationId, Long userId, long runVersion,
+                                                String currentUserMessage,
+                                                Consumer<AgentEvent> onEvent) {
         ScheduledFuture<?> leaseRenewal;
         try {
             leaseRenewal = startLeaseRenewal(conversationId, userId, runVersion);
@@ -122,7 +130,7 @@ public class AgentConversationService {
             throw exception;
         }
         try {
-            return runLoop(conversationId, userId, runVersion, onEvent);
+            return runLoop(conversationId, userId, runVersion, currentUserMessage, onEvent);
         } catch (AgentRunSupersededException exception) {
             log.info("agent worker generation superseded for conversation {} and run {}",
                     conversationId, runVersion);
@@ -173,11 +181,18 @@ public class AgentConversationService {
     public AgentConversation executeTurn(Long conversationId, Long userId, String message,
         Consumer<AgentEvent> onEvent) {
         AgentConversation claimed = prepareTurn(conversationId, userId, message);
-        return executeClaimedTurn(conversationId, userId, claimed.getRunVersion(), onEvent);
+        return executeClaimedTurn(conversationId, userId, claimed.getRunVersion(), message, onEvent);
     }
 
     private AgentConversation runLoop(Long conversationId, Long userId, long runVersion,
-                                      Consumer<AgentEvent> listener) {
+                                      String currentUserMessage, Consumer<AgentEvent> listener) {
+        long turnStartedNanos = System.nanoTime();
+        String latestUserMessage = StringUtils.hasText(currentUserMessage)
+                ? currentUserMessage : latestUserMessage(conversationId, userId);
+        Set<String> allowedTools = toolRegistry.selectNames(latestUserMessage);
+        String toolDescriptions = toolRegistry.describeTools(allowedTools);
+        log.info("agent turn started conversation={} run={} selectedToolCount={}",
+                conversationId, runVersion, allowedTools.size());
         int maxSteps = Math.max(1, properties.getMaxSteps());
         int failures = 0;
         JsonNode lastError = null;
@@ -192,15 +207,21 @@ public class AgentConversationService {
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
             String context = buildContext(conversationId, userId, lastError);
-            AnswerProgress answerProgress = new AnswerProgress(conversationId, userId, runVersion, listener);
+            long modelStartedNanos = System.nanoTime();
+            AnswerProgress answerProgress = new AnswerProgress(
+                    conversationId, userId, runVersion, listener,
+                    step + 1, turnStartedNanos, modelStartedNanos);
             JsonNode decision;
             try {
                 ModelCallResult call = modelClient.decideNextStepStream(
-                        context, toolRegistry.describeTools(), answerProgress::accept,
+                        context, toolDescriptions, answerProgress::accept,
                         () -> isCancelRequested(conversationId, userId, runVersion));
                 answerProgress.flush();
                 decision = call.payload();
                 usage.add(call.usage());
+                log.info("agent model decision conversation={} run={} step={} durationMs={} done={}",
+                        conversationId, runVersion, step + 1,
+                        elapsedMillis(modelStartedNanos), decision.path("done").asBoolean(false));
             } catch (CancellationException exception) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
@@ -229,12 +250,13 @@ public class AgentConversationService {
 
             JsonNode action = decision.path("action");
             String toolName = action.path("tool").asText("");
-            AgentTool tool = StringUtils.hasText(toolName) ? toolRegistry.get(toolName) : null;
+            AgentTool tool = StringUtils.hasText(toolName) && allowedTools.contains(toolName)
+                    ? toolRegistry.get(toolName) : null;
             if (tool == null) {
                 lastError = JsonNodeFactory.instance.objectNode()
                         .put("ok", false)
                         .put("error", "未知工具 " + toolName + "，请从可用工具中选择")
-                        .put("availableTools", String.join(", ", toolRegistry.names()));
+                        .put("availableTools", String.join(", ", allowedTools));
                 continue;
             }
 
@@ -610,6 +632,21 @@ public class AgentConversationService {
         return builder.toString();
     }
 
+    private String latestUserMessage(Long conversationId, Long userId) {
+        List<AgentMessage> messages = listMessages(conversationId, userId);
+        for (int index = messages.size() - 1; index >= 0; index--) {
+            AgentMessage message = messages.get(index);
+            if ("user".equals(message.getRole()) && "message".equals(message.getKind())) {
+                return message.getContent();
+            }
+        }
+        return "";
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
+    }
+
     private String compactJson(String content, int maxLength) {
         if (!StringUtils.hasText(content)) return "";
         return content.length() <= maxLength ? content : content.substring(0, maxLength) + "…";
@@ -709,15 +746,22 @@ public class AgentConversationService {
         private final Long userId;
         private final long runVersion;
         private final Consumer<AgentEvent> listener;
+        private final int step;
+        private final long turnStartedNanos;
+        private final long modelStartedNanos;
         private final StringBuilder deltaBuffer = new StringBuilder();
         private boolean firstDeltaDelivered;
 
         private AnswerProgress(Long conversationId, Long userId, long runVersion,
-                               Consumer<AgentEvent> listener) {
+                               Consumer<AgentEvent> listener, int step,
+                               long turnStartedNanos, long modelStartedNanos) {
             this.conversationId = conversationId;
             this.userId = userId;
             this.runVersion = runVersion;
             this.listener = listener;
+            this.step = step;
+            this.turnStartedNanos = turnStartedNanos;
+            this.modelStartedNanos = modelStartedNanos;
         }
 
         private void accept(String delta) {
@@ -727,6 +771,9 @@ public class AgentConversationService {
                 firstDeltaDelivered = true;
                 appendActive(conversationId, userId, runVersion, "answer_delta",
                         normalized, listener);
+                log.info("agent first visible delta conversation={} run={} step={} modelMs={} turnMs={}",
+                        conversationId, runVersion, step,
+                        elapsedMillis(modelStartedNanos), elapsedMillis(turnStartedNanos));
                 return;
             }
             deltaBuffer.append(normalized);

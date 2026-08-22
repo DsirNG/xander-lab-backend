@@ -420,7 +420,6 @@ class AgentConversationServiceTest {
     void oldWorkerCannotPublishAfterANewerRunWasClaimed() {
         ObjectNode decision = decisionNode(true, "不应公开的旧轮思考", null, null);
         decision.put("reply", "旧轮迟到回复");
-        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(decision));
         AgentConversation oldRun = conversation("running");
         AgentConversation newRun = conversation("running");
         newRun.setRunVersion(2L);

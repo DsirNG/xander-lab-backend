@@ -42,6 +42,10 @@ public class AgentModelClient {
     private static final Set<Integer> TRANSIENT_STATUS = Set.of(429, 500, 502, 503, 504);
     private static final int MAX_ATTEMPTS = 3;
     private static final long RETRY_BACKOFF_MILLIS = 500L;
+    private static final List<String> WEB_SEARCH_MARKERS = List.of(
+            "最新", "今天", "当前", "现在", "新闻", "搜索", "搜一下", "查找", "联网",
+            "资料来源", "引用来源", "链接", "网址", "latest", "today", "current",
+            "news", "search", "source", "link", "url");
     private final AgentModelProperties properties;
     private final ObjectMapper objectMapper;
     private final ModelGateway gateway;
@@ -146,6 +150,7 @@ public class AgentModelClient {
     private ModelCallResult decideNextStepStreamOnce(ModelEndpoint endpoint, String context, String toolDescriptions,
                                                 Consumer<String> onAnswerDelta,
                                                 BooleanSupplier cancellationRequested) {
+        long requestStartedNanos = System.nanoTime();
         Map<String, Object> payload = requestPayload(endpoint.model(), context, toolDescriptions);
         payload.put("stream", true);
 
@@ -167,6 +172,7 @@ public class AgentModelClient {
             connection.getOutputStream().write(objectMapper.writeValueAsBytes(payload));
 
             int status = connection.getResponseCode();
+            long headersMillis = elapsedMillis(requestStartedNanos);
             if (status < 200 || status >= 300) {
                 throw new ModelGatewayException(status,
                         "模型服务请求失败（HTTP " + status + "），请稍后重试");
@@ -175,6 +181,7 @@ public class AgentModelClient {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                     connection.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
+                boolean firstOutputLogged = false;
                 while ((line = reader.readLine()) != null) {
                     checkCancellation(cancellationRequested);
                     if (!line.startsWith("data:")) continue;
@@ -183,6 +190,12 @@ public class AgentModelClient {
                     JsonNode event = objectMapper.readTree(data);
                     String type = event.path("type").asText();
                     if ("response.output_text.delta".equals(type)) {
+                        if (!firstOutputLogged) {
+                            firstOutputLogged = true;
+                            log.info("agent model first output provider={} model={} headersMs={} firstOutputMs={}",
+                                    endpoint.providerId(), endpoint.model(), headersMillis,
+                                    elapsedMillis(requestStartedNanos));
+                        }
                         appendDecisionDelta(output, replyDecoder, event.path("delta").asText(""));
                     } else if ("response.output_text.done".equals(type) && output.isEmpty()) {
                         appendDecisionDelta(output, replyDecoder, event.path("text").asText(""));
@@ -192,6 +205,8 @@ public class AgentModelClient {
                                     defaultText(extractOutputText(event.path("response"))));
                         }
                         usage = ModelUsage.fromJson(event.path("response").path("usage"));
+                        log.info("agent model completed provider={} model={} totalMs={}",
+                                endpoint.providerId(), endpoint.model(), elapsedMillis(requestStartedNanos));
                         break;
                     } else if ("error".equals(type)) {
                         throw new ModelGatewayException(502, "模型服务暂时不可用，请稍后重试");
@@ -236,19 +251,30 @@ public class AgentModelClient {
     }
 
     private Map<String, Object> requestPayload(String model, String context, String toolDescriptions) {
+        boolean webSearchEnabled = properties.isWebSearchEnabled() && needsWebSearch(context);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("store", false);
-        payload.put("instructions", instructions(toolDescriptions, properties.isWebSearchEnabled()));
+        payload.put("instructions", instructions(toolDescriptions, webSearchEnabled));
         payload.put("input", context);
         String reasoningEffort = normalizedReasoningEffort(model);
         if (reasoningEffort != null) {
             payload.put("reasoning", Map.of("effort", reasoningEffort));
         }
-        if (properties.isWebSearchEnabled()) {
+        if (webSearchEnabled) {
             payload.put("tools", List.of(Map.of("type", "web_search")));
         }
         return payload;
+    }
+
+    private boolean needsWebSearch(String context) {
+        if (!StringUtils.hasText(context)) return false;
+        String normalized = context.toLowerCase(Locale.ROOT);
+        return WEB_SEARCH_MARKERS.stream().anyMatch(normalized::contains);
+    }
+
+    private long elapsedMillis(long startedNanos) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 
     /** Only reasoning-capable model families receive this optional Responses API parameter. */
@@ -298,10 +324,17 @@ public class AgentModelClient {
                 + "应直接使用网页搜索；不要声称平台不支持网页搜索。只有搜索工具实际调用失败时，"
                 + "才能如实说明失败原因。网页搜索由模型服务执行，不属于下方业务工具 action。\n"
                 : "网页搜索能力：当前未启用。不要编造搜索结果或声称已经联网核验。\n";
-        return "你是 DinQorAI 博客工作台的智能体调度器。你的任务是把用户的对话诉求拆解成可执行步骤，"
+        boolean hasBusinessTools = StringUtils.hasText(toolDescriptions);
+        String roleInstructions = hasBusinessTools
+                ? "你是 DinQorAI 博客工作台的智能体调度器。你的任务是把用户的对话诉求拆解成可执行步骤，"
                 + "通过调用工具完成任务，并在完成后用中文回复用户。\n"
+                : "你是 DinQorAI 博客工作台的对话助手。本轮无需业务操作，请直接、自然地用中文回答用户。\n";
+        String businessTools = hasBusinessTools
+                ? "可调用业务工具：\n" + toolDescriptions + "\n"
+                : "本轮是普通对话，不提供业务工具；直接回答用户，不要虚构或请求调用业务工具。\n";
+        return roleInstructions
                 + webSearchInstructions
-                + "可调用工具：\n" + toolDescriptions + "\n"
+                + businessTools
                 + "决策规则：\n"
                 + "1. 需要执行操作时，调用工具并等待工具结果；不要臆造工具结果。\n"
                 + "2. 工具执行失败时，尝试换一种工具参数或说明失败原因并结束。\n"

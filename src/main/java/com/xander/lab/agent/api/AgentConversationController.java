@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -121,10 +122,12 @@ public class AgentConversationController {
             return emitter;
         }
         registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
+        send(id, emitter, subscriberOpen, null, "started",
+                Map.of("phase", "understanding", "runVersion", runVersion));
         try {
             CompletableFuture.runAsync(() -> {
                 try {
-                    service.executeClaimedTurn(id, userId, runVersion,
+                    service.executeClaimedTurn(id, userId, runVersion, request.getContent(),
                             event -> send(id, emitter, subscriberOpen, event));
                 } catch (Exception exception) {
                     // executeClaimedTurn persists and delivers the durable error event.
@@ -154,7 +157,7 @@ public class AgentConversationController {
         try {
             CompletableFuture.runAsync(() -> {
                 try {
-                    service.executeClaimedTurn(id, userId, runVersion, event -> {
+                    service.executeClaimedTurn(id, userId, runVersion, request.getContent(), event -> {
                     });
                 } catch (Exception exception) {
                     // executeClaimedTurn persists and delivers the durable error event.
@@ -188,6 +191,8 @@ public class AgentConversationController {
             throw serviceUnavailable(exception);
         }
         registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
+        send(id, emitter, subscriberOpen, null, "started",
+                Map.of("phase", "recovering", "runVersion", runVersion));
         try {
             CompletableFuture.runAsync(
                     () -> followEvents(id, userId, runVersion, cursor,

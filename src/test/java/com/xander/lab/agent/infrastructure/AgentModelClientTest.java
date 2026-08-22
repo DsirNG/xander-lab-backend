@@ -134,6 +134,19 @@ class AgentModelClientTest {
     }
 
     @Test
+    void omitsAllToolsForAnOrdinaryConversationTurn() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"SSE 是服务端推送协议\",\"thought\":\"\",\"action\":null}"));
+
+        client(true).decideNextStep("解释一下 SSE", "");
+
+        assertThat(requestPayload.has("tools")).isFalse();
+        assertThat(requestPayload.path("instructions").asText())
+                .contains("对话助手")
+                .contains("本轮是普通对话，不提供业务工具")
+                .doesNotContain("可调用业务工具");
+    }
+
+    @Test
     void omitsWebSearchAndDescribesItAsDisabledWhenTurnedOff() throws Exception {
         startServer(List.of("{\"thought\":\"\",\"done\":true,\"reply\":\"未搜索\",\"action\":null}"));
 
