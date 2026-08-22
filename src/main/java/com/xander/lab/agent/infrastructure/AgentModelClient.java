@@ -199,8 +199,20 @@ public class AgentModelClient {
                         }
                         appendOutputDelta(output, replyDecoder, event.path("delta").asText(""),
                                 directConversation, onAnswerDelta);
+                    } else if (!StringUtils.hasText(type)
+                            && StringUtils.hasLength(event.path("choices").path(0)
+                            .path("delta").path("content").asText(""))) {
+                        appendOutputDelta(output, replyDecoder, event.path("choices").path(0)
+                                        .path("delta").path("content").asText(""),
+                                directConversation, onAnswerDelta);
                     } else if ("response.output_text.done".equals(type) && output.isEmpty()) {
                         appendOutputDelta(output, replyDecoder, event.path("text").asText(""),
+                                directConversation, onAnswerDelta);
+                    } else if ("response.content_part.done".equals(type) && output.isEmpty()) {
+                        appendOutputDelta(output, replyDecoder, event.path("part").path("text").asText(""),
+                                directConversation, onAnswerDelta);
+                    } else if ("response.output_item.done".equals(type) && output.isEmpty()) {
+                        appendOutputDelta(output, replyDecoder, extractContentText(event.path("item")),
                                 directConversation, onAnswerDelta);
                     } else if ("response.completed".equals(type)) {
                         if (output.isEmpty()) {
@@ -229,7 +241,7 @@ public class AgentModelClient {
                 decision.putNull("action");
                 return ModelCallResult.of(decision, usage, endpoint.model());
             }
-            JsonNode decision = objectMapper.readTree(stripCodeFence(output.toString()));
+            JsonNode decision = parseDecision(output.toString());
             validateDecision(decision);
             return ModelCallResult.of(decision, usage, endpoint.model());
         } catch (JsonProcessingException exception) {
@@ -393,6 +405,55 @@ public class AgentModelClient {
         }
         String chatContent = response.path("choices").path(0).path("message").path("content").asText();
         return StringUtils.hasText(chatContent) ? chatContent : null;
+    }
+
+    private String extractContentText(JsonNode item) {
+        if (item == null || item.isMissingNode()) return "";
+        for (JsonNode content : item.path("content")) {
+            String text = content.path("text").asText();
+            if (StringUtils.hasText(text)) return text;
+        }
+        return defaultText(item.path("text").asText(null));
+    }
+
+    /** Accepts compatible gateways that wrap an otherwise valid decision with prose or tags. */
+    private JsonNode parseDecision(String raw) {
+        String normalized = stripCodeFence(raw);
+        try {
+            return objectMapper.readTree(normalized);
+        } catch (JsonProcessingException original) {
+            for (int start = normalized.indexOf('{'); start >= 0;
+                 start = normalized.indexOf('{', start + 1)) {
+                int end = balancedObjectEnd(normalized, start);
+                if (end < 0) continue;
+                try {
+                    JsonNode candidate = objectMapper.readTree(normalized.substring(start, end));
+                    if (candidate.isObject() && candidate.has("done")) return candidate;
+                } catch (JsonProcessingException ignored) {
+                    // Try the next balanced object; gateways may prepend metadata-like fragments.
+                }
+            }
+            throw new IllegalStateException("模型决策结果不是有效的 JSON，请重试", original);
+        }
+    }
+
+    private int balancedObjectEnd(String value, int start) {
+        int depth = 0;
+        boolean quoted = false;
+        boolean escaped = false;
+        for (int index = start; index < value.length(); index++) {
+            char character = value.charAt(index);
+            if (quoted) {
+                if (escaped) escaped = false;
+                else if (character == '\\') escaped = true;
+                else if (character == '"') quoted = false;
+                continue;
+            }
+            if (character == '"') quoted = true;
+            else if (character == '{') depth++;
+            else if (character == '}' && --depth == 0) return index + 1;
+        }
+        return -1;
     }
 
     private String stripCodeFence(String text) {

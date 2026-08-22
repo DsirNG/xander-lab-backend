@@ -135,6 +135,21 @@ class AgentModelClientTest {
     }
 
     @Test
+    void acceptsAValidDecisionWrappedInProviderCommentary() throws Exception {
+        startServer(List.of(
+                "下面是调度结果：\n```json\n",
+                "{\"done\":false,\"reply\":\"\",\"thought\":\"\",",
+                "\"action\":{\"tool\":\"image_generate\",\"args\":{\"prompt\":\"小猫\"}}}\n```"
+        ));
+
+        JsonNode decision = client().decideNextStep("生成图片：小猫", "tools").payload();
+
+        assertThat(decision.path("done").asBoolean()).isFalse();
+        assertThat(decision.path("action").path("tool").asText()).isEqualTo("image_generate");
+        assertThat(decision.path("action").path("args").path("prompt").asText()).isEqualTo("小猫");
+    }
+
+    @Test
     void streamsPlainTextDirectlyForAnOrdinaryConversationTurn() throws Exception {
         startServer(List.of("SSE 是", "服务端推送协议"));
         List<String> deltas = new ArrayList<>();

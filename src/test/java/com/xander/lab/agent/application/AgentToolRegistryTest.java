@@ -36,6 +36,12 @@ class AgentToolRegistryTest {
     }
 
     @Test
+    void selectsImageToolForTheReportedCatPrompt() {
+        assertThat(registry.selectNames("生成图片：小猫"))
+                .containsExactly("image_generate");
+    }
+
+    @Test
     void shortContextDependentActionFallsBackToAllTools() {
         assertThat(registry.selectNames("确认，按这个执行吧"))
                 .containsExactlyInAnyOrderElementsOf(registry.names());
