@@ -45,6 +45,7 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 public class AgentConversationService {
     private static final int TOOL_DELTA_FLUSH_CHARS = 256;
+    private static final int ANSWER_DELTA_FLUSH_CHARS = 24;
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
     private static final String DEFAULT_TITLE = "新对话";
 
@@ -197,6 +198,7 @@ public class AgentConversationService {
                 ModelCallResult call = modelClient.decideNextStepStream(
                         context, toolRegistry.describeTools(), answerProgress::accept,
                         () -> isCancelRequested(conversationId, userId, runVersion));
+                answerProgress.flush();
                 decision = call.payload();
                 usage.add(call.usage());
             } catch (CancellationException exception) {
@@ -701,12 +703,14 @@ public class AgentConversationService {
         }
     }
 
-    /** Persists and forwards each decoded upstream reply delta without re-chunking it. */
+    /** Pushes the first reply delta immediately, then batches tiny token deltas to reduce database round trips. */
     private final class AnswerProgress {
         private final Long conversationId;
         private final Long userId;
         private final long runVersion;
         private final Consumer<AgentEvent> listener;
+        private final StringBuilder deltaBuffer = new StringBuilder();
+        private boolean firstDeltaDelivered;
 
         private AnswerProgress(Long conversationId, Long userId, long runVersion,
                                Consumer<AgentEvent> listener) {
@@ -718,8 +722,22 @@ public class AgentConversationService {
 
         private void accept(String delta) {
             if (delta == null || delta.isEmpty()) return;
+            String normalized = normalizeAnswer(delta);
+            if (!firstDeltaDelivered) {
+                firstDeltaDelivered = true;
+                appendActive(conversationId, userId, runVersion, "answer_delta",
+                        normalized, listener);
+                return;
+            }
+            deltaBuffer.append(normalized);
+            if (deltaBuffer.length() >= ANSWER_DELTA_FLUSH_CHARS) flush();
+        }
+
+        private void flush() {
+            if (deltaBuffer.isEmpty()) return;
             appendActive(conversationId, userId, runVersion, "answer_delta",
-                    normalizeAnswer(delta), listener);
+                    deltaBuffer.toString(), listener);
+            deltaBuffer.setLength(0);
         }
     }
 

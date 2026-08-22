@@ -44,6 +44,19 @@ class AgentModelClientTest {
     }
 
     @Test
+    void asksTheModelToEmitTheReplyBeforeHiddenThought() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"你好\",\"thought\":\"\",\"action\":null}"));
+
+        client().decideNextStep("context", "tools");
+
+        String instructions = requestPayload.path("instructions").asText();
+        assertThat(instructions)
+                .contains("字段顺序必须严格为 done、reply、thought、action")
+                .contains("thought 必须为空")
+                .contains("不要在 reply 之前生成用户不可见的思考内容");
+    }
+
+    @Test
     void keepsToolDecisionJsonOutOfTheUserFacingStream() throws Exception {
         startServer(List.of(
                 "{\"thought\":\"需要生成博客\",\"done\":false,",

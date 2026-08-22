@@ -354,6 +354,30 @@ class AgentConversationServiceTest {
     }
 
     @Test
+    void batchesTinyAnswerDeltasAfterDeliveringTheFirstOneImmediately() {
+        stubTransactions();
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "第一二三四五六七八九十十一十二十三十四");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Consumer<String> deltas = invocation.getArgument(2);
+            deltas.accept("第一");
+            deltas.accept("二三");
+            deltas.accept("四五");
+            deltas.accept("六七八九十十一十二十三十四");
+            return call(decision);
+        });
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> deltas = new java.util.ArrayList<>();
+
+        service.executeTurn(7L, 42L, "你好", event -> {
+            if ("answer_delta".equals(event.getEventType())) deltas.add(event.getDataContent());
+        });
+
+        assertThat(deltas).containsExactly("第一", "二三四五六七八九十十一十二十三十四");
+    }
+
+    @Test
     void escapedBackticksInReplyAreNormalizedForMarkdownRendering() {
         stubTransactions();
         ObjectNode decision = decisionNode(true, "", null, null);

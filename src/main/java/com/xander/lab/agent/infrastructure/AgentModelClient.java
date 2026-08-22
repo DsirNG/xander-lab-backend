@@ -286,11 +286,12 @@ public class AgentModelClient {
                 + "reply 内容允许使用 Markdown 排版（加粗、有序/无序列表、标题、引用、表格等），"
                 + "JSON 字符串内的换行必须转义为 \\n；代码片段必须使用带语言标记的围栏"
                 + "（如 ```html、```css、```js），以便前端提供代码复制与 HTML 预览。"
-                + "字段顺序必须严格为 thought、done、reply、action；最终回复放在 reply 中，便于安全流式展示。JSON 结构：\n"
-                + "{\"thought\":\"本步的简要思考\",\"done\":false,\"reply\":\"最终回复，done 为 true 时必须填写\","
+                + "字段顺序必须严格为 done、reply、thought、action；把 reply 提前，便于尽早安全流式展示。JSON 结构：\n"
+                + "{\"done\":false,\"reply\":\"最终回复，done 为 true 时必须填写\",\"thought\":\"本步的简要思考\","
                 + "\"action\":{\"tool\":\"工具名\",\"args\":{\"工具参数名\":\"值\"}}}。\n"
                 + "当需要调用工具时 done 为 false 且 action 指向要调用的工具；"
-                + "当准备向用户输出最终结果时 done 为 true 且 reply 填写最终回复。";
+                + "当准备向用户输出最终结果时 done 为 true、reply 填写最终回复且 thought 必须为空，"
+                + "不要在 reply 之前生成用户不可见的思考内容。";
     }
 
     private String extractOutputText(JsonNode response) {
