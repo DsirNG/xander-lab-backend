@@ -6,8 +6,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.admin.application.ModelGateway;
 import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.recitation.application.RecitationAsrPort;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -25,15 +25,26 @@ import java.util.List;
 /** 使用管理台模型配置调用 DashScope Paraformer 异步录音转写。 */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class DashScopeRecitationAsrClient implements RecitationAsrPort {
     private static final int MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
     private final ModelGateway modelGateway;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(15))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
+    private final HttpClient httpClient;
+
+    /** 生产环境复用带连接超时和安全重定向策略的 HTTP 客户端。 */
+    @Autowired
+    public DashScopeRecitationAsrClient(ModelGateway modelGateway, ObjectMapper objectMapper) {
+        this(modelGateway, objectMapper, HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(15))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build());
+    }
+
+    DashScopeRecitationAsrClient(ModelGateway modelGateway, ObjectMapper objectMapper, HttpClient httpClient) {
+        this.modelGateway = modelGateway;
+        this.objectMapper = objectMapper;
+        this.httpClient = httpClient;
+    }
 
     @Override
     public SubmittedTask submit(String audioUrl) {
@@ -44,7 +55,7 @@ public class DashScopeRecitationAsrClient implements RecitationAsrPort {
                 return submit(endpoint, audioUrl);
             } catch (RuntimeException error) {
                 lastError = error;
-                log.warn("recitation ASR submit failed for provider {}", endpoint.providerId());
+                logRequestFailure("submit", endpoint.providerId(), error);
             }
         }
         throw lastError != null ? lastError : new IllegalStateException("背诵音转文模型未正确配置");
@@ -62,7 +73,7 @@ public class DashScopeRecitationAsrClient implements RecitationAsrPort {
                     .timeout(Duration.ofSeconds(30))
                     .header("Authorization", "Bearer " + endpoint.apiKey())
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .GET()
                     .build();
             JsonNode body = sendJson(request);
             String status = body.path("output").path("task_status").asText("");
@@ -77,6 +88,9 @@ public class DashScopeRecitationAsrClient implements RecitationAsrPort {
                 return new PollResult(PollResult.State.FAILED, null, List.of(), "语音识别结果不可用");
             }
             return downloadTranscript(successful.path("transcription_url").asText());
+        } catch (DashScopeRequestException error) {
+            logRequestFailure("poll", providerId, error);
+            throw error;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("查询语音识别任务被中断", interrupted);
@@ -161,10 +175,44 @@ public class DashScopeRecitationAsrClient implements RecitationAsrPort {
     private JsonNode sendJson(HttpRequest request) throws Exception {
         HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("音转文服务请求失败（HTTP " + response.statusCode() + "）");
+            throw diagnosticFailure(response);
         }
         if (response.body().length > MAX_RESPONSE_BYTES) throw new IllegalStateException("音转文响应过大");
         return objectMapper.readTree(response.body());
+    }
+
+    private DashScopeRequestException diagnosticFailure(HttpResponse<byte[]> response) {
+        JsonNode body = null;
+        byte[] bytes = response.body();
+        if (bytes != null && bytes.length <= MAX_RESPONSE_BYTES) {
+            try {
+                body = objectMapper.readTree(bytes);
+            } catch (Exception ignored) {
+                // 非 JSON 错误页只记录 HTTP 状态，不把第三方正文写入日志。
+            }
+        }
+        String code = safeDiagnostic(body, "code");
+        String requestId = safeDiagnostic(body, "request_id");
+        if ("-".equals(requestId)) requestId = safeDiagnostic(body, "requestId");
+        return new DashScopeRequestException(response.statusCode(), code, requestId);
+    }
+
+    private String safeDiagnostic(JsonNode body, String field) {
+        if (body == null) return "-";
+        String value = body.path(field).asText("");
+        if (!StringUtils.hasText(value)) return "-";
+        String sanitized = value.replaceAll("[^A-Za-z0-9._:-]", "_");
+        return sanitized.substring(0, Math.min(sanitized.length(), 100));
+    }
+
+    private void logRequestFailure(String action, long providerId, RuntimeException error) {
+        if (error instanceof DashScopeRequestException requestError) {
+            log.warn("recitation ASR {} failed provider={} status={} code={} requestId={}",
+                    action, providerId, requestError.status(), requestError.code(), requestError.requestId());
+            return;
+        }
+        log.warn("recitation ASR {} failed provider={} type={}",
+                action, providerId, error.getClass().getSimpleName());
     }
 
     private URI apiUri(ModelEndpoint endpoint, String path) {
@@ -173,5 +221,30 @@ public class DashScopeRecitationAsrClient implements RecitationAsrPort {
             throw new IllegalStateException("音转文供应商必须使用 HTTPS 地址");
         }
         return URI.create(endpoint.baseUrl() + path);
+    }
+
+    private static final class DashScopeRequestException extends IllegalStateException {
+        private final int status;
+        private final String code;
+        private final String requestId;
+
+        private DashScopeRequestException(int status, String code, String requestId) {
+            super("DashScope request failed: HTTP " + status + ", code=" + code + ", requestId=" + requestId);
+            this.status = status;
+            this.code = code;
+            this.requestId = requestId;
+        }
+
+        private int status() {
+            return status;
+        }
+
+        private String code() {
+            return code;
+        }
+
+        private String requestId() {
+            return requestId;
+        }
     }
 }
