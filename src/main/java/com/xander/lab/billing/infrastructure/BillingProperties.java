@@ -9,15 +9,15 @@ import java.util.Map;
 /**
  * 积分计费配置。
  *
- * <p>账本单位为「毫分」（1 分 = 1000 毫分，1 元 = 100_000 毫分），余额与流水全链路毫分，
+ * <p>账本单位为「毫分」（1 分 = 1000 毫分，1 元 = 10 分 = 10_000 毫分），余额与流水全链路毫分，
  * token 计费精确到毫分不再舍入到整分。token 单价以「毫分 / 每 1K token」为单位：
- * 一次调用毫分 = round(input*inputPrice + cached*cachedPrice + output*outputPrice)，
+ * 一次调用毫分 = round((input-cached)*inputPrice + cached*cachedPrice + output*outputPrice)，
  * 至少 1 毫分。一口价（配图 / 邮件 / CSDN）直接按 biz_type 配置毫分值。</p>
  *
  * <p>支持按模型配置不同价格：models.{model}.price 优先级高于默认 price（数据库
  * billing_model_price 又优先于本配置），未配置的模型使用默认价格。例如：</p>
  * <pre>
- * billing.models.gpt-5.6-terra.price.input-milli-per-1k-token=200
+ * billing.models.gpt-5.6-terra.price.input-milli-per-1k-token=20
  * </pre>
  *
  * <pre>
@@ -56,11 +56,11 @@ public class BillingProperties {
 
     public static class Price {
         /** 输入 token 单价：毫分 / 每 1K token */
-        private long inputMilliPer1kToken = 500L;
+        private long inputMilliPer1kToken = 50L;
         /** 缓存命中 token 单价：毫分 / 每 1K token */
-        private long cachedMilliPer1kToken = 50L;
+        private long cachedMilliPer1kToken = 5L;
         /** 输出 token 单价：毫分 / 每 1K token */
-        private long outputMilliPer1kToken = 2000L;
+        private long outputMilliPer1kToken = 200L;
 
         public long getInputMilliPer1kToken() { return inputMilliPer1kToken; }
         public void setInputMilliPer1kToken(long value) { this.inputMilliPer1kToken = value; }

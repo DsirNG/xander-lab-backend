@@ -4,7 +4,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 
 /**
- * 保存模型定价请求体。单价单位：毫分 / 每 1K token（¥2/M = 200）。
+ * 保存模型定价请求体。单价单位：毫分 / 每 1K token（按 1 元 = 10 积分，¥2/M = 20）。
  */
 public record SaveModelPriceRequest(
         /** 输入 token 单价：毫分 / 每 1K token */

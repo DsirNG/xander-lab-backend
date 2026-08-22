@@ -227,11 +227,11 @@ public class AgentModelClient {
                 decision.put("reply", output.toString());
                 decision.put("thought", "");
                 decision.putNull("action");
-                return ModelCallResult.of(decision, usage);
+                return ModelCallResult.of(decision, usage, endpoint.model());
             }
             JsonNode decision = objectMapper.readTree(stripCodeFence(output.toString()));
             validateDecision(decision);
-            return ModelCallResult.of(decision, usage);
+            return ModelCallResult.of(decision, usage, endpoint.model());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("模型决策结果不是有效的 JSON，请重试", exception);
         } catch (IOException exception) {

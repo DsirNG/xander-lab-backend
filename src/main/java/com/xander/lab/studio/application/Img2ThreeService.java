@@ -131,7 +131,7 @@ public class Img2ThreeService {
             requireActiveExecution(updateStage(taskId, userId, runToken, "spec"));
 
             GeneratedModel generated = new GeneratedModel(
-                    relief.title(), relief.analysis(), relief.sceneSpec(), relief.factoryCode(), ModelUsage.NONE
+                    relief.title(), relief.analysis(), relief.sceneSpec(), relief.factoryCode(), ModelUsage.NONE, null
             );
             if (properties.isAgentEnabled()) {
                 try {
@@ -168,7 +168,7 @@ public class Img2ThreeService {
             }
             if (!generated.usage().isEmpty()) {
                 billingService.chargeTokens(userId, BillingBiz.IMG2THREE, "img2three:" + taskId,
-                        "task:" + taskId, generated.usage(), null, "图生 3D 重建完成");
+                        "task:" + taskId, generated.usage(), generated.model(), "图生 3D 重建完成");
             }
             return get(taskId, userId);
         } catch (Exception e) {
@@ -196,7 +196,7 @@ public class Img2ThreeService {
         JsonNode result = reconstruction.payload();
         log.info("img2three task {} received initial model response", taskId);
         UsageAccumulator usage = new UsageAccumulator();
-        usage.add(reconstruction.usage());
+        usage.add(reconstruction.usage(), reconstruction.model());
         JsonNode analysis = objectMapper.createObjectNode();
         JsonNode sceneSpec = null;
         String title = null;
@@ -221,7 +221,7 @@ public class Img2ThreeService {
                                 + "{\"title\": string, \"analysis\": object, \"spec\": ObjectSculptSpec}."
                 );
                 result = repair.payload();
-                usage.add(repair.usage());
+                usage.add(repair.usage(), repair.model());
                 continue;
             }
 
@@ -237,7 +237,7 @@ public class Img2ThreeService {
                 emit(onEvent, "stage", "spec|质量门未通过，正在根据完整报告修订规格");
                 ModelCallResult repair = modelClient.repair(imageBytes, contentType, result, e.getMessage());
                 result = repair.payload();
-                usage.add(repair.usage());
+                usage.add(repair.usage(), repair.model());
             }
         }
 
@@ -249,7 +249,7 @@ public class Img2ThreeService {
                 safeAnalysis,
                 sceneSpec,
                 factoryCode,
-                usage.sum()
+                usage.sum(), usage.model()
         );
     }
 
@@ -468,7 +468,8 @@ public class Img2ThreeService {
             JsonNode analysis,
             JsonNode sceneSpec,
             String factoryCode,
-            ModelUsage usage
+            ModelUsage usage,
+            String model
     ) {
     }
 
@@ -477,16 +478,26 @@ public class Img2ThreeService {
         private long input;
         private long cached;
         private long output;
+        private String model;
+        private boolean mixedModels;
 
-        void add(ModelUsage usage) {
+        void add(ModelUsage usage, String usedModel) {
             if (usage == null) return;
             input += Math.max(0L, usage.inputTokens());
             cached += Math.max(0L, usage.cachedTokens());
             output += Math.max(0L, usage.outputTokens());
+            if (StringUtils.hasText(usedModel)) {
+                if (model == null) model = usedModel;
+                else if (!model.equals(usedModel)) mixedModels = true;
+            }
         }
 
         ModelUsage sum() {
             return new ModelUsage(input, cached, output);
+        }
+
+        String model() {
+            return mixedModels ? null : model;
         }
     }
 }

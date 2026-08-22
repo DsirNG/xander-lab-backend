@@ -76,24 +76,24 @@ class BillingServiceTest {
 
     @Test
     void chargeTokensUsesDatabasePriceOverYmlDefault() {
-        // 数据库给 gpt-5.6-terra 配 200/1200/20 毫分每 1K（¥2/M、¥12/M、¥0.2/M）。
+        // 1 元 = 10 积分：¥2/M、¥12/M、¥0.2/M 对应 20/120/2 毫分每 1K。
         ModelPrice db = new ModelPrice();
         db.setModel("gpt-5.6-terra");
-        db.setInputMilliPer1kToken(200L);
-        db.setOutputMilliPer1kToken(1200L);
-        db.setCachedMilliPer1kToken(20L);
+        db.setInputMilliPer1kToken(20L);
+        db.setOutputMilliPer1kToken(120L);
+        db.setCachedMilliPer1kToken(2L);
         db.setEnabled(1);
 
         BillingService service = newService(db);
         stubAccount(1_000_000L);
 
-        // 与线上账单对齐：5036 输入 + 5690 输出 → 5036*200/1000 + 5690*1200/1000 = 7835.2 毫分 → 7835
+        // 5036 输入 + 5690 输出 → 5036*20/1000 + 5690*120/1000 = 783.52 毫分 → 784。
         service.chargeTokens(7L, "blog-agent-run", "run:terra", null,
                 new ModelUsage(5036, 0, 5690), "gpt-5.6-terra", "博客生成");
 
         ArgumentCaptor<PointsLedger> captor = ArgumentCaptor.forClass(PointsLedger.class);
         verify(ledgerMapper).insert(captor.capture());
-        assertEquals(7835L, captor.getValue().getAmount());
+        assertEquals(784L, captor.getValue().getAmount());
     }
 
     @Test
@@ -101,13 +101,33 @@ class BillingServiceTest {
         BillingService service = newService(null);
         stubAccount(1_000_000L);
 
-        // 未配置模型回退 yml 默认价 500/2000：5036*500/1000 + 5690*2000/1000 = 13898 毫分
+        // 未配置模型回退 yml 默认价 50/200：5036*50/1000 + 5690*200/1000 = 1389.8 毫分 → 1390。
         service.chargeTokens(7L, "blog-agent-run", "run:unknown", null,
                 new ModelUsage(5036, 0, 5690), "unknown-model", "博客生成");
 
         ArgumentCaptor<PointsLedger> captor = ArgumentCaptor.forClass(PointsLedger.class);
         verify(ledgerMapper).insert(captor.capture());
-        assertEquals(13898L, captor.getValue().getAmount());
+        assertEquals(1390L, captor.getValue().getAmount());
+    }
+
+    @Test
+    void cachedInputTokensAreNotChargedAgainAtTheFullInputRate() {
+        ModelPrice db = new ModelPrice();
+        db.setModel("gpt-5.6-terra");
+        db.setInputMilliPer1kToken(20L);
+        db.setOutputMilliPer1kToken(120L);
+        db.setCachedMilliPer1kToken(2L);
+        db.setEnabled(1);
+        BillingService service = newService(db);
+        stubAccount(1_000_000L);
+
+        service.chargeTokens(7L, "agent-turn", "run:cached", null,
+                new ModelUsage(1000, 400, 0), "gpt-5.6-terra", "智能体会话");
+
+        ArgumentCaptor<PointsLedger> captor = ArgumentCaptor.forClass(PointsLedger.class);
+        verify(ledgerMapper).insert(captor.capture());
+        // 600*20/1000 + 400*2/1000 = 12.8 毫分，四舍五入为 13。
+        assertEquals(13L, captor.getValue().getAmount());
     }
 
     @Test

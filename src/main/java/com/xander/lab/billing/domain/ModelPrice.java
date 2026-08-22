@@ -1,6 +1,7 @@
 package com.xander.lab.billing.domain;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -10,7 +11,7 @@ import java.time.LocalDateTime;
 /**
  * 模型 token 定价（管理员维护）。
  *
- * <p>单价单位为「毫分 / 每 1K token」（¥2/M = 200）。计费时按 model 精确匹配
+ * <p>单价单位为「毫分 / 每 1K token」（按 1 元 = 10 积分，¥2/M = 20）。计费时按 model 精确匹配
  * enabled=1 的行；未命中回退 application.yml 的默认价。缓存写入单价为预留字段，
  * 当前模型网关 usage 不含缓存写入计量，参与计算时按 0 处理。</p>
  */
@@ -26,15 +27,19 @@ public class ModelPrice {
     private String model;
 
     /** 输入 token 单价：毫分 / 每 1K token */
+    @TableField("input_milli_per_1k_token")
     private Long inputMilliPer1kToken;
 
     /** 输出 token 单价：毫分 / 每 1K token */
+    @TableField("output_milli_per_1k_token")
     private Long outputMilliPer1kToken;
 
     /** 缓存读取 token 单价：毫分 / 每 1K token */
+    @TableField("cached_milli_per_1k_token")
     private Long cachedMilliPer1kToken;
 
     /** 缓存写入 token 单价：毫分 / 每 1K token；当前 usage 无该计量，预留 */
+    @TableField("cached_write_milli_per_1k_token")
     private Long cachedWriteMilliPer1kToken;
 
     /** 是否启用：1=参与计费，0=停用后回退 yml 默认价 */

@@ -154,7 +154,7 @@ public class Img2ThreeModelClient {
             throw new IllegalStateException("模型没有返回可读取的" + stage + "结果");
         }
         try {
-            return ModelCallResult.of(parseJsonObject(text), response.usage());
+            return ModelCallResult.of(parseJsonObject(text), response.usage(), response.model());
         } catch (Exception e) {
             throw new IllegalStateException("模型" + stage + "结果不是有效 JSON，请重试", e);
         }
@@ -239,7 +239,8 @@ public class Img2ThreeModelClient {
                     .body(payload)
                     .retrieve()
                     .body(JsonNode.class);
-            return ModelCallResult.of(body, ModelUsage.fromJson(body == null ? null : body.path("usage")));
+            return ModelCallResult.of(body, ModelUsage.fromJson(body == null ? null : body.path("usage")),
+                    endpoint.model());
         } catch (Exception e) {
             String reason = describeFailure(e);
             log.warn("img2three Responses API request failed: {}", reason, e);

@@ -218,7 +218,7 @@ public class AgentConversationService {
                         () -> isCancelRequested(conversationId, userId, runVersion));
                 answerProgress.flush();
                 decision = call.payload();
-                usage.add(call.usage());
+                usage.add(call.usage(), call.model());
                 log.info("agent model decision conversation={} run={} step={} durationMs={} done={}",
                         conversationId, runVersion, step + 1,
                         elapsedMillis(modelStartedNanos), decision.path("done").asBoolean(false));
@@ -362,7 +362,7 @@ public class AgentConversationService {
         });
         billingService.chargeTokens(userId, BillingBiz.AGENT_TURN,
                 "conv:" + conversationId + ":run:" + runVersion, "conv:" + conversationId,
-                usage.sum(), null, "智能体会话单轮执行");
+                usage.sum(), usage.model(), "智能体会话单轮执行");
         eventService.deliver(terminal.event(), onEvent);
         return terminal.conversation();
     }
@@ -796,16 +796,26 @@ public class AgentConversationService {
         private long input;
         private long cached;
         private long output;
+        private String model;
+        private boolean mixedModels;
 
-        void add(ModelUsage usage) {
+        void add(ModelUsage usage, String usedModel) {
             if (usage == null) return;
             input += Math.max(0L, usage.inputTokens());
             cached += Math.max(0L, usage.cachedTokens());
             output += Math.max(0L, usage.outputTokens());
+            if (StringUtils.hasText(usedModel)) {
+                if (model == null) model = usedModel;
+                else if (!model.equals(usedModel)) mixedModels = true;
+            }
         }
 
         ModelUsage sum() {
             return new ModelUsage(input, cached, output);
+        }
+
+        String model() {
+            return mixedModels ? null : model;
         }
     }
 }

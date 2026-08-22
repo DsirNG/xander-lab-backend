@@ -196,7 +196,7 @@ public class BlogAgentModelClient {
                 }
                 try {
                     return ModelCallResult.of(objectMapper.readTree(stripCodeFence(text)),
-                            ModelUsage.fromJson(response.path("usage")));
+                            ModelUsage.fromJson(response.path("usage")), endpoint.model());
                 } catch (Exception e) {
                     throw new IllegalStateException("模型阶段结果不是有效 JSON", e);
                 }
@@ -227,7 +227,7 @@ public class BlogAgentModelClient {
                 }
                 try {
                     return ModelCallResult.of(objectMapper.readTree(stripCodeFence(text)),
-                            ModelUsage.fromJson(response.path("usage")));
+                            ModelUsage.fromJson(response.path("usage")), endpoint.model());
                 } catch (Exception e) {
                     throw new IllegalStateException("模型返回格式不正确，请重试", e);
                 }
@@ -373,7 +373,8 @@ public class BlogAgentModelClient {
                 }
             }
             if (!StringUtils.hasText(output)) throw new IllegalStateException("模型没有返回可读取的文章结果");
-            return ModelCallResult.of(objectMapper.readTree(stripCodeFence(output.toString())), usage);
+            return ModelCallResult.of(objectMapper.readTree(stripCodeFence(output.toString())), usage,
+                    endpoint.model());
         } catch (IOException e) {
             // 流在产出任何 delta 前中断视为可重试的瞬态失败；已有输出时重试会重复推送内容，直接失败。
             if (output.isEmpty()) {

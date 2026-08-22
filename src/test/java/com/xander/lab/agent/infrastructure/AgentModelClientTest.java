@@ -2,6 +2,7 @@ package com.xander.lab.agent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.common.ModelCallResult;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -138,9 +139,9 @@ class AgentModelClientTest {
         startServer(List.of("SSE 是", "服务端推送协议"));
         List<String> deltas = new ArrayList<>();
 
-        JsonNode decision = client(true)
-                .decideNextStepStream("解释一下 SSE", "", deltas::add)
-                .payload();
+        ModelCallResult call = client(true)
+                .decideNextStepStream("解释一下 SSE", "", deltas::add);
+        JsonNode decision = call.payload();
 
         assertThat(requestPayload.has("tools")).isFalse();
         assertThat(requestPayload.path("instructions").asText())
@@ -152,6 +153,7 @@ class AgentModelClientTest {
         assertThat(decision.path("done").asBoolean()).isTrue();
         assertThat(decision.path("reply").asText()).isEqualTo("SSE 是服务端推送协议");
         assertThat(decision.path("action").isNull()).isTrue();
+        assertThat(call.model()).isEqualTo("test-model");
     }
 
     @Test

@@ -258,8 +258,9 @@ public class BillingService {
         BillingProperties.Price price = resolvePrice(model);
         long input = Math.max(0L, usage.inputTokens());
         long output = Math.max(0L, usage.outputTokens());
-        long cached = Math.max(0L, usage.cachedTokens());
-        double milliPoints = input / 1000.0 * price.getInputMilliPer1kToken()
+        long cached = Math.min(input, Math.max(0L, usage.cachedTokens()));
+        long uncachedInput = input - cached;
+        double milliPoints = uncachedInput / 1000.0 * price.getInputMilliPer1kToken()
                 + output / 1000.0 * price.getOutputMilliPer1kToken()
                 + cached / 1000.0 * price.getCachedMilliPer1kToken();
         return Math.max(1L, Math.round(milliPoints));

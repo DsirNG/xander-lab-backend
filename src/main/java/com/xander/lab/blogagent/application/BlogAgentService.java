@@ -119,7 +119,7 @@ public class BlogAgentService {
                 .toList();
         if (!result.isEmpty()) {
             billingService.chargeTokens(userId, BillingBiz.BLOG_TOPIC, "topics:" + userId + ":" + System.currentTimeMillis(),
-                    "seed:" + seed, call.usage(), null, "AI 选题生成");
+                    "seed:" + seed, call.usage(), call.model(), "AI 选题生成");
         }
         return result;
     }
@@ -173,12 +173,12 @@ public class BlogAgentService {
             updateStage(taskId, userId, "analyze", "正在理解你的目标和文章边界", onEvent);
             ModelCallResult analysisCall = modelClient.analyze(getInput(taskId, userId));
             JsonNode analysis = analysisCall.payload();
-            usage.add(analysisCall.usage());
+            usage.add(analysisCall.usage(), analysisCall.model());
             checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "research", "正在联网查找并核验相关资料", onEvent);
             ModelCallResult researchCall = modelClient.research(getInput(taskId, userId), analysis);
             JsonNode research = researchCall.payload();
-            usage.add(researchCall.usage());
+            usage.add(researchCall.usage(), researchCall.model());
             checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "write", "正在根据策划和调研结果撰写文章草稿", onEvent);
             String writingInput = getInput(taskId, userId)
@@ -191,7 +191,7 @@ public class BlogAgentService {
                     })
                     : modelClient.createArticle(writingInput);
             JsonNode result = articleCall.payload();
-            usage.add(articleCall.usage());
+            usage.add(articleCall.usage(), articleCall.model());
             checkCancellation(cancellationRequested);
             updateStage(taskId, userId, "illustrate", "正在按需生成并保存知识插图", onEvent);
             IllustrationOutcome outcome = generateIllustrations(
@@ -233,7 +233,7 @@ public class BlogAgentService {
         try {
             ModelCallResult call = modelClient.reviewArticle(outcome.content(), request);
             JsonNode reviewed = call.payload();
-            usage.add(call.usage());
+            usage.add(call.usage(), call.model());
             if (reviewed == null) return outcome;
             String content = defaultText(reviewed.path("content").asText(), outcome.content());
             return new IllustrationOutcome(content, outcome.status(), outcome.error(), outcome.generated());
@@ -312,7 +312,7 @@ public class BlogAgentService {
                 : "博客生成助手完成调研、写作与审校");
         saveMessage(taskId, "assistant", "result", "review", task.getTitle());
         billingService.chargeTokens(userId, billingBizType, billingBizKey,
-                "task:" + taskId, usage.sum(), null, billingBizKey);
+                "task:" + taskId, usage.sum(), usage.model(), billingBizKey);
         return get(taskId, userId);
     }
 
@@ -439,7 +439,7 @@ public class BlogAgentService {
                     requireOwnedTask(taskId, userId).getContent(), instruction,
                     delta -> onEvent.accept("delta", delta));
             JsonNode result = reviseCall.payload();
-            usage.add(reviseCall.usage());
+            usage.add(reviseCall.usage(), reviseCall.model());
             updateStage(taskId, userId, "illustrate", "正在同步调整文章插图", onEvent);
             IllustrationOutcome outcome = generateIllustrations(
                     taskId, userId, result.path("content").asText(), result.path("illustrations"));
@@ -678,7 +678,7 @@ public class BlogAgentService {
                     : "";
             billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_COMPLIANCE,
                     "task:" + taskId + ":compliance", "task:" + taskId,
-                    call.usage(), null, "合规审查");
+                    call.usage(), call.model(), "合规审查");
             return new ComplianceReview(pass, reason);
         } catch (RuntimeException e) {
             log.warn("blog-agent compliance review degraded to reject for task {}: {}",
@@ -790,16 +790,26 @@ public class BlogAgentService {
         private long input;
         private long cached;
         private long output;
+        private String model;
+        private boolean mixedModels;
 
-        void add(ModelUsage usage) {
+        void add(ModelUsage usage, String usedModel) {
             if (usage == null) return;
             input += Math.max(0L, usage.inputTokens());
             cached += Math.max(0L, usage.cachedTokens());
             output += Math.max(0L, usage.outputTokens());
+            if (StringUtils.hasText(usedModel)) {
+                if (model == null) model = usedModel;
+                else if (!model.equals(usedModel)) mixedModels = true;
+            }
         }
 
         ModelUsage sum() {
             return new ModelUsage(input, cached, output);
+        }
+
+        String model() {
+            return mixedModels ? null : model;
         }
     }
 
