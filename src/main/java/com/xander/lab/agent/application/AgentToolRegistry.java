@@ -17,8 +17,6 @@ import java.util.stream.Collectors;
 @Component
 public class AgentToolRegistry {
 
-    private static final Set<String> CONTENT_TOOLS = Set.of(
-            "blog_generate", "query_posts", "query_unsynced_posts");
     private static final Set<String> PUBLISH_TOOLS = Set.of(
             "publish_post", "query_posts", "query_unsynced_posts");
     private static final Set<String> PLAN_TOOLS = Set.of(
@@ -27,8 +25,18 @@ public class AgentToolRegistry {
             "email_reminder", "query_email_reminders", "update_email_reminder");
     private static final Set<String> IMAGE_TOOLS = Set.of("image_generate");
 
-    private static final List<String> CONTENT_MARKERS = List.of(
-            "博客", "博文", "文章", "选题", "大纲", "写作", "改写", "润色", "blog", "article", "post");
+    private static final List<String> CONTENT_CREATION_MARKERS = List.of(
+            "写博客", "写博文", "写文章", "写一篇",
+            "撰写博客", "撰写博文", "撰写文章",
+            "生成博客", "生成博文", "生成文章", "博客生成", "博文生成", "文章生成",
+            "创作博客", "创作博文", "创作文章",
+            "改写博客", "改写博文", "改写文章",
+            "润色博客", "润色博文", "润色文章",
+            "write a blog", "write a post", "write an article",
+            "generate a blog", "generate a post", "generate an article");
+    private static final List<String> CONTENT_QUERY_MARKERS = List.of(
+            "哪些博客", "哪些博文", "哪些文章", "博客列表", "博文列表", "文章列表",
+            "我的博客", "我的博文", "我的文章", "我写过");
     private static final List<String> PUBLISH_MARKERS = List.of(
             "发布", "发文", "同步", "草稿", "csdn", "掘金", "公众号", "publish", "sync");
     private static final List<String> PLAN_MARKERS = List.of(
@@ -64,7 +72,9 @@ public class AgentToolRegistry {
     public Set<String> selectNames(String userMessage) {
         String normalized = userMessage == null ? "" : userMessage.toLowerCase(Locale.ROOT);
         LinkedHashSet<String> selected = new LinkedHashSet<>();
-        addWhenMatched(selected, normalized, CONTENT_MARKERS, CONTENT_TOOLS);
+        addWhenMatched(selected, normalized, CONTENT_CREATION_MARKERS, Set.of("blog_generate"));
+        addWhenMatched(selected, normalized, CONTENT_QUERY_MARKERS,
+                Set.of("query_posts", "query_unsynced_posts"));
         addWhenMatched(selected, normalized, PUBLISH_MARKERS, PUBLISH_TOOLS);
         addWhenMatched(selected, normalized, PLAN_MARKERS, PLAN_TOOLS);
         addWhenMatched(selected, normalized, EMAIL_MARKERS, EMAIL_TOOLS);

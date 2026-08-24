@@ -206,7 +206,7 @@ public class AgentConversationService {
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
-            String context = buildContext(conversationId, userId, lastError);
+            String context = buildContext(conversationId, userId, lastError, !allowedTools.isEmpty());
             long modelStartedNanos = System.nanoTime();
             AnswerProgress answerProgress = new AnswerProgress(
                     conversationId, userId, runVersion, listener,
@@ -602,7 +602,8 @@ public class AgentConversationService {
     }
 
     /** Builds the model context from the recent message history, dropping tool payload noise. */
-    private String buildContext(Long conversationId, Long userId, JsonNode lastError) {
+    private String buildContext(Long conversationId, Long userId, JsonNode lastError,
+                                boolean hasBusinessTools) {
         List<AgentMessage> messages = listMessages(conversationId, userId);
         int limit = Math.max(5, properties.getContextMessageLimit());
         List<AgentMessage> recent = messages.size() <= limit
@@ -628,7 +629,12 @@ public class AgentConversationService {
         if (lastError != null) {
             builder.append("【最近一次工具失败】").append(lastError.toString()).append("\n\n");
         }
-        builder.append("请根据以上对话继续：如需执行操作则返回 action，否则返回 done=true 的最终回复。");
+        if (hasBusinessTools) {
+            builder.append("请根据以上对话继续：如需执行操作则返回 action，否则返回 done=true 的最终回复。");
+        } else {
+            builder.append("请根据以上对话直接、自然地回复用户，只输出用户可见的 Markdown 正文；"
+                    + "不要输出 JSON、HTML 换行标签或任何内部协议内容。");
+        }
         return builder.toString();
     }
 

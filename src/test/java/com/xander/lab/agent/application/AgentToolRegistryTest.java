@@ -20,7 +20,20 @@ class AgentToolRegistryTest {
     @Test
     void plainConversationUsesNoBusinessToolSchemas() {
         assertThat(registry.selectNames("你好，解释一下什么是 SSE")).isEmpty();
+        assertThat(registry.selectNames("给我200字文章")).isEmpty();
         assertThat(registry.describeTools(Set.of())).isEmpty();
+    }
+
+    @Test
+    void explicitArticleWritingRequestSelectsGenerationTool() {
+        assertThat(registry.selectNames("帮我写一篇200字的文章"))
+                .containsExactly("blog_generate");
+    }
+
+    @Test
+    void articleQueryDoesNotEnableGenerationTool() {
+        assertThat(registry.selectNames("我有哪些文章"))
+                .containsExactlyInAnyOrder("query_posts", "query_unsynced_posts");
     }
 
     @Test

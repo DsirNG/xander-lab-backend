@@ -332,6 +332,27 @@ class AgentConversationServiceTest {
     }
 
     @Test
+    void plainConversationContextDoesNotRequestDecisionProtocol() {
+        stubTransactions();
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "这是普通对话回复");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(decision));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "给我200字文章", ignored -> { });
+
+        var context = org.mockito.ArgumentCaptor.forClass(String.class);
+        var toolDescriptions = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(modelClient).decideNextStepStream(
+                context.capture(), toolDescriptions.capture(), any(), any());
+        assertThat(toolDescriptions.getValue()).isEmpty();
+        assertThat(context.getValue())
+                .contains("只输出用户可见的 Markdown 正文")
+                .doesNotContain("否则返回 done=true");
+    }
+
+    @Test
     void preservesDecodedUpstreamAnswerDeltaBoundaries() {
         stubTransactions();
         ObjectNode decision = decisionNode(true, "", null, null);

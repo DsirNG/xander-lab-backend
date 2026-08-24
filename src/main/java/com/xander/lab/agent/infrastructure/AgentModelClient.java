@@ -403,7 +403,8 @@ public class AgentModelClient {
             return "你是 DinQorAI 博客工作台的对话助手。本轮无需业务操作，请直接、自然地用中文回答用户。\n"
                     + webSearchInstructions
                     + "本轮是普通对话，不提供业务工具；直接回答用户，不要虚构或请求调用业务工具。\n"
-                    + "直接输出给用户看的正文，不要输出 JSON、字段名、代码围栏或隐藏思考。";
+                    + "直接输出给用户看的 Markdown 正文，不要输出 JSON、字段名、HTML 换行标签、"
+                    + "内部协议内容或隐藏思考；段落和换行使用 Markdown。";
         }
         String roleInstructions = hasBusinessTools
                 ? "你是 DinQorAI 博客工作台的智能体调度器。你的任务是把用户的对话诉求拆解成可执行步骤，"
