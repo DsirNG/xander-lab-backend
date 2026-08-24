@@ -36,14 +36,23 @@ public class AgentStreamAuthHandshakeInterceptor implements HandshakeInterceptor
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                    WebSocketHandler wsHandler, Map<String, Object> attributes) {
+        Long conversationId = queryLong(request, "conversationId");
+        Long runVersion = queryLong(request, "runVersion");
+        boolean authorizationHeaderPresent = request.getHeaders()
+                .containsKey(Constants.AUTHORIZATION_HEADER);
+        boolean tokenQueryPresent = queryParam(request, "token") != null;
+        log.info("agent ws handshake started conversation={} run={} authorizationHeaderPresent={} tokenQueryPresent={}",
+                conversationId, runVersion, authorizationHeaderPresent, tokenQueryPresent);
         Long userId = resolveUserId(request);
         if (userId == null) {
+            log.warn("agent ws handshake rejected conversation={} run={} reason=missing-or-invalid-token",
+                    conversationId, runVersion);
             reject(response, HttpStatus.UNAUTHORIZED);
             return false;
         }
-        Long conversationId = queryLong(request, "conversationId");
-        Long runVersion = queryLong(request, "runVersion");
         if (conversationId == null || runVersion == null) {
+            log.warn("agent ws handshake rejected conversation={} run={} reason=invalid-subscription-parameters",
+                    conversationId, runVersion);
             reject(response, HttpStatus.BAD_REQUEST);
             return false;
         }
@@ -51,8 +60,8 @@ public class AgentStreamAuthHandshakeInterceptor implements HandshakeInterceptor
             // 归属校验（不存在/非本人）与 SSE 订阅同一语义；同时触发 stale 会话恢复。
             conversationService.get(conversationId, userId);
         } catch (ResponseStatusException exception) {
-            log.debug("agent ws handshake rejected for conversation {}: {}",
-                    conversationId, exception.getReason());
+            log.warn("agent ws handshake rejected conversation={} run={} reason=conversation-access status={}",
+                    conversationId, runVersion, exception.getStatusCode().value());
             reject(response, exception.getStatusCode().is4xxClientError()
                     ? exception.getStatusCode() : HttpStatusCode.valueOf(404));
             return false;
@@ -60,6 +69,7 @@ public class AgentStreamAuthHandshakeInterceptor implements HandshakeInterceptor
         attributes.put(ATTR_USER_ID, userId);
         attributes.put(ATTR_CONVERSATION_ID, conversationId);
         attributes.put(ATTR_RUN_VERSION, runVersion);
+        log.info("agent ws handshake accepted conversation={} run={}", conversationId, runVersion);
         return true;
     }
 

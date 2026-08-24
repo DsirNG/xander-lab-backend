@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -85,14 +86,19 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
         Long conversationId = (Long) session.getAttributes().get(AgentStreamAuthHandshakeInterceptor.ATTR_CONVERSATION_ID);
         Long runVersion = (Long) session.getAttributes().get(AgentStreamAuthHandshakeInterceptor.ATTR_RUN_VERSION);
         if (userId == null || conversationId == null || runVersion == null) {
+            log.warn("agent ws connection rejected after handshake conversation={} run={} reason=missing-session-attributes",
+                    conversationId, runVersion);
             closeQuietly(session, CloseStatus.NOT_ACCEPTABLE);
             return;
         }
+        log.info("agent ws subscriber connected conversation={} run={}", conversationId, runVersion);
         AtomicLong lastSentAt = new AtomicLong(System.currentTimeMillis());
         ScheduledFuture<?> heartbeat = scheduleHeartbeat(session, lastSentAt);
         try {
             agentSseExecutor.execute(() -> stream(session, userId, conversationId, runVersion, heartbeat, lastSentAt));
         } catch (RuntimeException exception) {
+            log.warn("agent ws subscriber scheduling failed conversation={} run={} errorType={}",
+                    conversationId, runVersion, exception.getClass().getSimpleName());
             heartbeat.cancel(false);
             closeQuietly(session, CloseStatus.SERVER_ERROR);
         }
@@ -113,13 +119,16 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-        log.debug("agent ws subscriber closed for conversation {} with status {}",
-                session.getAttributes().get(AgentStreamAuthHandshakeInterceptor.ATTR_CONVERSATION_ID), status);
+        log.info("agent ws subscriber closed conversation={} run={} closeCode={} reason={}",
+                session.getAttributes().get(AgentStreamAuthHandshakeInterceptor.ATTR_CONVERSATION_ID),
+                session.getAttributes().get(AgentStreamAuthHandshakeInterceptor.ATTR_RUN_VERSION),
+                status.getCode(), status.getReason() == null ? "-" : status.getReason());
     }
 
     private void stream(WebSocketSession session, Long userId, Long conversationId, long runVersion,
                         ScheduledFuture<?> heartbeat, AtomicLong lastSentAt) {
         AtomicLong sentCursor = new AtomicLong(0);
+        AtomicBoolean firstEventSent = new AtomicBoolean(false);
         Object sendLock = new Object();
         java.util.concurrent.CountDownLatch terminal = new java.util.concurrent.CountDownLatch(1);
         // 统一推送出口：按事件 id 单调去重，衔接「历史重放」与「总线实时」两路，不丢不重。
@@ -130,8 +139,14 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
                 if (id != null && id <= sentCursor.get()) return;
                 lastSentAt.set(System.currentTimeMillis());
                 sendJson(session, eventFrame(event));
+                if (firstEventSent.compareAndSet(false, true)) {
+                    log.info("agent ws first event sent conversation={} run={} event={} eventId={}",
+                            conversationId, runVersion, event.getEventType(), event.getId());
+                }
                 if (id != null) sentCursor.set(id);
                 if ("complete".equals(event.getEventType()) || "error".equals(event.getEventType())) {
+                    log.info("agent ws terminal event sent conversation={} run={} event={} eventId={}",
+                            conversationId, runVersion, event.getEventType(), event.getId());
                     terminal.countDown();
                 }
             }
