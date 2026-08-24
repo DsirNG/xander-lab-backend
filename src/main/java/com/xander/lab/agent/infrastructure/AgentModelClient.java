@@ -7,6 +7,7 @@ import com.xander.lab.admin.application.ModelGateway;
 import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
+import com.xander.lab.agent.domain.AgentAttachment;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -90,6 +91,14 @@ public class AgentModelClient {
     public ModelCallResult decideNextStepStream(String context, String toolDescriptions,
                                          Consumer<String> onAnswerDelta,
                                          BooleanSupplier cancellationRequested) {
+        return decideNextStepStream(context, toolDescriptions, List.of(), onAnswerDelta, cancellationRequested);
+    }
+
+    /** Sends the latest turn's images and documents as native Responses multimodal inputs. */
+    public ModelCallResult decideNextStepStream(String context, String toolDescriptions,
+                                         List<AgentAttachment> attachments,
+                                         Consumer<String> onAnswerDelta,
+                                         BooleanSupplier cancellationRequested) {
         List<ModelEndpoint> endpoints = endpoints();
         AtomicBoolean visibleDelta = new AtomicBoolean();
         Consumer<String> guardedDelta = delta -> {
@@ -101,7 +110,7 @@ public class AgentModelClient {
         for (int index = 0; index < endpoints.size(); index++) {
             ModelEndpoint endpoint = endpoints.get(index);
             try {
-                return decideNextStepStreamPerEndpoint(endpoint, context, toolDescriptions,
+                return decideNextStepStreamPerEndpoint(endpoint, context, toolDescriptions, attachments,
                         guardedDelta, visibleDelta, cancellationRequested);
             } catch (RuntimeException exception) {
                 lastFailure = exception;
@@ -116,13 +125,14 @@ public class AgentModelClient {
     }
 
     private ModelCallResult decideNextStepStreamPerEndpoint(ModelEndpoint endpoint, String context,
-                                                     String toolDescriptions, Consumer<String> onAnswerDelta,
+                                                     String toolDescriptions, List<AgentAttachment> attachments,
+                                                     Consumer<String> onAnswerDelta,
                                                      AtomicBoolean visibleDelta,
                                                      BooleanSupplier cancellationRequested) {
         for (int attempt = 1; ; attempt++) {
             checkCancellation(cancellationRequested);
             try {
-                return decideNextStepStreamOnce(endpoint, context, toolDescriptions,
+                return decideNextStepStreamOnce(endpoint, context, toolDescriptions, attachments,
                         onAnswerDelta, cancellationRequested);
             } catch (ModelGatewayException exception) {
                 if (!TRANSIENT_STATUS.contains(exception.status())
@@ -148,10 +158,11 @@ public class AgentModelClient {
     }
 
     private ModelCallResult decideNextStepStreamOnce(ModelEndpoint endpoint, String context, String toolDescriptions,
+                                                List<AgentAttachment> attachments,
                                                 Consumer<String> onAnswerDelta,
                                                 BooleanSupplier cancellationRequested) {
         long requestStartedNanos = System.nanoTime();
-        Map<String, Object> payload = requestPayload(endpoint.model(), context, toolDescriptions);
+        Map<String, Object> payload = requestPayload(endpoint.model(), context, toolDescriptions, attachments);
         payload.put("stream", true);
         boolean directConversation = !StringUtils.hasText(toolDescriptions);
 
@@ -286,13 +297,14 @@ public class AgentModelClient {
         decoder.accept(delta);
     }
 
-    private Map<String, Object> requestPayload(String model, String context, String toolDescriptions) {
+    private Map<String, Object> requestPayload(String model, String context, String toolDescriptions,
+                                               List<AgentAttachment> attachments) {
         boolean webSearchEnabled = properties.isWebSearchEnabled() && needsWebSearch(context);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("store", false);
         payload.put("instructions", instructions(toolDescriptions, webSearchEnabled));
-        payload.put("input", context);
+        payload.put("input", multimodalInput(context, attachments));
         if (StringUtils.hasText(toolDescriptions)) {
             payload.put("text", structuredDecisionText());
         }
@@ -304,6 +316,25 @@ public class AgentModelClient {
             payload.put("tools", List.of(Map.of("type", "web_search")));
         }
         return payload;
+    }
+
+    private Object multimodalInput(String context, List<AgentAttachment> attachments) {
+        if (attachments == null || attachments.isEmpty()) return context;
+        java.util.ArrayList<Map<String, Object>> content = new java.util.ArrayList<>();
+        content.add(Map.of("type", "input_text", "text", context));
+        for (AgentAttachment attachment : attachments) {
+            if (attachment.image()) {
+                content.add(Map.of(
+                        "type", "input_image",
+                        "image_url", attachment.url(),
+                        "detail", "auto"));
+            } else {
+                content.add(Map.of(
+                        "type", "input_file",
+                        "file_url", attachment.url()));
+            }
+        }
+        return List.of(Map.of("role", "user", "content", content));
     }
 
     /**

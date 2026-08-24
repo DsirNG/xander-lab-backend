@@ -3,12 +3,14 @@ package com.xander.lab.agent.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.application.AgentTool.ProgressListener;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentMessage;
+import com.xander.lab.agent.domain.AgentAttachment;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
@@ -68,6 +70,7 @@ public class AgentConversationService {
     private final AgentEventService eventService;
     private final ScheduledExecutorService agentLeaseRenewer;
     private final BillingService billingService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 根据首条消息生成标题并创建会话壳（ready、无消息、不启动轮次）。
@@ -91,6 +94,12 @@ public class AgentConversationService {
 
     /** Atomically claims and records a subsequent turn before an async worker is scheduled. */
     public AgentConversation prepareTurn(Long conversationId, Long userId, String message) {
+        return prepareTurn(conversationId, userId, message, List.of());
+    }
+
+    /** Atomically claims and records a turn together with its immutable attachment snapshot. */
+    public AgentConversation prepareTurn(Long conversationId, Long userId, String message,
+                                         List<AgentAttachment> attachments) {
         String userMessage = defaultText(message, "").trim();
         if (!StringUtils.hasText(userMessage)) {
             throw new IllegalArgumentException("消息内容不能为空");
@@ -98,7 +107,8 @@ public class AgentConversationService {
         billingService.ensureAvailable(userId);
         return transactionTemplate.execute(status -> {
             long runVersion = claimConversation(conversationId, userId);
-            saveMessage(conversationId, "user", "message", null, userMessage);
+            saveMessage(conversationId, "user", "message", null, userMessage,
+                    serializeAttachments(attachments));
             AgentConversation claimed = requireOwned(conversationId, userId);
             if (isDefaultTitle(claimed.getTitle())) {
                 claimed.setTitle(excerpt(userMessage, 40));
@@ -213,9 +223,14 @@ public class AgentConversationService {
                     step + 1, turnStartedNanos, modelStartedNanos);
             JsonNode decision;
             try {
-                ModelCallResult call = modelClient.decideNextStepStream(
-                        context, toolDescriptions, answerProgress::accept,
-                        () -> isCancelRequested(conversationId, userId, runVersion));
+                List<AgentAttachment> attachments = recentAttachments(conversationId, userId);
+                ModelCallResult call = attachments.isEmpty()
+                        ? modelClient.decideNextStepStream(
+                                context, toolDescriptions, answerProgress::accept,
+                                () -> isCancelRequested(conversationId, userId, runVersion))
+                        : modelClient.decideNextStepStream(
+                                context, toolDescriptions, attachments, answerProgress::accept,
+                                () -> isCancelRequested(conversationId, userId, runVersion));
                 answerProgress.flush();
                 decision = call.payload();
                 usage.add(call.usage(), call.model());
@@ -501,9 +516,9 @@ public class AgentConversationService {
 
     public List<AgentMessage> listMessages(Long conversationId, Long userId) {
         requireOwned(conversationId, userId);
-        return messageMapper.selectList(new LambdaQueryWrapper<AgentMessage>()
+        return hydrateAttachments(messageMapper.selectList(new LambdaQueryWrapper<AgentMessage>()
                 .eq(AgentMessage::getConversationId, conversationId)
-                .orderByAsc(AgentMessage::getId));
+                .orderByAsc(AgentMessage::getId)));
     }
 
     public List<AgentConversation> listSessions(Long userId) {
@@ -555,19 +570,25 @@ public class AgentConversationService {
     /** 通过分享令牌获取消息列表（公开接口，无需登录）。 */
     public List<AgentMessage> listMessagesByShareToken(String shareToken) {
         AgentConversation conversation = getByShareToken(shareToken);
-        return messageMapper.selectList(new LambdaQueryWrapper<AgentMessage>()
+        return hydrateAttachments(messageMapper.selectList(new LambdaQueryWrapper<AgentMessage>()
                 .eq(AgentMessage::getConversationId, conversation.getId())
-                .orderByAsc(AgentMessage::getId));
+                .orderByAsc(AgentMessage::getId)));
     }
 
     private void saveMessage(Long conversationId, String role, String kind,
                              String toolName, String content) {
+        saveMessage(conversationId, role, kind, toolName, content, null);
+    }
+
+    private void saveMessage(Long conversationId, String role, String kind,
+                             String toolName, String content, String attachmentsJson) {
         AgentMessage message = new AgentMessage();
         message.setConversationId(conversationId);
         message.setRole(role);
         message.setKind(kind);
         message.setToolName(toolName);
         message.setContent(content);
+        message.setAttachmentsJson(attachmentsJson);
         message.setCreatedAt(LocalDateTime.now());
         messageMapper.insert(message);
     }
@@ -625,6 +646,11 @@ public class AgentConversationService {
                 default -> message.getContent();
             };
             builder.append("【").append(role).append("】").append(content).append("\n\n");
+            if (message.getAttachments() != null && !message.getAttachments().isEmpty()) {
+                builder.append("【附件】")
+                        .append(message.getAttachments().stream().map(AgentAttachment::name).toList())
+                        .append("\n\n");
+            }
         }
         if (lastError != null) {
             builder.append("【最近一次工具失败】").append(lastError.toString()).append("\n\n");
@@ -647,6 +673,55 @@ public class AgentConversationService {
             }
         }
         return "";
+    }
+
+    private List<AgentAttachment> recentAttachments(Long conversationId, Long userId) {
+        List<AgentMessage> messages = listMessages(conversationId, userId);
+        java.util.LinkedHashMap<String, AgentAttachment> recent = new java.util.LinkedHashMap<>();
+        for (int index = messages.size() - 1; index >= 0; index--) {
+            AgentMessage message = messages.get(index);
+            if (!"user".equals(message.getRole()) || message.getAttachments() == null) continue;
+            for (AgentAttachment attachment : message.getAttachments()) {
+                recent.putIfAbsent(attachment.url(), attachment);
+                if (recent.size() >= 5) return reverseAttachments(recent);
+            }
+        }
+        return reverseAttachments(recent);
+    }
+
+    private List<AgentAttachment> reverseAttachments(
+            java.util.LinkedHashMap<String, AgentAttachment> attachments) {
+        java.util.ArrayList<AgentAttachment> ordered = new java.util.ArrayList<>(attachments.values());
+        java.util.Collections.reverse(ordered);
+        return List.copyOf(ordered);
+    }
+
+    private String serializeAttachments(List<AgentAttachment> attachments) {
+        if (attachments == null || attachments.isEmpty()) return null;
+        if (attachments.size() > 5) throw new IllegalArgumentException("每次最多上传5个附件");
+        try {
+            return objectMapper.writeValueAsString(attachments);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalArgumentException("附件信息无效", exception);
+        }
+    }
+
+    private List<AgentMessage> hydrateAttachments(List<AgentMessage> messages) {
+        for (AgentMessage message : messages) {
+            if (!StringUtils.hasText(message.getAttachmentsJson())) {
+                message.setAttachments(List.of());
+                continue;
+            }
+            try {
+                message.setAttachments(objectMapper.readValue(
+                        message.getAttachmentsJson(),
+                        objectMapper.getTypeFactory().constructCollectionType(List.class, AgentAttachment.class)));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+                log.warn("Unable to deserialize agent message attachments, messageId={}", message.getId());
+                message.setAttachments(List.of());
+            }
+        }
+        return messages;
     }
 
     private long elapsedMillis(long startedNanos) {

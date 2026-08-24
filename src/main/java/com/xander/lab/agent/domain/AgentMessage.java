@@ -3,9 +3,12 @@ package com.xander.lab.agent.domain;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * One persisted turn inside an agent conversation. {@code kind} distinguishes
@@ -26,5 +29,10 @@ public class AgentMessage {
     /** 工具名，仅 kind=tool_call/tool_result 时非空 */
     private String toolName;
     private String content;
+    /** 持久化的附件快照 JSON；API 仅返回解析后的 attachments。 */
+    @JsonIgnore
+    private String attachmentsJson;
+    @TableField(exist = false)
+    private List<AgentAttachment> attachments;
     private LocalDateTime createdAt;
 }

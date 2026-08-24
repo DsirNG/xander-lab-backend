@@ -100,7 +100,7 @@ class AgentConversationServiceTest {
         eventService = new AgentEventService(eventMapper, conversationMapper, objectMapper, new AgentEventBus());
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class));
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper);
         org.mockito.Mockito.lenient().doReturn(leaseRenewal).when(agentLeaseRenewer)
                 .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
         org.mockito.Mockito.lenient().when(properties.getMaxSteps()).thenReturn(10);
@@ -151,7 +151,7 @@ class AgentConversationServiceTest {
                 List.of(new FailingTool("failing_tool")));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, failingRegistry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class));
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper);
         AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(ready);

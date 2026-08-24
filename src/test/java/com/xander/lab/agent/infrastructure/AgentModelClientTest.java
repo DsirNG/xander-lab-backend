@@ -3,6 +3,7 @@ package com.xander.lab.agent.infrastructure;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.agent.domain.AgentAttachment;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -42,6 +43,27 @@ class AgentModelClientTest {
         assertThat(decision.path("reply").asText()).isEqualTo("你好，世界");
         assertThat(String.join("", deltas)).isEqualTo("你好，世界");
         assertThat(deltas).hasSizeGreaterThan(1);
+    }
+
+    @Test
+    void sendsImagesAndDocumentsAsNativeResponsesInputs() throws Exception {
+        startServer(List.of("附件已解析"));
+
+        client().decideNextStepStream(
+                "请分析附件", "",
+                List.of(
+                        new AgentAttachment("https://cdn.example.com/photo.png", "photo.png", "image/png", 12L),
+                        new AgentAttachment("https://cdn.example.com/report.pdf", "report.pdf", "application/pdf", 34L)),
+                ignored -> { }, () -> false);
+
+        JsonNode content = requestPayload.path("input").path(0).path("content");
+        assertThat(content.path(0).path("type").asText()).isEqualTo("input_text");
+        assertThat(content.path(1).path("type").asText()).isEqualTo("input_image");
+        assertThat(content.path(1).path("image_url").asText())
+                .isEqualTo("https://cdn.example.com/photo.png");
+        assertThat(content.path(2).path("type").asText()).isEqualTo("input_file");
+        assertThat(content.path(2).path("file_url").asText())
+                .isEqualTo("https://cdn.example.com/report.pdf");
     }
 
     @Test

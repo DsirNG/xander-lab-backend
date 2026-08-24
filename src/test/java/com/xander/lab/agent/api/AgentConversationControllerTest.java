@@ -1,6 +1,7 @@
 package com.xander.lab.agent.api;
 
 import com.xander.lab.agent.application.AgentConversationService;
+import com.xander.lab.agent.application.AgentAttachmentService;
 import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.identity.security.UserContext;
@@ -39,7 +40,8 @@ class AgentConversationControllerTest {
         AgentEventService eventService = mock(AgentEventService.class);
         TaskExecutor directExecutor = Runnable::run;
         AgentConversationController controller = new AgentConversationController(
-                service, eventService, directExecutor, directExecutor, mock(TaskScheduler.class));
+                service, mock(AgentAttachmentService.class), eventService,
+                directExecutor, directExecutor, mock(TaskScheduler.class));
         AgentConversation ready = new AgentConversation();
         ready.setId(7L);
         ready.setUserId(42L);
@@ -70,13 +72,14 @@ class AgentConversationControllerTest {
         org.mockito.Mockito.doReturn(heartbeat).when(scheduler).scheduleAtFixedRate(
                 any(Runnable.class), any(java.time.Instant.class), any(java.time.Duration.class));
         AgentConversationController controller = new AgentConversationController(
-                service, eventService, directExecutor, directExecutor, scheduler);
+                service, mock(AgentAttachmentService.class), eventService,
+                directExecutor, directExecutor, scheduler);
         AgentConversation claimed = new AgentConversation();
         claimed.setId(7L);
         claimed.setUserId(42L);
         claimed.setStatus("running");
         claimed.setRunVersion(9L);
-        when(service.prepareTurn(7L, 42L, "继续")).thenReturn(claimed);
+        when(service.prepareTurn(7L, 42L, "继续", List.of())).thenReturn(claimed);
         UserContext.setUserId(42L);
         AgentConversationMessageRequest request = new AgentConversationMessageRequest();
         request.setContent("继续");
@@ -94,13 +97,14 @@ class AgentConversationControllerTest {
         AgentEventService eventService = mock(AgentEventService.class);
         TaskExecutor directExecutor = Runnable::run;
         AgentConversationController controller = new AgentConversationController(
-                service, eventService, directExecutor, directExecutor, mock(TaskScheduler.class));
+                service, mock(AgentAttachmentService.class), eventService,
+                directExecutor, directExecutor, mock(TaskScheduler.class));
         AgentConversation claimed = new AgentConversation();
         claimed.setId(7L);
         claimed.setUserId(42L);
         claimed.setStatus("running");
         claimed.setRunVersion(9L);
-        when(service.prepareTurn(7L, 42L, "继续")).thenReturn(claimed);
+        when(service.prepareTurn(7L, 42L, "继续", List.of())).thenReturn(claimed);
         UserContext.setUserId(42L);
         AgentConversationMessageRequest request = new AgentConversationMessageRequest();
         request.setContent("继续");
@@ -120,13 +124,14 @@ class AgentConversationControllerTest {
             throw new RejectedExecutionException("pool full");
         };
         AgentConversationController controller = new AgentConversationController(
-                service, eventService, rejectingExecutor, rejectingExecutor, mock(TaskScheduler.class));
+                service, mock(AgentAttachmentService.class), eventService,
+                rejectingExecutor, rejectingExecutor, mock(TaskScheduler.class));
         AgentConversation claimed = new AgentConversation();
         claimed.setId(7L);
         claimed.setUserId(42L);
         claimed.setStatus("running");
         claimed.setRunVersion(9L);
-        when(service.prepareTurn(7L, 42L, "继续")).thenReturn(claimed);
+        when(service.prepareTurn(7L, 42L, "继续", List.of())).thenReturn(claimed);
         UserContext.setUserId(42L);
         AgentConversationMessageRequest request = new AgentConversationMessageRequest();
         request.setContent("继续");

@@ -61,6 +61,13 @@ while `recitation` remains the owner of source content, tests, scores, review
 history, and scheduling. Both the web and mini-program clients consume these
 tools through the existing conversation event contract.
 
+Agent turns also accept up to five user attachments. The agent application
+uploads supported images and documents through `integration.oss`, stores an
+immutable attachment snapshot on the owning `agent_message`, and sends recent
+attachments to the configured Responses-compatible model as native
+`input_image` or `input_file` items. The model provider remains stateless
+(`store=false`); attachment history stays in the local agent conversation.
+
 `automation` consumes `publishing` only through application services
 (`PublicationService` for publishing, `BlogService` for reading back titles of
 published posts) and never through publishing mappers. `automation` owns
@@ -180,6 +187,8 @@ database use this order:
 5. `agent_run_version_migration.sql`. This fences delayed workers and scopes
    resumable events to one execution generation; its guarded column/index
    checks are no-ops after the current fresh baseline.
+6. `20260824_agent_message_attachment_migration.sql`. This adds the nullable
+   attachment snapshot used by web and mini-program multimodal turns.
 
 The older `blog_agent_*_migration.sql` files are upgrade-only deltas for a
 database that predates the current `blog_agent_schema.sql`; do not apply those

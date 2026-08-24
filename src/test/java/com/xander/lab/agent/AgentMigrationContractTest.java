@@ -52,6 +52,18 @@ class AgentMigrationContractTest {
                 .contains("20260812_agent_run_version");
     }
 
+    @Test
+    void attachmentUpgradeKeepsMessageBaselineAligned() throws IOException {
+        String baseline = resource("db/agent_conversation_migration.sql");
+        String upgrade = resource("db/20260824_agent_message_attachment_migration.sql");
+
+        assertThat(baseline).contains("`attachments_json` LONGTEXT NULL COMMENT");
+        assertThat(upgrade)
+                .contains("information_schema.COLUMNS")
+                .contains("COLUMN_NAME = 'attachments_json'")
+                .contains("20260824_agent_message_attachment");
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertThat(input).as("classpath resource %s", path).isNotNull();

@@ -4,6 +4,7 @@ import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.application.AgentConversationService;
+import com.xander.lab.agent.application.AgentAttachmentService;
 import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
@@ -17,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
@@ -36,17 +38,20 @@ public class AgentConversationController {
     private static final Duration HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
 
     private final AgentConversationService service;
+    private final AgentAttachmentService attachmentService;
     private final AgentEventService eventService;
     private final TaskExecutor agentTaskExecutor;
     private final TaskExecutor agentSseExecutor;
     private final TaskScheduler agentHeartbeatScheduler;
 
     public AgentConversationController(AgentConversationService service,
+                                       AgentAttachmentService attachmentService,
                                        AgentEventService eventService,
                                        @Qualifier("agentTaskExecutor") TaskExecutor agentTaskExecutor,
                                        @Qualifier("agentSseExecutor") TaskExecutor agentSseExecutor,
                                        @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler) {
         this.service = service;
+        this.attachmentService = attachmentService;
         this.eventService = eventService;
         this.agentTaskExecutor = agentTaskExecutor;
         this.agentSseExecutor = agentSseExecutor;
@@ -58,8 +63,15 @@ public class AgentConversationController {
     public Result<AgentConversationVO> create(
             @Valid @RequestBody AgentConversationMessageRequest request) {
         Long userId = UserContext.getUserId();
-        AgentConversation conversation = service.create(userId, request.getContent());
+        AgentConversation conversation = service.create(userId, request.effectiveContent());
         return Result.success(buildVO(conversation.getId(), userId));
+    }
+
+    /** Uploads an image or document for a later conversation turn. */
+    @PostMapping("/attachments")
+    public Result<com.xander.lab.agent.domain.AgentAttachment> uploadAttachment(
+            @RequestParam("file") MultipartFile file) {
+        return Result.success(attachmentService.upload(UserContext.getUserId(), file));
     }
 
     @GetMapping
@@ -110,7 +122,9 @@ public class AgentConversationController {
                                   HttpServletResponse response) {
         Long userId = UserContext.getUserId();
         // Claim and persist the user message before committing an SSE 200 response.
-        AgentConversation claimed = service.prepareTurn(id, userId, request.getContent());
+        String content = request.effectiveContent();
+        AgentConversation claimed = service.prepareTurn(id, userId, content,
+                request.domainAttachments());
         long runVersion = claimed.getRunVersion();
         SseEmitter emitter = createEmitter(id, response);
         AtomicBoolean subscriberOpen = new AtomicBoolean(true);
@@ -127,7 +141,7 @@ public class AgentConversationController {
         try {
             CompletableFuture.runAsync(() -> {
                 try {
-                    service.executeClaimedTurn(id, userId, runVersion, request.getContent(),
+                    service.executeClaimedTurn(id, userId, runVersion, content,
                             event -> send(id, emitter, subscriberOpen, event));
                 } catch (Exception exception) {
                     // executeClaimedTurn persists and delivers the durable error event.
@@ -152,12 +166,14 @@ public class AgentConversationController {
     public Result<Long> triggerMessage(@PathVariable Long id,
                                        @Valid @RequestBody AgentConversationMessageRequest request) {
         Long userId = UserContext.getUserId();
-        AgentConversation claimed = service.prepareTurn(id, userId, request.getContent());
+        String content = request.effectiveContent();
+        AgentConversation claimed = service.prepareTurn(id, userId, content,
+                request.domainAttachments());
         long runVersion = claimed.getRunVersion();
         try {
             CompletableFuture.runAsync(() -> {
                 try {
-                    service.executeClaimedTurn(id, userId, runVersion, request.getContent(), event -> {
+                    service.executeClaimedTurn(id, userId, runVersion, content, event -> {
                     });
                 } catch (Exception exception) {
                     // executeClaimedTurn persists and delivers the durable error event.

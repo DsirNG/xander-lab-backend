@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS `agent_message` (
   `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/tool_call/tool_result/answer',
   `tool_name` VARCHAR(64) NULL COMMENT '工具名，仅 kind=tool_call/tool_result 时非空',
   `content` LONGTEXT NOT NULL COMMENT '消息正文；tool 记录为 JSON',
+  `attachments_json` LONGTEXT NULL COMMENT '用户消息附件快照JSON，包含URL、原始文件名、MIME类型和字节数',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_agent_message_conversation_created` (`conversation_id`, `created_at`),
