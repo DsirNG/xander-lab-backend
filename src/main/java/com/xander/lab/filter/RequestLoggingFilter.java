@@ -41,6 +41,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         long startTime = System.currentTimeMillis();
+        log.info("Received request: method={} uri={}", request.getMethod(), request.getRequestURI());
         try {
             filterChain.doFilter(request, response);
         } finally {
