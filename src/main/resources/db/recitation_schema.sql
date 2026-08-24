@@ -8,7 +8,15 @@ CREATE TABLE IF NOT EXISTS `recitation_material` (
   `normalized_content` TEXT NOT NULL COMMENT '去除标点空白后的对齐基准文本',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '材料创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '材料最近更新时间',
+  `knowledge_type` VARCHAR(30) NOT NULL DEFAULT 'RECITATION' COMMENT '知识类型：RECITATION背诵、CONCEPT概念、MATH数学',
+  `test_mode` VARCHAR(30) NOT NULL DEFAULT 'AUDIO_RECITATION' COMMENT '测试方式：录音背诵、AI问答或练习题',
+  `mastery_score` DECIMAL(5,2) NOT NULL DEFAULT 0 COMMENT '最近一次有效测试的掌握分数，范围0至100',
+  `mastery_level` VARCHAR(20) NOT NULL DEFAULT 'NEW' COMMENT '掌握等级：NEW、FAMILIAR、RECALLING、APPLYING、MASTERED',
+  `review_count` INT NOT NULL DEFAULT 0 COMMENT '已经完成的有效测试次数',
+  `last_review_at` DATETIME NULL COMMENT '最近一次完成有效测试的时间',
+  `next_review_at` DATETIME NULL COMMENT '依据掌握程度计算的建议下次复习时间',
   PRIMARY KEY (`id`),
+  KEY `idx_recitation_material_user_review` (`user_id`, `next_review_at`, `mastery_level`),
   KEY `idx_recitation_material_user_created` (`user_id`, `created_at`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='中文背诵材料';
 

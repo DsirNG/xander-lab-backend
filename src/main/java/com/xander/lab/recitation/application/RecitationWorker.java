@@ -124,8 +124,10 @@ public class RecitationWorker {
             ObjectNode report = objectMapper.valueToTree(alignment);
             report.set("words", objectMapper.valueToTree(result.words()));
             String resultJson = objectMapper.writeValueAsString(report);
-            transactionTemplate.executeWithoutResult(status -> attemptMapper.update(null,
-                    new LambdaUpdateWrapper<RecitationAttempt>()
+            LocalDateTime reviewedAt = LocalDateTime.now();
+            MasteryPolicy.Result mastery = MasteryPolicy.evaluate(alignment.score(), reviewedAt);
+            transactionTemplate.executeWithoutResult(status -> {
+                int completed = attemptMapper.update(null, new LambdaUpdateWrapper<RecitationAttempt>()
                             .eq(RecitationAttempt::getId, task.getId())
                             .eq(RecitationAttempt::getStatus, RecitationAttemptStatus.POLLING)
                             .eq(RecitationAttempt::getRunToken, token)
@@ -135,7 +137,19 @@ public class RecitationWorker {
                             .set(RecitationAttempt::getScore, alignment.score())
                             .set(RecitationAttempt::getErrorMessage, null)
                             .set(RecitationAttempt::getRunToken, null)
-                            .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now())));
+                            .set(RecitationAttempt::getUpdatedAt, reviewedAt));
+                if (completed == 1) {
+                    materialMapper.update(null, new LambdaUpdateWrapper<RecitationMaterial>()
+                            .eq(RecitationMaterial::getId, material.getId())
+                            .eq(RecitationMaterial::getUserId, task.getUserId())
+                            .set(RecitationMaterial::getMasteryScore, alignment.score())
+                            .set(RecitationMaterial::getMasteryLevel, mastery.level())
+                            .setSql("review_count = review_count + 1")
+                            .set(RecitationMaterial::getLastReviewAt, reviewedAt)
+                            .set(RecitationMaterial::getNextReviewAt, mastery.nextReviewAt())
+                            .set(RecitationMaterial::getUpdatedAt, reviewedAt));
+                }
+            });
         } catch (Exception error) {
             log.warn("recitation attempt {} alignment failed", task.getId());
             failClaimed(task.getId(), RecitationAttemptStatus.POLLING, token, "背诵结果分析失败");

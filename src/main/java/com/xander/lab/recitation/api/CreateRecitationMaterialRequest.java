@@ -10,5 +10,9 @@ public record CreateRecitationMaterialRequest(
         String title,
         @NotBlank(message = "背诵原文不能为空")
         @Size(max = 10000, message = "背诵原文不能超过10000个字符")
-        String content) {
+        String content,
+        @Size(max = 30, message = "知识类型不能超过30个字符")
+        String knowledgeType,
+        @Size(max = 30, message = "测试方式不能超过30个字符")
+        String testMode) {
 }

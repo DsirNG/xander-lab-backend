@@ -11,6 +11,8 @@ import com.xander.lab.recitation.api.RecitationMaterialView;
 import com.xander.lab.recitation.domain.RecitationAttempt;
 import com.xander.lab.recitation.domain.RecitationAttemptStatus;
 import com.xander.lab.recitation.domain.RecitationMaterial;
+import com.xander.lab.recitation.domain.KnowledgeTestMode;
+import com.xander.lab.recitation.domain.KnowledgeType;
 import com.xander.lab.recitation.infrastructure.RecitationAttemptMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import com.xander.lab.recitation.infrastructure.RecitationProperties;
@@ -56,6 +58,12 @@ public class RecitationService {
         material.setTitle(request.title().trim());
         material.setContent(content);
         material.setNormalizedContent(normalized);
+        KnowledgeType knowledgeType = KnowledgeType.fromNullable(request.knowledgeType());
+        material.setKnowledgeType(knowledgeType.name());
+        material.setTestMode(KnowledgeTestMode.fromNullable(request.testMode(), knowledgeType).name());
+        material.setMasteryScore(java.math.BigDecimal.ZERO);
+        material.setMasteryLevel("NEW");
+        material.setReviewCount(0);
         material.setCreatedAt(LocalDateTime.now());
         material.setUpdatedAt(material.getCreatedAt());
         materialMapper.insert(material);
@@ -179,6 +187,9 @@ public class RecitationService {
     private RecitationMaterialView toView(RecitationMaterial material) {
         return new RecitationMaterialView(material.getId(), material.getTitle(), material.getContent(),
                 material.getNormalizedContent().codePointCount(0, material.getNormalizedContent().length()),
+                material.getKnowledgeType(), material.getTestMode(), material.getMasteryScore(),
+                material.getMasteryLevel(), material.getReviewCount() == null ? 0 : material.getReviewCount(),
+                material.getLastReviewAt(), material.getNextReviewAt(),
                 material.getCreatedAt(), material.getUpdatedAt());
     }
 
