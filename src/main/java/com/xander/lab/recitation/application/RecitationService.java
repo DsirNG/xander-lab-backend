@@ -50,6 +50,7 @@ public class RecitationService {
     @Transactional
     public RecitationMaterialView createMaterial(Long userId, CreateRecitationMaterialRequest request) {
         requireUser(userId);
+        validateMaterialRequest(request);
         String content = request.content().trim();
         String normalized = aligner.normalize(content);
         if (normalized.isEmpty()) throw new IllegalArgumentException("背诵原文必须包含中文、字母或数字");
@@ -168,6 +169,21 @@ public class RecitationService {
         if (!AUDIO_EXTENSIONS.contains(extension)
                 && (!StringUtils.hasText(contentType) || !contentType.toLowerCase(Locale.ROOT).startsWith("audio/"))) {
             throw new IllegalArgumentException("仅支持 mp3、aac、wav、m4a、ogg、opus 或 amr 录音");
+        }
+    }
+
+    private void validateMaterialRequest(CreateRecitationMaterialRequest request) {
+        if (request == null || !StringUtils.hasText(request.title())) {
+            throw new IllegalArgumentException("材料标题不能为空");
+        }
+        if (request.title().trim().length() > 100) {
+            throw new IllegalArgumentException("材料标题不能超过100个字符");
+        }
+        if (!StringUtils.hasText(request.content())) {
+            throw new IllegalArgumentException("背诵原文不能为空");
+        }
+        if (request.content().trim().length() > 10000) {
+            throw new IllegalArgumentException("背诵原文不能超过10000个字符");
         }
     }
 

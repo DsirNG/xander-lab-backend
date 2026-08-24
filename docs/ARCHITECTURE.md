@@ -53,6 +53,14 @@ thread. The orchestration UI may link to a tool result for review, but the blog
 generation workflow is not a second agent or a source of orchestration
 conversation state.
 
+The personal knowledge mirror is part of the same orchestration surface rather
+than a second chatbot. `create_knowledge` and `query_knowledge` delegate to the
+`recitation` application service with the explicit conversation user id. The
+agent may create user-confirmed knowledge and read mastery/review projections,
+while `recitation` remains the owner of source content, tests, scores, review
+history, and scheduling. Both the web and mini-program clients consume these
+tools through the existing conversation event contract.
+
 `automation` consumes `publishing` only through application services
 (`PublicationService` for publishing, `BlogService` for reading back titles of
 published posts) and never through publishing mappers. `automation` owns

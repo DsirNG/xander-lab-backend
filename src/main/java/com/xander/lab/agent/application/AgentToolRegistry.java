@@ -24,6 +24,7 @@ public class AgentToolRegistry {
     private static final Set<String> EMAIL_TOOLS = Set.of(
             "email_reminder", "query_email_reminders", "update_email_reminder");
     private static final Set<String> IMAGE_TOOLS = Set.of("image_generate");
+    private static final Set<String> KNOWLEDGE_TOOLS = Set.of("create_knowledge", "query_knowledge");
 
     private static final List<String> CONTENT_CREATION_MARKERS = List.of(
             "写博客", "写博文", "写文章", "写一篇",
@@ -45,6 +46,10 @@ public class AgentToolRegistry {
             "邮件", "邮箱", "提醒", "email", "mail", "reminder");
     private static final List<String> IMAGE_MARKERS = List.of(
             "图片", "配图", "插图", "封面", "图像", "image", "illustration", "cover");
+    private static final List<String> KNOWLEDGE_MARKERS = List.of(
+            "知识库", "知识点", "个人镜像", "知识镜像", "掌握度", "已掌握", "需要掌握",
+            "背诵", "复习", "学习进度", "加入知识", "保存知识",
+            "knowledge base", "mastery", "memorize", "review");
     private static final List<String> CONTEXT_DEPENDENT_ACTION_MARKERS = List.of(
             "继续", "执行", "确认", "开始吧", "就这样", "按这个", "照这个", "取消", "触发",
             "continue", "execute", "confirm", "go ahead", "do it", "cancel");
@@ -79,6 +84,7 @@ public class AgentToolRegistry {
         addWhenMatched(selected, normalized, PLAN_MARKERS, PLAN_TOOLS);
         addWhenMatched(selected, normalized, EMAIL_MARKERS, EMAIL_TOOLS);
         addWhenMatched(selected, normalized, IMAGE_MARKERS, IMAGE_TOOLS);
+        addWhenMatched(selected, normalized, KNOWLEDGE_MARKERS, KNOWLEDGE_TOOLS);
         if (selected.isEmpty() && containsAny(normalized, CONTEXT_DEPENDENT_ACTION_MARKERS)) {
             selected.addAll(tools.keySet());
         }

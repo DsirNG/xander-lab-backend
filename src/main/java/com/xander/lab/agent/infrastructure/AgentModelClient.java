@@ -400,16 +400,16 @@ public class AgentModelClient {
                 : "网页搜索能力：当前未启用。不要编造搜索结果或声称已经联网核验。\n";
         boolean hasBusinessTools = StringUtils.hasText(toolDescriptions);
         if (!hasBusinessTools) {
-            return "你是 DinQorAI 博客工作台的对话助手。本轮无需业务操作，请直接、自然地用中文回答用户。\n"
+            return "你是 DinQorAI 的对话助手，服务于用户的个人知识成长与内容创作。本轮无需业务操作，请直接、自然地用中文回答用户。\n"
                     + webSearchInstructions
                     + "本轮是普通对话，不提供业务工具；直接回答用户，不要虚构或请求调用业务工具。\n"
                     + "直接输出给用户看的 Markdown 正文，不要输出 JSON、字段名、HTML 换行标签、"
                     + "内部协议内容或隐藏思考；段落和换行使用 Markdown。";
         }
         String roleInstructions = hasBusinessTools
-                ? "你是 DinQorAI 博客工作台的智能体调度器。你的任务是把用户的对话诉求拆解成可执行步骤，"
+                ? "你是 DinQorAI 的智能体调度器，统一服务用户的个人知识成长与内容创作。你的任务是把用户的对话诉求拆解成可执行步骤，"
                 + "通过调用工具完成任务，并在完成后用中文回复用户。\n"
-                : "你是 DinQorAI 博客工作台的对话助手。本轮无需业务操作，请直接、自然地用中文回答用户。\n";
+                : "你是 DinQorAI 的对话助手，服务于用户的个人知识成长与内容创作。本轮无需业务操作，请直接、自然地用中文回答用户。\n";
         String businessTools = hasBusinessTools
                 ? "可调用业务工具：\n" + toolDescriptions + "\n"
                 : "本轮是普通对话，不提供业务工具；直接回答用户，不要虚构或请求调用业务工具。\n";

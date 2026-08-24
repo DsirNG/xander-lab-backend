@@ -15,7 +15,7 @@ class AgentToolRegistryTest {
             tool("blog_generate"), tool("query_posts"), tool("query_unsynced_posts"),
             tool("publish_post"), tool("schedule_plan"), tool("query_plans"), tool("update_plan"),
             tool("email_reminder"), tool("query_email_reminders"), tool("update_email_reminder"),
-            tool("image_generate")));
+            tool("image_generate"), tool("create_knowledge"), tool("query_knowledge")));
 
     @Test
     void plainConversationUsesNoBusinessToolSchemas() {
@@ -52,6 +52,12 @@ class AgentToolRegistryTest {
     void selectsImageToolForTheReportedCatPrompt() {
         assertThat(registry.selectNames("生成图片：小猫"))
                 .containsExactly("image_generate");
+    }
+
+    @Test
+    void selectsKnowledgeToolsForPersonalMasteryRequests() {
+        assertThat(registry.selectNames("我有哪些需要复习的知识点，掌握度怎么样"))
+                .containsExactlyInAnyOrder("create_knowledge", "query_knowledge");
     }
 
     @Test
