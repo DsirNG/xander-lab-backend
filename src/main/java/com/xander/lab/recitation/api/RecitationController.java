@@ -2,6 +2,7 @@ package com.xander.lab.recitation.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.recitation.application.KnowledgeQuizService;
 import com.xander.lab.recitation.application.RecitationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RecitationController {
     private final RecitationService service;
+    private final KnowledgeQuizService quizService;
 
     @PostMapping("/materials")
     public Result<RecitationMaterialView> createMaterial(@Valid @RequestBody CreateRecitationMaterialRequest request) {
@@ -54,5 +56,11 @@ public class RecitationController {
     @GetMapping("/attempts/{attemptId}")
     public Result<RecitationAttemptView> getAttempt(@PathVariable Long attemptId) {
         return Result.success(service.getAttempt(UserContext.getUserId(), attemptId));
+    }
+
+    /** 某条知识的测验评分记录：概念问答与练习题的成绩单，知识页据此展示最近一次结果。 */
+    @GetMapping("/materials/{materialId}/quizzes")
+    public Result<List<KnowledgeQuizAttemptView>> listQuizzes(@PathVariable Long materialId) {
+        return Result.success(quizService.listQuizzes(UserContext.getUserId(), materialId));
     }
 }

@@ -76,6 +76,7 @@ class SubAgentRunnerTest {
         SubAgentRunner runner = runner(model, 6,
                 new RecordingTool(DelegateSubtaskTool.NAME, "{}"),
                 new RecordingTool(PlanTasksTool.NAME, "{}"),
+                new RecordingTool(GradeAnswerTool.NAME, "{}"),
                 new RecordingTool("query_knowledge", "{}"));
 
         SubAgentRunner.SubAgentResult result = runner.run(context, "随便查查", "", Set.of(), new CapturingProgress());
@@ -84,7 +85,9 @@ class SubAgentRunnerTest {
         assertThat(model.toolDescriptions.get(0))
                 .contains("query_knowledge")
                 .doesNotContain(DelegateSubtaskTool.NAME)
-                .doesNotContain(PlanTasksTool.NAME);
+                .doesNotContain(PlanTasksTool.NAME)
+                // 子智能体看不到用户的作答，让它判分等于凭空改写掌握度。
+                .doesNotContain(GradeAnswerTool.NAME);
     }
 
     @Test
