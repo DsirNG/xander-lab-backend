@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** Reads the current user's personal knowledge and mastery overview. */
 @Component
@@ -23,6 +24,13 @@ public class QueryKnowledgeTool implements AgentTool {
     private static final int FULL_CONTENT_CHARS = 2000;
     /** 取全文时收窄条数，避免一次把多条长正文全塞进上下文。 */
     private static final int FULL_CONTENT_ITEM_LIMIT = 3;
+    /** 合法掌握等级；模型给了别的值就当没传过滤条件，而不是拿它去查出空结果。 */
+    private static final Set<String> LEVELS =
+            Set.of("NEW", "FAMILIAR", "RECALLING", "APPLYING", "MASTERED");
+    private static final RecitationService.MaterialQuery MASTERED_FILTER =
+            new RecitationService.MaterialQuery(null, "MASTERED", false, 1);
+    private static final RecitationService.MaterialQuery DUE_FILTER =
+            new RecitationService.MaterialQuery(null, null, true, 1);
 
     private final RecitationService recitationService;
 
@@ -73,36 +81,38 @@ public class QueryKnowledgeTool implements AgentTool {
     @Override
     public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
-        List<RecitationMaterialView> all = recitationService.listMaterials(userId);
-        long total = recitationService.countMaterials(userId);
         LocalDateTime now = LocalDateTime.now();
-        String search = args.path("search").asText("").trim().toLowerCase(Locale.ROOT);
-        String level = args.path("masteryLevel").asText("").trim().toUpperCase(Locale.ROOT);
+        String search = args.path("search").asText("").trim();
+        String level = normalizedLevel(args.path("masteryLevel").asText(""));
         boolean dueOnly = args.path("dueOnly").asBoolean(false);
         boolean fullContent = args.path("fullContent").asBoolean(false);
         int limit = Math.min(Math.max(args.path("limit").asInt(10), 1), 30);
         if (fullContent) limit = Math.min(limit, FULL_CONTENT_ITEM_LIMIT);
         int excerptChars = fullContent ? FULL_CONTENT_CHARS : EXCERPT_CHARS;
 
-        List<RecitationMaterialView> matched = all.stream()
-                .filter(item -> !StringUtils.hasText(search) || contains(item, search))
-                .filter(item -> !StringUtils.hasText(level) || level.equals(item.masteryLevel()))
-                .filter(item -> !dueOnly || isDue(item, now))
-                .limit(limit)
-                .toList();
+        // 过滤条件下推到 SQL。曾经的做法是取"最近 100 条"再在内存里筛，
+        // 知识超过 100 条之后智能体是查不到也不报错，只会退回凭印象作答。
+        RecitationService.MaterialQuery filter =
+                new RecitationService.MaterialQuery(search, level, dueOnly, limit);
+        List<RecitationMaterialView> matched = recitationService.searchMaterials(userId, filter);
+        long matchedTotal = recitationService.countMaterials(userId, filter);
+        long total = recitationService.countMaterials(userId, RecitationService.MaterialQuery.all());
+        long mastered = recitationService.countMaterials(userId, MASTERED_FILTER);
+        long due = recitationService.countMaterials(userId, DUE_FILTER);
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("total", total);
-        outcome.put("mastered", all.stream().filter(item -> "MASTERED".equals(item.masteryLevel())).count());
-        outcome.put("learning", all.stream().filter(item -> !"MASTERED".equals(item.masteryLevel())).count());
-        outcome.put("dueForReview", all.stream().filter(item -> isDue(item, now)).count());
+        outcome.put("mastered", mastered);
+        outcome.put("learning", Math.max(0L, total - mastered));
+        outcome.put("dueForReview", due);
         outcome.put("matched", matched.size());
+        outcome.put("matchedTotal", matchedTotal);
         outcome.put("knowledgeHomeUrl", "/workspace/knowledge");
-        if (total > all.size()) {
-            // 统计口径来自全量计数，明细只取最近一批；说清楚才不会让智能体把两个数字混为一谈。
-            outcome.put("statsScope", "mastered/learning/dueForReview 仅统计最近 " + all.size()
-                    + " 条知识；total 是全部条数");
+        if (matchedTotal > matched.size()) {
+            // 说清楚"还有多少条没返回"，智能体才不会把一页明细当成全部证据。
+            outcome.put("moreMatches", "还有 " + (matchedTotal - matched.size())
+                    + " 条符合条件的知识没有返回，可调大 limit 或把 search 写得更具体");
         }
         ArrayNode records = outcome.putArray("items");
         matched.forEach(item -> appendItem(records, item, now, search, excerptChars));
@@ -113,9 +123,9 @@ public class QueryKnowledgeTool implements AgentTool {
         return outcome;
     }
 
-    private boolean contains(RecitationMaterialView item, String search) {
-        return item.title().toLowerCase(Locale.ROOT).contains(search)
-                || item.content().toLowerCase(Locale.ROOT).contains(search);
+    private String normalizedLevel(String level) {
+        String normalized = level == null ? "" : level.trim().toUpperCase(Locale.ROOT);
+        return LEVELS.contains(normalized) ? normalized : "";
     }
 
     private boolean isDue(RecitationMaterialView item, LocalDateTime now) {
@@ -151,7 +161,7 @@ public class QueryKnowledgeTool implements AgentTool {
         if (content.isEmpty()) return "";
         if (content.length() <= maxChars) return content;
         int matchIndex = StringUtils.hasText(search)
-                ? content.toLowerCase(Locale.ROOT).indexOf(search) : -1;
+                ? content.toLowerCase(Locale.ROOT).indexOf(search.toLowerCase(Locale.ROOT)) : -1;
         if (matchIndex < 0) return content.substring(0, maxChars) + "…";
         int start = Math.max(0, matchIndex - maxChars / 3);
         int end = Math.min(content.length(), start + maxChars);

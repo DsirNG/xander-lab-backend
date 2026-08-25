@@ -159,6 +159,39 @@ class AgentMemoryServiceTest {
     }
 
     @Test
+    void recallSkipsUnrelatedFactsInsteadOfPaddingTheContextAndCountingThemAsHits() {
+        // 零分记忆一旦被当成"命中"，hitCount 就不再是"常用"的信号，淘汰会先删错东西。
+        when(memoryMapper.selectList(any())).thenReturn(List.of(
+                memory(1L, "favourite-food", "FACT", "喜欢吃辣", 0),
+                memory(2L, "car", "FACT", "开电车", 0)));
+
+        assertThat(service.recall(42L, "帮我看看这段代码", 5)).isEmpty();
+        verify(memoryMapper, never()).markRecalled(any(), anyList());
+    }
+
+    @Test
+    void recallOnlyCountsTheMemoriesItActuallyInjected() {
+        when(memoryMapper.selectList(any())).thenReturn(List.of(
+                memory(1L, "favourite-food", "FACT", "喜欢吃辣", 0),
+                memory(2L, "writing-style", "PREFERENCE", "写作偏好口语化", 0)));
+
+        service.recall(42L, "按我的写作偏好来", 5);
+
+        verify(memoryMapper).markRecalled(42L, List.of(2L));
+    }
+
+    @Test
+    void recallToleratesMemoriesWithoutAnUpdatedAt() {
+        // 历史数据里出现过空的 updated_at；排序时不能因此抛 NPE 把整轮对话打断。
+        AgentMemory undated = memory(1L, "writing-style", "PREFERENCE", "写作偏好口语化", 0);
+        undated.setUpdatedAt(null);
+        when(memoryMapper.selectList(any())).thenReturn(List.of(
+                undated, memory(2L, "job", "PROFILE", "后端工程师", 0)));
+
+        assertThat(service.recall(42L, "随便问一句", 5)).hasSize(2);
+    }
+
+    @Test
     void renderLabelsEachMemoryWithItsKindAndKey() {
         String rendered = service.render(List.of(
                 memory(1L, "job", "PROFILE", "后端工程师", 0),

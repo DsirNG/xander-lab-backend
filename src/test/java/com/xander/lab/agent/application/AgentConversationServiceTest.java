@@ -572,6 +572,90 @@ class AgentConversationServiceTest {
                 eq(42L), eq(false));
     }
 
+    @Test
+    void namingAToolThatDoesNotExistTripsTheFailureCapInsteadOfBurningEveryStep() {
+        // 曾经这条分支只是静默 continue：模型可以一直点名不存在的工具，
+        // 把 maxSteps 全烧完，用户等半天只收到一句"步数已达上限"。
+        stubTransactions();
+        ObjectNode bogus = decisionNode(false, "我要用这个工具", "并不存在的工具", null);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(bogus));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        AgentConversation result = service.executeTurn(7L, 42L, "随便做点什么", ignored -> { });
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        // maxToolFailures=2：两次就收工，而不是打满 maxSteps=10。
+        verify(modelClient, org.mockito.Mockito.times(2))
+                .decideNextStepStream(any(), any(), any(), any());
+        verify(messageMapper).insertForActiveRun(
+                org.mockito.ArgumentMatchers.argThat(message ->
+                        "assistant".equals(message.getRole())
+                                && "answer".equals(message.getKind())
+                                && message.getContent().contains("并不存在的工具")),
+                eq(42L), eq(1L));
+    }
+
+    @Test
+    void attachmentsOutsideTheContextWindowAreNotResentOnEveryLaterTurn() {
+        // 附件和文本上下文用同一个窗口：早就翻篇的图片不该在之后每一轮的每一步被重新上传计费。
+        stubTransactions();
+        org.mockito.Mockito.when(properties.getContextMessageLimit()).thenReturn(5);
+        List<AgentMessage> history = new java.util.ArrayList<>();
+        history.add(userMessage(1L, "看看这张图", "[{\"url\":\"https://cdn.example.com/old.png\","
+                + "\"name\":\"old.png\",\"contentType\":\"image/png\",\"size\":12}]"));
+        for (long id = 2L; id <= 7L; id++) {
+            history.add(userMessage(id, "第 " + id + " 条", null));
+        }
+        when(messageMapper.selectList(any())).thenReturn(history);
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "好的");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(decision));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "继续", ignored -> { });
+
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
+        verify(modelClient, org.mockito.Mockito.never())
+                .decideNextStepStream(any(), any(), org.mockito.ArgumentMatchers.anyList(), any(), any());
+    }
+
+    @Test
+    void anAttachmentInsideTheContextWindowIsStillSentSoFollowUpQuestionsWork() {
+        stubTransactions();
+        org.mockito.Mockito.when(properties.getContextMessageLimit()).thenReturn(5);
+        when(messageMapper.selectList(any())).thenReturn(List.of(
+                userMessage(1L, "旧消息", null),
+                userMessage(2L, "看看这张图", "[{\"url\":\"https://cdn.example.com/new.png\","
+                        + "\"name\":\"new.png\",\"contentType\":\"image/png\",\"size\":12}]"),
+                userMessage(3L, "这图里是什么", null)));
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "这是一张示意图");
+        when(modelClient.decideNextStepStream(any(), any(), org.mockito.ArgumentMatchers.anyList(),
+                any(), any())).thenReturn(call(decision));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "这图里是什么", ignored -> { });
+
+        var attachments = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(modelClient).decideNextStepStream(any(), any(), attachments.capture(), any(), any());
+        assertThat(attachments.getValue()).hasSize(1);
+    }
+
+    private AgentMessage userMessage(Long id, String content, String attachmentsJson) {
+        AgentMessage message = new AgentMessage();
+        message.setId(id);
+        message.setConversationId(7L);
+        message.setRole("user");
+        message.setKind("message");
+        message.setContent(content);
+        message.setAttachmentsJson(attachmentsJson);
+        message.setCreatedAt(LocalDateTime.now().minusMinutes(10 - id));
+        return message;
+    }
+
     private AgentMessage argThatMessage(String role, String kind, String toolName) {
         return org.mockito.ArgumentMatchers.argThat(message ->
                 role.equals(message.getRole())

@@ -111,8 +111,12 @@ public class SubAgentRunner {
             String toolName = decision.path("action").path("tool").asText("");
             AgentTool tool = allowed.contains(toolName) ? registry.get(toolName) : null;
             if (tool == null) {
+                // 点名不存在的工具也计入失败预算：否则子智能体可以一直点名错工具，
+                // 把步数预算烧完，交回主智能体的却只是一串"被拒绝"的观察。
+                failures++;
                 observations.add("尝试调用 " + describeUnknown(toolName) + " 被拒绝：不在本子任务的可用工具内（"
                         + String.join(", ", allowed) + "）");
+                if (failures >= MAX_FAILURES) break;
                 continue;
             }
 

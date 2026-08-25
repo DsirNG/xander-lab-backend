@@ -310,10 +310,21 @@ public class AgentConversationService {
             AgentTool tool = StringUtils.hasText(toolName) && allowedTools.contains(toolName)
                     ? toolRegistry.get(toolName) : null;
             if (tool == null) {
+                // 点名一个不存在的工具是协议错误，但同样要计入失败预算。
+                // 不计数的话，模型可以一直点名错工具：每一步都被静默跳过，整轮步数烧完，
+                // 用户等了很久却只收到一句"步数已达上限"，看不出到底发生了什么。
+                failures++;
                 lastError = JsonNodeFactory.instance.objectNode()
                         .put("ok", false)
-                        .put("error", "未知工具 " + toolName + "，请从可用工具中选择")
+                        .put("error", "未知工具 " + describeTool(toolName) + "，请从可用工具中选择")
                         .put("availableTools", String.join(", ", allowedTools));
+                if (failures >= Math.max(1, properties.getMaxToolFailures())) {
+                    String reply = "很抱歉，我连续几次都没选对可用的工具（" + describeTool(toolName)
+                            + " 不存在），这一轮先停在这里。请把需求说得更具体一些，或换个说法再试。";
+                    saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
+                    appendActive(conversationId, userId, runVersion, "answer", reply, listener);
+                    return finalizeReady(conversationId, userId, runVersion, usage, listener);
+                }
                 continue;
             }
 
@@ -536,7 +547,7 @@ public class AgentConversationService {
         if (conversation.getUpdatedAt().isAfter(LocalDateTime.now().minusMinutes(staleMinutes))) {
             return conversation;
         }
-        int updated = transactionTemplate.execute(status -> {
+        transactionTemplate.execute(status -> {
             String interrupted = "上一轮执行中断，可继续对话";
             int changed = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
                     .eq(AgentConversation::getId, conversation.getId())
@@ -678,11 +689,7 @@ public class AgentConversationService {
      */
     private String buildContext(Long conversationId, Long userId, JsonNode lastError,
                                List<AgentPlanItem> plan, String memoryContext, String critique) {
-        List<AgentMessage> messages = listMessages(conversationId, userId);
-        int limit = Math.max(5, properties.getContextMessageLimit());
-        List<AgentMessage> recent = messages.size() <= limit
-                ? messages
-                : messages.subList(messages.size() - limit, messages.size());
+        List<AgentMessage> recent = recentWindow(listMessages(conversationId, userId));
         int lastToolResultIndex = lastToolResultIndex(recent);
 
         StringBuilder builder = new StringBuilder();
@@ -729,6 +736,14 @@ public class AgentConversationService {
         return builder.toString();
     }
 
+    /** 注入模型的历史窗口；文本上下文和附件都取这一段，两者的"可见范围"必须一致。 */
+    private List<AgentMessage> recentWindow(List<AgentMessage> messages) {
+        int limit = Math.max(5, properties.getContextMessageLimit());
+        return messages.size() <= limit
+                ? messages
+                : messages.subList(messages.size() - limit, messages.size());
+    }
+
     /** 最近一条工具结果在窗口中的下标；没有则返回 -1。 */
     private int lastToolResultIndex(List<AgentMessage> recent) {
         for (int index = recent.size() - 1; index >= 0; index--) {
@@ -760,11 +775,22 @@ public class AgentConversationService {
         return "";
     }
 
+    private String describeTool(String toolName) {
+        return StringUtils.hasText(toolName) ? toolName : "（空工具名）";
+    }
+
+    /**
+     * 交给模型的附件只取上下文窗口内的用户消息。
+     *
+     * <p>原来的实现沿整条历史一路回溯，于是第一轮传的图片会在之后每一轮的每一步被重新上传：
+     * 既反复按图片计费，也让早就翻篇的图片继续参与推理。跟文本上下文用同一个窗口后，
+     * "看得见图"和"看得见提到图的那句话"始终一致，追问同一张图仍然有效。</p>
+     */
     private List<AgentAttachment> recentAttachments(Long conversationId, Long userId) {
-        List<AgentMessage> messages = listMessages(conversationId, userId);
+        List<AgentMessage> window = recentWindow(listMessages(conversationId, userId));
         java.util.LinkedHashMap<String, AgentAttachment> recent = new java.util.LinkedHashMap<>();
-        for (int index = messages.size() - 1; index >= 0; index--) {
-            AgentMessage message = messages.get(index);
+        for (int index = window.size() - 1; index >= 0; index--) {
+            AgentMessage message = window.get(index);
             if (!"user".equals(message.getRole()) || message.getAttachments() == null) continue;
             for (AgentAttachment attachment : message.getAttachments()) {
                 recent.putIfAbsent(attachment.url(), attachment);

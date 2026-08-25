@@ -119,6 +119,22 @@ class SubAgentRunnerTest {
     }
 
     @Test
+    void repeatedlyNamingAToolItCannotUseStopsAtTheFailureCapInsteadOfBurningTheBudget() {
+        // 不计入失败预算的话，子智能体可以一直点名错工具把 6 步全烧完，
+        // 交回主智能体的却只是一串"被拒绝"，主智能体还得为这些步数付钱。
+        ScriptedModel model = new ScriptedModel(decideTool("publish_post"), decideTool("publish_post"));
+        SubAgentRunner runner = runner(model, 6, new RecordingTool("query_knowledge", "{}"));
+
+        SubAgentRunner.SubAgentResult result = runner.run(context, "查笔记", "", Set.of("query_knowledge"),
+                new CapturingProgress());
+
+        assertThat(result.completed()).isFalse();
+        assertThat(result.steps()).isEqualTo(2);
+        assertThat(result.toolCalls()).isEmpty();
+        assertThat(result.findings()).contains("尝试调用 publish_post 被拒绝");
+    }
+
+    @Test
     void stopsAfterRepeatedToolFailuresAndHandsBackTheObservationsAsUnfinished() {
         FailingTool broken = new FailingTool("query_knowledge", new IllegalStateException("数据库连不上"));
         ScriptedModel model = new ScriptedModel(decideTool("query_knowledge"), decideTool("query_knowledge"));

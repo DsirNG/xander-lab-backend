@@ -73,24 +73,73 @@ public class RecitationService {
         return toView(material);
     }
 
+    /**
+     * 个人知识库的筛选条件。
+     *
+     * <p>搜索、掌握等级和到期过滤都下推到 SQL：这些条件如果只在"最近一批"上做内存过滤，
+     * 知识条数超过 {@link #LIST_LIMIT} 之后就会查不到也不报错——对调用方（页面或智能体）
+     * 表现为"这条知识不存在"，比直接报错更难发现。</p>
+     *
+     * @param search       标题或正文的模糊匹配词，空表示不过滤
+     * @param masteryLevel 掌握等级精确匹配，空表示不过滤
+     * @param dueOnly      只要已到复习时间的条目
+     * @param limit        明细条数上限，仅对列表查询有意义
+     */
+    public record MaterialQuery(String search, String masteryLevel, boolean dueOnly, int limit) {
+        /** 不带任何过滤的查询，用于"一共多少条"这类全库统计。 */
+        public static MaterialQuery all() {
+            return new MaterialQuery(null, null, false, LIST_LIMIT);
+        }
+    }
+
     /** 按创建时间倒序列出当前用户的材料。 */
     @Transactional(readOnly = true)
     public List<RecitationMaterialView> listMaterials(Long userId) {
+        return searchMaterials(userId, MaterialQuery.all());
+    }
+
+    /** 按条件筛选当前用户的材料，创建时间倒序。 */
+    @Transactional(readOnly = true)
+    public List<RecitationMaterialView> searchMaterials(Long userId, MaterialQuery query) {
         requireUser(userId);
-        return materialMapper.selectList(new LambdaQueryWrapper<RecitationMaterial>()
-                        .eq(RecitationMaterial::getUserId, userId)
+        int limit = Math.min(Math.max(query.limit(), 1), LIST_LIMIT);
+        return materialMapper.selectList(materialFilter(userId, query)
                         .orderByDesc(RecitationMaterial::getCreatedAt, RecitationMaterial::getId)
-                        .last("LIMIT " + LIST_LIMIT))
+                        .last("LIMIT " + limit))
                 .stream().map(this::toView).toList();
     }
 
     /** 当前用户的知识点总数；列表接口有条数上限，统计口径必须单独查。 */
     @Transactional(readOnly = true)
     public long countMaterials(Long userId) {
+        return countMaterials(userId, MaterialQuery.all());
+    }
+
+    /** 按同一筛选条件统计条数，让调用方能如实区分"没有匹配"和"匹配了但没全返回"。 */
+    @Transactional(readOnly = true)
+    public long countMaterials(Long userId, MaterialQuery query) {
         requireUser(userId);
-        Long total = materialMapper.selectCount(new LambdaQueryWrapper<RecitationMaterial>()
-                .eq(RecitationMaterial::getUserId, userId));
+        Long total = materialMapper.selectCount(materialFilter(userId, query));
         return total == null ? 0L : total;
+    }
+
+    private LambdaQueryWrapper<RecitationMaterial> materialFilter(Long userId, MaterialQuery query) {
+        LambdaQueryWrapper<RecitationMaterial> wrapper = new LambdaQueryWrapper<RecitationMaterial>()
+                .eq(RecitationMaterial::getUserId, userId);
+        String search = query.search() == null ? "" : query.search().trim();
+        if (!search.isEmpty()) {
+            wrapper.and(nested -> nested.like(RecitationMaterial::getTitle, search)
+                    .or().like(RecitationMaterial::getContent, search));
+        }
+        String level = query.masteryLevel() == null ? "" : query.masteryLevel().trim().toUpperCase(Locale.ROOT);
+        if (!level.isEmpty()) {
+            wrapper.eq(RecitationMaterial::getMasteryLevel, level);
+        }
+        if (query.dueOnly()) {
+            wrapper.isNotNull(RecitationMaterial::getNextReviewAt)
+                    .le(RecitationMaterial::getNextReviewAt, LocalDateTime.now());
+        }
+        return wrapper;
     }
 
     /** 返回一份属于当前用户的材料。 */

@@ -104,6 +104,11 @@ public class AgentMemoryService {
     /**
      * 按查询文本召回最相关的若干条记忆，并记录命中次数。
      *
+     * <p>本轮输入里有词元时，只召回真正打到分的记忆：原来是排完序就取前 N 条，
+     * 于是一句和记忆毫不相干的话也会把 8 条零分记忆塞进上下文，还把它们全部计成"命中"——
+     * hitCount 是淘汰时用的信号，被这样污染之后，真正常用的记忆反而可能先被淘汰。
+     * PROFILE/PREFERENCE 天生带 +1 基线分，所以用户画像和偏好始终留得住。</p>
+     *
      * <p>命中计数是排序信号而非业务数据，失败只记日志，不能让召回本身失败。</p>
      */
     public List<AgentMemory> recall(Long userId, String query, int limit) {
@@ -112,20 +117,35 @@ public class AgentMemoryService {
         int size = Math.min(Math.max(limit, 1), RECALL_LIMIT);
         List<String> terms = terms(query);
         List<AgentMemory> ranked = new ArrayList<>(all);
+        if (!terms.isEmpty()) {
+            ranked.removeIf(memory -> score(memory, terms) <= 0);
+            if (ranked.isEmpty()) return List.of();
+        }
         ranked.sort((left, right) -> {
             int byScore = Integer.compare(score(right, terms), score(left, terms));
             if (byScore != 0) return byScore;
             int byHits = Integer.compare(hitCount(right), hitCount(left));
             if (byHits != 0) return byHits;
-            return right.getUpdatedAt().compareTo(left.getUpdatedAt());
+            // updatedAt 理论上非空，但历史数据里出现过空值；这里按"最旧"处理而不是抛 NPE 让整轮对话失败。
+            return compareUpdatedAt(right, left);
         });
-        List<AgentMemory> recalled = ranked.subList(0, Math.min(size, ranked.size()));
+        List<AgentMemory> recalled = List.copyOf(ranked.subList(0, Math.min(size, ranked.size())));
         try {
             memoryMapper.markRecalled(userId, recalled.stream().map(AgentMemory::getId).toList());
         } catch (Exception error) {
             log.warn("agent memory hit counter update failed, userId={}", userId, error);
         }
-        return List.copyOf(recalled);
+        return recalled;
+    }
+
+    /** 空 updatedAt 视为最旧，保证排序器满足传递性，不会在数据不干净时抛 NPE。 */
+    private int compareUpdatedAt(AgentMemory left, AgentMemory right) {
+        LocalDateTime first = left.getUpdatedAt();
+        LocalDateTime second = right.getUpdatedAt();
+        if (first == null && second == null) return 0;
+        if (first == null) return -1;
+        if (second == null) return 1;
+        return first.compareTo(second);
     }
 
     /** 渲染成注入上下文的紧凑文本；空记忆返回空串由调用方决定是否写入。 */

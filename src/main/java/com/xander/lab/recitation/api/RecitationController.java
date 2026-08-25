@@ -31,9 +31,18 @@ public class RecitationController {
         return Result.success(service.createMaterial(UserContext.getUserId(), request));
     }
 
+    /**
+     * 知识列表。搜索、掌握等级与到期过滤都由服务端执行，和智能体 {@code query_knowledge} 走同一条查询路径，
+     * 避免"页面能搜到、智能体搜不到"这类两套口径的问题。参数全部可选，不传即返回最近一批全部知识。
+     */
     @GetMapping("/materials")
-    public Result<List<RecitationMaterialView>> listMaterials() {
-        return Result.success(service.listMaterials(UserContext.getUserId()));
+    public Result<List<RecitationMaterialView>> listMaterials(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String masteryLevel,
+            @RequestParam(required = false, defaultValue = "false") boolean dueOnly,
+            @RequestParam(required = false, defaultValue = "100") int limit) {
+        return Result.success(service.searchMaterials(UserContext.getUserId(),
+                new RecitationService.MaterialQuery(search, masteryLevel, dueOnly, limit)));
     }
 
     @GetMapping("/materials/{materialId}")
