@@ -23,4 +23,11 @@ public class AgentConversationProperties {
      * 由回复如实交代未完成部分，避免和模型互相纠缠把步数耗光。</p>
      */
     private int maxReflections = 2;
+    /**
+     * 单个子智能体（delegate_subtask）允许的最大推理步数。
+     *
+     * <p>刻意比主循环小得多：派发的意义是把脏活关在隔离上下文里，
+     * 不是再开一个能无限跑的循环。预算不够就如实交回中途观察，由主智能体决定是否再派一次。</p>
+     */
+    private int maxSubAgentSteps = 6;
 }

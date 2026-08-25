@@ -44,6 +44,15 @@ public interface AgentTool {
         default void onToolDelta(String delta) {
         }
 
+        /**
+         * 回报工具内部自行发起的模型调用用量。
+         *
+         * <p>子智能体这类工具会自己调模型，如果不回报，这部分 token 就绕过了本轮计费。
+         * 默认空实现让普通工具无需关心。</p>
+         */
+        default void onModelUsage(com.xander.lab.common.ModelUsage usage, String model) {
+        }
+
         /** Lets a long-running tool cooperatively stop between remote stages. */
         default boolean isCancellationRequested() {
             return false;

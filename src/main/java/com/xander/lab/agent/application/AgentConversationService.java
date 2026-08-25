@@ -324,7 +324,7 @@ public class AgentConversationService {
             saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_call", toolName, call.toString());
             appendActive(conversationId, userId, runVersion, "tool_start", call, listener);
 
-            ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, toolName, listener);
+            ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, toolName, listener, usage);
             try {
                 JsonNode result = tool.execute(toolContext, args, progress);
                 progress.flushToolDelta();
@@ -864,15 +864,17 @@ public class AgentConversationService {
         private final long runVersion;
         private final String toolName;
         private final Consumer<AgentEvent> listener;
+        private final UsageAccumulator usage;
         private final StringBuilder deltaBuffer = new StringBuilder();
 
         private ToolProgress(Long conversationId, Long userId, long runVersion,
-                             String toolName, Consumer<AgentEvent> listener) {
+                             String toolName, Consumer<AgentEvent> listener, UsageAccumulator usage) {
             this.conversationId = conversationId;
             this.userId = userId;
             this.runVersion = runVersion;
             this.toolName = toolName;
             this.listener = listener;
+            this.usage = usage;
         }
 
         @Override
@@ -889,6 +891,12 @@ public class AgentConversationService {
             if (deltaBuffer.length() >= TOOL_DELTA_FLUSH_CHARS) {
                 flushToolDelta();
             }
+        }
+
+        /** 工具（子智能体）自己调模型烧掉的 token 也算本轮成本，否则这部分绕过计费。 */
+        @Override
+        public void onModelUsage(ModelUsage modelUsage, String usedModel) {
+            usage.add(modelUsage, usedModel);
         }
 
         @Override
