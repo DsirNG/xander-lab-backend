@@ -16,4 +16,11 @@ public class AgentConversationProperties {
     private int staleConversationMinutes = 30;
     /** 构建模型上下文时保留的最近消息条数。 */
     private int contextMessageLimit = 30;
+    /**
+     * 单轮允许的自检驳回次数。
+     *
+     * <p>反思要能纠偏，也要能停：预算用尽后即使自检仍不满意也放行，
+     * 由回复如实交代未完成部分，避免和模型互相纠缠把步数耗光。</p>
+     */
+    private int maxReflections = 2;
 }

@@ -26,6 +26,16 @@ public interface AgentTool {
      */
     JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress);
 
+    /**
+     * 带会话上下文的执行入口，编排循环统一走这里。
+     *
+     * <p>默认转发到只带 userId 的重载，所以既有工具无需改动；
+     * 需要写回会话状态的工具（任务计划等）覆写本方法。</p>
+     */
+    default JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
+        return execute(context.userId(), args, onProgress);
+    }
+
     /** Receives human-readable progress hints during a long-running tool call. */
     interface ProgressListener {
         void onProgress(String message);

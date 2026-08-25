@@ -12,58 +12,46 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AgentToolRegistryTest {
 
     private final AgentToolRegistry registry = new AgentToolRegistry(List.of(
-            tool("blog_generate"), tool("query_posts"), tool("query_unsynced_posts"),
+            tool("query_posts"), tool("blog_generate"), tool("query_unsynced_posts"),
             tool("publish_post"), tool("schedule_plan"), tool("query_plans"), tool("update_plan"),
             tool("email_reminder"), tool("query_email_reminders"), tool("update_email_reminder"),
-            tool("image_generate"), tool("create_knowledge"), tool("query_knowledge")));
+            tool("image_generate"), tool("create_knowledge"), tool("query_knowledge"),
+            tool("plan_tasks"), tool("remember"), tool("recall_memory")));
 
     @Test
-    void plainConversationUsesNoBusinessToolSchemas() {
-        assertThat(registry.selectNames("你好，解释一下什么是 SSE")).isEmpty();
-        assertThat(registry.selectNames("给我200字文章")).isEmpty();
+    void everyTurnSeesTheWholeToolTable() {
+        // 关键词门禁已移除：能力边界不再由规则层代模型决定，否则匹配不上词表的诉求会静默失能。
+        assertThat(registry.allowedNames()).containsExactlyInAnyOrderElementsOf(registry.names());
+        assertThat(registry.allowedNames()).contains("plan_tasks", "remember", "recall_memory");
+    }
+
+    @Test
+    void toolNamesAreRenderedInStableOrder() {
+        // 顺序稳定，同一套工具每轮渲染出的前缀完全一致，便于上游做 prompt 缓存。
+        assertThat(registry.names()).isSorted();
+        assertThat(registry.describeTools()).isEqualTo(registry.describeTools());
+        assertThat(registry.describeTools().indexOf("\"blog_generate\""))
+                .isLessThan(registry.describeTools().indexOf("\"query_posts\""));
+    }
+
+    @Test
+    void describedToolsCarryDescriptionAndSchema() {
+        String described = registry.describeTools(Set.of("plan_tasks"));
+
+        assertThat(described).contains("plan_tasks").contains("plan_tasks description");
+        assertThat(described).doesNotContain("query_posts");
+    }
+
+    @Test
+    void emptySelectionRendersNoSchemaBlock() {
         assertThat(registry.describeTools(Set.of())).isEmpty();
+        assertThat(registry.describeTools(null)).isEmpty();
     }
 
     @Test
-    void explicitArticleWritingRequestSelectsGenerationTool() {
-        assertThat(registry.selectNames("帮我写一篇200字的文章"))
-                .containsExactly("blog_generate");
-    }
-
-    @Test
-    void articleQueryDoesNotEnableGenerationTool() {
-        assertThat(registry.selectNames("我有哪些文章"))
-                .containsExactlyInAnyOrder("query_posts", "query_unsynced_posts");
-    }
-
-    @Test
-    void selectsOnlyRelevantToolGroups() {
-        Set<String> selected = registry.selectNames("给博客生成一张封面图，然后定时发布");
-
-        assertThat(selected).contains(
-                "blog_generate", "query_posts", "query_unsynced_posts",
-                "image_generate", "schedule_plan", "query_plans", "update_plan",
-                "publish_post");
-        assertThat(selected).doesNotContain(
-                "email_reminder", "query_email_reminders", "update_email_reminder");
-    }
-
-    @Test
-    void selectsImageToolForTheReportedCatPrompt() {
-        assertThat(registry.selectNames("生成图片：小猫"))
-                .containsExactly("image_generate");
-    }
-
-    @Test
-    void selectsKnowledgeToolsForPersonalMasteryRequests() {
-        assertThat(registry.selectNames("我有哪些需要复习的知识点，掌握度怎么样"))
-                .containsExactlyInAnyOrder("create_knowledge", "query_knowledge");
-    }
-
-    @Test
-    void shortContextDependentActionFallsBackToAllTools() {
-        assertThat(registry.selectNames("确认，按这个执行吧"))
-                .containsExactlyInAnyOrderElementsOf(registry.names());
+    void unknownToolNameResolvesToNull() {
+        assertThat(registry.get("no_such_tool")).isNull();
+        assertThat(registry.get("plan_tasks")).isNotNull();
     }
 
     private AgentTool tool(String name) {

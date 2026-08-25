@@ -37,6 +37,8 @@ import java.util.Set;
 @Slf4j
 public class RecitationService {
     private static final Set<String> AUDIO_EXTENSIONS = Set.of("mp3", "aac", "wav", "m4a", "ogg", "opus", "amr");
+    /** 单次列表返回上限；总量另有 {@link #countMaterials(Long)}，避免把截断后的条数当成总数。 */
+    private static final int LIST_LIMIT = 100;
 
     private final RecitationMaterialMapper materialMapper;
     private final RecitationAttemptMapper attemptMapper;
@@ -78,8 +80,17 @@ public class RecitationService {
         return materialMapper.selectList(new LambdaQueryWrapper<RecitationMaterial>()
                         .eq(RecitationMaterial::getUserId, userId)
                         .orderByDesc(RecitationMaterial::getCreatedAt, RecitationMaterial::getId)
-                        .last("LIMIT 100"))
+                        .last("LIMIT " + LIST_LIMIT))
                 .stream().map(this::toView).toList();
+    }
+
+    /** 当前用户的知识点总数；列表接口有条数上限，统计口径必须单独查。 */
+    @Transactional(readOnly = true)
+    public long countMaterials(Long userId) {
+        requireUser(userId);
+        Long total = materialMapper.selectCount(new LambdaQueryWrapper<RecitationMaterial>()
+                .eq(RecitationMaterial::getUserId, userId));
+        return total == null ? 0L : total;
     }
 
     /** 返回一份属于当前用户的材料。 */

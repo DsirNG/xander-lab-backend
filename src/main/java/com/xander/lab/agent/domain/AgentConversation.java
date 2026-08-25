@@ -22,6 +22,8 @@ public class AgentConversation {
     private Long runVersion;
     /** 用户取消请求标记：0=未请求，1=执行中轮询到后立即停止；新一轮开始时复位。 */
     private Integer cancelRequested;
+    /** 智能体自主维护的任务计划快照（JSON 数组），是会话级状态而非日志。 */
+    private String planJson;
     /** 分享令牌，启用分享时生成 UUID，禁用时置 NULL。 */
     private String shareToken;
     private LocalDateTime createdAt;

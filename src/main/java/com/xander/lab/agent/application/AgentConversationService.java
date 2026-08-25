@@ -9,7 +9,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.application.AgentTool.ProgressListener;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
+import com.xander.lab.agent.domain.AgentMemory;
 import com.xander.lab.agent.domain.AgentMessage;
+import com.xander.lab.agent.domain.AgentPlanItem;
 import com.xander.lab.agent.domain.AgentAttachment;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
@@ -30,6 +32,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CancellationException;
@@ -39,9 +42,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
- * Orchestrates an agent conversation: the model decides each next step
- * (reply or tool call), tool outcomes are fed back as observations, and the
- * loop continues until the model concludes or step budgets are exhausted.
+ * 编排一轮智能体对话：模型自己决定下一步（继续调工具还是收口回复），
+ * 工具结果作为观察回灌，直到模型认为完成或步数预算耗尽。
+ *
+ * <p>这一层承载"像智能体而不像工作流"的几个关键点：完整工具表每轮都交给模型（不按关键词预筛）、
+ * 任务计划与长期记忆作为会话状态注入每一步、收口前过一道确定性自检，
+ * 自检不通过就把批评意见回灌让它自己纠偏。</p>
  */
 @Slf4j
 @Service
@@ -51,6 +57,10 @@ public class AgentConversationService {
     private static final int ANSWER_DELTA_FLUSH_CHARS = 24;
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
     private static final String DEFAULT_TITLE = "新对话";
+    /** 历史工具结果的截断长度：早期观察只保留摘要，够模型记得"做过什么"。 */
+    private static final int TOOL_RESULT_HISTORY_CHARS = 800;
+    /** 最近一次工具结果的截断长度：下一步推理主要依赖它，留足正文才能据实作答。 */
+    private static final int TOOL_RESULT_LATEST_CHARS = 4000;
 
     /**
      * 模型常把 Markdown 反引号转义成 \`；CommonMark 会把 \` 渲染成裸反引号。
@@ -71,6 +81,9 @@ public class AgentConversationService {
     private final ScheduledExecutorService agentLeaseRenewer;
     private final BillingService billingService;
     private final ObjectMapper objectMapper;
+    private final AgentPlanService planService;
+    private final AgentMemoryService memoryService;
+    private final AgentTurnEvaluator turnEvaluator;
 
     /**
      * 根据首条消息生成标题并创建会话壳（ready、无消息、不启动轮次）。
@@ -107,6 +120,8 @@ public class AgentConversationService {
         billingService.ensureAvailable(userId);
         return transactionTemplate.execute(status -> {
             long runVersion = claimConversation(conversationId, userId);
+            // 新一轮诉求开始：上一轮的计划已经收口或作废，留着只会污染这一轮的自检。
+            planService.clear(conversationId, userId);
             saveMessage(conversationId, "user", "message", null, userMessage,
                     serializeAttachments(attachments));
             AgentConversation claimed = requireOwned(conversationId, userId);
@@ -199,13 +214,21 @@ public class AgentConversationService {
         long turnStartedNanos = System.nanoTime();
         String latestUserMessage = StringUtils.hasText(currentUserMessage)
                 ? currentUserMessage : latestUserMessage(conversationId, userId);
-        Set<String> allowedTools = toolRegistry.selectNames(latestUserMessage);
+        // 工具表不再按关键词预筛：用不用、用哪个由模型自己判断。
+        // 旧的关键词门禁会让匹配不上词表的诉求连工具都看不见，只能空口答应，那才是"工作流"。
+        Set<String> allowedTools = toolRegistry.allowedNames();
         String toolDescriptions = toolRegistry.describeTools(allowedTools);
-        log.info("agent turn started conversation={} run={} selectedToolCount={}",
-                conversationId, runVersion, allowedTools.size());
+        String memoryContext = recallMemoryContext(userId, latestUserMessage);
+        AgentToolContext toolContext = new AgentToolContext(userId, conversationId, runVersion);
+        log.info("agent turn started conversation={} run={} toolCount={} memoryInjected={}",
+                conversationId, runVersion, allowedTools.size(), !memoryContext.isEmpty());
         int maxSteps = Math.max(1, properties.getMaxSteps());
+        int maxReflections = Math.max(0, properties.getMaxReflections());
+        int reflections = 0;
         int failures = 0;
         JsonNode lastError = null;
+        // 上一步自检的批评意见，只注入紧随其后的那一步。
+        String critique = null;
         UsageAccumulator usage = new UsageAccumulator();
 
         for (int step = 0; step < maxSteps; step++) {
@@ -216,7 +239,10 @@ public class AgentConversationService {
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
-            String context = buildContext(conversationId, userId, lastError, !allowedTools.isEmpty());
+            // 每一步重新读计划：智能体上一步可能刚改写过它，这是会话状态而不是一次性输入。
+            List<AgentPlanItem> plan = planService.load(requireOwned(conversationId, userId));
+            String context = buildContext(conversationId, userId, lastError, plan, memoryContext, critique);
+            critique = null;
             long modelStartedNanos = System.nanoTime();
             AnswerProgress answerProgress = new AnswerProgress(
                     conversationId, userId, runVersion, listener,
@@ -258,6 +284,22 @@ public class AgentConversationService {
 
             if (decision.path("done").asBoolean(false)) {
                 String reply = normalizeAnswer(defaultText(decision.path("reply").asText(), "已完成你的请求。"));
+                Optional<String> verdict = turnEvaluator.critique(reply, plan, lastError);
+                if (verdict.isPresent() && reflections < maxReflections) {
+                    // 自检不通过：不把这次回复交给用户，把批评意见回灌让智能体自己纠偏。
+                    reflections++;
+                    critique = verdict.get();
+                    log.info("agent turn reflection conversation={} run={} round={}",
+                            conversationId, runVersion, reflections);
+                    saveActiveMessage(conversationId, userId, runVersion,
+                            "assistant", "reflection", null, critique);
+                    appendActive(conversationId, userId, runVersion, "reflection",
+                            JsonNodeFactory.instance.objectNode()
+                                    .put("round", reflections)
+                                    .put("critique", critique),
+                            listener);
+                    continue;
+                }
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
                 appendActive(conversationId, userId, runVersion, "answer", reply, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
@@ -284,12 +326,18 @@ public class AgentConversationService {
 
             ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, toolName, listener);
             try {
-                JsonNode result = tool.execute(userId, args, progress);
+                JsonNode result = tool.execute(toolContext, args, progress);
                 progress.flushToolDelta();
                 saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName, result.toString());
                 appendActive(conversationId, userId, runVersion, "tool_end",
                         JsonNodeFactory.instance.objectNode().put("tool", toolName).set("result", result),
                         listener);
+                // 计划变更单独发一个事件：前端要能把它当成"智能体的待办清单"渲染，而不是一段工具输出。
+                if (PlanTasksTool.NAME.equals(toolName) && result.has("items")) {
+                    appendActive(conversationId, userId, runVersion, "plan",
+                            JsonNodeFactory.instance.objectNode().set("items", result.path("items")),
+                            listener);
+                }
                 failures = 0;
                 lastError = null;
             } catch (CancellationException exception) {
@@ -622,17 +670,34 @@ public class AgentConversationService {
         return event;
     }
 
-    /** Builds the model context from the recent message history, dropping tool payload noise. */
+    /**
+     * 拼装模型上下文：长期记忆、任务计划、对话历史、最近失败、自检批评。
+     *
+     * <p>计划和记忆放在历史之前，因为它们是"我是谁、我打算怎么做"这类基线状态；
+     * 批评意见放在最后，紧贴决策点，避免被历史冲淡。</p>
+     */
     private String buildContext(Long conversationId, Long userId, JsonNode lastError,
-                                boolean hasBusinessTools) {
+                               List<AgentPlanItem> plan, String memoryContext, String critique) {
         List<AgentMessage> messages = listMessages(conversationId, userId);
         int limit = Math.max(5, properties.getContextMessageLimit());
         List<AgentMessage> recent = messages.size() <= limit
                 ? messages
                 : messages.subList(messages.size() - limit, messages.size());
+        int lastToolResultIndex = lastToolResultIndex(recent);
 
-        StringBuilder builder = new StringBuilder("以下是智能体与用户的对话记录：\n\n");
-        for (AgentMessage message : recent) {
+        StringBuilder builder = new StringBuilder();
+        if (StringUtils.hasText(memoryContext)) {
+            builder.append("以下是你对这位用户的长期记忆（跨会话有效，可直接使用；与用户当前说法冲突时以用户当前说法为准）：\n")
+                    .append(memoryContext).append("\n\n");
+        }
+        String renderedPlan = planService.render(plan);
+        if (StringUtils.hasText(renderedPlan)) {
+            builder.append("以下是你自己写下的任务计划（会话状态，用 plan_tasks 改写它）：\n")
+                    .append(renderedPlan).append("\n\n");
+        }
+        builder.append("以下是智能体与用户的对话记录：\n\n");
+        for (int index = 0; index < recent.size(); index++) {
+            AgentMessage message = recent.get(index);
             String role = switch (message.getRole()) {
                 case "user" -> "用户";
                 case "tool" -> "工具结果";
@@ -640,8 +705,10 @@ public class AgentConversationService {
             };
             String content = switch (message.getKind()) {
                 case "thought" -> "（思考：）" + message.getContent();
+                case "reflection" -> "（自检：）" + message.getContent();
                 case "tool_call" -> "（调用了工具）" + message.getContent();
-                case "tool_result" -> compactJson(message.getContent(), 800);
+                case "tool_result" -> compactJson(message.getContent(), index == lastToolResultIndex
+                        ? TOOL_RESULT_LATEST_CHARS : TOOL_RESULT_HISTORY_CHARS);
                 case "answer" -> "（回复：）" + message.getContent();
                 default -> message.getContent();
             };
@@ -655,13 +722,31 @@ public class AgentConversationService {
         if (lastError != null) {
             builder.append("【最近一次工具失败】").append(lastError.toString()).append("\n\n");
         }
-        if (hasBusinessTools) {
-            builder.append("请根据以上对话继续：如需执行操作则返回 action，否则返回 done=true 的最终回复。");
-        } else {
-            builder.append("请根据以上对话直接、自然地回复用户，只输出用户可见的 Markdown 正文；"
-                    + "不要输出 JSON、HTML 换行标签或任何内部协议内容。");
+        if (StringUtils.hasText(critique)) {
+            builder.append("【自检结果】").append(critique).append("\n\n");
         }
+        builder.append("请根据以上信息决定下一步：需要动手就返回 action，已经真正做完就返回 done=true 的最终回复。");
         return builder.toString();
+    }
+
+    /** 最近一条工具结果在窗口中的下标；没有则返回 -1。 */
+    private int lastToolResultIndex(List<AgentMessage> recent) {
+        for (int index = recent.size() - 1; index >= 0; index--) {
+            if ("tool_result".equals(recent.get(index).getKind())) return index;
+        }
+        return -1;
+    }
+
+    /** 召回与本轮输入相关的长期记忆；记忆是增益而非必需，失败不能拖垮整轮对话。 */
+    private String recallMemoryContext(Long userId, String latestUserMessage) {
+        try {
+            List<AgentMemory> memories = memoryService.recall(
+                    userId, latestUserMessage, AgentMemoryService.RECALL_LIMIT);
+            return defaultText(memoryService.render(memories), "");
+        } catch (RuntimeException exception) {
+            log.warn("agent memory recall failed, userId={}", userId, exception);
+            return "";
+        }
     }
 
     private String latestUserMessage(Long conversationId, Long userId) {

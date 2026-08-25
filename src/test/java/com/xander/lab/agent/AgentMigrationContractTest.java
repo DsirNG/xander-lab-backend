@@ -64,6 +64,30 @@ class AgentMigrationContractTest {
                 .contains("20260824_agent_message_attachment");
     }
 
+    @Test
+    void autonomyUpgradeMatchesTheFreshBaselineForPlanAndMemory() throws IOException {
+        String baseline = resource("db/agent_conversation_migration.sql");
+        String upgrade = resource("db/20260825_agent_autonomy_migration.sql");
+
+        // 新装走 baseline、老库走 upgrade，两条路径必须落到同一套列与表上。
+        assertThat(baseline)
+                .contains("`plan_json` LONGTEXT NULL COMMENT")
+                .contains("CREATE TABLE IF NOT EXISTS `agent_memory`")
+                .contains("UNIQUE KEY `uk_agent_memory_user_key` (`user_id`, `memory_key`)")
+                .contains("thought/plan/reflection/tool_start")
+                .contains("message/thought/reflection/tool_call/tool_result/answer");
+        assertThat(upgrade)
+                .contains("information_schema.COLUMNS")
+                .contains("COLUMN_NAME = 'plan_json'")
+                .contains("PREPARE stmt_agent_plan_column")
+                .contains("PREPARE stmt_agent_event_type_autonomy")
+                .contains("PREPARE stmt_agent_message_kind_autonomy")
+                .contains("thought/plan/reflection/tool_start")
+                .contains("message/thought/reflection/tool_call/tool_result/answer")
+                .contains("CREATE TABLE IF NOT EXISTS `agent_memory`")
+                .contains("20260825_agent_autonomy");
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertThat(input).as("classpath resource %s", path).isNotNull();
