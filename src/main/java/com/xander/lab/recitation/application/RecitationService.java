@@ -8,11 +8,15 @@ import com.xander.lab.integration.oss.UploadResponse;
 import com.xander.lab.recitation.api.CreateRecitationMaterialRequest;
 import com.xander.lab.recitation.api.RecitationAttemptView;
 import com.xander.lab.recitation.api.RecitationMaterialView;
+import com.xander.lab.recitation.api.UpdateRecitationMaterialRequest;
+import com.xander.lab.recitation.domain.ArchiveFilter;
+import com.xander.lab.recitation.domain.KnowledgeQuizAttempt;
 import com.xander.lab.recitation.domain.RecitationAttempt;
 import com.xander.lab.recitation.domain.RecitationAttemptStatus;
 import com.xander.lab.recitation.domain.RecitationMaterial;
 import com.xander.lab.recitation.domain.KnowledgeTestMode;
 import com.xander.lab.recitation.domain.KnowledgeType;
+import com.xander.lab.recitation.infrastructure.KnowledgeQuizAttemptMapper;
 import com.xander.lab.recitation.infrastructure.RecitationAttemptMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import com.xander.lab.recitation.infrastructure.RecitationProperties;
@@ -42,6 +46,7 @@ public class RecitationService {
 
     private final RecitationMaterialMapper materialMapper;
     private final RecitationAttemptMapper attemptMapper;
+    private final KnowledgeQuizAttemptMapper quizAttemptMapper;
     private final RecitationAligner aligner;
     private final OssService ossService;
     private final RecitationProperties properties;
@@ -84,8 +89,19 @@ public class RecitationService {
      * @param masteryLevel 掌握等级精确匹配，空表示不过滤
      * @param dueOnly      只要已到复习时间的条目
      * @param limit        明细条数上限，仅对列表查询有意义
+     * @param archive      归档可见范围，默认只看未归档
      */
-    public record MaterialQuery(String search, String masteryLevel, boolean dueOnly, int limit) {
+    public record MaterialQuery(String search, String masteryLevel, boolean dueOnly, int limit,
+                                ArchiveFilter archive) {
+        public MaterialQuery {
+            if (archive == null) archive = ArchiveFilter.ACTIVE;
+        }
+
+        /** 不显式指定归档范围时只看在用的知识，与页面和智能体的默认口径一致。 */
+        public MaterialQuery(String search, String masteryLevel, boolean dueOnly, int limit) {
+            this(search, masteryLevel, dueOnly, limit, ArchiveFilter.ACTIVE);
+        }
+
         /** 不带任何过滤的查询，用于"一共多少条"这类全库统计。 */
         public static MaterialQuery all() {
             return new MaterialQuery(null, null, false, LIST_LIMIT);
@@ -139,6 +155,12 @@ public class RecitationService {
             wrapper.isNotNull(RecitationMaterial::getNextReviewAt)
                     .le(RecitationMaterial::getNextReviewAt, LocalDateTime.now());
         }
+        // 归档条件同样下推：归档的知识如果还出现在默认列表和到期复习里，归档这个动作就等于没生效。
+        switch (query.archive()) {
+            case ACTIVE -> wrapper.isNull(RecitationMaterial::getArchivedAt);
+            case ARCHIVED -> wrapper.isNotNull(RecitationMaterial::getArchivedAt);
+            case ALL -> { }
+        }
         return wrapper;
     }
 
@@ -146,6 +168,139 @@ public class RecitationService {
     @Transactional(readOnly = true)
     public RecitationMaterialView getMaterial(Long userId, Long materialId) {
         return toView(requireMaterial(userId, materialId));
+    }
+
+    /**
+     * 修改一条已有知识：只改传了的字段。
+     *
+     * <p>正文或测试方式发生实质变化时会重置掌握度（分数归零、等级回到 NEW、清掉下次复习时间），
+     * 因为原来的分数衡量的是改动前的文本和改动前的考法。不重置的话，把正文整段换掉之后
+     * 这条知识仍然显示"已掌握、30 天后再复习"——那是一个没有出处的数字，
+     * 复习计划也会把一条其实从没测过的内容一直排在最后。已完成的测试次数与最近测试时间作为
+     * 历史保留，不清零。</p>
+     */
+    public RecitationMaterialView updateMaterial(Long userId, Long materialId,
+                                                 UpdateRecitationMaterialRequest request) {
+        RecitationMaterial material = requireMaterial(userId, materialId);
+        if (request == null) return toView(material);
+        LambdaUpdateWrapper<RecitationMaterial> update = new LambdaUpdateWrapper<RecitationMaterial>()
+                .eq(RecitationMaterial::getId, materialId)
+                .eq(RecitationMaterial::getUserId, userId);
+        boolean changed = false;
+
+        if (StringUtils.hasText(request.title())) {
+            String title = request.title().trim();
+            if (title.length() > 100) throw new IllegalArgumentException("材料标题不能超过100个字符");
+            if (!title.equals(material.getTitle())) {
+                update.set(RecitationMaterial::getTitle, title);
+                material.setTitle(title);
+                changed = true;
+            }
+        }
+
+        boolean contentReplaced = false;
+        if (request.content() != null) {
+            String content = request.content().trim();
+            if (content.isEmpty()) throw new IllegalArgumentException("背诵原文不能为空");
+            if (content.length() > 10000) throw new IllegalArgumentException("背诵原文不能超过10000个字符");
+            String normalized = aligner.normalize(content);
+            if (normalized.isEmpty()) throw new IllegalArgumentException("背诵原文必须包含中文、字母或数字");
+            // 以归一化文本判断"实质变化"：只调标点或空白不该让掌握记录白费。
+            contentReplaced = !normalized.equals(material.getNormalizedContent());
+            if (contentReplaced || !content.equals(material.getContent())) {
+                update.set(RecitationMaterial::getContent, content)
+                        .set(RecitationMaterial::getNormalizedContent, normalized);
+                material.setContent(content);
+                material.setNormalizedContent(normalized);
+                changed = true;
+            }
+        }
+
+        boolean testModeReplaced = false;
+        if (request.knowledgeType() != null || request.testMode() != null) {
+            KnowledgeType type = request.knowledgeType() == null
+                    ? KnowledgeType.valueOf(material.getKnowledgeType())
+                    : KnowledgeType.fromNullable(request.knowledgeType());
+            // 只改类型不给考法时按新类型自动匹配：否则背诵改成概念之后，
+            // 页面还会拿着 AUDIO_RECITATION 让用户对着概念题录音。
+            KnowledgeTestMode mode = KnowledgeTestMode.fromNullable(request.testMode(), type);
+            if (!type.name().equals(material.getKnowledgeType())) {
+                update.set(RecitationMaterial::getKnowledgeType, type.name());
+                material.setKnowledgeType(type.name());
+                changed = true;
+            }
+            if (!mode.name().equals(material.getTestMode())) {
+                update.set(RecitationMaterial::getTestMode, mode.name());
+                material.setTestMode(mode.name());
+                testModeReplaced = true;
+                changed = true;
+            }
+        }
+
+        if (contentReplaced || testModeReplaced) {
+            update.set(RecitationMaterial::getMasteryScore, java.math.BigDecimal.ZERO)
+                    .set(RecitationMaterial::getMasteryLevel, "NEW")
+                    .set(RecitationMaterial::getNextReviewAt, null);
+            material.setMasteryScore(java.math.BigDecimal.ZERO);
+            material.setMasteryLevel("NEW");
+            material.setNextReviewAt(null);
+        }
+        if (!changed) return toView(material);
+        LocalDateTime now = LocalDateTime.now();
+        update.set(RecitationMaterial::getUpdatedAt, now);
+        material.setUpdatedAt(now);
+        transactionTemplate.executeWithoutResult(status -> materialMapper.update(null, update));
+        return toView(material);
+    }
+
+    /**
+     * 归档或恢复一条知识。
+     *
+     * <p>归档是删除之外的另一个出口：内容还想留着，但不想它继续出现在列表、到期复习和智能体检索里。
+     * 因为可逆，所以它是"我暂时不学这个了"的正确动作；真要清掉数据才用
+     * {@link #deleteMaterial(Long, Long)}。</p>
+     */
+    public RecitationMaterialView archiveMaterial(Long userId, Long materialId, boolean archived) {
+        RecitationMaterial material = requireMaterial(userId, materialId);
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime archivedAt = archived ? now : null;
+        transactionTemplate.executeWithoutResult(status -> materialMapper.update(null,
+                new LambdaUpdateWrapper<RecitationMaterial>()
+                        .eq(RecitationMaterial::getId, materialId)
+                        .eq(RecitationMaterial::getUserId, userId)
+                        .set(RecitationMaterial::getArchivedAt, archivedAt)
+                        .set(RecitationMaterial::getUpdatedAt, now)));
+        material.setArchivedAt(archivedAt);
+        material.setUpdatedAt(now);
+        return toView(material);
+    }
+    /**
+     * 彻底删除一条知识，连带它的录音任务与测验留档。
+     *
+     * <p>先删库再尽力删 OSS 音频：删除音频失败不能让整个删除失败，否则用户会卡在
+     * "删不掉"的状态；反过来先删音频再删库，删库失败就会留下一条指向已消失音频的记录。
+     * 删不掉的音频只记日志，等对象存储的生命周期规则回收。</p>
+     */
+    public void deleteMaterial(Long userId, Long materialId) {
+        requireMaterial(userId, materialId);
+        List<String> audioUrls = attemptMapper
+                .selectList(new LambdaQueryWrapper<RecitationAttempt>()
+                        .select(RecitationAttempt::getAudioUrl)
+                        .eq(RecitationAttempt::getUserId, userId)
+                        .eq(RecitationAttempt::getMaterialId, materialId))
+                .stream().map(RecitationAttempt::getAudioUrl).filter(StringUtils::hasText).toList();
+        transactionTemplate.executeWithoutResult(status -> {
+            quizAttemptMapper.delete(new LambdaQueryWrapper<KnowledgeQuizAttempt>()
+                    .eq(KnowledgeQuizAttempt::getUserId, userId)
+                    .eq(KnowledgeQuizAttempt::getMaterialId, materialId));
+            attemptMapper.delete(new LambdaQueryWrapper<RecitationAttempt>()
+                    .eq(RecitationAttempt::getUserId, userId)
+                    .eq(RecitationAttempt::getMaterialId, materialId));
+            materialMapper.delete(new LambdaQueryWrapper<RecitationMaterial>()
+                    .eq(RecitationMaterial::getId, materialId)
+                    .eq(RecitationMaterial::getUserId, userId));
+        });
+        audioUrls.forEach(ossService::deleteByUrlQuietly);
     }
 
     /**
@@ -265,7 +420,7 @@ public class RecitationService {
                 material.getNormalizedContent().codePointCount(0, material.getNormalizedContent().length()),
                 material.getKnowledgeType(), material.getTestMode(), material.getMasteryScore(),
                 material.getMasteryLevel(), material.getReviewCount() == null ? 0 : material.getReviewCount(),
-                material.getLastReviewAt(), material.getNextReviewAt(),
+                material.getLastReviewAt(), material.getNextReviewAt(), material.getArchivedAt(),
                 material.getCreatedAt(), material.getUpdatedAt());
     }
 

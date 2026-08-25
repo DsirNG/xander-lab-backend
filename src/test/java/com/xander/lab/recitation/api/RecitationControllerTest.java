@@ -30,7 +30,7 @@ class RecitationControllerTest {
         when(service.searchMaterials(42L, expected)).thenReturn(List.of());
 
         List<RecitationMaterialView> body =
-                controller.listMaterials("勾股", "MASTERED", true, 30).getData();
+                controller.listMaterials("勾股", "MASTERED", true, 30, null).getData();
 
         assertThat(body).isEmpty();
         verify(service).searchMaterials(42L, expected);
@@ -42,7 +42,7 @@ class RecitationControllerTest {
         RecitationController controller = new RecitationController(service, mock(KnowledgeQuizService.class));
         UserContext.setUserId(42L);
 
-        controller.listMaterials(null, null, false, 100);
+        controller.listMaterials(null, null, false, 100, null);
 
         verify(service).searchMaterials(42L,
                 new RecitationService.MaterialQuery(null, null, false, 100));

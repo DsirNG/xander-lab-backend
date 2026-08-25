@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.xander.lab.recitation.api.RecitationMaterialView;
 import com.xander.lab.recitation.application.RecitationService;
+import com.xander.lab.recitation.domain.ArchiveFilter;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -106,7 +107,21 @@ class QueryKnowledgeToolTest {
         assertThat(item.path("truncated").asBoolean()).isFalse();
         assertThat(result.path("hint").asText()).contains("contentExcerpt");
     }
-    // PLACEHOLDER_MORE_TESTS
+    @Test
+    void archivedKnowledgeStaysOutOfWhatTheAgentCanSee() {
+        RecitationService service = mock(RecitationService.class);
+        when(service.searchMaterials(eq(7L), any())).thenReturn(List.of());
+        when(service.countMaterials(eq(7L), any())).thenReturn(0L);
+
+        new QueryKnowledgeTool(service)
+                .execute(7L, JsonNodeFactory.instance.objectNode().put("search", "定理"), new NoopProgress());
+
+        // 用户归档一条知识就是不想再被问到它；检索口径必须和页面默认口径一致。
+        ArgumentCaptor<RecitationService.MaterialQuery> captor =
+                ArgumentCaptor.forClass(RecitationService.MaterialQuery.class);
+        verify(service).searchMaterials(eq(7L), captor.capture());
+        assertThat(captor.getValue().archive()).isEqualTo(ArchiveFilter.ACTIVE);
+    }
 
     @Test
     void centresTheExcerptOnTheSearchHitAndFlagsTruncation() {
@@ -166,7 +181,8 @@ class QueryKnowledgeToolTest {
     private RecitationMaterialView withContent(String content) {
         return new RecitationMaterialView(1L, "标题", content, content.length(), "CONCEPT", "AI_QA",
                 BigDecimal.valueOf(60), "RECALLING", 2, LocalDateTime.now().minusDays(1),
-                LocalDateTime.now().plusDays(1), LocalDateTime.now().minusDays(5), LocalDateTime.now());
+                LocalDateTime.now().plusDays(1), null,
+                LocalDateTime.now().minusDays(5), LocalDateTime.now());
     }
 
     private RecitationMaterialView material(Long id, String title, String type, String level,
@@ -174,7 +190,7 @@ class QueryKnowledgeToolTest {
         return new RecitationMaterialView(id, title, title + "的内容", title.length(), type,
                 "RECITATION".equals(type) ? "AUDIO_RECITATION" : "AI_QA",
                 BigDecimal.valueOf(score), level, 2, LocalDateTime.now().minusDays(1),
-                nextReviewAt, LocalDateTime.now().minusDays(5), LocalDateTime.now());
+                nextReviewAt, null, LocalDateTime.now().minusDays(5), LocalDateTime.now());
     }
 
     private static final class NoopProgress implements AgentTool.ProgressListener {

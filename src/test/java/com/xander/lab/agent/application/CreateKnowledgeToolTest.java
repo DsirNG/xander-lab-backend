@@ -25,7 +25,7 @@ class CreateKnowledgeToolTest {
         RecitationMaterialView created = new RecitationMaterialView(
                 8L, "勾股定理", "直角三角形两直角边平方和等于斜边平方", 21,
                 "MATH", "PRACTICE", BigDecimal.ZERO, "NEW", 0,
-                null, null, LocalDateTime.now(), LocalDateTime.now());
+                null, null, null, LocalDateTime.now(), LocalDateTime.now());
         when(service.createMaterial(eq(42L), argThat(request ->
                 "勾股定理".equals(request.title())
                         && "MATH".equals(request.knowledgeType())

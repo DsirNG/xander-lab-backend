@@ -119,4 +119,30 @@ public class OssService {
             throw new IllegalStateException("智能体图片上传至云存储失败", e);
         }
     }
+
+    /**
+     * 按访问地址尽力删除一个对象，失败只记日志。
+     *
+     * <p>只删地址前缀等于本 bucket 配置域名的对象：地址是从库里读出来的，
+     * 不校验前缀就直接截路径的话，一条被改写过的记录就能让我们去删别处的 key。</p>
+     *
+     * @return 是否确实完成了删除
+     */
+    public boolean deleteByUrlQuietly(String url) {
+        String prefix = domain + "/";
+        if (url == null || !url.startsWith(prefix)) {
+            log.warn("[OSS] 跳过删除：地址不属于当前存储域名");
+            return false;
+        }
+        String objectName = url.substring(prefix.length());
+        if (objectName.isBlank()) return false;
+        try {
+            client().deleteObject(bucketName, objectName);
+            return true;
+        } catch (Exception e) {
+            // 删不掉的对象交给存储侧生命周期规则回收，不能让它阻断调用方的业务删除。
+            log.warn("[OSS] 对象删除失败，objectName={}: {}", objectName, e.getMessage());
+            return false;
+        }
+    }
 }

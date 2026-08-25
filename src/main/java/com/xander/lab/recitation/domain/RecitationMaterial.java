@@ -25,6 +25,8 @@ public class RecitationMaterial {
     private Integer reviewCount;
     private LocalDateTime lastReviewAt;
     private LocalDateTime nextReviewAt;
+    /** 归档时间；非空即已归档，默认列表、到期复习和智能体检索都不再看到它。 */
+    private LocalDateTime archivedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

@@ -16,6 +16,8 @@ public record RecitationMaterialView(
         int reviewCount,
         LocalDateTime lastReviewAt,
         LocalDateTime nextReviewAt,
+        /** 非空表示这条知识已归档：不出现在默认列表，也不再参与到期复习。 */
+        LocalDateTime archivedAt,
         LocalDateTime createdAt,
         LocalDateTime updatedAt) {
 }

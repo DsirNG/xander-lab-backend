@@ -15,9 +15,11 @@ CREATE TABLE IF NOT EXISTS `recitation_material` (
   `review_count` INT NOT NULL DEFAULT 0 COMMENT '已经完成的有效测试次数',
   `last_review_at` DATETIME NULL COMMENT '最近一次完成有效测试的时间',
   `next_review_at` DATETIME NULL COMMENT '依据掌握程度计算的建议下次复习时间',
+  `archived_at` DATETIME NULL COMMENT '归档时间；非空表示已归档，不参与默认列表与到期复习',
   PRIMARY KEY (`id`),
   KEY `idx_recitation_material_user_review` (`user_id`, `next_review_at`, `mastery_level`),
-  KEY `idx_recitation_material_user_created` (`user_id`, `created_at`, `id`)
+  KEY `idx_recitation_material_user_created` (`user_id`, `created_at`, `id`),
+  KEY `idx_recitation_material_user_archived` (`user_id`, `archived_at`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='中文背诵材料';
 
 CREATE TABLE IF NOT EXISTS `recitation_attempt` (
