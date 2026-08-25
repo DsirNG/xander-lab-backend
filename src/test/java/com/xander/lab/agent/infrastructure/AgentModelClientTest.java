@@ -166,6 +166,41 @@ class AgentModelClientTest {
     }
 
     @Test
+    void exposesWebSearchEvenWhenTheTurnLooksLikePlainConversation() throws Exception {
+        // 搜索能力不再按关键词开关：词表猜不中时模型会以为自己不能联网，于是凭记忆作答。
+        startServer(List.of("{\"thought\":\"\",\"done\":true,\"reply\":\"好的\",\"action\":null}"));
+
+        client(true).decideNextStep("随便聊聊", "blog_generate: 生成博客");
+
+        assertThat(requestPayload.path("tools").path(0).path("type").asText()).isEqualTo("web_search");
+    }
+
+    @Test
+    void omitsWebSearchWhenDisabledByConfiguration() throws Exception {
+        startServer(List.of("{\"thought\":\"\",\"done\":true,\"reply\":\"好的\",\"action\":null}"));
+
+        client(false).decideNextStep("查找三个前端链接", "blog_generate: 生成博客");
+
+        assertThat(requestPayload.has("tools")).isFalse();
+        assertThat(requestPayload.path("instructions").asText()).contains("网页搜索能力：当前未启用");
+    }
+
+    @Test
+    void statesTheAgentPolicyWhenToolsAreAvailable() throws Exception {
+        startServer(List.of("{\"thought\":\"\",\"done\":true,\"reply\":\"好的\",\"action\":null}"));
+
+        client().decideNextStep("我有哪些需要复习的知识点", "query_knowledge: 查询知识");
+
+        String instructions = requestPayload.path("instructions").asText();
+        assertThat(instructions)
+                .contains("个人知识智能体")
+                .contains("plan_tasks")
+                .contains("remember")
+                .contains("绝不把失败说成完成")
+                .contains("query_knowledge: 查询知识");
+    }
+
+    @Test
     void acceptsAValidDecisionWrappedInProviderCommentary() throws Exception {
         startServer(List.of(
                 "下面是调度结果：\n```json\n",
@@ -203,13 +238,14 @@ class AgentModelClientTest {
                 .decideNextStepStream("解释一下 SSE", "", deltas::add);
         JsonNode decision = call.payload();
 
-        assertThat(requestPayload.has("tools")).isFalse();
+        // 没有业务工具时不再要求决策 JSON；web_search 由配置决定，与业务工具表无关。
         assertThat(requestPayload.has("text")).isFalse();
+        assertThat(requestPayload.path("tools").path(0).path("type").asText()).isEqualTo("web_search");
         assertThat(requestPayload.path("instructions").asText())
                 .contains("对话助手")
-                .contains("本轮是普通对话，不提供业务工具")
+                .contains("本轮没有可用工具")
                 .contains("不要输出 JSON")
-                .doesNotContain("可调用业务工具");
+                .doesNotContain("可调用工具：");
         assertThat(String.join("", deltas)).isEqualTo("SSE 是服务端推送协议");
         assertThat(decision.path("done").asBoolean()).isTrue();
         assertThat(decision.path("reply").asText()).isEqualTo("SSE 是服务端推送协议");

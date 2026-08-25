@@ -26,12 +26,31 @@ public interface AgentTool {
      */
     JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress);
 
+    /**
+     * 带会话上下文的执行入口，编排循环统一走这里。
+     *
+     * <p>默认转发到只带 userId 的重载，所以既有工具无需改动；
+     * 需要写回会话状态的工具（任务计划等）覆写本方法。</p>
+     */
+    default JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
+        return execute(context.userId(), args, onProgress);
+    }
+
     /** Receives human-readable progress hints during a long-running tool call. */
     interface ProgressListener {
         void onProgress(String message);
 
         /** Streams tool-owned draft/output text without pretending it is the agent's final answer. */
         default void onToolDelta(String delta) {
+        }
+
+        /**
+         * 回报工具内部自行发起的模型调用用量。
+         *
+         * <p>子智能体这类工具会自己调模型，如果不回报，这部分 token 就绕过了本轮计费。
+         * 默认空实现让普通工具无需关心。</p>
+         */
+        default void onModelUsage(com.xander.lab.common.ModelUsage usage, String model) {
         }
 
         /** Lets a long-running tool cooperatively stop between remote stages. */

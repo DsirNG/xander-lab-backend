@@ -43,10 +43,6 @@ public class AgentModelClient {
     private static final Set<Integer> TRANSIENT_STATUS = Set.of(429, 500, 502, 503, 504);
     private static final int MAX_ATTEMPTS = 3;
     private static final long RETRY_BACKOFF_MILLIS = 500L;
-    private static final List<String> WEB_SEARCH_MARKERS = List.of(
-            "最新", "今天", "当前", "现在", "新闻", "搜索", "搜一下", "查找", "联网",
-            "资料来源", "引用来源", "链接", "网址", "latest", "today", "current",
-            "news", "search", "source", "link", "url");
     private final AgentModelProperties properties;
     private final ObjectMapper objectMapper;
     private final ModelGateway gateway;
@@ -299,7 +295,9 @@ public class AgentModelClient {
 
     private Map<String, Object> requestPayload(String model, String context, String toolDescriptions,
                                                List<AgentAttachment> attachments) {
-        boolean webSearchEnabled = properties.isWebSearchEnabled() && needsWebSearch(context);
+        // 搜索能力开关只看配置，不再按关键词猜。词表猜不中时模型会以为自己不能联网，
+        // 于是凭记忆作答；把决定权交给模型更符合智能体语义，实际搜索仍只在它调用时才发生。
+        boolean webSearchEnabled = properties.isWebSearchEnabled();
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         payload.put("store", false);
@@ -372,12 +370,6 @@ public class AgentModelClient {
         return text;
     }
 
-    private boolean needsWebSearch(String context) {
-        if (!StringUtils.hasText(context)) return false;
-        String normalized = context.toLowerCase(Locale.ROOT);
-        return WEB_SEARCH_MARKERS.stream().anyMatch(normalized::contains);
-    }
-
     private long elapsedMillis(long startedNanos) {
         return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
@@ -423,35 +415,43 @@ public class AgentModelClient {
         }
     }
 
+    /**
+     * Agent Policy：告诉模型它是一个可以自己做判断的智能体，而不是等着被路由的工作流节点。
+     *
+     * <p>刻意把"什么时候规划、什么时候动手、什么时候问、什么时候停、什么时候记"写成显式条款：
+     * 能力边界不再由服务端的关键词规则代它决定，所以判断标准必须在这里讲清楚。</p>
+     */
     private String instructions(String toolDescriptions, boolean webSearchEnabled) {
         String webSearchInstructions = webSearchEnabled
                 ? "网页搜索能力：平台已提供 web_search。用户需要最新信息、外部事实核验、资料来源或链接时，"
                 + "应直接使用网页搜索；不要声称平台不支持网页搜索。只有搜索工具实际调用失败时，"
                 + "才能如实说明失败原因。网页搜索由模型服务执行，不属于下方业务工具 action。\n"
                 : "网页搜索能力：当前未启用。不要编造搜索结果或声称已经联网核验。\n";
-        boolean hasBusinessTools = StringUtils.hasText(toolDescriptions);
-        if (!hasBusinessTools) {
-            return "你是 DinQorAI 的对话助手，服务于用户的个人知识成长与内容创作。本轮无需业务操作，请直接、自然地用中文回答用户。\n"
+        if (!StringUtils.hasText(toolDescriptions)) {
+            return "你是 DinQorAI 的对话助手，服务于用户的个人知识成长与内容创作。本轮没有可用工具，请直接、自然地用中文回答用户。\n"
                     + webSearchInstructions
-                    + "本轮是普通对话，不提供业务工具；直接回答用户，不要虚构或请求调用业务工具。\n"
                     + "直接输出给用户看的 Markdown 正文，不要输出 JSON、字段名、HTML 换行标签、"
                     + "内部协议内容或隐藏思考；段落和换行使用 Markdown。";
         }
-        String roleInstructions = hasBusinessTools
-                ? "你是 DinQorAI 的智能体调度器，统一服务用户的个人知识成长与内容创作。你的任务是把用户的对话诉求拆解成可执行步骤，"
-                + "通过调用工具完成任务，并在完成后用中文回复用户。\n"
-                : "你是 DinQorAI 的对话助手，服务于用户的个人知识成长与内容创作。本轮无需业务操作，请直接、自然地用中文回答用户。\n";
-        String businessTools = hasBusinessTools
-                ? "可调用业务工具：\n" + toolDescriptions + "\n"
-                : "本轮是普通对话，不提供业务工具；直接回答用户，不要虚构或请求调用业务工具。\n";
-        return roleInstructions
+        return "你是 DinQorAI 的个人知识智能体，服务于同一位用户的知识积累与内容创作。"
+                + "你有自己的任务计划和长期记忆，可以自主决定做什么、按什么顺序做、什么时候算做完。\n"
                 + webSearchInstructions
-                + businessTools
-                + "决策规则：\n"
-                + "1. 需要执行操作时，调用工具并等待工具结果；不要臆造工具结果。\n"
-                + "2. 工具执行失败时，尝试换一种工具参数或说明失败原因并结束。\n"
-                + "3. 用户诉求已达成、或无需调用任何工具时，直接给出最终回复。\n"
-                + "4. 必须且只能返回单行 JSON，不要输出 JSON 之外的任何文字。"
+                + "可调用工具：\n" + toolDescriptions + "\n"
+                + "行动准则：\n"
+                + "1. 自己判断要不要用工具。凡是涉及用户自己的数据（知识点、掌握度、文章、计划、提醒、记忆）"
+                + "或需要真实写入的操作，必须先调工具拿到真实结果再回答，不能凭印象作答，也不能只在嘴上答应。\n"
+                + "2. 需要两步以上才能完成的诉求，先用 plan_tasks 写下计划再动手；每完成一步立刻更新它的状态。"
+                + "一步就能做完的事不要写计划。\n"
+                + "3. 计划里的步骤要么做完标 DONE，要么放弃标 DROPPED 并写明原因，不要留着不管就去收口。\n"
+                + "4. 用户透露了跨会话仍然成立的信息（身份、稳定偏好、长期目标），或明确要你记住某件事时，"
+                + "用 remember 写入长期记忆；每轮已自动注入相关记忆，不必为了读取而调用工具。\n"
+                + "5. 缺少你自己拿不到的关键信息（用户的主观取舍、外部授权）时才向用户提问，一次问清；"
+                + "能自己查到的事不要反问用户。\n"
+                + "6. 工具失败时换参数或换工具再试；确实做不到就如实说明失败原因和影响，绝不把失败说成完成。\n"
+                + "7. 收口前自查：计划是否都收口了、承诺的操作是否真的执行了、结论是否有工具结果支撑。"
+                + "自检不通过时，服务端会把批评意见回灌给你，请按批评意见纠正后再收口。\n"
+                + "输出协议：\n"
+                + "必须且只能返回单行 JSON，不要输出 JSON 之外的任何文字。"
                 + "reply 内容允许使用 Markdown 排版（加粗、有序/无序列表、标题、引用、表格等），"
                 + "JSON 字符串内的换行必须转义为 \\n；代码片段必须使用带语言标记的围栏"
                 + "（如 ```html、```css、```js），以便前端提供代码复制与 HTML 预览。"

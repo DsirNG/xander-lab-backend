@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `agent_conversation` (
   `error_message` VARCHAR(1000) NULL COMMENT '最近一轮失败原因',
   `run_version` BIGINT NOT NULL DEFAULT 0 COMMENT '当前执行代次；每次成功领取新一轮后递增，用于拒绝旧工作线程迟到写入',
   `cancel_requested` TINYINT NOT NULL DEFAULT 0 COMMENT '用户取消请求标记：0=未请求，1=执行中轮询到后立即停止；新一轮执行开始时复位',
+  `plan_json` LONGTEXT NULL COMMENT '智能体自主维护的任务计划JSON，元素含标题、状态与备注',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -27,7 +28,7 @@ CREATE TABLE IF NOT EXISTS `agent_message` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '消息主键',
   `conversation_id` BIGINT NOT NULL COMMENT '所属会话ID，关联 agent_conversation.id',
   `role` VARCHAR(16) NOT NULL COMMENT '消息角色：user/assistant/tool',
-  `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/tool_call/tool_result/answer',
+  `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer',
   `tool_name` VARCHAR(64) NULL COMMENT '工具名，仅 kind=tool_call/tool_result 时非空',
   `content` LONGTEXT NOT NULL COMMENT '消息正文；tool 记录为 JSON',
   `attachments_json` LONGTEXT NULL COMMENT '用户消息附件快照JSON，包含URL、原始文件名、MIME类型和字节数',
@@ -42,7 +43,7 @@ CREATE TABLE IF NOT EXISTS `agent_event` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '事件游标ID，供断线续传使用',
   `conversation_id` BIGINT NOT NULL COMMENT '所属会话ID，关联 agent_conversation.id',
   `run_version` BIGINT NOT NULL COMMENT '事件所属执行代次；断线续传固定在该代次内回放',
-  `event_type` VARCHAR(24) NOT NULL COMMENT '事件类型：thought/tool_start/tool_progress/tool_delta/tool_end/tool_error/answer_delta/answer/complete/error',
+  `event_type` VARCHAR(24) NOT NULL COMMENT '事件类型：thought/plan/reflection/tool_start/tool_progress/tool_delta/tool_end/tool_error/answer_delta/answer/complete/error',
   `data_content` LONGTEXT NOT NULL COMMENT 'SSE 事件数据，完整对象使用 JSON',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '事件创建时间',
   PRIMARY KEY (`id`),
@@ -50,6 +51,24 @@ CREATE TABLE IF NOT EXISTS `agent_event` (
   CONSTRAINT `fk_agent_event_conversation`
     FOREIGN KEY (`conversation_id`) REFERENCES `agent_conversation` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='智能体会话可续传事件日志';
+
+CREATE TABLE IF NOT EXISTS `agent_memory` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '记忆主键',
+  `user_id` BIGINT NOT NULL COMMENT '所属用户ID，关联 sys_user.id',
+  `memory_key` VARCHAR(120) NOT NULL COMMENT '记忆稳定标识，同一用户内唯一，便于更新而非重复写入',
+  `kind` VARCHAR(24) NOT NULL DEFAULT 'FACT' COMMENT '记忆类型：PROFILE用户画像/PREFERENCE偏好/FACT长期事实/PROJECT在办事项',
+  `content` VARCHAR(2000) NOT NULL COMMENT '记忆正文，只描述一件长期有效的事',
+  `source_conversation_id` BIGINT NULL COMMENT '首次写入该记忆的会话ID，便于追溯来源',
+  `hit_count` INT NOT NULL DEFAULT 0 COMMENT '被召回次数，用于优先注入高频记忆',
+  `last_used_at` DATETIME NULL COMMENT '最近一次被召回的时间',
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_agent_memory_user_key` (`user_id`, `memory_key`),
+  KEY `idx_agent_memory_user_updated` (`user_id`, `updated_at`),
+  CONSTRAINT `fk_agent_memory_user`
+    FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='智能体跨会话长期记忆';
 
 INSERT IGNORE INTO `xander_schema_migration` (`migration_key`)
 VALUES ('20260812_agent_conversation');

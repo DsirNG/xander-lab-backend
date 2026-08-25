@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentMessage;
+import com.xander.lab.agent.domain.AgentPlanItem;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentEventMapper;
@@ -63,6 +64,10 @@ class AgentConversationServiceTest {
     private ScheduledExecutorService agentLeaseRenewer;
     @Mock
     private ScheduledFuture<?> leaseRenewal;
+    @Mock
+    private AgentPlanService planService;
+    @Mock
+    private AgentMemoryService memoryService;
 
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper =
             new com.fasterxml.jackson.databind.ObjectMapper()
@@ -100,13 +105,15 @@ class AgentConversationServiceTest {
         eventService = new AgentEventService(eventMapper, conversationMapper, objectMapper, new AgentEventBus());
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper);
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                planService, memoryService, new AgentTurnEvaluator());
         org.mockito.Mockito.lenient().doReturn(leaseRenewal).when(agentLeaseRenewer)
                 .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
         org.mockito.Mockito.lenient().when(properties.getMaxSteps()).thenReturn(10);
         org.mockito.Mockito.lenient().when(properties.getMaxToolFailures()).thenReturn(2);
         org.mockito.Mockito.lenient().when(properties.getContextMessageLimit()).thenReturn(30);
         org.mockito.Mockito.lenient().when(properties.getStaleConversationMinutes()).thenReturn(30);
+        org.mockito.Mockito.lenient().when(properties.getMaxReflections()).thenReturn(1);
     }
 
     @Test
@@ -151,7 +158,8 @@ class AgentConversationServiceTest {
                 List.of(new FailingTool("failing_tool")));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, failingRegistry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper);
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                planService, memoryService, new AgentTurnEvaluator());
         AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(ready);
@@ -332,7 +340,8 @@ class AgentConversationServiceTest {
     }
 
     @Test
-    void plainConversationContextDoesNotRequestDecisionProtocol() {
+    void everyTurnSeesTheWholeToolTableAndTheSameDecisionTail() {
+        // 关键词门禁移除后，"这轮算不算普通对话"由模型自己判断，服务端不再替它裁剪能力。
         stubTransactions();
         ObjectNode decision = decisionNode(true, "", null, null);
         decision.put("reply", "这是普通对话回复");
@@ -340,16 +349,68 @@ class AgentConversationServiceTest {
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
 
-        service.executeTurn(7L, 42L, "给我200字文章", ignored -> { });
+        service.executeTurn(7L, 42L, "随便聊聊", ignored -> { });
 
         var context = org.mockito.ArgumentCaptor.forClass(String.class);
         var toolDescriptions = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(modelClient).decideNextStepStream(
                 context.capture(), toolDescriptions.capture(), any(), any());
-        assertThat(toolDescriptions.getValue()).isEmpty();
+        assertThat(toolDescriptions.getValue()).contains("blog_generate");
         assertThat(context.getValue())
-                .contains("只输出用户可见的 Markdown 正文")
-                .doesNotContain("否则返回 done=true");
+                .contains("以下是智能体与用户的对话记录")
+                .endsWith("请根据以上信息决定下一步：需要动手就返回 action，已经真正做完就返回 done=true 的最终回复。");
+    }
+
+    @Test
+    void reflectionGateBlocksAPrematureDoneAndFeedsTheCritiqueBack() {
+        stubTransactions();
+        when(planService.load(any())).thenReturn(List.of(
+                new AgentPlanItem("查一下知识库", "IN_PROGRESS", "")));
+        when(planService.render(any())).thenReturn("1. 查一下知识库 (IN_PROGRESS)");
+        ObjectNode premature = decisionNode(true, "", null, null);
+        premature.put("reply", "都办好了");
+        ObjectNode settled = decisionNode(true, "", null, null);
+        settled.put("reply", "查询失败，我没能拿到知识库数据");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(premature), call(settled));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> eventTypes = new java.util.ArrayList<>();
+
+        AgentConversation result = service.executeTurn(
+                7L, 42L, "帮我复习", event -> eventTypes.add(event.getEventType()));
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        assertThat(eventTypes).containsSubsequence("reflection", "answer");
+        var contexts = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(modelClient, org.mockito.Mockito.times(2))
+                .decideNextStepStream(contexts.capture(), any(), any(), any());
+        assertThat(contexts.getAllValues().get(0)).doesNotContain("【自检结果】");
+        assertThat(contexts.getAllValues().get(1))
+                .contains("【自检结果】")
+                .contains("还有 1 个步骤没有收口")
+                .contains("查一下知识库");
+    }
+
+    @Test
+    void reflectionBudgetIsBoundedSoTheTurnCannotSpinForever() {
+        stubTransactions();
+        when(planService.load(any())).thenReturn(List.of(
+                new AgentPlanItem("永远没做完的步骤", "PENDING", "")));
+        ObjectNode premature = decisionNode(true, "", null, null);
+        premature.put("reply", "都办好了");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(premature));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        AgentConversation result = service.executeTurn(7L, 42L, "帮我复习", ignored -> { });
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        // maxReflections=1：驳回一次后放行，两次模型调用而不是打满 maxSteps。
+        verify(modelClient, org.mockito.Mockito.times(2))
+                .decideNextStepStream(any(), any(), any(), any());
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
     }
 
     @Test
@@ -509,6 +570,90 @@ class AgentConversationServiceTest {
         verify(eventMapper).insertForRun(
                 org.mockito.ArgumentMatchers.argThat(event -> "error".equals(event.getEventType())),
                 eq(42L), eq(false));
+    }
+
+    @Test
+    void namingAToolThatDoesNotExistTripsTheFailureCapInsteadOfBurningEveryStep() {
+        // 曾经这条分支只是静默 continue：模型可以一直点名不存在的工具，
+        // 把 maxSteps 全烧完，用户等半天只收到一句"步数已达上限"。
+        stubTransactions();
+        ObjectNode bogus = decisionNode(false, "我要用这个工具", "并不存在的工具", null);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(bogus));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        AgentConversation result = service.executeTurn(7L, 42L, "随便做点什么", ignored -> { });
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        // maxToolFailures=2：两次就收工，而不是打满 maxSteps=10。
+        verify(modelClient, org.mockito.Mockito.times(2))
+                .decideNextStepStream(any(), any(), any(), any());
+        verify(messageMapper).insertForActiveRun(
+                org.mockito.ArgumentMatchers.argThat(message ->
+                        "assistant".equals(message.getRole())
+                                && "answer".equals(message.getKind())
+                                && message.getContent().contains("并不存在的工具")),
+                eq(42L), eq(1L));
+    }
+
+    @Test
+    void attachmentsOutsideTheContextWindowAreNotResentOnEveryLaterTurn() {
+        // 附件和文本上下文用同一个窗口：早就翻篇的图片不该在之后每一轮的每一步被重新上传计费。
+        stubTransactions();
+        org.mockito.Mockito.when(properties.getContextMessageLimit()).thenReturn(5);
+        List<AgentMessage> history = new java.util.ArrayList<>();
+        history.add(userMessage(1L, "看看这张图", "[{\"url\":\"https://cdn.example.com/old.png\","
+                + "\"name\":\"old.png\",\"contentType\":\"image/png\",\"size\":12}]"));
+        for (long id = 2L; id <= 7L; id++) {
+            history.add(userMessage(id, "第 " + id + " 条", null));
+        }
+        when(messageMapper.selectList(any())).thenReturn(history);
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "好的");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(decision));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "继续", ignored -> { });
+
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
+        verify(modelClient, org.mockito.Mockito.never())
+                .decideNextStepStream(any(), any(), org.mockito.ArgumentMatchers.anyList(), any(), any());
+    }
+
+    @Test
+    void anAttachmentInsideTheContextWindowIsStillSentSoFollowUpQuestionsWork() {
+        stubTransactions();
+        org.mockito.Mockito.when(properties.getContextMessageLimit()).thenReturn(5);
+        when(messageMapper.selectList(any())).thenReturn(List.of(
+                userMessage(1L, "旧消息", null),
+                userMessage(2L, "看看这张图", "[{\"url\":\"https://cdn.example.com/new.png\","
+                        + "\"name\":\"new.png\",\"contentType\":\"image/png\",\"size\":12}]"),
+                userMessage(3L, "这图里是什么", null)));
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "这是一张示意图");
+        when(modelClient.decideNextStepStream(any(), any(), org.mockito.ArgumentMatchers.anyList(),
+                any(), any())).thenReturn(call(decision));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "这图里是什么", ignored -> { });
+
+        var attachments = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(modelClient).decideNextStepStream(any(), any(), attachments.capture(), any(), any());
+        assertThat(attachments.getValue()).hasSize(1);
+    }
+
+    private AgentMessage userMessage(Long id, String content, String attachmentsJson) {
+        AgentMessage message = new AgentMessage();
+        message.setId(id);
+        message.setConversationId(7L);
+        message.setRole("user");
+        message.setKind("message");
+        message.setContent(content);
+        message.setAttachmentsJson(attachmentsJson);
+        message.setCreatedAt(LocalDateTime.now().minusMinutes(10 - id));
+        return message;
     }
 
     private AgentMessage argThatMessage(String role, String kind, String toolName) {
