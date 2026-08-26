@@ -60,4 +60,21 @@ class RecitationControllerTest {
         verify(service).searchMaterials(42L,
                 new RecitationService.MaterialQuery(null, null, false, 100));
     }
+
+    @Test
+    void lifecycleEndpointsForwardTheAuthenticatedOwnerAndRequestedMutation() {
+        RecitationService service = mock(RecitationService.class);
+        RecitationController controller = new RecitationController(service, mock(KnowledgeQuizService.class));
+        UserContext.setUserId(42L);
+        UpdateRecitationMaterialRequest request =
+                new UpdateRecitationMaterialRequest("新标题", null, null, null);
+
+        controller.updateMaterial(9L, request);
+        controller.archiveMaterial(9L, false);
+        controller.deleteMaterial(9L);
+
+        verify(service).updateMaterial(42L, 9L, request);
+        verify(service).archiveMaterial(42L, 9L, false);
+        verify(service).deleteMaterial(42L, 9L);
+    }
 }

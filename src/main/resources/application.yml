@@ -166,7 +166,7 @@ admin:
 
 # 中文背诵录音转写。先应用 recitation_migration.sql，并在管理台配置 recitation_asr 后再启用。
 recitation:
-  enabled: ${RECITATION_ENABLED:true}
+  enabled: ${RECITATION_ENABLED:false}
   max-audio-bytes: ${RECITATION_MAX_AUDIO_BYTES:20971520}
   worker-batch-size: ${RECITATION_WORKER_BATCH_SIZE:10}
   worker-poll-interval-ms: ${RECITATION_WORKER_POLL_INTERVAL_MS:2000}

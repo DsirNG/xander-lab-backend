@@ -1,7 +1,7 @@
 # 个人知识库现状与待办
 
 > 盘点日期：2026-08-24
-> 更新日期：2026-08-26（补充测验目标绑定、持久化测验会话，以及测验评分和录音上传幂等）
+> 更新日期：2026-08-26（补充测验/录音幂等、默认关闭录音能力、页面错误态与轮询容错测试）
 > 盘点范围：`xander-lab-frontend`、`xander-lab-backend` 中的个人知识库（Knowledge Mirror / recitation）及 Agent 联动能力。
 
 ## 结论
@@ -54,6 +54,7 @@
 2. **修正录音功能的默认开关**
    - 当前 `RECITATION_ENABLED` 默认值为 `true`，但代码注释和项目规范都要求外部副作用能力在迁移、OSS、模型配置完成前默认关闭。
    - 建议默认改为 `false`，由部署环境显式开启。
+   - **已完成（2026-08-26）**：`application.yml` 改为 `${RECITATION_ENABLED:false}`；需要录音能力的环境必须显式开启。
 
 3. **完成真实环境冒烟测试**
    - 验证登录用户隔离、建知识、浏览器授权、WebM/Ogg 上传、OSS 可访问性、DashScope 提交与轮询、结果回写、刷新恢复和失败提示。
@@ -64,6 +65,7 @@
    - 至少覆盖鉴权、用户归属、上传失败留痕、状态竞争、陈旧任务恢复、轮询耗尽、完成时同时更新 attempt/material，以及真实 HTTP 状态码。
    - **2026-08-25 状态**：仍未完成。本轮只新增了测验侧测试（`KnowledgeQuizServiceTest`、`QuizKnowledgeToolTest`、`GradeAnswerToolTest`），Controller/Service/Worker 三处依旧没有专项测试。
    - **2026-08-25 第三轮**：`RecitationServiceTest` 已补到 23 条，但只覆盖编辑/归档/删除与查询口径这一片；`RecitationController` 仍只有 2 条测试（新增的三个端点没有 Controller 级覆盖），`RecitationWorker` 依旧零专项测试。上传失败留痕、状态竞争、陈旧任务恢复、轮询耗尽这几项仍然没测。
+   - **2026-08-26 增量**：新增 `RecitationWorkerTest` 5 条，覆盖功能关闭不扫描、认领竞争不调远端、轮询耗尽、陈旧提交/查询租约恢复，以及成功时 attempt/material 同事务更新；`RecitationControllerTest` 补编辑、归档恢复与删除的用户和参数转发。Controller 的 Bean Validation/真实 HTTP 状态、提交远端失败留痕仍需继续补。
 
 ### P1：MVP 使用体验和可靠性
 
@@ -71,14 +73,17 @@
    - `KnowledgeMirrorPage` 目前没有组件测试。应覆盖首次加载、空态、创建、录音授权拒绝、上传、URL 中 attempt 恢复、成功/失败结果和轮询停止。
    - **2026-08-25 部分完成**：已新增 `AgentQuizPanel` 组件测试（成绩单渲染、半对不显示成答对、空态、入口回调、缺字段容错）与 `knowledgeService` 端点测试。录音授权、上传、attempt 恢复与轮询停止仍未覆盖。
    - **2026-08-25 第三轮**：再新增 `KnowledgeActions` 组件测试 5 条（删除必须二次确认、确认框点名标题并提示归档、取消不删、在用/归档分别给归档与恢复入口、编辑回调）与 `knowledgeService` 的 `update/archive/remove/归档列表` 端点测试 4 条。首次加载、录音授权、上传、attempt 恢复与轮询停止依旧没有页面级测试。
+   - **2026-08-26 增量**：`KnowledgeMirrorPage` 补首次加载失败/重试、URL 中 attempt 查询失败后手动恢复、麦克风权限拒绝三条页面级测试；上传和 MediaRecorder 完整停止回调仍未覆盖。
 
 2. **区分“加载失败”和“知识为空”**
    - 列表请求使用静默模式，失败后页面会落到空知识库状态，用户无法判断是网络错误还是真的没有数据。
    - 应增加错误态和重试入口。
+   - **已完成（2026-08-26）**：首次加载失败显示独立错误态和重试按钮；已有数据刷新失败时保留旧数据并显示警告，不再伪装为空库。
 
 3. **增强任务轮询容错**
    - 当前任意一次查询 attempt 失败都会清空结果并停止轮询；短暂网络抖动会让已提交任务在页面上消失。
    - 应保留任务卡片，采用有限重试/退避，并提供手动重试。
+   - **已完成（2026-08-26）**：查询失败不再清空任务，最多自动退避重试 3 次，并保留手动立即重试入口；任务 ID 继续保存在 URL 中。
 
 4. **展示历史与到期复习**
    - 后端已有“最近 30 次尝试”接口，前端 service 也已封装，但页面没有调用或展示历史。
@@ -201,7 +206,7 @@ KnowledgeMirrorPage.test.jsx +5（KnowledgeActions：删除二次确认、确认
 ## 上线验收清单
 
 - [ ] 新库或存量库按正确顺序应用 SQL，并核对字段、索引和中文注释（含 2026-08-25 新增的 `knowledge_quiz_migration.sql` 与 `20260825_knowledge_lifecycle_migration.sql`）。
-- [ ] `recitation.enabled` 默认关闭，生产通过环境变量显式开启。
+- [x] `recitation.enabled` 默认关闭，生产通过环境变量显式开启（2026-08-26 完成）。
 - [ ] 管理台已配置可用的 `recitation_asr` 模型端点。
 - [ ] OSS 上传目录、访问策略、跨域和音频清理策略已验证。
 - [ ] HTTPS 域名下 Chrome、Edge、Safari 至少各完成一次录音闭环。
