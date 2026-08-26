@@ -1,7 +1,7 @@
 # 个人知识库现状与待办
 
 > 盘点日期：2026-08-24
-> 更新日期：2026-08-25（标注本轮已完成项，未重写盘点结论；新增内容见"2026-08-25 增量"标记。同日第二轮补充：知识检索下推到 SQL、四处智能体逻辑错误修复，以及对"模型看不到图片"这一错误记录的更正。同日第三轮补充：知识编辑/归档/删除闭环打通，P1 第 5 条落地）
+> 更新日期：2026-08-26（补充测验目标绑定、持久化测验会话，以及测验评分和录音上传幂等）
 > 盘点范围：`xander-lab-frontend`、`xander-lab-backend` 中的个人知识库（Knowledge Mirror / recitation）及 Agent 联动能力。
 
 ## 结论
@@ -31,15 +31,15 @@
 | 背诵评分 | 已完成 | 对原文和转写文本做确定性归一化、编辑距离对齐，统计正确、漏字、错字和多字。 |
 | 掌握度与复习计划 | 已完成 | 根据最近一次有效分数计算 `NEW` 到 `MASTERED` 五级掌握度及 12 小时到 30 天的下次复习时间。 |
 | Agent 联动 | 已完成 | Agent 可在用户明确要求时创建知识，也可查询知识、掌握度和到期复习项。 |
-| 概念/数学测验闭环 | 已完成（2026-08-25 增量） | `quiz_knowledge` 交出原文、掌握画像与最近评分证据供智能体出题（只读，放弃的测验不计掌握度）；`grade_answer` 逐题留档并推进掌握度。工具不接受"总分"，服务端按 `Σcredit / 题数 × 100` 计算，credit 夹到 0–1，空清单或缺 credit 直接拒绝。写库路径与录音完成一致，两类知识共用同一套掌握度统计。 |
+| 概念/数学测验闭环 | 已完成（2026-08-26 加固） | 知识页把 `materialId` 明确交给智能体；`quiz_knowledge` 创建绑定用户、知识和对话的持久化 `quizSessionId`，`grade_answer` 必须凭该会话逐题留档。服务端按 `Σcredit / 题数 × 100` 计算，同一会话重复评分复用原结果，不重复增加复习次数。 |
 | 测验成绩单 | 已完成（2026-08-25 增量） | 新增 `knowledge_quiz_attempt` 表与 `GET /api/recitations/materials/{id}/quizzes`；知识页对非录音类知识展示"让智能体考我"入口和最近一次得分、答对题数、总体讲评、逐题证据。 |
 | 子智能体边界 | 已完成（2026-08-25 增量） | `grade_answer` 列入 `SubAgentRunner.FORBIDDEN_TOOLS`：子智能体只拿到任务简报、看不到用户作答，让它判分等于凭空改写掌握度与复习时间。 |
 | 服务端知识检索 | 已完成（2026-08-25 增量） | `RecitationService.MaterialQuery` 把搜索、掌握等级、到期过滤下推到 SQL；`query_knowledge` 与 `GET /api/recitations/materials` 共用同一条查询路径，超过 100 条不再静默漏查，并会说明"还有 N 条没有返回"。 |
 | 知识编辑 | 已完成（2026-08-25 第三轮） | `PUT /api/recitations/materials/{id}` 部分更新：只写真正变了的字段，改标题不刷正文。改正文按归一化文本判断实质变化——只调标点或空白不清掌握度；换了正文或考法才把掌握度归零、重排复习时间，`review_count` 作为历史保留。只改知识类型不给考法时按新类型自动匹配考法。 |
 | 知识归档与恢复 | 已完成（2026-08-25 第三轮） | `POST /api/recitations/materials/{id}/archive?archived=` 同一端点双向切换。归档后不进日常列表、不进到期复习，`query_knowledge` 的默认口径也是 `ArchiveFilter.ACTIVE`，智能体不会再拿它考你。页面有"在用/已归档"视图切换，归档因此是可逆出口而不是黑洞。 |
-| 知识删除与音频清理 | 已完成（2026-08-25 第三轮） | `DELETE /api/recitations/materials/{id}` 在一个事务里依次删 `knowledge_quiz_attempt`、`recitation_attempt`、`recitation_material`，再尽力删 OSS 音频：删库成功后音频删不掉只记日志，交给对象存储生命周期规则回收，不让用户卡在"删不掉"。前端删除有二次确认，并在确认框里指出归档这个可逆替代。 |
+| 知识删除与音频清理 | 已完成（2026-08-26 加固） | `DELETE /api/recitations/materials/{id}` 在一个事务里依次删 `knowledge_quiz_attempt`、`knowledge_quiz_session`、`recitation_attempt`、`recitation_material`，再尽力删 OSS 音频；前端删除有二次确认。 |
 | 六语言国际化 | 已完成 | `zh/en/fr/ja/ru/vi` 的知识库命名空间均为 56 个 key，无缺项。<br>**2026-08-25**：测验相关新增 10 个 key 并移除 `testComingSoon`，现为 6 种语言各 47 个顶层键、65 个叶子键，无缺项。<br>**2026-08-25 第三轮**：编辑/归档/删除相关新增 17 个 key 与 `view` 子对象，现为 6 种语言各 65 个顶层键、84 个叶子键，无缺项。 |
-| 数据库脚本 | 已具备 | 新库基线与存量迁移脚本均存在，表和新增列带中文注释及必要索引。<br>**2026-08-25**：新增 `knowledge_quiz_schema.sql` 与 `knowledge_quiz_migration.sql`（只建表，不改动 `recitation_material`），仍需手工执行。<br>**2026-08-25 第三轮**：新增 `20260825_knowledge_lifecycle_migration.sql`（`recitation_material.archived_at` + `(user_id, archived_at, id)` 索引），新库基线 `recitation_schema.sql` 已同步，存量环境仍需手工执行。 |
+| 数据库脚本 | 已具备 | 新库基线与存量迁移脚本均存在，表和新增列带中文注释及必要索引。<br>**2026-08-26**：新增 `20260826_knowledge_idempotency_migration.sql`，创建 `knowledge_quiz_session`，回填历史评分会话，并为评分会话和录音客户端请求 ID 建唯一索引；存量环境仍需手工执行。 |
 
 ## 尚未做完或需要改进
 
@@ -102,7 +102,7 @@
    - **已完成（2026-08-25 增量）**：`RecitationService.MaterialQuery` 把 search/masteryLevel/dueOnly 三个条件下推到 SQL（`materialFilter`），`searchMaterials` 与 `countMaterials(userId, query)` 共用同一套条件。`query_knowledge` 改为按条件直查全库，并输出 `matchedTotal` 与 `moreMatches`（"还有 N 条没有返回"），不再把一页明细当成全部证据。`GET /api/recitations/materials` 也接受同样的 `search/masteryLevel/dueOnly/limit`，页面与智能体自此共用一条查询路径。仍未做的是真正的分页（只有 limit，没有 offset/游标）。
 
 7. **增加提交幂等或防重复策略**
-   - 录音提交没有客户端请求 ID 或服务端唯一约束，超时重试可能产生重复 attempt 和重复转写费用。
+   - **已完成（2026-08-26）**：录音请求携带 `clientRequestId`，数据库以 `(user_id, client_request_id)` 唯一约束复用任务；测验评分以唯一 `quiz_session_id` 收口，同一会话重复调用不会重复推进掌握度。
 
 ### P2：完整个人知识库能力
 

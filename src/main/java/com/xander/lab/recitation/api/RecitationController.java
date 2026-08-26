@@ -83,8 +83,10 @@ public class RecitationController {
     @PostMapping(value = "/materials/{materialId}/attempts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<RecitationAttemptView> createAttempt(
             @PathVariable Long materialId,
-            @RequestParam("file") MultipartFile file) {
-        return Result.success(service.createAttempt(UserContext.getUserId(), materialId, file));
+            @RequestParam("file") MultipartFile file,
+            @RequestParam String clientRequestId) {
+        return Result.success(service.createAttempt(
+                UserContext.getUserId(), materialId, file, clientRequestId));
     }
 
     @GetMapping("/materials/{materialId}/attempts")

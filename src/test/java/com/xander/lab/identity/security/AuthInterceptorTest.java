@@ -137,6 +137,22 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void personalKnowledgeAndAttemptReadsRequireAuthentication() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(
+                new MockHttpServletRequest("GET", "/api/recitations/materials"), response, new Object()))
+                .isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+
+        response = new MockHttpServletResponse();
+        assertThat(interceptor.preHandle(
+                new MockHttpServletRequest("GET", "/api/recitations/attempts/9"), response, new Object()))
+                .isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
     void agentImagesGalleryReadRequiresAuthentication() {
         MockHttpServletRequest request = new MockHttpServletRequest(
                 "GET", "/api/blog/media/images/agent");

@@ -15,6 +15,19 @@ import static org.mockito.Mockito.when;
 
 class RecitationControllerTest {
 
+    @Test
+    void recordingUploadForwardsTheClientRequestIdForServerSideIdempotency() {
+        RecitationService service = mock(RecitationService.class);
+        RecitationController controller = new RecitationController(service, mock(KnowledgeQuizService.class));
+        UserContext.setUserId(42L);
+        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "voice.webm", "audio/webm", new byte[]{1});
+
+        controller.createAttempt(9L, file, "request-123");
+
+        verify(service).createAttempt(42L, 9L, file, "request-123");
+    }
+
     @AfterEach
     void clearUserContext() {
         UserContext.clear();

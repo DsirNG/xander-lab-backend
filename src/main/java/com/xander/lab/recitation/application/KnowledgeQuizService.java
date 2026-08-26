@@ -5,8 +5,10 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.recitation.api.KnowledgeQuizAttemptView;
 import com.xander.lab.recitation.domain.KnowledgeQuizAttempt;
+import com.xander.lab.recitation.domain.KnowledgeQuizSession;
 import com.xander.lab.recitation.domain.RecitationMaterial;
 import com.xander.lab.recitation.infrastructure.KnowledgeQuizAttemptMapper;
+import com.xander.lab.recitation.infrastructure.KnowledgeQuizSessionMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,21 +54,40 @@ public class KnowledgeQuizService {
     static final int QUIZ_CONTENT_CHARS = 4000;
     /** 开场回带几次历史，够智能体针对上次答错的地方出题。 */
     static final int SESSION_HISTORY_LIMIT = 3;
+    static final int SESSION_TTL_HOURS = 24;
+    private static final String SESSION_OPEN = "OPEN";
+    private static final String SESSION_GRADED = "GRADED";
 
     private final RecitationMaterialMapper materialMapper;
     private final KnowledgeQuizAttemptMapper quizMapper;
+    private final KnowledgeQuizSessionMapper sessionMapper;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
 
-    /** 开一场测验：交出出题需要的原文、当前掌握画像和最近几次测验记录。本身不写库。 */
-    @Transactional(readOnly = true)
+    /** 开一场测验并持久化会话，使后续评分只能落到这次真实出题上。 */
+    @Transactional
     public QuizSession openQuiz(Long userId, Long materialId) {
+        return openQuiz(userId, materialId, null);
+    }
+
+    /** 开一场属于指定智能体对话的测验；跨对话不能拿该会话评分。 */
+    @Transactional
+    public QuizSession openQuiz(Long userId, Long materialId, Long conversationId) {
         RecitationMaterial material = requireMaterial(userId, materialId);
         String content = material.getContent() == null ? "" : material.getContent();
         boolean truncated = content.length() > QUIZ_CONTENT_CHARS;
         List<KnowledgeQuizAttemptView> history = recentQuizzes(userId, materialId, SESSION_HISTORY_LIMIT);
         LocalDateTime nextReviewAt = material.getNextReviewAt();
-        return new QuizSession(material.getId(), material.getTitle(), material.getKnowledgeType(),
+        LocalDateTime createdAt = LocalDateTime.now();
+        KnowledgeQuizSession quizSession = new KnowledgeQuizSession();
+        quizSession.setUserId(userId);
+        quizSession.setMaterialId(materialId);
+        quizSession.setConversationId(conversationId);
+        quizSession.setStatus(SESSION_OPEN);
+        quizSession.setExpiresAt(createdAt.plusHours(SESSION_TTL_HOURS));
+        quizSession.setCreatedAt(createdAt);
+        sessionMapper.insert(quizSession);
+        return new QuizSession(quizSession.getId(), material.getId(), material.getTitle(), material.getKnowledgeType(),
                 material.getTestMode(), truncated ? content.substring(0, QUIZ_CONTENT_CHARS) + "…" : content,
                 truncated, content.length(), material.getMasteryScore(), material.getMasteryLevel(),
                 material.getReviewCount() == null ? 0 : material.getReviewCount(),
@@ -88,32 +109,51 @@ public class KnowledgeQuizService {
      * 更新掌握分数与等级、复习次数 +1、按 {@link MasteryPolicy} 重算下次复习时间。
      * 也就是说概念题和录音背诵最终落在同一套掌握度口径上，知识页的统计不会分家。</p>
      *
-     * @param conversationId 出题所在会话，可为空
+     * @param quizSessionId  {@code quiz_knowledge} 创建的持久化测验会话
+     * @param conversationId 评分所在会话；必须与测验发起会话一致
      * @param verdict        面向用户的总体讲评，可为空
      * @param rawItems       逐题判分证据，不能为空
      */
-    public QuizOutcome recordQuiz(Long userId, Long materialId, Long conversationId,
+    public QuizOutcome recordQuiz(Long userId, Long quizSessionId, Long conversationId,
                                   String verdict, List<GradedItem> rawItems) {
-        RecitationMaterial material = requireMaterial(userId, materialId);
         List<GradedItem> items = normalize(rawItems);
         BigDecimal score = score(items);
         int correctCount = (int) items.stream()
                 .filter(item -> item.credit().compareTo(BigDecimal.ONE) >= 0).count();
-        LocalDateTime reviewedAt = LocalDateTime.now();
-        MasteryPolicy.Result mastery = MasteryPolicy.evaluate(score, reviewedAt);
-
-        KnowledgeQuizAttempt attempt = new KnowledgeQuizAttempt();
-        attempt.setUserId(userId);
-        attempt.setMaterialId(material.getId());
-        attempt.setConversationId(conversationId);
-        attempt.setTestMode(material.getTestMode());
-        attempt.setQuestionCount(items.size());
-        attempt.setCorrectCount(correctCount);
-        attempt.setScore(score);
-        attempt.setVerdict(limit(verdict, MAX_VERDICT_CHARS));
-        attempt.setItemsJson(writeItems(items));
-        attempt.setCreatedAt(reviewedAt);
-        transactionTemplate.executeWithoutResult(status -> {
+        QuizOutcome outcome = transactionTemplate.execute(status -> {
+            KnowledgeQuizSession session = requireSession(userId, quizSessionId, conversationId);
+            RecitationMaterial material = requireMaterial(userId, session.getMaterialId());
+            if (SESSION_GRADED.equals(session.getStatus())) {
+                return existingOutcome(session, material);
+            }
+            LocalDateTime reviewedAt = LocalDateTime.now();
+            if (session.getExpiresAt() == null || !session.getExpiresAt().isAfter(reviewedAt)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "测验会话已过期，请重新开始测验");
+            }
+            // 先条件认领 OPEN 会话；并发重复评分只有一个事务能推进掌握度。
+            int claimed = sessionMapper.update(null, new LambdaUpdateWrapper<KnowledgeQuizSession>()
+                    .eq(KnowledgeQuizSession::getId, session.getId())
+                    .eq(KnowledgeQuizSession::getUserId, userId)
+                    .eq(KnowledgeQuizSession::getStatus, SESSION_OPEN)
+                    .set(KnowledgeQuizSession::getStatus, SESSION_GRADED)
+                    .set(KnowledgeQuizSession::getGradedAt, reviewedAt));
+            if (claimed != 1) {
+                KnowledgeQuizSession latest = requireSession(userId, quizSessionId, conversationId);
+                return existingOutcome(latest, requireMaterial(userId, latest.getMaterialId()));
+            }
+            MasteryPolicy.Result mastery = MasteryPolicy.evaluate(score, reviewedAt);
+            KnowledgeQuizAttempt attempt = new KnowledgeQuizAttempt();
+            attempt.setUserId(userId);
+            attempt.setMaterialId(material.getId());
+            attempt.setQuizSessionId(session.getId());
+            attempt.setConversationId(conversationId);
+            attempt.setTestMode(material.getTestMode());
+            attempt.setQuestionCount(items.size());
+            attempt.setCorrectCount(correctCount);
+            attempt.setScore(score);
+            attempt.setVerdict(limit(verdict, MAX_VERDICT_CHARS));
+            attempt.setItemsJson(writeItems(items));
+            attempt.setCreatedAt(reviewedAt);
             quizMapper.insert(attempt);
             materialMapper.update(null, new LambdaUpdateWrapper<RecitationMaterial>()
                     .eq(RecitationMaterial::getId, material.getId())
@@ -124,13 +164,47 @@ public class KnowledgeQuizService {
                     .set(RecitationMaterial::getLastReviewAt, reviewedAt)
                     .set(RecitationMaterial::getNextReviewAt, mastery.nextReviewAt())
                     .set(RecitationMaterial::getUpdatedAt, reviewedAt));
+            sessionMapper.update(null, new LambdaUpdateWrapper<KnowledgeQuizSession>()
+                    .eq(KnowledgeQuizSession::getId, session.getId())
+                    .eq(KnowledgeQuizSession::getUserId, userId)
+                    .set(KnowledgeQuizSession::getAttemptId, attempt.getId()));
+            return new QuizOutcome(attempt.getId(), material.getId(), material.getTitle(), score, items.size(),
+                    correctCount, mastery.level(), material.getMasteryLevel(),
+                    (material.getReviewCount() == null ? 0 : material.getReviewCount()) + 1,
+                    reviewedAt, mastery.nextReviewAt());
         });
-        log.info("knowledge quiz recorded material={} questions={} correct={} score={}",
-                material.getId(), items.size(), correctCount, score);
-        return new QuizOutcome(attempt.getId(), material.getId(), material.getTitle(), score, items.size(),
-                correctCount, mastery.level(), material.getMasteryLevel(),
-                (material.getReviewCount() == null ? 0 : material.getReviewCount()) + 1,
-                reviewedAt, mastery.nextReviewAt());
+        if (outcome == null) throw new IllegalStateException("无法记录知识测验");
+        log.info("knowledge quiz resolved material={} questions={} correct={} score={}",
+                outcome.materialId(), outcome.questionCount(), outcome.correctCount(), outcome.score());
+        return outcome;
+    }
+
+    private KnowledgeQuizSession requireSession(Long userId, Long quizSessionId, Long conversationId) {
+        if (userId == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        KnowledgeQuizSession session = quizSessionId == null ? null
+                : sessionMapper.selectOne(new LambdaQueryWrapper<KnowledgeQuizSession>()
+                        .eq(KnowledgeQuizSession::getId, quizSessionId)
+                        .eq(KnowledgeQuizSession::getUserId, userId));
+        if (session == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "测验会话不存在");
+        if (session.getConversationId() != null && !session.getConversationId().equals(conversationId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "测验会话不属于当前对话，请重新开始测验");
+        }
+        return session;
+    }
+
+    private QuizOutcome existingOutcome(KnowledgeQuizSession session, RecitationMaterial material) {
+        if (!SESSION_GRADED.equals(session.getStatus()) || session.getAttemptId() == null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "测验正在评分，请稍后重试");
+        }
+        KnowledgeQuizAttempt attempt = quizMapper.selectOne(new LambdaQueryWrapper<KnowledgeQuizAttempt>()
+                .eq(KnowledgeQuizAttempt::getId, session.getAttemptId())
+                .eq(KnowledgeQuizAttempt::getUserId, session.getUserId())
+                .eq(KnowledgeQuizAttempt::getQuizSessionId, session.getId()));
+        if (attempt == null) throw new IllegalStateException("测验会话缺少评分记录");
+        int reviewCount = material.getReviewCount() == null ? 0 : material.getReviewCount();
+        return new QuizOutcome(attempt.getId(), material.getId(), material.getTitle(), attempt.getScore(),
+                attempt.getQuestionCount(), attempt.getCorrectCount(), material.getMasteryLevel(),
+                material.getMasteryLevel(), reviewCount, material.getLastReviewAt(), material.getNextReviewAt());
     }
 
     /**
@@ -225,7 +299,7 @@ public class KnowledgeQuizService {
      * @param dueForReview     是否已到建议复习时间
      * @param recentQuizzes    最近几次测验，用于针对错处出题
      */
-    public record QuizSession(Long materialId, String title, String knowledgeType, String testMode,
+    public record QuizSession(Long quizSessionId, Long materialId, String title, String knowledgeType, String testMode,
                               String content, boolean contentTruncated, int contentLength,
                               BigDecimal masteryScore, String masteryLevel, int reviewCount,
                               LocalDateTime lastReviewAt, LocalDateTime nextReviewAt, boolean dueForReview,

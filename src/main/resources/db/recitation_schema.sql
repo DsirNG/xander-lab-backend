@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS `recitation_attempt` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '背诵尝试主键',
   `user_id` BIGINT NOT NULL COMMENT '尝试所属用户 sys_user.id',
   `material_id` BIGINT NOT NULL COMMENT '对应背诵材料 recitation_material.id',
+  `client_request_id` VARCHAR(64) NOT NULL COMMENT '客户端幂等请求标识；同一用户重复提交时复用原任务',
   `audio_url` VARCHAR(1000) NULL COMMENT 'OSS 中的用户录音访问地址',
   `status` VARCHAR(20) NOT NULL COMMENT '任务状态：UPLOADING/PENDING/SUBMITTING/PROCESSING/POLLING/SUCCEEDED/FAILED',
   `provider_task_id` VARCHAR(100) NULL COMMENT '语音供应商返回的异步任务 ID',
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS `recitation_attempt` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '背诵尝试创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '任务状态最近更新时间',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_recitation_attempt_user_request` (`user_id`, `client_request_id`),
   KEY `idx_recitation_attempt_user_created` (`user_id`, `created_at`, `id`),
   KEY `idx_recitation_attempt_material_created` (`material_id`, `created_at`, `id`),
   KEY `idx_recitation_attempt_status_updated` (`status`, `updated_at`, `id`)

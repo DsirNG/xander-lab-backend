@@ -49,6 +49,11 @@ public class AuthInterceptor implements HandlerInterceptor {
             "POST:/api/agent/conversations/*",
             // 撤销分享链接同样属于私有写操作，需显式登记而非依赖兜底。
             "DELETE:/api/agent/conversations/*",
+            // 个人知识、测验会话与录音任务全部属于当前用户，读写都必须显式鉴权。
+            "GET:/api/recitations/*",
+            "POST:/api/recitations/*",
+            "PUT:/api/recitations/*",
+            "DELETE:/api/recitations/*",
             "POST:/api/img2three/tasks",
             "POST:/api/img2three/tasks/*",
             "GET:/api/img2three/tasks",

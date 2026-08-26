@@ -10,9 +10,11 @@ import com.xander.lab.recitation.api.RecitationMaterialView;
 import com.xander.lab.recitation.api.UpdateRecitationMaterialRequest;
 import com.xander.lab.recitation.domain.ArchiveFilter;
 import com.xander.lab.recitation.domain.KnowledgeQuizAttempt;
+import com.xander.lab.recitation.domain.KnowledgeQuizSession;
 import com.xander.lab.recitation.domain.RecitationAttempt;
 import com.xander.lab.recitation.domain.RecitationMaterial;
 import com.xander.lab.recitation.infrastructure.KnowledgeQuizAttemptMapper;
+import com.xander.lab.recitation.infrastructure.KnowledgeQuizSessionMapper;
 import com.xander.lab.recitation.infrastructure.RecitationAttemptMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import com.xander.lab.recitation.infrastructure.RecitationProperties;
@@ -49,7 +51,9 @@ class RecitationServiceTest {
     private RecitationMaterialMapper materialMapper;
     private RecitationAttemptMapper attemptMapper;
     private KnowledgeQuizAttemptMapper quizAttemptMapper;
+    private KnowledgeQuizSessionMapper quizSessionMapper;
     private OssService ossService;
+    private RecitationProperties properties;
     private RecitationService service;
 
     @BeforeAll
@@ -59,6 +63,7 @@ class RecitationServiceTest {
         // 删除会连带清理录音任务与测验留档，这两张表的元数据同样要就位，否则 lambda 解析列名就会失败。
         TableInfoHelper.initTableInfo(assistant, RecitationAttempt.class);
         TableInfoHelper.initTableInfo(assistant, KnowledgeQuizAttempt.class);
+        TableInfoHelper.initTableInfo(assistant, KnowledgeQuizSession.class);
     }
 
     @BeforeEach
@@ -66,9 +71,12 @@ class RecitationServiceTest {
         materialMapper = mock(RecitationMaterialMapper.class);
         attemptMapper = mock(RecitationAttemptMapper.class);
         quizAttemptMapper = mock(KnowledgeQuizAttemptMapper.class);
+        quizSessionMapper = mock(KnowledgeQuizSessionMapper.class);
         ossService = mock(OssService.class);
-        service = new RecitationService(materialMapper, attemptMapper, quizAttemptMapper,
-                new RecitationAligner(), ossService, new RecitationProperties(),
+        properties = new RecitationProperties();
+        properties.setEnabled(true);
+        service = new RecitationService(materialMapper, attemptMapper, quizAttemptMapper, quizSessionMapper,
+                new RecitationAligner(), ossService, properties,
                 inlineTransactions(), new ObjectMapper());
     }
 
@@ -245,13 +253,34 @@ class RecitationServiceTest {
 
         service.deleteMaterial(42L, 7L);
 
-        InOrder order = inOrder(attemptMapper, quizAttemptMapper, materialMapper, ossService);
+        InOrder order = inOrder(attemptMapper, quizAttemptMapper, quizSessionMapper, materialMapper, ossService);
         // 音频地址必须在删库之前读出来，否则记录一没就再也找不到该删哪些对象。
         order.verify(attemptMapper).selectList(any());
         order.verify(quizAttemptMapper).delete(any());
+        order.verify(quizSessionMapper).delete(any());
         order.verify(attemptMapper).delete(any());
         order.verify(materialMapper).delete(any());
         order.verify(ossService).deleteByUrlQuietly("https://cdn.test/a.mp3");
+    }
+
+    @Test
+    void repeatingARecordingRequestReturnsTheExistingTaskWithoutUploadingAgain() {
+        stored("床前明月光");
+        RecitationAttempt existing = attempt("https://oss/voice.webm");
+        existing.setId(88L);
+        existing.setUserId(42L);
+        existing.setMaterialId(7L);
+        existing.setClientRequestId("request-123");
+        existing.setStatus("PENDING");
+        when(attemptMapper.selectOne(any())).thenReturn(existing);
+        org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                "file", "voice.webm", "audio/webm", new byte[]{1, 2, 3});
+
+        var result = service.createAttempt(42L, 7L, file, "request-123");
+
+        assertThat(result.id()).isEqualTo(88L);
+        verify(attemptMapper, never()).insert(any(RecitationAttempt.class));
+        verifyNoInteractions(ossService);
     }
 
     @Test
@@ -278,7 +307,7 @@ class RecitationServiceTest {
 
         verify(materialMapper, never()).update(any(), any());
         verify(materialMapper, never()).delete(any());
-        verifyNoInteractions(quizAttemptMapper, ossService);
+        verifyNoInteractions(quizAttemptMapper, quizSessionMapper, ossService);
     }
 
     @Test

@@ -32,12 +32,13 @@ class QuizKnowledgeToolTest {
 
     @Test
     void handsTheAgentTheOriginalTextTheMasteryPictureAndLastTimesQuestions() {
-        when(quizService.openQuiz(42L, 9L)).thenReturn(session("sin(a+b) = ...", false,
+        when(quizService.openQuiz(42L, 9L, null)).thenReturn(session("sin(a+b) = ...", false,
                 List.of(quiz("上次问的题", "忘了"))));
 
         JsonNode result = tool.execute(42L, args(9L), new NoopProgress());
 
         assertThat(result.path("ok").asBoolean()).isTrue();
+        assertThat(result.path("quizSessionId").asLong()).isEqualTo(55L);
         assertThat(result.path("materialId").asLong()).isEqualTo(9L);
         assertThat(result.path("title").asText()).isEqualTo("三角函数和角公式");
         assertThat(result.path("content").asText()).isEqualTo("sin(a+b) = ...");
@@ -55,7 +56,7 @@ class QuizKnowledgeToolTest {
 
     @Test
     void saysSoWhenTheTextWasTruncatedSoTheAgentDoesNotAskAboutWhatItCannotSee() {
-        when(quizService.openQuiz(42L, 9L)).thenReturn(session("很长的正文…", true, List.of()));
+        when(quizService.openQuiz(42L, 9L, null)).thenReturn(session("很长的正文…", true, List.of()));
 
         JsonNode result = tool.execute(42L, args(9L), new NoopProgress());
 
@@ -68,11 +69,11 @@ class QuizKnowledgeToolTest {
 
     @Test
     void aMissingMaterialIdStaysNullInsteadOfSilentlyBecomingZero() {
-        when(quizService.openQuiz(eq(42L), isNull())).thenReturn(session("正文", false, List.of()));
+        when(quizService.openQuiz(eq(42L), isNull(), isNull())).thenReturn(session("正文", false, List.of()));
 
         tool.execute(42L, JsonNodeFactory.instance.objectNode().put("materialId", "九"), new NoopProgress());
 
-        verify(quizService).openQuiz(42L, null);
+        verify(quizService).openQuiz(42L, null, null);
     }
 
     @Test
@@ -84,7 +85,7 @@ class QuizKnowledgeToolTest {
 
     @Test
     void openingAQuizNeverWritesAnythingItselfSoAbandonedTestsCostNoMastery() {
-        when(quizService.openQuiz(any(), any())).thenReturn(session("正文", false, List.of()));
+        when(quizService.openQuiz(any(), any(), any())).thenReturn(session("正文", false, List.of()));
 
         tool.execute(42L, args(9L), new NoopProgress());
 
@@ -108,7 +109,7 @@ class QuizKnowledgeToolTest {
 
     private KnowledgeQuizService.QuizSession session(String content, boolean truncated,
                                                      List<KnowledgeQuizAttemptView> history) {
-        return new KnowledgeQuizService.QuizSession(9L, "三角函数和角公式", "CONCEPT", "AI_QA",
+        return new KnowledgeQuizService.QuizSession(55L, 9L, "三角函数和角公式", "CONCEPT", "AI_QA",
                 content, truncated, content.length(), new BigDecimal("40.00"), "FAMILIAR", 2,
                 LocalDateTime.now().minusDays(5), LocalDateTime.now().minusHours(1), true, history);
     }

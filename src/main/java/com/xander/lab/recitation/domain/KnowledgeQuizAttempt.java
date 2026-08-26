@@ -22,6 +22,8 @@ public class KnowledgeQuizAttempt {
     private Long id;
     private Long userId;
     private Long materialId;
+    /** 唯一对应的测验会话，用于让重复评分返回同一结果。 */
+    private Long quizSessionId;
     /** 出题与评分所在的智能体会话；从知识页直接看结果时可为空。 */
     private Long conversationId;
     private String testMode;

@@ -6,14 +6,17 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.recitation.api.KnowledgeQuizAttemptView;
 import com.xander.lab.recitation.domain.KnowledgeQuizAttempt;
+import com.xander.lab.recitation.domain.KnowledgeQuizSession;
 import com.xander.lab.recitation.domain.RecitationMaterial;
 import com.xander.lab.recitation.infrastructure.KnowledgeQuizAttemptMapper;
+import com.xander.lab.recitation.infrastructure.KnowledgeQuizSessionMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -37,6 +40,7 @@ class KnowledgeQuizServiceTest {
 
     private final RecitationMaterialMapper materialMapper = mock(RecitationMaterialMapper.class);
     private final KnowledgeQuizAttemptMapper quizMapper = mock(KnowledgeQuizAttemptMapper.class);
+    private final KnowledgeQuizSessionMapper sessionMapper = mock(KnowledgeQuizSessionMapper.class);
     private final TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private KnowledgeQuizService service;
@@ -48,17 +52,29 @@ class KnowledgeQuizServiceTest {
                 new MapperBuilderAssistant(new MybatisConfiguration(), ""), RecitationMaterial.class);
         TableInfoHelper.initTableInfo(
                 new MapperBuilderAssistant(new MybatisConfiguration(), ""), KnowledgeQuizAttempt.class);
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), ""), KnowledgeQuizSession.class);
         TransactionStatus status = mock(TransactionStatus.class);
         doAnswer(invocation -> {
             Consumer<TransactionStatus> callback = invocation.getArgument(0);
             callback.accept(status);
             return null;
         }).when(transactionTemplate).executeWithoutResult(any());
+        when(transactionTemplate.execute(any())).thenAnswer(invocation -> {
+            TransactionCallback<?> callback = invocation.getArgument(0);
+            return callback.doInTransaction(status);
+        });
         when(quizMapper.insert(any(KnowledgeQuizAttempt.class))).thenAnswer(invocation -> {
             invocation.getArgument(0, KnowledgeQuizAttempt.class).setId(77L);
             return 1;
         });
-        service = new KnowledgeQuizService(materialMapper, quizMapper, transactionTemplate, objectMapper);
+        when(sessionMapper.insert(any(KnowledgeQuizSession.class))).thenAnswer(invocation -> {
+            invocation.getArgument(0, KnowledgeQuizSession.class).setId(55L);
+            return 1;
+        });
+        when(sessionMapper.update(isNull(), any())).thenReturn(1);
+        service = new KnowledgeQuizService(
+                materialMapper, quizMapper, sessionMapper, transactionTemplate, objectMapper);
     }
 
     @Test
@@ -177,8 +193,9 @@ class KnowledgeQuizServiceTest {
         givenMaterial(material);
         when(quizMapper.selectList(any())).thenReturn(List.of(historyRow()));
 
-        KnowledgeQuizService.QuizSession session = service.openQuiz(42L, 9L);
+        KnowledgeQuizService.QuizSession session = service.openQuiz(42L, 9L, 7L);
 
+        assertThat(session.quizSessionId()).isEqualTo(55L);
         assertThat(session.content()).isEqualTo("sin(a+b) = sin a cos b + cos a sin b");
         assertThat(session.contentTruncated()).isFalse();
         assertThat(session.masteryLevel()).isEqualTo("FAMILIAR");
@@ -191,6 +208,54 @@ class KnowledgeQuizServiceTest {
                     assertThat(quiz.correctCount()).isEqualTo(1);
                     assertThat(quiz.items().toString()).contains("上次问的题");
                 });
+        verify(quizMapper, never()).insert(any(KnowledgeQuizAttempt.class));
+        verify(sessionMapper).insert(any(KnowledgeQuizSession.class));
+    }
+
+    @Test
+    void openingAQuizBindsTheMaterialAndConversationIntoADurableSession() {
+        givenMaterial(material());
+        when(quizMapper.selectList(any())).thenReturn(List.of());
+
+        service.openQuiz(42L, 9L, 7L);
+
+        ArgumentCaptor<KnowledgeQuizSession> saved = ArgumentCaptor.forClass(KnowledgeQuizSession.class);
+        verify(sessionMapper).insert(saved.capture());
+        assertThat(saved.getValue().getUserId()).isEqualTo(42L);
+        assertThat(saved.getValue().getMaterialId()).isEqualTo(9L);
+        assertThat(saved.getValue().getConversationId()).isEqualTo(7L);
+        assertThat(saved.getValue().getStatus()).isEqualTo("OPEN");
+        assertThat(saved.getValue().getExpiresAt()).isAfter(LocalDateTime.now().plusHours(23));
+    }
+
+    @Test
+    void gradingAnAlreadyGradedSessionReturnsTheStoredAttemptWithoutAdvancingMasteryAgain() {
+        RecitationMaterial material = material();
+        givenMaterial(material);
+        KnowledgeQuizSession graded = openSession(material.getId());
+        graded.setStatus("GRADED");
+        graded.setAttemptId(5L);
+        when(sessionMapper.selectOne(any())).thenReturn(graded);
+        when(quizMapper.selectOne(any())).thenReturn(historyRow());
+
+        KnowledgeQuizService.QuizOutcome outcome = service.recordQuiz(
+                42L, 9L, 7L, "重复提交", List.of(item("同一道题", "1")));
+
+        assertThat(outcome.attemptId()).isEqualTo(5L);
+        assertThat(outcome.score()).isEqualByComparingTo("60.00");
+        verify(sessionMapper, never()).update(isNull(), any());
+        verify(quizMapper, never()).insert(any(KnowledgeQuizAttempt.class));
+        verify(materialMapper, never()).update(isNull(), any());
+    }
+
+    @Test
+    void aQuizSessionCannotBeGradedFromAnotherConversation() {
+        givenMaterial(material());
+
+        assertThatThrownBy(() -> service.recordQuiz(
+                42L, 9L, 99L, "", List.of(item("题", "1"))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("不属于当前对话");
         verify(quizMapper, never()).insert(any(KnowledgeQuizAttempt.class));
     }
 
@@ -280,6 +345,18 @@ class KnowledgeQuizServiceTest {
 
     private void givenMaterial(RecitationMaterial material) {
         when(materialMapper.selectOne(any())).thenReturn(material);
+        when(sessionMapper.selectOne(any())).thenReturn(openSession(material.getId()));
+    }
+
+    private KnowledgeQuizSession openSession(Long materialId) {
+        KnowledgeQuizSession session = new KnowledgeQuizSession();
+        session.setId(9L);
+        session.setUserId(42L);
+        session.setMaterialId(materialId);
+        session.setConversationId(7L);
+        session.setStatus("OPEN");
+        session.setExpiresAt(LocalDateTime.now().plusHours(1));
+        return session;
     }
 
     private KnowledgeQuizService.GradedItem item(String question, String credit) {

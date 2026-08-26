@@ -11,17 +11,20 @@ import com.xander.lab.recitation.api.RecitationMaterialView;
 import com.xander.lab.recitation.api.UpdateRecitationMaterialRequest;
 import com.xander.lab.recitation.domain.ArchiveFilter;
 import com.xander.lab.recitation.domain.KnowledgeQuizAttempt;
+import com.xander.lab.recitation.domain.KnowledgeQuizSession;
 import com.xander.lab.recitation.domain.RecitationAttempt;
 import com.xander.lab.recitation.domain.RecitationAttemptStatus;
 import com.xander.lab.recitation.domain.RecitationMaterial;
 import com.xander.lab.recitation.domain.KnowledgeTestMode;
 import com.xander.lab.recitation.domain.KnowledgeType;
 import com.xander.lab.recitation.infrastructure.KnowledgeQuizAttemptMapper;
+import com.xander.lab.recitation.infrastructure.KnowledgeQuizSessionMapper;
 import com.xander.lab.recitation.infrastructure.RecitationAttemptMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import com.xander.lab.recitation.infrastructure.RecitationProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 
 /** 背诵材料、录音上传和用户侧任务查询用例。 */
 @Service
@@ -47,6 +51,7 @@ public class RecitationService {
     private final RecitationMaterialMapper materialMapper;
     private final RecitationAttemptMapper attemptMapper;
     private final KnowledgeQuizAttemptMapper quizAttemptMapper;
+    private final KnowledgeQuizSessionMapper quizSessionMapper;
     private final RecitationAligner aligner;
     private final OssService ossService;
     private final RecitationProperties properties;
@@ -293,6 +298,9 @@ public class RecitationService {
             quizAttemptMapper.delete(new LambdaQueryWrapper<KnowledgeQuizAttempt>()
                     .eq(KnowledgeQuizAttempt::getUserId, userId)
                     .eq(KnowledgeQuizAttempt::getMaterialId, materialId));
+            quizSessionMapper.delete(new LambdaQueryWrapper<KnowledgeQuizSession>()
+                    .eq(KnowledgeQuizSession::getUserId, userId)
+                    .eq(KnowledgeQuizSession::getMaterialId, materialId));
             attemptMapper.delete(new LambdaQueryWrapper<RecitationAttempt>()
                     .eq(RecitationAttempt::getUserId, userId)
                     .eq(RecitationAttempt::getMaterialId, materialId));
@@ -307,22 +315,50 @@ public class RecitationService {
      * 先持久化上传意图，再调用 OSS，最后将任务转为待提交；任何上传失败都会留下可审计失败状态。
      */
     public RecitationAttemptView createAttempt(Long userId, Long materialId, MultipartFile file) {
+        return createAttempt(userId, materialId, file, null);
+    }
+
+    /**
+     * 创建录音任务；同一用户重复使用同一个客户端请求标识时复用第一次创建的任务，避免重复上传与计费。
+     */
+    public RecitationAttemptView createAttempt(Long userId, Long materialId, MultipartFile file,
+                                               String clientRequestId) {
         requireUser(userId);
         if (!properties.isEnabled()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "背诵音转文功能尚未启用");
         }
         requireMaterial(userId, materialId);
         validateAudio(file);
-        Long attemptId = transactionTemplate.execute(status -> {
-            RecitationAttempt attempt = new RecitationAttempt();
-            attempt.setUserId(userId);
-            attempt.setMaterialId(materialId);
-            attempt.setStatus(RecitationAttemptStatus.UPLOADING);
-            attempt.setCreatedAt(LocalDateTime.now());
-            attempt.setUpdatedAt(attempt.getCreatedAt());
-            attemptMapper.insert(attempt);
-            return attempt.getId();
-        });
+        String requestId = normalizeClientRequestId(clientRequestId);
+        RecitationAttempt existing = findAttemptByRequestId(userId, requestId);
+        if (existing != null) {
+            if (!materialId.equals(existing.getMaterialId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "录音请求标识已用于另一条知识");
+            }
+            return toView(existing);
+        }
+        Long attemptId;
+        try {
+            attemptId = transactionTemplate.execute(status -> {
+                RecitationAttempt attempt = new RecitationAttempt();
+                attempt.setUserId(userId);
+                attempt.setMaterialId(materialId);
+                attempt.setClientRequestId(requestId);
+                attempt.setStatus(RecitationAttemptStatus.UPLOADING);
+                attempt.setCreatedAt(LocalDateTime.now());
+                attempt.setUpdatedAt(attempt.getCreatedAt());
+                attemptMapper.insert(attempt);
+                return attempt.getId();
+            });
+        } catch (DuplicateKeyException duplicate) {
+            // 两个相同请求并发到达时，唯一索引只允许一个上传；输掉竞争的请求复用已落库任务。
+            RecitationAttempt raced = findAttemptByRequestId(userId, requestId);
+            if (raced == null) throw duplicate;
+            if (!materialId.equals(raced.getMaterialId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "录音请求标识已用于另一条知识");
+            }
+            return toView(raced);
+        }
         if (attemptId == null) throw new IllegalStateException("无法创建背诵任务");
         try {
             UploadResponse uploaded = ossService.upload(file, "recitations/" + userId + "/");
@@ -345,6 +381,21 @@ public class RecitationService {
             throw error;
         }
         return getAttempt(userId, attemptId);
+    }
+
+    private String normalizeClientRequestId(String value) {
+        if (value != null && !StringUtils.hasText(value)) {
+            throw new IllegalArgumentException("录音请求标识不能为空");
+        }
+        String normalized = StringUtils.hasText(value) ? value.trim() : UUID.randomUUID().toString();
+        if (normalized.length() > 64) throw new IllegalArgumentException("录音请求标识不能超过64个字符");
+        return normalized;
+    }
+
+    private RecitationAttempt findAttemptByRequestId(Long userId, String requestId) {
+        return attemptMapper.selectOne(new LambdaQueryWrapper<RecitationAttempt>()
+                .eq(RecitationAttempt::getUserId, userId)
+                .eq(RecitationAttempt::getClientRequestId, requestId));
     }
 
     /** 查询一条属于当前用户的背诵任务及报告。 */

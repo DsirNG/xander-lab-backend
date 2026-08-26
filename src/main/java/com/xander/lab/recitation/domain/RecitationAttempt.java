@@ -16,6 +16,8 @@ public class RecitationAttempt {
     private Long id;
     private Long userId;
     private Long materialId;
+    /** 客户端生成的稳定请求标识；同一用户重复提交时只创建一个任务。 */
+    private String clientRequestId;
     private String audioUrl;
     private String status;
     private String providerTaskId;

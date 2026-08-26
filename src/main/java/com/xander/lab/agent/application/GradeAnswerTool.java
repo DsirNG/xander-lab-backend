@@ -37,6 +37,7 @@ public class GradeAnswerTool implements AgentTool {
     public String description() {
         return "记录一次测验的逐题判分，并按得分更新这条知识的掌握等级和下次复习时间。"
                 + "使用时机：你用 quiz_knowledge 出的题被用户答完之后，立刻调用一次——不调用这次测验就白考了。"
+                + "必须原样使用 quiz_knowledge 返回的 quizSessionId；它把评分绑定到真实出题记录，并让重复调用安全复用原结果。"
                 + "总分由服务端按每题 credit 自动算出，你不要自己报总分。"
                 + "判分要严格：答不出、答错就给 0，只说对一半给 0.5，完整正确才给 1；"
                 + "userAnswer 要填用户的原话而不是你的转述。"
@@ -49,9 +50,9 @@ public class GradeAnswerTool implements AgentTool {
         ObjectNode schema = factory.objectNode();
         schema.put("type", "object");
         ObjectNode properties = schema.putObject("properties");
-        properties.putObject("materialId")
+        properties.putObject("quizSessionId")
                 .put("type", "integer")
-                .put("description", "被测知识 id，与 quiz_knowledge 用的是同一个");
+                .put("description", "quiz_knowledge 返回的测验会话 id，必须原样传回");
         properties.putObject("verdict")
                 .put("type", "string")
                 .put("description", "面向用户的总体讲评，最多 " + KnowledgeQuizService.MAX_VERDICT_CHARS + " 个字符，可选");
@@ -74,7 +75,7 @@ public class GradeAnswerTool implements AgentTool {
                 .put("type", "string")
                 .put("description", "本题点评：错在哪、正确答案是什么，可选");
         item.putArray("required").add("question").add("credit");
-        schema.putArray("required").add("materialId").add("items");
+        schema.putArray("required").add("quizSessionId").add("items");
         return schema;
     }
 
@@ -91,8 +92,8 @@ public class GradeAnswerTool implements AgentTool {
 
     private JsonNode grade(Long userId, Long conversationId, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
-        Long materialId = args.path("materialId").isNumber() ? args.path("materialId").asLong() : null;
-        KnowledgeQuizService.QuizOutcome result = quizService.recordQuiz(userId, materialId, conversationId,
+        Long quizSessionId = args.path("quizSessionId").isNumber() ? args.path("quizSessionId").asLong() : null;
+        KnowledgeQuizService.QuizOutcome result = quizService.recordQuiz(userId, quizSessionId, conversationId,
                 args.path("verdict").asText(""), readItems(args.path("items")));
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();

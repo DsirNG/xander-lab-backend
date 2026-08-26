@@ -31,7 +31,7 @@ class GradeAnswerToolTest {
 
     @Test
     void recordsThePerQuestionEvidenceAndReportsWhereMasteryLanded() {
-        when(quizService.recordQuiz(eq(42L), eq(9L), eq(7L), eq("推导那题没答上"), any()))
+        when(quizService.recordQuiz(eq(42L), eq(55L), eq(7L), eq("推导那题没答上"), any()))
                 .thenReturn(outcome(new BigDecimal("50.00"), "FAMILIAR", "NEW"));
 
         JsonNode result = tool.execute(context, args(), new NoopProgress());
@@ -50,7 +50,7 @@ class GradeAnswerToolTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<KnowledgeQuizService.GradedItem>> items = ArgumentCaptor.forClass(List.class);
-        verify(quizService).recordQuiz(eq(42L), eq(9L), eq(7L), eq("推导那题没答上"), items.capture());
+        verify(quizService).recordQuiz(eq(42L), eq(55L), eq(7L), eq("推导那题没答上"), items.capture());
         assertThat(items.getValue()).hasSize(2);
         assertThat(items.getValue().get(0).question()).isEqualTo("和角公式怎么写");
         assertThat(items.getValue().get(0).userAnswer()).isEqualTo("sin a cos b + cos a sin b");
@@ -74,7 +74,7 @@ class GradeAnswerToolTest {
         when(quizService.recordQuiz(any(), any(), any(), any(), any()))
                 .thenReturn(outcome(new BigDecimal("50.00"), "FAMILIAR", "NEW"));
         ObjectNode args = JsonNodeFactory.instance.objectNode();
-        args.put("materialId", 9L);
+        args.put("quizSessionId", 55L);
         ArrayNode items = args.putArray("items");
         items.addObject().put("question", "答对的").put("correct", true);
         items.addObject().put("question", "答错的").put("correct", false);
@@ -91,7 +91,7 @@ class GradeAnswerToolTest {
         when(quizService.recordQuiz(any(), any(), any(), any(), any()))
                 .thenReturn(outcome(new BigDecimal("0.00"), "NEW", "NEW"));
         ObjectNode args = JsonNodeFactory.instance.objectNode();
-        args.put("materialId", 9L);
+        args.put("quizSessionId", 55L);
         args.putArray("items").addObject().put("question", "没判分的题");
 
         tool.execute(context, args, new NoopProgress());
@@ -102,13 +102,13 @@ class GradeAnswerToolTest {
 
     @Test
     void gradesWithoutAConversationTooSoTheToolStaysUsableOutsideTheChatLoop() {
-        when(quizService.recordQuiz(eq(42L), eq(9L), isNull(), any(), any()))
+        when(quizService.recordQuiz(eq(42L), eq(55L), isNull(), any(), any()))
                 .thenReturn(outcome(new BigDecimal("50.00"), "FAMILIAR", "NEW"));
 
         JsonNode result = tool.execute(42L, args(), new NoopProgress());
 
         assertThat(result.path("ok").asBoolean()).isTrue();
-        verify(quizService).recordQuiz(eq(42L), eq(9L), isNull(), any(), any());
+        verify(quizService).recordQuiz(eq(42L), eq(55L), isNull(), any(), any());
     }
 
     @Test
@@ -122,7 +122,7 @@ class GradeAnswerToolTest {
     void theSchemaDemandsPerQuestionJudgementsAndTheDescriptionForbidsReportingATotal() {
         JsonNode schema = tool.parametersSchema();
 
-        assertThat(schema.path("required").toString()).isEqualTo("[\"materialId\",\"items\"]");
+        assertThat(schema.path("required").toString()).isEqualTo("[\"quizSessionId\",\"items\"]");
         assertThat(schema.path("properties").path("items").path("items").path("required").toString())
                 .isEqualTo("[\"question\",\"credit\"]");
         assertThat(schema.path("properties").path("items").path("items")
@@ -141,7 +141,7 @@ class GradeAnswerToolTest {
 
     private ObjectNode args() {
         ObjectNode args = JsonNodeFactory.instance.objectNode();
-        args.put("materialId", 9L);
+        args.put("quizSessionId", 55L);
         args.put("verdict", "推导那题没答上");
         ArrayNode items = args.putArray("items");
         items.addObject().put("question", "和角公式怎么写")

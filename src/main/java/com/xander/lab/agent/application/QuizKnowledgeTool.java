@@ -45,7 +45,7 @@ public class QuizKnowledgeTool implements AgentTool {
                 + "拿到结果后由你自己出题：3 到 5 题，覆盖原文的关键点，"
                 + "recentQuizzes 里上次答错的地方要优先再考一遍；"
                 + "题目写在你的回复里让用户作答，同一条回复里不要把答案写出来。"
-                + "用户答完后必须调用 grade_answer 记录评分，否则这次测验不计入掌握度。";
+                + "用户答完后必须把返回的 quizSessionId 交给 grade_answer 记录评分，否则这次测验不计入掌握度。";
     }
 
     @Override
@@ -63,12 +63,19 @@ public class QuizKnowledgeTool implements AgentTool {
 
     @Override
     public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+        return execute(AgentToolContext.ofUser(userId), args, onProgress);
+    }
+
+    @Override
+    public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         Long materialId = args.path("materialId").isNumber() ? args.path("materialId").asLong() : null;
-        KnowledgeQuizService.QuizSession session = quizService.openQuiz(userId, materialId);
+        KnowledgeQuizService.QuizSession session = quizService.openQuiz(
+                context.userId(), materialId, context.conversationId());
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
+        outcome.put("quizSessionId", session.quizSessionId());
         outcome.put("materialId", session.materialId());
         outcome.put("title", session.title());
         outcome.put("knowledgeType", session.knowledgeType());
@@ -113,7 +120,7 @@ public class QuizKnowledgeTool implements AgentTool {
         } else {
             hint.append("recentQuizzes 是历史评分，别原样重复上次的题目，但要覆盖上次答错的点。");
         }
-        hint.append("现在把题目写进你的回复让用户作答（先别给答案），等用户答完再调用 grade_answer 逐题判分。");
+        hint.append("现在把题目写进你的回复让用户作答（先别给答案），等用户答完再把 quizSessionId 原样交给 grade_answer 逐题判分。");
         return hint.toString();
     }
 
