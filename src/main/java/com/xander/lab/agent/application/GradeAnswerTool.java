@@ -36,7 +36,8 @@ public class GradeAnswerTool implements AgentTool {
     @Override
     public String description() {
         return "记录一次测验的逐题判分，并按得分更新这条知识的掌握等级和下次复习时间。"
-                + "使用时机：你用 quiz_knowledge 出的题被用户答完之后，立刻调用一次——不调用这次测验就白考了。"
+                + "使用时机：用户答完你用 quiz_knowledge 出的题之后的那一轮，立刻调用一次"
+                + "——不调用这次测验就白考了；同一轮里用户还没作答时不要调用，先收口等用户回答。"
                 + "必须原样使用 quiz_knowledge 返回的 quizSessionId；它把评分绑定到真实出题记录，并让重复调用安全复用原结果。"
                 + "总分由服务端按每题 credit 自动算出，你不要自己报总分。"
                 + "判分要严格：答不出、答错就给 0，只说对一半给 0.5，完整正确才给 1；"

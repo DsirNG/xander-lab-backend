@@ -248,8 +248,7 @@ public class AgentModelClient {
                 decision.putNull("action");
                 return ModelCallResult.of(decision, usage, endpoint.model());
             }
-            JsonNode decision = normalizeDecisionArgs(parseDecision(output.toString()));
-            validateDecision(decision);
+            JsonNode decision = validateDecision(normalizeDecisionArgs(parseDecision(output.toString())));
             return ModelCallResult.of(decision, usage, endpoint.model());
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("模型决策结果不是有效的 JSON，请重试", exception);
@@ -400,7 +399,18 @@ public class AgentModelClient {
         }
     }
 
-    private void validateDecision(JsonNode decision) {
+    /**
+     * 校验决策，并把"没有工具可调却说自己没做完"的输出补成一次收口。
+     *
+     * <p>这种输出多来自必须等用户回答才能继续的流程（出完题等作答、向用户确认取舍）：
+     * 模型真正想做的是"把这一轮交还给用户"，而协议里表达它的唯一方式是 done=true，
+     * 于是它退化成 done=false + action 为空。此时 reply 已经流式推给用户了，
+     * 按收口处理既符合它的本意，也免得用户读完题目再吃一个报错。</p>
+     *
+     * <p>reply 也是空的才算真的什么都没决定：这里不抛断整轮，交给编排循环按一次工具失败
+     * 回灌纠正，模型还有重新选工具的机会。</p>
+     */
+    private JsonNode validateDecision(JsonNode decision) {
         if (decision == null || !decision.isObject() || !decision.has("done")) {
             throw new IllegalStateException("模型决策结果缺少 done 字段，请重试");
         }
@@ -408,11 +418,19 @@ public class AgentModelClient {
             if (!StringUtils.hasText(decision.path("reply").asText())) {
                 throw new IllegalStateException("模型最终回复为空，请重试");
             }
-            return;
+            return decision;
         }
-        if (!StringUtils.hasText(decision.path("action").path("tool").asText())) {
-            throw new IllegalStateException("模型工具决策缺少工具名，请重试");
+        if (StringUtils.hasText(decision.path("action").path("tool").asText())
+                || !StringUtils.hasText(decision.path("reply").asText())) {
+            return decision;
         }
+        com.fasterxml.jackson.databind.node.ObjectNode handBack =
+                ((com.fasterxml.jackson.databind.node.ObjectNode) decision).deepCopy();
+        handBack.put("done", true);
+        handBack.put("thought", "");
+        handBack.putNull("action");
+        log.info("agent decision without a tool name carried a reply, handing the turn back to the user");
+        return handBack;
     }
 
     /**
@@ -461,7 +479,11 @@ public class AgentModelClient {
                 + "action.args 必须是工具参数对象序列化后的单行 JSON 字符串；"
                 + "当需要调用工具时 done 为 false 且 action 指向要调用的工具；"
                 + "当准备向用户输出最终结果时 done 为 true、reply 填写最终回复且 thought 必须为空，"
-                + "不要在 reply 之前生成用户不可见的思考内容。";
+                + "不要在 reply 之前生成用户不可见的思考内容。\n"
+                + "done=true 的含义是把这一轮交还给用户，而不只是整件事都做完了："
+                + "凡是要等用户回答之后才能继续的步骤（出完题等用户作答、向用户确认取舍、请用户补信息），"
+                + "同样用 done=true 收口，把要说的话或题目写进 reply，等用户的下一条消息到达后再继续调工具。"
+                + "任何情况下都不要返回 done=false 而 action 为空：没有工具要调，就说明该收口了。";
     }
 
     private String extractOutputText(JsonNode response) {

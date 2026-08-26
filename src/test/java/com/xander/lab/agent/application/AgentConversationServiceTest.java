@@ -171,6 +171,23 @@ class AgentConversationServiceTest {
     }
 
     @Test
+    void aBlankToolNameIsFedBackAsAFailureInsteadOfBreakingTheWholeTurn() {
+        stubTransactions();
+        org.mockito.Mockito.when(properties.getMaxToolFailures()).thenReturn(1);
+        ObjectNode blank = decisionNode(false, "想调工具但没写工具名", "", null);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(blank));
+        AgentConversation ready = conversation("running");
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(ready);
+
+        AgentConversation result = service.executeTurn(7L, 42L, "考考我这条知识", ignored -> { });
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
+    }
+
+    @Test
     void duplicateTurnWhileRunningIsRejected() {
         stubTransactions();
         when(conversationMapper.update(any(), any())).thenReturn(0);

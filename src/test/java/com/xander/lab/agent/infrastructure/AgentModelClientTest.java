@@ -123,6 +123,36 @@ class AgentModelClientTest {
     }
 
     @Test
+    void treatsAToolStepWithoutAToolNameAsHandingTheTurnBackToTheUser() throws Exception {
+        // 出完题等用户作答时模型常常这样输出：它没做完，但也没有工具可调。
+        // reply 已经流式推给用户了，按收口处理，而不是让整轮报错。
+        startServer(List.of(
+                "{\"done\":false,\"reply\":\"第 1 题：为什么不能把或者理解成两者同时成立？\",",
+                "\"thought\":\"等用户作答后再判分\",\"action\":null}"
+        ));
+        List<String> deltas = new ArrayList<>();
+
+        JsonNode decision = client().decideNextStepStream("context", "tools", deltas::add).payload();
+
+        assertThat(decision.path("done").asBoolean()).isTrue();
+        assertThat(decision.path("reply").asText()).startsWith("第 1 题：");
+        assertThat(decision.path("thought").asText()).isEmpty();
+        assertThat(decision.path("action").isNull()).isTrue();
+        assertThat(String.join("", deltas)).isEqualTo(decision.path("reply").asText());
+    }
+
+    @Test
+    void leavesAToolStepWithNeitherToolNameNorReplyToTheOrchestrator() throws Exception {
+        // 什么都没决定才是真的协议错误：这里不抛断整轮，交给编排循环的失败预算回灌纠正。
+        startServer(List.of("{\"done\":false,\"reply\":\"\",\"thought\":\"\",\"action\":null}"));
+
+        JsonNode decision = client().decideNextStep("context", "tools").payload();
+
+        assertThat(decision.path("done").asBoolean()).isFalse();
+        assertThat(decision.path("action").path("tool").asText()).isEmpty();
+    }
+
+    @Test
     void decodesEscapedReplyPrefixesWithoutLeakingBrokenUnicode() {
         List<String> deltas = new ArrayList<>();
         AgentModelClient.DecisionReplyDecoder decoder =
@@ -197,6 +227,8 @@ class AgentModelClientTest {
                 .contains("plan_tasks")
                 .contains("remember")
                 .contains("绝不把失败说成完成")
+                .contains("交还给用户")
+                .contains("不要返回 done=false 而 action 为空")
                 .contains("query_knowledge: 查询知识");
     }
 

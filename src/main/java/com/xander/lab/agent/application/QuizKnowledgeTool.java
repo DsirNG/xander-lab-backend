@@ -44,8 +44,10 @@ public class QuizKnowledgeTool implements AgentTool {
                 + "不知道 materialId 就先用 query_knowledge 找到它。"
                 + "拿到结果后由你自己出题：3 到 5 题，覆盖原文的关键点，"
                 + "recentQuizzes 里上次答错的地方要优先再考一遍；"
-                + "题目写在你的回复里让用户作答，同一条回复里不要把答案写出来。"
-                + "用户答完后必须把返回的 quizSessionId 交给 grade_answer 记录评分，否则这次测验不计入掌握度。";
+                + "题目写在你的回复里让用户作答，同一条回复里不要把答案写出来；"
+                + "出完题就以 done=true 结束这一轮等用户作答，不要在同一轮里继续空转。"
+                + "用户在下一条消息里答完后，必须把返回的 quizSessionId 交给 grade_answer 记录评分，"
+                + "否则这次测验不计入掌握度。";
     }
 
     @Override
@@ -120,7 +122,9 @@ public class QuizKnowledgeTool implements AgentTool {
         } else {
             hint.append("recentQuizzes 是历史评分，别原样重复上次的题目，但要覆盖上次答错的点。");
         }
-        hint.append("现在把题目写进你的回复让用户作答（先别给答案），等用户答完再把 quizSessionId 原样交给 grade_answer 逐题判分。");
+        hint.append("现在把题目写进你的回复（先别给答案），并以 done=true 结束这一轮让用户作答；"
+                + "用户在下一条消息里答完之后，再把 quizSessionId 原样交给 grade_answer 逐题判分。"
+                + "本轮不要为了等用户作答而继续输出没有工具的决策。");
         return hint.toString();
     }
 

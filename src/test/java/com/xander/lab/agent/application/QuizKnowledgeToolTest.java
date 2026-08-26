@@ -51,7 +51,9 @@ class QuizKnowledgeToolTest {
         assertThat(result.path("recentQuizzes").path(0).path("items").path(0).path("question").asText())
                 .isEqualTo("上次问的题");
         assertThat(result.path("hint")).asString()
-                .contains("上次答错").contains("先别给答案").contains("grade_answer");
+                .contains("上次答错").contains("先别给答案").contains("grade_answer")
+                // 出题这一轮必须收口等用户作答：否则模型会返回没有工具的决策把整轮卡死。
+                .contains("done=true");
     }
 
     @Test
