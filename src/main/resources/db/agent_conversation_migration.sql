@@ -16,10 +16,14 @@ CREATE TABLE IF NOT EXISTS `agent_conversation` (
   `run_version` BIGINT NOT NULL DEFAULT 0 COMMENT '当前执行代次；每次成功领取新一轮后递增，用于拒绝旧工作线程迟到写入',
   `cancel_requested` TINYINT NOT NULL DEFAULT 0 COMMENT '用户取消请求标记：0=未请求，1=执行中轮询到后立即停止；新一轮执行开始时复位',
   `plan_json` LONGTEXT NULL COMMENT '智能体自主维护的任务计划JSON，元素含标题、状态与备注',
+  `is_pinned` TINYINT NOT NULL DEFAULT 0 COMMENT '置顶标记：0=普通会话，1=置顶会话；列表先按置顶分组再按更新时间倒序',
+  `last_read_at` DATETIME NULL COMMENT '用户最近一次打开该会话的时间；早于 last_completed_at 表示有未读的生成结果',
+  `last_completed_at` DATETIME NULL COMMENT '最近一轮执行到达终态（成功/失败/中断收口）的时间；与 last_read_at 比较得出未读提醒',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   KEY `idx_agent_conversation_user_created` (`user_id`, `created_at`),
+  KEY `idx_agent_conversation_user_pinned_updated` (`user_id`, `is_pinned`, `updated_at`),
   CONSTRAINT `fk_agent_conversation_user`
     FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='智能体对话会话';

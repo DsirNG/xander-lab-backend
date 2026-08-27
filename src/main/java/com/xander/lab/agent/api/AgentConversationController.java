@@ -116,6 +116,22 @@ public class AgentConversationController {
         return Result.success(service.cancel(id, UserContext.getUserId()));
     }
 
+    /** 上报已读：清掉会话列表上的"生成完成"提醒，不改变会话的排序时间。 */
+    @PostMapping("/{id}/read")
+    public Result<AgentConversation> markRead(@PathVariable Long id) {
+        return Result.success(service.markRead(id, UserContext.getUserId()));
+    }
+
+    @PostMapping("/{id}/pin")
+    public Result<AgentConversation> pin(@PathVariable Long id) {
+        return Result.success(service.setPinned(id, UserContext.getUserId(), true));
+    }
+
+    @DeleteMapping("/{id}/pin")
+    public Result<AgentConversation> unpin(@PathVariable Long id) {
+        return Result.success(service.setPinned(id, UserContext.getUserId(), false));
+    }
+
     @PostMapping(value = "/{id}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter sendMessage(@PathVariable Long id,
                                   @Valid @RequestBody AgentConversationMessageRequest request,

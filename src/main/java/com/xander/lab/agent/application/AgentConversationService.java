@@ -101,6 +101,7 @@ public class AgentConversationService {
         conversation.setStatus("ready");
         conversation.setRunVersion(1L);
         conversation.setCancelRequested(0);
+        conversation.setIsPinned(0);
         conversationMapper.insert(conversation);
         return conversation;
     }
@@ -422,6 +423,8 @@ public class AgentConversationService {
                     .set(AgentConversation::getStatus, "ready")
                     .set(AgentConversation::getErrorMessage, null)
                     .set(AgentConversation::getCancelRequested, 0)
+                    // 终态时间是列表未读提醒的事实来源：用户不在这个会话时靠它点亮蓝点。
+                    .set(AgentConversation::getLastCompletedAt, now)
                     .set(AgentConversation::getUpdatedAt, now));
             if (updated != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
@@ -429,6 +432,7 @@ public class AgentConversationService {
             current.setStatus("ready");
             current.setErrorMessage(null);
             current.setCancelRequested(0);
+            current.setLastCompletedAt(now);
             current.setUpdatedAt(now);
             AgentEvent event = eventService.storeForRun(
                     conversationId, userId, runVersion, "complete", current, false);
@@ -522,6 +526,7 @@ public class AgentConversationService {
     private AgentEvent markFailed(Long conversationId, Long userId, long runVersion, String errorMessage) {
         return transactionTemplate.execute(status -> {
             String safeError = limit(defaultText(errorMessage, "智能体任务失败，请稍后重试"), 1000);
+            LocalDateTime now = LocalDateTime.now();
             int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
                     .eq(AgentConversation::getId, conversationId)
                     .eq(AgentConversation::getUserId, userId)
@@ -529,7 +534,9 @@ public class AgentConversationService {
                     .eq(AgentConversation::getRunVersion, runVersion)
                     .set(AgentConversation::getStatus, "failed")
                     .set(AgentConversation::getErrorMessage, safeError)
-                    .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                    // 失败同样是"这一轮有结果要看"，与成功收口一样点亮未读提醒。
+                    .set(AgentConversation::getLastCompletedAt, now)
+                    .set(AgentConversation::getUpdatedAt, now));
             if (updated != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
             }
@@ -549,6 +556,7 @@ public class AgentConversationService {
         }
         transactionTemplate.execute(status -> {
             String interrupted = "上一轮执行中断，可继续对话";
+            LocalDateTime now = LocalDateTime.now();
             int changed = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
                     .eq(AgentConversation::getId, conversation.getId())
                     .eq(AgentConversation::getUserId, userId)
@@ -557,7 +565,9 @@ public class AgentConversationService {
                     .le(AgentConversation::getUpdatedAt, LocalDateTime.now().minusMinutes(staleMinutes))
                     .set(AgentConversation::getStatus, "failed")
                     .set(AgentConversation::getErrorMessage, interrupted)
-                    .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                    // 中断收口也是终态：列表要能从"转圈"切到"有结果待看"，否则会一直转圈。
+                    .set(AgentConversation::getLastCompletedAt, now)
+                    .set(AgentConversation::getUpdatedAt, now));
             long runVersion = conversation.getRunVersion() == null ? 0L : conversation.getRunVersion();
             if (changed == 1 && eventService.latestTerminal(conversation.getId(), runVersion) == null) {
                 eventService.storeForRun(
@@ -570,7 +580,43 @@ public class AgentConversationService {
     }
 
     public AgentConversation get(Long conversationId, Long userId) {
-        return resolveStale(requireOwned(conversationId, userId), userId);
+        return withUnreadFlag(resolveStale(requireOwned(conversationId, userId), userId));
+    }
+
+    /**
+     * 打开会话即视为已读，清掉列表上的"生成完成"提醒。
+     *
+     * <p>只写 last_read_at 并显式回写 updated_at：updated_at 带 ON UPDATE CURRENT_TIMESTAMP，
+     * 若不显式回写，单纯翻看历史会话就会把它顶到列表最前面，而排序时间应该只由"发起对话"刷新。</p>
+     */
+    public AgentConversation markRead(Long conversationId, Long userId) {
+        requireOwned(conversationId, userId);
+        conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                .eq(AgentConversation::getId, conversationId)
+                .eq(AgentConversation::getUserId, userId)
+                .set(AgentConversation::getLastReadAt, LocalDateTime.now())
+                .setSql("updated_at = updated_at"));
+        return withUnreadFlag(requireOwned(conversationId, userId));
+    }
+
+    /** 置顶/取消置顶；同样保留 updated_at，置顶只改分组不改组内时间排序。 */
+    public AgentConversation setPinned(Long conversationId, Long userId, boolean pinned) {
+        requireOwned(conversationId, userId);
+        conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                .eq(AgentConversation::getId, conversationId)
+                .eq(AgentConversation::getUserId, userId)
+                .set(AgentConversation::getIsPinned, pinned ? 1 : 0)
+                .setSql("updated_at = updated_at"));
+        return withUnreadFlag(requireOwned(conversationId, userId));
+    }
+
+    /** 生成完成时间晚于最近阅读时间即为未读，对应列表上的蓝点提醒。 */
+    private AgentConversation withUnreadFlag(AgentConversation conversation) {
+        if (conversation == null) return null;
+        LocalDateTime completedAt = conversation.getLastCompletedAt();
+        LocalDateTime readAt = conversation.getLastReadAt();
+        conversation.setUnread(completedAt != null && (readAt == null || readAt.isBefore(completedAt)));
+        return conversation;
     }
 
     public List<AgentMessage> listMessages(Long conversationId, Long userId) {
@@ -580,11 +626,18 @@ public class AgentConversationService {
                 .orderByAsc(AgentMessage::getId)));
     }
 
+    /** 会话列表：置顶在前，组内按更新时间倒序；顺带收口中断会话，避免列表上一直转圈。 */
     public List<AgentConversation> listSessions(Long userId) {
-        return conversationMapper.selectList(new LambdaQueryWrapper<AgentConversation>()
-                .eq(AgentConversation::getUserId, userId)
-                .orderByDesc(AgentConversation::getUpdatedAt)
-                .last("LIMIT 50"));
+        List<AgentConversation> sessions = conversationMapper.selectList(
+                new LambdaQueryWrapper<AgentConversation>()
+                        .eq(AgentConversation::getUserId, userId)
+                        .orderByDesc(AgentConversation::getIsPinned)
+                        .orderByDesc(AgentConversation::getUpdatedAt)
+                        .last("LIMIT 50"));
+        // resolveStale 对未超时的 running 与非 running 会话直接返回，正常情况下不产生写操作。
+        return sessions.stream()
+                .map(session -> withUnreadFlag(resolveStale(session, userId)))
+                .toList();
     }
 
     /** 启用分享：生成唯一 share_token 并返回。若已启用则直接返回现有 token。 */
