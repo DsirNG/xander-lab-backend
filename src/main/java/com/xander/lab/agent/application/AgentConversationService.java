@@ -162,6 +162,10 @@ public class AgentConversationService {
                     conversationId, runVersion);
             return requireOwned(conversationId, userId);
         } catch (RuntimeException exception) {
+            // 这里最终会把未知异常转换成“智能体任务失败，请稍后重试”；必须在转换前记录完整堆栈，
+            // 否则线上只能看到兜底文案，无法判断是模型、工具、数据库还是事件持久化失败。
+            log.error("agent turn execution failed conversationId={} userId={} runVersion={} phase=runLoop exceptionType={} message={}",
+                    conversationId, userId, runVersion, exception.getClass().getName(), exception.getMessage(), exception);
             AgentEvent errorEvent = null;
             try {
                 errorEvent = markFailed(conversationId, userId, runVersion, safeMessage(exception));
@@ -171,8 +175,9 @@ public class AgentConversationService {
                 return requireOwned(conversationId, userId);
             } catch (RuntimeException persistenceFailure) {
                 exception.addSuppressed(persistenceFailure);
-                log.error("agent terminal failure could not be persisted for conversation {}",
-                        conversationId, persistenceFailure);
+                log.error("agent terminal failure could not be persisted conversationId={} userId={} runVersion={} phase=markFailed exceptionType={} message={}",
+                        conversationId, userId, runVersion, persistenceFailure.getClass().getName(),
+                        persistenceFailure.getMessage(), persistenceFailure);
             }
             if (errorEvent != null) {
                 eventService.deliver(errorEvent, onEvent);
@@ -371,6 +376,8 @@ public class AgentConversationService {
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             } catch (Exception e) {
+                log.error("agent tool execution failed conversationId={} userId={} runVersion={} phase=tool.execute tool={} exceptionType={} message={}",
+                        conversationId, userId, runVersion, toolName, e.getClass().getName(), e.getMessage(), e);
                 progress.flushToolDelta();
                 failures++;
                 ObjectNode errorNode = JsonNodeFactory.instance.objectNode();
