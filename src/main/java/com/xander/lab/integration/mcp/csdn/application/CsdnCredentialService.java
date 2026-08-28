@@ -58,7 +58,7 @@ public class CsdnCredentialService {
         mapper.update(null, new UpdateWrapper<CsdnPlatformCredential>()
                 .eq("user_id", userId)
                 .eq("status", "ACTIVE")
-                .set("status", "EXPIRED")
+                .set("status", "EXPIRED"));
     }
 
     public String requireCookie(Long userId) {

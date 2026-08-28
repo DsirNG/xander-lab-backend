@@ -188,6 +188,8 @@ class BlogAgentImageClientTest {
         assertThat(image.contentType()).isEqualTo("image/png");
         assertThat(image.extension()).isEqualTo("png");
         assertThat(image.bytes()).containsExactly(png);
+        assertThat(image.usage()).isEqualTo(new ModelUsage(120, 20, 80));
+        assertThat(image.model()).isEqualTo("gpt-image-2");
     }
 
     @Test
@@ -208,8 +210,6 @@ class BlogAgentImageClientTest {
         assertThat(image.contentType()).isEqualTo("image/png");
         assertThat(image.extension()).isEqualTo("png");
         assertThat(image.bytes()).containsExactly(png);
-        assertThat(image.usage()).isEqualTo(new ModelUsage(120, 20, 80));
-        assertThat(image.model()).isEqualTo("gpt-image-2");
     }
 
     @Test

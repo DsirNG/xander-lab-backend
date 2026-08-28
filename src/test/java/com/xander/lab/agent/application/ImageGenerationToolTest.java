@@ -8,6 +8,7 @@ import com.xander.lab.common.ModelUsage;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.publishing.application.BlogMediaService;
+import com.xander.lab.publishing.domain.BlogMediaAsset;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
