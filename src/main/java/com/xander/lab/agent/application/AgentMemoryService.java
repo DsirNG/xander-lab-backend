@@ -52,17 +52,15 @@ public class AgentMemoryService {
         String normalizedKind = normalizeKind(kind);
 
         AgentMemory existing = findByKey(userId, key);
-        LocalDateTime now = LocalDateTime.now();
         if (existing != null) {
             memoryMapper.update(null, new LambdaUpdateWrapper<AgentMemory>()
                     .eq(AgentMemory::getId, existing.getId())
                     .eq(AgentMemory::getUserId, userId)
                     .set(AgentMemory::getKind, normalizedKind)
                     .set(AgentMemory::getContent, body)
-                    .set(AgentMemory::getUpdatedAt, now));
+                    );
             existing.setKind(normalizedKind);
             existing.setContent(body);
-            existing.setUpdatedAt(now);
             return existing;
         }
 
@@ -74,8 +72,6 @@ public class AgentMemoryService {
         memory.setContent(body);
         memory.setSourceConversationId(sourceConversationId);
         memory.setHitCount(0);
-        memory.setCreatedAt(now);
-        memory.setUpdatedAt(now);
         memoryMapper.insert(memory);
         return memory;
     }

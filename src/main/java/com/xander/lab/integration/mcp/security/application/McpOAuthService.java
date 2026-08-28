@@ -77,8 +77,6 @@ public class McpOAuthService {
         client.setClientName(clientName.strip());
         client.setRedirectUris(write(normalizedUris));
         client.setStatus("ACTIVE");
-        client.setCreatedAt(LocalDateTime.now());
-        client.setUpdatedAt(LocalDateTime.now());
         clientMapper.insert(client);
         return new RegisteredClient(client.getClientId(), client.getClientName(), normalizedUris);
     }
@@ -150,13 +148,11 @@ public class McpOAuthService {
             grant = new McpOAuthGrant();
             grant.setUserId(userId);
             grant.setClientId(client.getClientId());
-            grant.setCreatedAt(now);
         }
         grant.setScopes(joinScopes(selectedScopes));
         grant.setStatus("ACTIVE");
         grant.setGrantedAt(now);
         grant.setRevokedAt(null);
-        grant.setUpdatedAt(now);
         if (grant.getId() == null) grantMapper.insert(grant); else grantMapper.updateById(grant);
 
         String code = randomToken(32);
@@ -277,7 +273,6 @@ public class McpOAuthService {
         if (grant == null) return;
         grant.setStatus("REVOKED");
         grant.setRevokedAt(LocalDateTime.now());
-        grant.setUpdatedAt(LocalDateTime.now());
         grantMapper.updateById(grant);
     }
 
@@ -300,7 +295,6 @@ public class McpOAuthService {
         token.setTokenFamilyId(familyId);
         token.setStatus("ACTIVE");
         token.setExpiresAt(expiresAt);
-        token.setCreatedAt(LocalDateTime.now());
         tokenMapper.insert(token);
     }
 

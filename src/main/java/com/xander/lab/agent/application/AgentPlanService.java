@@ -62,7 +62,7 @@ public class AgentPlanService {
                 .eq(AgentConversation::getUserId, userId)
                 .eq(AgentConversation::getRunVersion, runVersion)
                 .set(AgentConversation::getPlanJson, planJson)
-                .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                );
         if (updated != 1) {
             // 代次已变化说明本轮已被新一轮取代，丢弃迟到写入而不是覆盖新状态。
             throw new AgentRunSupersededException(conversationId, runVersion);

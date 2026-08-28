@@ -18,10 +18,10 @@ public interface PointAccountMapper extends BaseMapper<PointAccount> {
     PointAccount selectForUpdate(@Param("userId") Long userId);
 
     /** 原子扣减余额，返回受影响行数；没有余额下限，允许负余额。 */
-    @Update("UPDATE sys_user_points SET balance = balance - #{points}, updated_at = NOW() WHERE user_id = #{userId}")
+    @Update("UPDATE sys_user_points SET balance = balance - #{points} WHERE user_id = #{userId}")
     int deduct(@Param("userId") Long userId, @Param("points") Long points);
 
     /** 原子增加余额，返回受影响行数。 */
-    @Update("UPDATE sys_user_points SET balance = balance + #{points}, updated_at = NOW() WHERE user_id = #{userId}")
+    @Update("UPDATE sys_user_points SET balance = balance + #{points} WHERE user_id = #{userId}")
     int add(@Param("userId") Long userId, @Param("points") Long points);
 }

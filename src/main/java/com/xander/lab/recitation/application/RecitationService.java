@@ -77,8 +77,6 @@ public class RecitationService {
         material.setMasteryScore(java.math.BigDecimal.ZERO);
         material.setMasteryLevel("NEW");
         material.setReviewCount(0);
-        material.setCreatedAt(LocalDateTime.now());
-        material.setUpdatedAt(material.getCreatedAt());
         materialMapper.insert(material);
         return toView(material);
     }
@@ -251,9 +249,6 @@ public class RecitationService {
             material.setNextReviewAt(null);
         }
         if (!changed) return toView(material);
-        LocalDateTime now = LocalDateTime.now();
-        update.set(RecitationMaterial::getUpdatedAt, now);
-        material.setUpdatedAt(now);
         transactionTemplate.executeWithoutResult(status -> materialMapper.update(null, update));
         return toView(material);
     }
@@ -273,10 +268,8 @@ public class RecitationService {
                 new LambdaUpdateWrapper<RecitationMaterial>()
                         .eq(RecitationMaterial::getId, materialId)
                         .eq(RecitationMaterial::getUserId, userId)
-                        .set(RecitationMaterial::getArchivedAt, archivedAt)
-                        .set(RecitationMaterial::getUpdatedAt, now)));
+                        .set(RecitationMaterial::getArchivedAt, archivedAt)));
         material.setArchivedAt(archivedAt);
-        material.setUpdatedAt(now);
         return toView(material);
     }
     /**
@@ -345,8 +338,6 @@ public class RecitationService {
                 attempt.setMaterialId(materialId);
                 attempt.setClientRequestId(requestId);
                 attempt.setStatus(RecitationAttemptStatus.UPLOADING);
-                attempt.setCreatedAt(LocalDateTime.now());
-                attempt.setUpdatedAt(attempt.getCreatedAt());
                 attemptMapper.insert(attempt);
                 return attempt.getId();
             });
@@ -369,7 +360,7 @@ public class RecitationService {
                             .eq(RecitationAttempt::getStatus, RecitationAttemptStatus.UPLOADING)
                             .set(RecitationAttempt::getAudioUrl, uploaded.getUrl())
                             .set(RecitationAttempt::getStatus, RecitationAttemptStatus.PENDING)
-                            .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now())));
+                            ));
         } catch (RuntimeException error) {
             transactionTemplate.executeWithoutResult(status -> attemptMapper.update(null,
                     new LambdaUpdateWrapper<RecitationAttempt>()
@@ -377,7 +368,7 @@ public class RecitationService {
                             .eq(RecitationAttempt::getStatus, RecitationAttemptStatus.UPLOADING)
                             .set(RecitationAttempt::getStatus, RecitationAttemptStatus.FAILED)
                             .set(RecitationAttempt::getErrorMessage, "录音上传失败，请稍后重试")
-                            .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now())));
+                            ));
             throw error;
         }
         return getAttempt(userId, attemptId);

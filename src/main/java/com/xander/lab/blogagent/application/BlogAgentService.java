@@ -87,8 +87,6 @@ public class BlogAgentService {
         task.setStatus("created");
         task.setStage("analyze");
         task.setTagsJson("[]");
-        task.setCreatedAt(LocalDateTime.now());
-        task.setUpdatedAt(LocalDateTime.now());
         taskMapper.insert(task);
         saveMessage(task.getId(), "user", "message", null, task.getInput());
         return task;
@@ -222,7 +220,7 @@ public class BlogAgentService {
                     .eq(BlogAgentTask::getUserId, userId)
                     .eq(BlogAgentTask::getStatus, "running")
                     .set(BlogAgentTask::getStage, stage)
-                    .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                    );
             requireActiveRun(taskId, userId, updated);
             saveMessage(taskId, "assistant", "process", stage, message);
         });
@@ -252,7 +250,7 @@ public class BlogAgentService {
                 .set(BlogAgentTask::getStatus, "running")
                 .set(BlogAgentTask::getStage, "analyze")
                 .set(BlogAgentTask::getErrorMessage, null)
-                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                );
         if (updated == 1) {
             eventService.clearTaskEvents(taskId);
             return;
@@ -282,7 +280,6 @@ public class BlogAgentService {
         task.setIllustrationError(limit(outcome.error(), 1000));
         task.setStatus("ready");
         task.setStage("review");
-        task.setUpdatedAt(LocalDateTime.now());
         int updated = taskMapper.update(null, new LambdaUpdateWrapper<BlogAgentTask>()
                 .eq(BlogAgentTask::getId, taskId)
                 .eq(BlogAgentTask::getUserId, userId)
@@ -304,7 +301,7 @@ public class BlogAgentService {
                 .set(BlogAgentTask::getStatus, "ready")
                 .set(BlogAgentTask::getStage, "review")
                 .set(BlogAgentTask::getErrorMessage, null)
-                .set(BlogAgentTask::getUpdatedAt, task.getUpdatedAt()));
+                );
         requireActiveRun(taskId, userId, updated);
         saveSources(task.getId(), result.path("sources"));
         saveVersion(task, outcome.generated() > 0
@@ -324,7 +321,7 @@ public class BlogAgentService {
                 .set(BlogAgentTask::getStatus, "failed")
                 .set(BlogAgentTask::getStage, "analyze")
                 .set(BlogAgentTask::getErrorMessage, limit(errorMessage, 1000))
-                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     private void markCancelled(Long taskId, Long userId) {
@@ -334,7 +331,7 @@ public class BlogAgentService {
                 .eq(BlogAgentTask::getStatus, "running")
                 .set(BlogAgentTask::getStatus, "failed")
                 .set(BlogAgentTask::getErrorMessage, "已由智能体会话停止")
-                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     /** Marks an initial task failed when its stream cannot enter the bounded worker pool. */
@@ -346,7 +343,7 @@ public class BlogAgentService {
                 .set(BlogAgentTask::getStatus, "failed")
                 .set(BlogAgentTask::getStage, "analyze")
                 .set(BlogAgentTask::getErrorMessage, limit(errorMessage, 1000))
-                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     /** Records a rejected revision without changing the last verified article. */
@@ -356,7 +353,7 @@ public class BlogAgentService {
                 .eq(BlogAgentTask::getUserId, userId)
                 .eq(BlogAgentTask::getStatus, "ready")
                 .set(BlogAgentTask::getErrorMessage, limit(errorMessage, 1000))
-                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                );
         if (updated == 1) {
             saveMessage(taskId, "assistant", "process", "review", "修改请求排队失败，已保留上一版文章");
         }
@@ -398,7 +395,7 @@ public class BlogAgentService {
                 .le(BlogAgentTask::getUpdatedAt, staleBefore)
                 .set(BlogAgentTask::getStatus, status)
                 .set(BlogAgentTask::getErrorMessage, message)
-                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                );
         return updated == 1 ? requireOwnedTask(task.getId(), userId) : task;
     }
 
@@ -463,7 +460,7 @@ public class BlogAgentService {
                 .set(BlogAgentTask::getStatus, "running")
                 .set(BlogAgentTask::getStage, "write")
                 .set(BlogAgentTask::getErrorMessage, null)
-                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                );
         if (updated == 1) {
             eventService.clearTaskEvents(taskId);
             saveMessage(taskId, "user", "message", null, instruction.trim());
@@ -485,7 +482,7 @@ public class BlogAgentService {
                 .set(BlogAgentTask::getStatus, "ready")
                 .set(BlogAgentTask::getStage, "review")
                 .set(BlogAgentTask::getErrorMessage, limit(errorMessage, 1000))
-                .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                );
         if (updated == 1) {
             saveMessage(taskId, "assistant", "process", "review", "本轮修改失败，已保留上一版文章");
         }
@@ -498,7 +495,6 @@ public class BlogAgentService {
         message.setKind(kind);
         message.setStage(stage);
         message.setContent(defaultText(content, ""));
-        message.setCreatedAt(LocalDateTime.now());
         messageMapper.insert(message);
     }
 
@@ -581,7 +577,7 @@ public class BlogAgentService {
                         .eq(BlogAgentTask::getId, taskId)
                         .eq(BlogAgentTask::getUserId, userId)
                         .eq(BlogAgentTask::getStatus, "running")
-                        .set(BlogAgentTask::getUpdatedAt, LocalDateTime.now()));
+                        );
                 if (renewed != 1) {
                     log.debug("blog-agent lease renewal stopped for inactive task {}", taskId);
                     throw new BlogAgentRunSupersededException(taskId);
@@ -644,7 +640,6 @@ public class BlogAgentService {
                 task.getSummary(), task.getContent(), task.getCategoryId(), null, readTags(task.getTagsJson())), "local");
         BlogPostVO published = blogService.getBlogById(Long.valueOf(result.externalId()));
         task.setPublishedPostId(published.getId());
-        task.setUpdatedAt(LocalDateTime.now());
         taskMapper.updateById(task);
         return published;
     }
@@ -736,7 +731,6 @@ public class BlogAgentService {
         version.setSummary(task.getSummary());
         version.setContent(task.getContent());
         version.setChangeNote(note);
-        version.setCreatedAt(LocalDateTime.now());
         versionMapper.insert(version);
     }
 

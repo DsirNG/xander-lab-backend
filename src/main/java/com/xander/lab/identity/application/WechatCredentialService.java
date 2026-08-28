@@ -72,7 +72,6 @@ public class WechatCredentialService {
             row.setId(CREDENTIAL_ID);
             row.setAppId(appId.trim());
             row.setEncryptedAppSecret(encrypted);
-            row.setUpdatedAt(LocalDateTime.now());
             try {
                 mapper.insert(row);
             } catch (DuplicateKeyException e) {
@@ -111,7 +110,6 @@ public class WechatCredentialService {
         row.setId(CREDENTIAL_ID);
         row.setAppId(appId);
         row.setEncryptedAppSecret(encryptedAppSecret);
-        row.setUpdatedAt(LocalDateTime.now());
         mapper.updateById(row);
     }
 

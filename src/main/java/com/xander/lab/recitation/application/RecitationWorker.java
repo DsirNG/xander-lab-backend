@@ -55,7 +55,7 @@ public class RecitationWorker {
                     .eq(RecitationAttempt::getStatus, RecitationAttemptStatus.PENDING)
                     .set(RecitationAttempt::getStatus, RecitationAttemptStatus.SUBMITTING)
                     .set(RecitationAttempt::getRunToken, token)
-                    .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now()));
+                    );
             if (claimed != 1) continue;
             try {
                 RecitationAsrPort.SubmittedTask submitted = asrPort.submit(task.getAudioUrl());
@@ -68,7 +68,7 @@ public class RecitationWorker {
                         .set(RecitationAttempt::getProviderId, submitted.providerId())
                         .set(RecitationAttempt::getModel, submitted.model())
                         .set(RecitationAttempt::getRunToken, null)
-                        .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now()));
+                        );
             } catch (Exception error) {
                 log.warn("recitation attempt {} submit failed", task.getId());
                 failClaimed(task.getId(), RecitationAttemptStatus.SUBMITTING, token,
@@ -90,7 +90,7 @@ public class RecitationWorker {
                     .set(RecitationAttempt::getStatus, RecitationAttemptStatus.POLLING)
                     .set(RecitationAttempt::getRunToken, token)
                     .setSql("poll_attempts = poll_attempts + 1")
-                    .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now()));
+                    );
             if (claimed != 1) continue;
             RecitationAttempt claimedTask = attemptMapper.selectById(task.getId());
             if (claimedTask.getPollAttempts() != null && claimedTask.getPollAttempts() > MAX_POLL_ATTEMPTS) {
@@ -137,7 +137,7 @@ public class RecitationWorker {
                             .set(RecitationAttempt::getScore, alignment.score())
                             .set(RecitationAttempt::getErrorMessage, null)
                             .set(RecitationAttempt::getRunToken, null)
-                            .set(RecitationAttempt::getUpdatedAt, reviewedAt));
+                            );
                 if (completed == 1) {
                     materialMapper.update(null, new LambdaUpdateWrapper<RecitationMaterial>()
                             .eq(RecitationMaterial::getId, material.getId())
@@ -147,7 +147,7 @@ public class RecitationWorker {
                             .setSql("review_count = review_count + 1")
                             .set(RecitationMaterial::getLastReviewAt, reviewedAt)
                             .set(RecitationMaterial::getNextReviewAt, mastery.nextReviewAt())
-                            .set(RecitationMaterial::getUpdatedAt, reviewedAt));
+                            );
                 }
             });
         } catch (Exception error) {
@@ -163,7 +163,7 @@ public class RecitationWorker {
                 .eq(RecitationAttempt::getRunToken, token)
                 .set(RecitationAttempt::getStatus, RecitationAttemptStatus.PROCESSING)
                 .set(RecitationAttempt::getRunToken, null)
-                .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     private void failClaimed(Long id, String expectedStatus, String token, String message) {
@@ -174,7 +174,7 @@ public class RecitationWorker {
                 .set(RecitationAttempt::getStatus, RecitationAttemptStatus.FAILED)
                 .set(RecitationAttempt::getErrorMessage, message)
                 .set(RecitationAttempt::getRunToken, null)
-                .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     private void recoverStaleClaims() {
@@ -186,13 +186,13 @@ public class RecitationWorker {
                 .set(RecitationAttempt::getStatus, RecitationAttemptStatus.FAILED)
                 .set(RecitationAttempt::getErrorMessage, "语音识别提交中断，请重新录音")
                 .set(RecitationAttempt::getRunToken, null)
-                .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now()));
+                );
         // 查询是只读操作，可安全释放过期租约并由下一轮继续。
         attemptMapper.update(null, new LambdaUpdateWrapper<RecitationAttempt>()
                 .eq(RecitationAttempt::getStatus, RecitationAttemptStatus.POLLING)
                 .lt(RecitationAttempt::getUpdatedAt, cutoff)
                 .set(RecitationAttempt::getStatus, RecitationAttemptStatus.PROCESSING)
                 .set(RecitationAttempt::getRunToken, null)
-                .set(RecitationAttempt::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 }

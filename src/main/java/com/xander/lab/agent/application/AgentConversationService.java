@@ -425,7 +425,7 @@ public class AgentConversationService {
                     .set(AgentConversation::getCancelRequested, 0)
                     // 终态时间是列表未读提醒的事实来源：用户不在这个会话时靠它点亮蓝点。
                     .set(AgentConversation::getLastCompletedAt, now)
-                    .set(AgentConversation::getUpdatedAt, now));
+                    );
             if (updated != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
             }
@@ -433,7 +433,6 @@ public class AgentConversationService {
             current.setErrorMessage(null);
             current.setCancelRequested(0);
             current.setLastCompletedAt(now);
-            current.setUpdatedAt(now);
             AgentEvent event = eventService.storeForRun(
                     conversationId, userId, runVersion, "complete", current, false);
             return new TerminalResult(current, event);
@@ -456,7 +455,7 @@ public class AgentConversationService {
                         .eq(AgentConversation::getStatus, "running")
                         .eq(AgentConversation::getRunVersion, runVersion)
                         .set(AgentConversation::getCancelRequested, 1)
-                        .set(AgentConversation::getUpdatedAt, LocalDateTime.now())));
+                        ));
         return requireOwned(conversationId, userId);
     }
 
@@ -481,7 +480,8 @@ public class AgentConversationService {
                         .eq(AgentConversation::getUserId, userId)
                         .eq(AgentConversation::getStatus, "running")
                         .eq(AgentConversation::getRunVersion, runVersion)
-                        .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                        .setSql("updated_at = CURRENT_TIMESTAMP")
+                        );
                 if (renewed != 1) {
                     throw new AgentRunSupersededException(conversationId, runVersion);
                 }
@@ -508,7 +508,7 @@ public class AgentConversationService {
                 .setSql("run_version = run_version + 1")
                 .set(AgentConversation::getErrorMessage, null)
                 .set(AgentConversation::getCancelRequested, 0)
-                .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                );
         if (updated == 1) {
             AgentConversation claimed = requireOwned(conversationId, userId);
             if (claimed.getRunVersion() == null) {
@@ -536,7 +536,7 @@ public class AgentConversationService {
                     .set(AgentConversation::getErrorMessage, safeError)
                     // 失败同样是"这一轮有结果要看"，与成功收口一样点亮未读提醒。
                     .set(AgentConversation::getLastCompletedAt, now)
-                    .set(AgentConversation::getUpdatedAt, now));
+                    );
             if (updated != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
             }
@@ -567,7 +567,7 @@ public class AgentConversationService {
                     .set(AgentConversation::getErrorMessage, interrupted)
                     // 中断收口也是终态：列表要能从"转圈"切到"有结果待看"，否则会一直转圈。
                     .set(AgentConversation::getLastCompletedAt, now)
-                    .set(AgentConversation::getUpdatedAt, now));
+                    );
             long runVersion = conversation.getRunVersion() == null ? 0L : conversation.getRunVersion();
             if (changed == 1 && eventService.latestTerminal(conversation.getId(), runVersion) == null) {
                 eventService.storeForRun(
@@ -651,7 +651,7 @@ public class AgentConversationService {
                 .eq(AgentConversation::getId, conversationId)
                 .eq(AgentConversation::getUserId, userId)
                 .set(AgentConversation::getShareToken, token)
-                .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                );
         return token;
     }
 
@@ -662,7 +662,7 @@ public class AgentConversationService {
                 .eq(AgentConversation::getId, conversationId)
                 .eq(AgentConversation::getUserId, userId)
                 .set(AgentConversation::getShareToken, null)
-                .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     /** 通过分享令牌获取对话（公开接口，无需登录）。 */
@@ -701,7 +701,6 @@ public class AgentConversationService {
         message.setToolName(toolName);
         message.setContent(content);
         message.setAttachmentsJson(attachmentsJson);
-        message.setCreatedAt(LocalDateTime.now());
         messageMapper.insert(message);
     }
 
@@ -713,14 +712,13 @@ public class AgentConversationService {
         message.setKind(kind);
         message.setToolName(toolName);
         message.setContent(content);
-        message.setCreatedAt(LocalDateTime.now());
         transactionTemplate.executeWithoutResult(status -> {
             int touched = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
                     .eq(AgentConversation::getId, conversationId)
                     .eq(AgentConversation::getUserId, userId)
                     .eq(AgentConversation::getStatus, "running")
                     .eq(AgentConversation::getRunVersion, runVersion)
-                    .set(AgentConversation::getUpdatedAt, LocalDateTime.now()));
+                    );
             if (touched != 1 || messageMapper.insertForActiveRun(message, userId, runVersion) != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
             }

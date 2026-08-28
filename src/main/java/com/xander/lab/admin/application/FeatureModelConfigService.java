@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -84,7 +83,6 @@ public class FeatureModelConfigService {
 
         FeatureModelConfig existing = configMapper.selectOne(
                 new LambdaQueryWrapper<FeatureModelConfig>().eq(FeatureModelConfig::getFeatureKey, featureKey));
-        LocalDateTime now = LocalDateTime.now();
         FeatureModelConfig config = existing != null ? existing : new FeatureModelConfig();
         if (existing == null) {
             config.setFeatureKey(featureKey);
@@ -96,7 +94,6 @@ public class FeatureModelConfigService {
         config.setFallbackProviderId(enabled ? request.fallbackProviderId() : null);
         config.setFallbackModel(enabled ? fallbackModel : null);
         config.setFallbackApiStyle(enabled ? fallbackApiStyle : null);
-        config.setUpdatedAt(now);
         if (existing == null) {
             configMapper.insert(config);
         } else {

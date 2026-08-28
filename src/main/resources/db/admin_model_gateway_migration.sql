@@ -30,8 +30,8 @@ SET @sql_model_provider = IF(
     `description` VARCHAR(500) NULL COMMENT ''供应商备注，仅管理台展示'',
     `enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT ''1=启用 0=停用；停用的供应商不会被任何功能选中'',
     `priority` INT NOT NULL DEFAULT 0 COMMENT ''管理台展示排序，数字越小越靠前'',
-    `created_at` DATETIME NOT NULL COMMENT ''创建时间'',
-    `updated_at` DATETIME NOT NULL COMMENT ''最近更新时间'',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT ''创建时间'',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT ''最近更新时间'',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_model_provider_name` (`name`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT=''模型供应商管理（管理台配置的 OpenAI 兼容网关）''',
@@ -55,7 +55,7 @@ SET @sql_feature_model_config = IF(
     `fallback_provider_id` BIGINT NULL COMMENT ''兜底供应商 model_provider.id；主供应商请求重试耗尽后切换'',
     `fallback_model` VARCHAR(100) NULL COMMENT ''兜底供应商使用的兜底模型名'',
     `enabled` TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''1=启用管理台配置（优先于环境变量） 0=回退到环境变量配置'',
-    `updated_at` DATETIME NOT NULL COMMENT ''最近更新时间（创建时与创建时间一致）'',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT ''最近更新时间（创建时与创建时间一致）'',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_feature_model_config_feature` (`feature_key`)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT=''各功能使用的模型与兜底模型配置（管理台维护）''',

@@ -47,7 +47,6 @@ public class BlogAgentEventService {
         event.setTaskId(taskId);
         event.setEventType(eventType);
         event.setDataContent(serialize(data));
-        event.setCreatedAt(LocalDateTime.now());
         try {
             eventMapper.insert(event);
         } catch (RuntimeException exception) {

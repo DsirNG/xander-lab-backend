@@ -98,8 +98,7 @@ public class UserAdminService {
         int rows = userMapper.update(new User(), new LambdaUpdateWrapper<User>()
                 .eq(User::getId, targetId)
                 .ne(User::getStatus, status)
-                .set(User::getStatus, status)
-                .set(User::getUpdatedAt, LocalDateTime.now()));
+                .set(User::getStatus, status));
         if (rows == 0 && status == 1) {
             // 解封时不需要撤销会话；直接返回库中最新状态。
             return toView(userMapper.selectById(targetId));

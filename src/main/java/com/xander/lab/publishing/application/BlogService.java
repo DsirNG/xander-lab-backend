@@ -107,8 +107,6 @@ public class BlogService {
         post.setReadTime(Math.max(1, dto.getContent().length() / 500) + " min");
         post.setStatus(publish ? 1 : 0);
         post.setPublishedAt(publish ? LocalDate.now() : null);
-        post.setCreatedAt(LocalDateTime.now());
-        post.setUpdatedAt(LocalDateTime.now());
         blogPostMapper.insert(post);
 
         // 处理标签
@@ -119,7 +117,6 @@ public class BlogService {
                 if (tag == null) {
                     tag = new BlogTag();
                     tag.setName(tagName);
-                    tag.setCreatedAt(LocalDateTime.now());
                     blogTagMapper.insert(tag);
                 }
                 blogTagMapper.insertPostTag(post.getId(), tag.getId());
@@ -167,7 +164,6 @@ public class BlogService {
         if (UserContext.getUserId() != null) {
             update.setAuthor(resolveAuthor(UserContext.getUserId()));
         }
-        update.setUpdatedAt(LocalDateTime.now());
         blogPostMapper.updateById(update);
 
         if (tags != null) {
@@ -178,7 +174,6 @@ public class BlogService {
                 if (tag == null) {
                     tag = new BlogTag();
                     tag.setName(tagName);
-                    tag.setCreatedAt(LocalDateTime.now());
                     blogTagMapper.insert(tag);
                 }
                 blogTagMapper.insertPostTag(id, tag.getId());
@@ -208,7 +203,6 @@ public class BlogService {
         BlogPost update = new BlogPost();
         update.setId(id);
         update.setStatus(nextStatus);
-        update.setUpdatedAt(LocalDateTime.now());
         if (nextStatus == STATUS_PUBLISHED) {
             update.setPublishedAt(existing.getPublishedAt() == null ? LocalDate.now() : existing.getPublishedAt());
         }
@@ -224,7 +218,6 @@ public class BlogService {
         BlogPost update = new BlogPost();
         update.setId(id);
         update.setStatus(STATUS_TRASHED);
-        update.setUpdatedAt(LocalDateTime.now());
         blogPostMapper.updateById(update);
     }
 
@@ -436,7 +429,6 @@ public class BlogService {
         view.setIpAddress(ip);
         view.setUserAgent(userAgent != null && userAgent.length() > 500
                 ? userAgent.substring(0, 500) : userAgent);
-        view.setCreatedAt(LocalDateTime.now());
         blogPostViewMapper.insert(view);
 
         // 3. 设置 Redis 去重 key（24小时过期）

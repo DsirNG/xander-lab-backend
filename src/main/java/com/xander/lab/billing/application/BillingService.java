@@ -176,7 +176,6 @@ public class BillingService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "单价不能为负数");
         }
         String trimmed = model.trim();
-        LocalDateTime now = LocalDateTime.now();
         ModelPrice existing = modelPriceMapper.selectOne(new LambdaQueryWrapper<ModelPrice>()
                 .eq(ModelPrice::getModel, trimmed)
                 .last("LIMIT 1"));
@@ -189,7 +188,6 @@ public class BillingService {
         entity.setEnabled(enabled ? 1 : 0);
         entity.setRemark(remark);
         if (existing == null) {
-            entity.setCreatedAt(now);
             try {
                 modelPriceMapper.insert(entity);
             } catch (DuplicateKeyException duplicate) {
@@ -199,7 +197,6 @@ public class BillingService {
                         .last("LIMIT 1"));
                 if (winner == null) throw duplicate;
                 entity.setId(winner.getId());
-                entity.setCreatedAt(winner.getCreatedAt());
                 modelPriceMapper.updateById(entity);
             }
         } else {
@@ -321,7 +318,6 @@ public class BillingService {
         ledger.setOutputTokens(output);
         ledger.setCachedTokens(cached);
         ledger.setRemark(remark);
-        ledger.setCreatedAt(LocalDateTime.now());
         try {
             ledgerMapper.insert(ledger);
         } catch (DuplicateKeyException duplicate) {
@@ -355,8 +351,6 @@ public class BillingService {
         PointAccount account = new PointAccount();
         account.setUserId(userId);
         account.setBalance(0L);
-        account.setCreatedAt(LocalDateTime.now());
-        account.setUpdatedAt(LocalDateTime.now());
         try {
             accountMapper.insert(account);
         } catch (DuplicateKeyException duplicate) {

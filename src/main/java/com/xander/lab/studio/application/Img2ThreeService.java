@@ -64,8 +64,6 @@ public class Img2ThreeService {
         task.setTitle(titleFromFileName(file.getOriginalFilename()));
         task.setReferenceMediaUrl(asset.getUrl());
         task.setReferenceMediaAssetId(asset.getId());
-        task.setCreatedAt(LocalDateTime.now());
-        task.setUpdatedAt(LocalDateTime.now());
         transactionTemplate.executeWithoutResult(status -> taskMapper.insert(task));
         return toVo(task);
     }
@@ -296,7 +294,7 @@ public class Img2ThreeService {
                 .set(Img2ThreeTask::getStatus, "running")
                 .set(Img2ThreeTask::getRunToken, runToken)
                 .set(Img2ThreeTask::getErrorMessage, null)
-                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
+                );
         return updated == 1 ? runToken : null;
     }
 
@@ -308,7 +306,7 @@ public class Img2ThreeService {
                 .eq(Img2ThreeTask::getRunToken, runToken)
                 .set(Img2ThreeTask::getStatus, "failed")
                 .set(Img2ThreeTask::getErrorMessage, truncate(message, 1000))
-                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     int updateStage(Long taskId, Long userId, String runToken, String stage) {
@@ -318,7 +316,7 @@ public class Img2ThreeService {
                 .eq(Img2ThreeTask::getStatus, "running")
                 .eq(Img2ThreeTask::getRunToken, runToken)
                 .set(Img2ThreeTask::getStage, stage)
-                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     int completeRunning(Long taskId,
@@ -340,7 +338,7 @@ public class Img2ThreeService {
                 .set(Img2ThreeTask::getSpecJson, specJson)
                 .set(Img2ThreeTask::getFactoryCode, factoryCode)
                 .set(Img2ThreeTask::getErrorMessage, null)
-                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now()));
+                );
     }
 
     private void failTimedOutExecution(Img2ThreeTask task, LocalDateTime cutoff) {
@@ -358,7 +356,7 @@ public class Img2ThreeService {
         update.set(Img2ThreeTask::getStatus, "failed")
                 .set(Img2ThreeTask::getErrorMessage,
                         "Reconstruction worker timed out or was interrupted; run the task again")
-                .set(Img2ThreeTask::getUpdatedAt, LocalDateTime.now());
+                ;
         taskMapper.update(null, update);
     }
 

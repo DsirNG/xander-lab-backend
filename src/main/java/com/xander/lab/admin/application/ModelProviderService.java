@@ -17,7 +17,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -65,9 +64,6 @@ public class ModelProviderService {
         provider.setDescription(trimToNull(request.description()));
         provider.setEnabled(request.enabled() == null || request.enabled());
         provider.setPriority(request.priority() == null ? 0 : request.priority());
-        LocalDateTime now = LocalDateTime.now();
-        provider.setCreatedAt(now);
-        provider.setUpdatedAt(now);
         mapper.insert(provider);
         return toView(mapper.selectById(provider.getId()));
     }
@@ -95,7 +91,6 @@ public class ModelProviderService {
         provider.setDescription(trimToNull(request.description()));
         provider.setEnabled(request.enabled() == null || request.enabled());
         provider.setPriority(request.priority() == null ? 0 : request.priority());
-        provider.setUpdatedAt(LocalDateTime.now());
         mapper.updateById(provider);
         return toView(mapper.selectById(id));
     }
@@ -110,7 +105,6 @@ public class ModelProviderService {
         ModelProvider update = new ModelProvider();
         update.setId(id);
         update.setEnabled(enabled);
-        update.setUpdatedAt(LocalDateTime.now());
         mapper.updateById(update);
     }
 

@@ -59,7 +59,6 @@ public class CsdnCredentialService {
                 .eq("user_id", userId)
                 .eq("status", "ACTIVE")
                 .set("status", "EXPIRED")
-                .set("updated_at", LocalDateTime.now()));
     }
 
     public String requireCookie(Long userId) {
@@ -82,8 +81,6 @@ public class CsdnCredentialService {
             LocalDateTime now = LocalDateTime.now();
             value.setAuthorizedAt(now);
             value.setLastValidatedAt(now);
-            value.setCreatedAt(now);
-            value.setUpdatedAt(now);
             // Single-statement upsert; the user-scoped unique key makes concurrent saves converge.
             mapper.upsert(value);
         } catch (Exception e) { throw new IllegalStateException("Unable to save CSDN authorization", e); }

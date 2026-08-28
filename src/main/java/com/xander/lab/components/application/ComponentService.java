@@ -188,7 +188,6 @@ public class ComponentService {
         item.setTagZh("社区分享");
         item.setTagEn("Community");
         item.setIconKey("Zap"); // 默认闪电图标
-        item.setCreatedAt(java.time.LocalDateTime.now());
         
         itemMapper.insert(item);
 

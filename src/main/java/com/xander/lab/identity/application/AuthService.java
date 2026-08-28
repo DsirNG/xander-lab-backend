@@ -200,8 +200,6 @@ public class AuthService {
         user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + username);
         user.setRole(role);
         user.setStatus(1);
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
         userMapper.insert(user);
         billingService.grantRegister(user.getId(), "user:" + user.getId());
         return user;
@@ -431,8 +429,6 @@ public class AuthService {
         user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + email);
         user.setRole("USER");
         user.setStatus(1);
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
         try {
             userMapper.insert(user);
         } catch (DuplicateKeyException e) {
@@ -466,8 +462,6 @@ public class AuthService {
             user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + username);
             user.setRole("USER");
             user.setStatus(1);
-            user.setCreatedAt(LocalDateTime.now());
-            user.setUpdatedAt(LocalDateTime.now());
             userMapper.insert(user);
             billingService.grantRegister(user.getId(), "user:" + user.getId());
             log.info("[Auth] 微信用户自动注册 userId={}", user.getId());
@@ -530,7 +524,6 @@ public class AuthService {
         User update = new User();
         update.setId(user.getId());
         update.setOpenid(openid);
-        update.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(update);
         user.setOpenid(openid);
     }
@@ -539,7 +532,6 @@ public class AuthService {
         User update = new User();
         update.setId(user.getId());
         update.setEmail(email);
-        update.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(update);
         user.setEmail(email);
     }
@@ -733,7 +725,6 @@ public class AuthService {
         if (normalizedAvatar != null) {
             update.setAvatar(normalizedAvatar);
         }
-        update.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(update);
 
         // 重新查询以返回数据库中的最新值（含未修改的头像原值）。
@@ -783,7 +774,6 @@ public class AuthService {
         User update = new User();
         update.setId(user.getId());
         update.setPassword(passwordEncoder.encode(newPassword));
-        update.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(update);
         user.setPassword(update.getPassword());
     }
@@ -843,8 +833,6 @@ public class AuthService {
         user.setAvatar("https://api.dicebear.com/7.x/avataaars/svg?seed=" + email);
         user.setRole("USER");
         user.setStatus(1);
-        user.setCreatedAt(LocalDateTime.now());
-        user.setUpdatedAt(LocalDateTime.now());
         userMapper.insert(user);
         billingService.grantRegister(user.getId(), "user:" + user.getId());
         return generateTokenResponse(user);

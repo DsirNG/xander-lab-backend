@@ -78,14 +78,12 @@ public class KnowledgeQuizService {
         boolean truncated = content.length() > QUIZ_CONTENT_CHARS;
         List<KnowledgeQuizAttemptView> history = recentQuizzes(userId, materialId, SESSION_HISTORY_LIMIT);
         LocalDateTime nextReviewAt = material.getNextReviewAt();
-        LocalDateTime createdAt = LocalDateTime.now();
         KnowledgeQuizSession quizSession = new KnowledgeQuizSession();
         quizSession.setUserId(userId);
         quizSession.setMaterialId(materialId);
         quizSession.setConversationId(conversationId);
         quizSession.setStatus(SESSION_OPEN);
-        quizSession.setExpiresAt(createdAt.plusHours(SESSION_TTL_HOURS));
-        quizSession.setCreatedAt(createdAt);
+        quizSession.setExpiresAt(LocalDateTime.now().plusHours(SESSION_TTL_HOURS));
         sessionMapper.insert(quizSession);
         return new QuizSession(quizSession.getId(), material.getId(), material.getTitle(), material.getKnowledgeType(),
                 material.getTestMode(), truncated ? content.substring(0, QUIZ_CONTENT_CHARS) + "…" : content,
@@ -153,7 +151,6 @@ public class KnowledgeQuizService {
             attempt.setScore(score);
             attempt.setVerdict(limit(verdict, MAX_VERDICT_CHARS));
             attempt.setItemsJson(writeItems(items));
-            attempt.setCreatedAt(reviewedAt);
             quizMapper.insert(attempt);
             materialMapper.update(null, new LambdaUpdateWrapper<RecitationMaterial>()
                     .eq(RecitationMaterial::getId, material.getId())
@@ -163,7 +160,7 @@ public class KnowledgeQuizService {
                     .setSql("review_count = review_count + 1")
                     .set(RecitationMaterial::getLastReviewAt, reviewedAt)
                     .set(RecitationMaterial::getNextReviewAt, mastery.nextReviewAt())
-                    .set(RecitationMaterial::getUpdatedAt, reviewedAt));
+                    );
             sessionMapper.update(null, new LambdaUpdateWrapper<KnowledgeQuizSession>()
                     .eq(KnowledgeQuizSession::getId, session.getId())
                     .eq(KnowledgeQuizSession::getUserId, userId)
