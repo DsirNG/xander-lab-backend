@@ -3,6 +3,8 @@ package com.xander.lab.agent.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.common.ModelUsage;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.publishing.application.BlogMediaService;
@@ -10,8 +12,11 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 class ImageGenerationToolTest {
 
@@ -30,6 +35,29 @@ class ImageGenerationToolTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("图片生成模型调用失败，请检查图片模型接口配置或供应商状态")
                 .hasMessageNotContaining("secret vendor body");
+    }
+
+    @Test
+    void chargesImageGenerationByReportedTokenUsage() {
+        BlogAgentImageClient imageClient = mock(BlogAgentImageClient.class);
+        when(imageClient.isEnabled()).thenReturn(true);
+        ModelUsage usage = new ModelUsage(120, 20, 80);
+        when(imageClient.generate(anyString())).thenReturn(
+                new BlogAgentImageClient.GeneratedImage(new byte[]{1}, "image/png", "png", usage, "gpt-image-2"));
+        BlogMediaAsset asset = new BlogMediaAsset();
+        asset.setId(9L);
+        asset.setUrl("https://cdn.example.test/image.png");
+        BillingService billingService = mock(BillingService.class);
+        BlogMediaService mediaService = mock(BlogMediaService.class);
+        when(mediaService.saveAgentImage(anyLong(), any(), anyString(), any(), anyString())).thenReturn(asset);
+        ImageGenerationTool tool = new ImageGenerationTool(
+                imageClient, mediaService, new BlogAgentProperties(), billingService, new ObjectMapper());
+        var args = JsonNodeFactory.instance.objectNode().put("prompt", "draw a robot");
+
+        tool.execute(1L, args, noOpProgress());
+
+        verify(billingService).chargeTokens(1L, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+                "agent-image:9", "asset:9", usage, "gpt-image-2", "智能体生成图片");
     }
 
     private AgentTool.ProgressListener noOpProgress() {

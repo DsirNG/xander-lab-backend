@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.admin.application.ModelGateway;
 import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
+import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -199,13 +200,14 @@ public class BlogAgentImageClient {
                 .body(JsonNode.class);
 
         JsonNode image = response == null ? objectMapper.createObjectNode() : response.path("data").path(0);
+        ModelUsage usage = ModelUsage.fromJson(response == null ? null : response.path("usage"));
         String base64 = image.path("b64_json").asText();
         if (StringUtils.hasText(base64)) {
-            return fromBase64(base64);
+            return fromBase64(base64, usage, endpoint.model());
         }
         String url = image.path("url").asText();
         if (!StringUtils.hasText(url)) throw new IllegalStateException("图片模型没有返回可读取的图片");
-        return download(url);
+        return withUsage(download(url), usage, endpoint.model());
     }
 
     /**
@@ -234,21 +236,22 @@ public class BlogAgentImageClient {
                 .body(JsonNode.class);
 
         String url = extractImageUrl(response);
+        ModelUsage usage = ModelUsage.fromJson(response == null ? null : response.path("usage"));
         if (StringUtils.hasText(url)) {
             if (url.startsWith("data:")) {
-                return fromDataUrl(url);
+                return withUsage(fromDataUrl(url), usage, endpoint.model());
             }
-            return download(url);
+            return withUsage(download(url), usage, endpoint.model());
         }
         // 部分网关在 chat 路径上仍返回 images/generations 形态（data[0]）。
         JsonNode image = response == null ? objectMapper.createObjectNode() : response.path("data").path(0);
         String base64 = image.path("b64_json").asText();
         if (StringUtils.hasText(base64)) {
-            return fromBase64(base64);
+            return fromBase64(base64, usage, endpoint.model());
         }
         url = image.path("url").asText();
         if (!StringUtils.hasText(url)) throw new IllegalStateException("图片模型没有返回可读取的图片");
-        return download(url);
+        return withUsage(download(url), usage, endpoint.model());
     }
 
     /** 从 chat/completions 响应中取第一个图片地址（content 兼容字符串或片段数组）。 */
@@ -283,13 +286,13 @@ public class BlogAgentImageClient {
         return (target.startsWith("data:image/") || target.startsWith("https://")) ? target : null;
     }
 
-    private GeneratedImage fromBase64(String base64) {
+    private GeneratedImage fromBase64(String base64, ModelUsage usage, String model) {
         checkEncodedSize(base64);
         byte[] bytes = Base64.getDecoder().decode(base64);
         if (bytes.length > MAX_IMAGE_BYTES) {
             throw new IllegalStateException("图片模型返回的图片超过 10MB 限制");
         }
-        return new GeneratedImage(bytes, "image/png", "png");
+        return new GeneratedImage(bytes, "image/png", "png", usage, model);
     }
 
     /** data:image/png;base64,.... 形式：校验 mime 并解码，避免任意 data 协议进入下载器。 */
@@ -311,7 +314,7 @@ public class BlogAgentImageClient {
         String extension = mime.contains("jpeg") ? "jpg"
                 : mime.contains("webp") ? "webp"
                 : mime.contains("gif") ? "gif" : "png";
-        return new GeneratedImage(bytes, mime, extension);
+        return new GeneratedImage(bytes, mime, extension, ModelUsage.NONE, null);
     }
 
     private void checkEncodedSize(String base64) {
@@ -444,5 +447,15 @@ public class BlogAgentImageClient {
         InetAddress[] resolve(String host) throws UnknownHostException;
     }
 
-    public record GeneratedImage(byte[] bytes, String contentType, String extension) {}
+    private GeneratedImage withUsage(GeneratedImage image, ModelUsage usage, String model) {
+        return new GeneratedImage(image.bytes(), image.contentType(), image.extension(),
+                usage == null ? ModelUsage.NONE : usage, model);
+    }
+
+    public record GeneratedImage(byte[] bytes, String contentType, String extension,
+                                 ModelUsage usage, String model) {
+        public GeneratedImage(byte[] bytes, String contentType, String extension) {
+            this(bytes, contentType, extension, ModelUsage.NONE, null);
+        }
+    }
 }

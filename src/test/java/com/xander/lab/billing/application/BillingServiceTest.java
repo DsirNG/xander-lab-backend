@@ -24,6 +24,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BillingServiceTest {
 
@@ -108,6 +109,16 @@ class BillingServiceTest {
         ArgumentCaptor<PointsLedger> captor = ArgumentCaptor.forClass(PointsLedger.class);
         verify(ledgerMapper).insert(captor.capture());
         assertEquals(1390L, captor.getValue().getAmount());
+    }
+
+    @Test
+    void illustrationWithoutUsageIsRejectedInsteadOfUsingFlatPrice() {
+        BillingService service = newService(null);
+
+        assertThatThrownBy(() -> service.chargeTokens(7L, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+                "illustration:1:1", "task:1", ModelUsage.NONE, "gpt-image-2", "知识插图生成"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("图片模型未返回 token 用量，无法按 token 计费");
     }
 
     @Test

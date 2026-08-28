@@ -547,13 +547,13 @@ public class BlogAgentService {
                             "title", title,
                             "alt", alt,
                             "prompt", prompt,
-                            "model", properties.getImageModel(),
+                            "model", generated.model(),
                             "size", properties.getImageSize()));
                     BlogMediaAsset asset = mediaService.saveAgentImage(userId, taskId, fileName, generated, meta);
                     markdown = "![" + alt + "](" + asset.getUrl() + ")";
-                    billingService.chargeFlat(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+                    billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
                             "illustration:" + taskId + ":" + (index + 1), "task:" + taskId,
-                            billingService.flatPoints(BillingBiz.BLOG_AGENT_ILLUSTRATION), "知识插图生成");
+                            generated.usage(), generated.model(), "知识插图生成");
                 }
                 content = replaceOrAppend(content, placeholder, markdown);
                 generatedCount++;

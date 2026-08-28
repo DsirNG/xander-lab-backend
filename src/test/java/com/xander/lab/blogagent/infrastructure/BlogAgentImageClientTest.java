@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.common.ModelUsage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -174,7 +175,8 @@ class BlogAgentImageClientTest {
                 "{\"choices\":[{\"message\":{\"content\":["
                         + "{\"type\":\"output_text\",\"text\":\"ok\"},"
                         + "{\"type\":\"image_url\",\"image_url\":{\"url\":\"" + dataUrl + "\"}}"
-                        + "]}}]}");
+                        + "]}}],\"usage\":{\"input_tokens\":120,\"output_tokens\":80,"
+                        + "\"input_tokens_details\":{\"cached_tokens\":20}}}");
         String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
         BlogAgentImageClient client = new BlogAgentImageClient(properties(baseUrl),
                 new ObjectMapper(),
@@ -206,6 +208,8 @@ class BlogAgentImageClientTest {
         assertThat(image.contentType()).isEqualTo("image/png");
         assertThat(image.extension()).isEqualTo("png");
         assertThat(image.bytes()).containsExactly(png);
+        assertThat(image.usage()).isEqualTo(new ModelUsage(120, 20, 80));
+        assertThat(image.model()).isEqualTo("gpt-image-2");
     }
 
     @Test

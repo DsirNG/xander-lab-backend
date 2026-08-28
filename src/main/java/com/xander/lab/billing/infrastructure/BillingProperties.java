@@ -24,7 +24,6 @@ import java.util.Map;
  * billing.enabled=true
  * billing.grant-register=2000000   # 2000 分 = 2,000,000 毫分
  * billing.price.input-milli-per-1k-token=500
- * billing.flat.blog-agent-illustration=50000
  * </pre>
  */
 @Component
@@ -42,7 +41,6 @@ public class BillingProperties {
 
     /** 一口价：BillingBiz 业务名 -> 毫分 */
     private Map<String, Integer> flat = new LinkedHashMap<>(Map.of(
-            "blog-agent-illustration", 50_000,
             "email-reminder", 5_000,
             "csdn-publish", 10_000,
             "juejin-publish", 10_000

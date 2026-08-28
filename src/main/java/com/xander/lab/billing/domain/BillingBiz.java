@@ -21,7 +21,7 @@ public final class BillingBiz {
     /** 博客智能体：一次合规审查调用 */
     public static final String BLOG_AGENT_COMPLIANCE = "blog-agent-compliance";
 
-    /** 博客智能体：生成一张知识插图（一口价） */
+    /** 博客智能体：生成一张知识插图，按图片模型实际 token 用量计费。 */
     public static final String BLOG_AGENT_ILLUSTRATION = "blog-agent-illustration";
 
     /** AI 选题生成 */

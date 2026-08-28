@@ -113,9 +113,9 @@ public class ImageGenerationTool implements AgentTool {
             throw new IllegalStateException("图片已经生成，但保存到素材库失败", exception);
         }
         try {
-            billingService.chargeFlat(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+            billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
                     "agent-image:" + asset.getId(), "asset:" + asset.getId(),
-                    billingService.flatPoints(BillingBiz.BLOG_AGENT_ILLUSTRATION), "智能体生成图片");
+                    generated.usage(), generated.model(), "智能体生成图片");
         } catch (RuntimeException exception) {
             log.warn("agent image billing failed userId={} assetId={} type={} message={}",
                     userId, asset.getId(), exception.getClass().getSimpleName(), safeLogMessage(exception));

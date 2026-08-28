@@ -276,7 +276,6 @@ billing:
         output-milli-per-1k-token: ${BILLING_MODEL_GPT_IMAGE2_OUTPUT:300}
         cached-milli-per-1k-token: ${BILLING_MODEL_GPT_IMAGE2_CACHED:0}
   flat:
-    blog-agent-illustration: ${BILLING_FLAT_BLOG_AGENT_ILLUSTRATION:50000}
     email-reminder: ${BILLING_FLAT_EMAIL_REMINDER:5000}
     csdn-publish: ${BILLING_FLAT_CSDN_PUBLISH:10000}
     juejin-publish: ${BILLING_FLAT_JUEJIN_PUBLISH:10000}

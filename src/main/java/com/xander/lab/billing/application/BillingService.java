@@ -40,16 +40,21 @@ public class BillingService {
     private final PointsLedgerMapper ledgerMapper;
     private final ModelPriceMapper modelPriceMapper;
 
-    /** token 精确计费：按 usage 折成积分后扣减。网关未回 usage 时退回一口价。 */
+    /** token 精确计费：按 usage 折成积分后扣减；插图缺少 usage 时拒绝扣费，避免退回固定图片价格。 */
     @Transactional
     public void chargeTokens(Long userId, String bizType, String bizKey, String bizRef,
                              ModelUsage usage, String model, String remark) {
         if (!properties.isEnabled() || userId == null || usage == null || usage.isEmpty()) {
-            if (usage != null && usage.isEmpty()) {
+            if (usage != null && usage.isEmpty()
+                    && !BillingBiz.BLOG_AGENT_ILLUSTRATION.equals(bizType)) {
                 long fallback = flatPrice(bizType);
                 if (fallback > 0) {
                     chargeFlat(userId, bizType, bizKey, bizRef, fallback, remark + "（网关未返回用量，按一口价）");
                 }
+            }
+            if (properties.isEnabled() && BillingBiz.BLOG_AGENT_ILLUSTRATION.equals(bizType)
+                    && (usage == null || usage.isEmpty())) {
+                throw new IllegalStateException("图片模型未返回 token 用量，无法按 token 计费");
             }
             return;
         }
@@ -59,7 +64,7 @@ public class BillingService {
                 usage.inputTokens(), usage.outputTokens(), usage.cachedTokens(), remark);
     }
 
-    /** 一口价计费（插图 / 邮件 / CSDN 发布等无 token 计量项）。 */
+    /** 一口价计费（邮件 / CSDN 发布等无 token 计量项）。 */
     @Transactional
     public void chargeFlat(Long userId, String bizType, String bizKey, String bizRef,
                            long points, String remark) {
