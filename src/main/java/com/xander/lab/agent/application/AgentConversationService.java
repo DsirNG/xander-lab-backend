@@ -725,6 +725,8 @@ public class AgentConversationService {
                     .eq(AgentConversation::getUserId, userId)
                     .eq(AgentConversation::getStatus, "running")
                     .eq(AgentConversation::getRunVersion, runVersion)
+                    // MyBatis-Plus update wrapper 必须包含 SET；同时用更新时间续租当前执行中的会话。
+                    .setSql("updated_at = CURRENT_TIMESTAMP")
                     );
             if (touched != 1 || messageMapper.insertForActiveRun(message, userId, runVersion) != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
