@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS `blog_content_plan` (
   `topic` VARCHAR(500) NOT NULL COMMENT '每日生成文章的主题',
   `audience` VARCHAR(120) NOT NULL DEFAULT '' COMMENT '目标读者（透传给生成 Agent）',
   `tone` VARCHAR(60) NOT NULL DEFAULT '' COMMENT '文风语气（透传给生成 Agent）',
+  `schedule_type` VARCHAR(16) NOT NULL DEFAULT 'DAILY' COMMENT '计划类型：DAILY 每日 / WEEKLY 每周 / ONCE 一次性',
+  `scheduled_date` DATE NULL COMMENT 'ONCE 的执行日期或 WEEKLY 的首次执行日期（计划时区本地日期）',
+  `ai_option` VARCHAR(16) NOT NULL DEFAULT 'DEEP' COMMENT 'AI 规划方向：DEEP / PRACTICAL / NEWS / OPINION',
+  `knowledge_material_id` BIGINT NULL COMMENT '绑定的个人知识材料ID，关联 recitation_material.id，生成时作为上下文',
+  `auto_publish` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '生成后是否自动发布（0 保存本站草稿 / 1 发布并按配置同步）',
   `timezone` VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai' COMMENT 'IANA 时区，如 Asia/Shanghai',
   `trigger_time` VARCHAR(5) NOT NULL COMMENT '每日触发本地时刻 HH:mm（单时段，多时段见 trigger_times_json）',
   `trigger_times_json` VARCHAR(500) NULL COMMENT 'JSON 数组：每日多个触发时刻 HH:mm（多时间段模式）',
@@ -40,7 +45,7 @@ CREATE TABLE IF NOT EXISTS `blog_content_plan` (
   KEY `idx_blog_plan_due` (`status`, `next_run_at`, `id`),
   CONSTRAINT `fk_blog_plan_user`
     FOREIGN KEY (`user_id`) REFERENCES `sys_user` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='定时内容（每日自动生成发布）计划';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='定时内容自动生成发布计划';
 
 -- One durable run row per trigger. plan_id + scheduled_at is the idempotency key:
 -- the scheduler never creates a second run for the same trigger instant.

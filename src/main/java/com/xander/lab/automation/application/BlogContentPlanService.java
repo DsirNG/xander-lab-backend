@@ -11,6 +11,7 @@ import com.xander.lab.automation.api.BlogContentPlansPage;
 import com.xander.lab.automation.api.BlogPlanRunVO;
 import com.xander.lab.automation.api.BlogPlanRunsPage;
 import com.xander.lab.automation.domain.BlogContentPlan;
+import com.xander.lab.automation.domain.BlogContentPlanScheduleCalculator;
 import com.xander.lab.automation.domain.BlogPlanRun;
 import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
 import com.xander.lab.automation.infrastructure.BlogContentPlanMapper;
@@ -18,6 +19,7 @@ import com.xander.lab.automation.infrastructure.BlogPlanRunMapper;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
+import com.xander.lab.recitation.application.RecitationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -58,6 +60,7 @@ public class BlogContentPlanService {
     private final CsdnCredentialService csdnCredentialService;
     private final JuejinCredentialService juejinCredentialService;
     private final BlogAgentService agentService;
+    private final RecitationService recitationService;
 
     @Value("${blog-content-plan.max-active-per-user:50}")
     private long maxActivePerUser;
@@ -75,6 +78,8 @@ public class BlogContentPlanService {
         String topic = request.getTopic().strip();
         ZoneId zone = EmailReminderScheduleCalculator.resolveZone(request.getTimezone());
         List<LocalTime> times = resolveTriggerTimes(request.getTriggerTimes(), request.getTriggerTime());
+        String scheduleType = request.getScheduleType() == null || request.getScheduleType().isBlank()
+                ? BlogContentPlan.SCHEDULE_DAILY : request.getScheduleType();
 
         long activeCount = planMapper.countActivePlans(userId);
         if (activeCount >= maxActivePerUser) {
@@ -91,14 +96,23 @@ public class BlogContentPlanService {
         }
 
         Instant now = Instant.now();
-        Instant nextRun = EmailReminderScheduleCalculator.resolveNextDailyAfter(zone, times, now);
+        Instant nextRun = BlogContentPlanScheduleCalculator.firstRun(
+                scheduleType, zone, times, request.getScheduledDate(), now);
         List<String> topics = normalizeTopics(request.getTopics());
+        if (request.getKnowledgeMaterialId() != null) {
+            recitationService.getMaterial(userId, request.getKnowledgeMaterialId());
+        }
 
         BlogContentPlan plan = new BlogContentPlan();
         plan.setUserId(userId);
         plan.setTopic(topic);
         plan.setAudience(strip(request.getAudience()));
         plan.setTone(strip(request.getTone()));
+        plan.setScheduleType(scheduleType);
+        plan.setScheduledDate(request.getScheduledDate());
+        plan.setAiOption(request.getAiOption() == null ? "DEEP" : request.getAiOption());
+        plan.setKnowledgeMaterialId(request.getKnowledgeMaterialId());
+        plan.setAutoPublish(request.getAutoPublish() == null || request.getAutoPublish());
         plan.setTimezone(zone.getId());
         plan.setTriggerTime(times.get(0).format(DateTimeFormatter.ofPattern("HH:mm")));
         plan.setTriggerTimesJson(BlogContentPlan.toJson(times.stream()
@@ -107,6 +121,7 @@ public class BlogContentPlanService {
         plan.setNextTopicIndex(0);
         plan.setSyncCsdn(request.getSyncCsdn() == null ? Boolean.FALSE : request.getSyncCsdn());
         plan.setSyncJuejin(request.getSyncJuejin() == null ? Boolean.FALSE : request.getSyncJuejin());
+        plan.setRunOnce(BlogContentPlan.SCHEDULE_ONCE.equals(scheduleType));
         plan.setNextRunAt(nextRun);
         plan.setStatus(BlogContentPlan.STATUS_ACTIVE);
         planMapper.insert(plan);
@@ -174,6 +189,10 @@ public class BlogContentPlanService {
             plan.setTopicsJson(BlogContentPlan.toJson(List.of()));
             plan.setNextTopicIndex(0);
             plan.setRunOnce(true);
+            plan.setScheduleType(BlogContentPlan.SCHEDULE_ONCE);
+            plan.setScheduledDate(startDate.plusDays(i));
+            plan.setAiOption("DEEP");
+            plan.setAutoPublish(true);
             plan.setSyncCsdn(request.getSyncCsdn() == null ? Boolean.FALSE : request.getSyncCsdn());
             plan.setSyncJuejin(request.getSyncJuejin() == null ? Boolean.FALSE : request.getSyncJuejin());
             plan.setNextRunAt(ZonedDateTime.of(startDate.plusDays(i), time, zone).toInstant());
@@ -252,6 +271,7 @@ public class BlogContentPlanService {
         String topic = request.getTopic();
         String timezone = request.getTimezone();
         String triggerTime = request.getTriggerTime();
+        boolean scheduleChanged = false;
         if (topic != null && !topic.isBlank()) {
             plan.setTopic(topic.strip());
         }
@@ -267,12 +287,30 @@ public class BlogContentPlanService {
         if (request.getTone() != null) {
             plan.setTone(strip(request.getTone()));
         }
+        if (request.getAiOption() != null) {
+            plan.setAiOption(request.getAiOption());
+        }
+        if (request.getKnowledgeMaterialId() != null) {
+            recitationService.getMaterial(userId, request.getKnowledgeMaterialId());
+            plan.setKnowledgeMaterialId(request.getKnowledgeMaterialId());
+        }
+        if (request.getAutoPublish() != null) {
+            plan.setAutoPublish(request.getAutoPublish());
+        }
+        if (request.getScheduleType() != null) {
+            plan.setScheduleType(request.getScheduleType());
+            plan.setRunOnce(BlogContentPlan.SCHEDULE_ONCE.equals(request.getScheduleType()));
+            scheduleChanged = true;
+        }
+        if (request.getScheduledDate() != null) {
+            plan.setScheduledDate(request.getScheduledDate());
+            scheduleChanged = true;
+        }
         if (request.getTopics() != null) {
             plan.setTopicsJson(BlogContentPlan.toJson(normalizeTopics(request.getTopics())));
             plan.setNextTopicIndex(0);
         }
 
-        boolean scheduleChanged = false;
         if (request.getTriggerTimes() != null) {
             List<LocalTime> times = EmailReminderScheduleCalculator.parseSendTimes(request.getTriggerTimes());
             String timesJson = BlogContentPlan.toJson(times.stream()
@@ -301,7 +339,8 @@ public class BlogContentPlanService {
         if (scheduleChanged) {
             ZoneId zone = EmailReminderScheduleCalculator.resolveZone(plan.getTimezone());
             List<LocalTime> times = EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes());
-            plan.setNextRunAt(EmailReminderScheduleCalculator.resolveNextDailyAfter(zone, times, Instant.now()));
+            plan.setNextRunAt(BlogContentPlanScheduleCalculator.firstRun(
+                    plan.getScheduleType(), zone, times, plan.getScheduledDate(), Instant.now()));
         }
         planMapper.updateById(plan);
         return toVO(planMapper.selectById(plan.getId()), userId);
@@ -425,11 +464,9 @@ public class BlogContentPlanService {
     public Instant nextRunAfter(Long userId, Long planId, long count) {
         requireUser(userId);
         BlogContentPlan plan = requireOwnedPlan(planId, userId);
-        ZoneId zone = EmailReminderScheduleCalculator.resolveZone(plan.getTimezone());
-        List<LocalTime> times = EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes());
         Instant cursor = Instant.now();
         for (long i = 0; i < Math.max(1, count); i++) {
-            cursor = EmailReminderScheduleCalculator.resolveNextDailyAfter(zone, times, cursor);
+            cursor = BlogContentPlanScheduleCalculator.nextRun(plan, cursor);
         }
         return cursor;
     }
@@ -458,6 +495,11 @@ public class BlogContentPlanService {
                 .nextTopicIndex(plan.getNextTopicIndex() == null ? 0 : plan.getNextTopicIndex())
                 .audience(plan.getAudience())
                 .tone(plan.getTone())
+                .scheduleType(plan.getScheduleType() == null ? BlogContentPlan.SCHEDULE_DAILY : plan.getScheduleType())
+                .scheduledDate(plan.getScheduledDate())
+                .aiOption(plan.getAiOption() == null ? "DEEP" : plan.getAiOption())
+                .knowledgeMaterialId(plan.getKnowledgeMaterialId())
+                .autoPublish(plan.getAutoPublish() == null || plan.getAutoPublish())
                 .timezone(plan.getTimezone())
                 .triggerTime(plan.getTriggerTime())
                 .syncCsdn(plan.getSyncCsdn())

@@ -2,6 +2,7 @@ package com.xander.lab.automation.application;
 
 import com.xander.lab.automation.api.BlogPlanRunVO;
 import com.xander.lab.automation.domain.BlogContentPlan;
+import com.xander.lab.automation.domain.BlogContentPlanScheduleCalculator;
 import com.xander.lab.automation.domain.BlogNotification;
 import com.xander.lab.automation.domain.BlogPlanRun;
 import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
@@ -22,6 +23,7 @@ import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.publishing.domain.PublishCommand;
 import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.recitation.application.RecitationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -51,6 +53,7 @@ public class BlogPlanRunService {
     private final JuejinCredentialService juejinCredentialService;
     private final JuejinBlogSyncService juejinBlogSyncService;
     private final BlogPlanSseService sseService;
+    private final RecitationService recitationService;
     private final TransactionTemplate transactionTemplate;
 
     /** Creates the run row for a due trigger and reschedules the plan atomically.
@@ -116,6 +119,12 @@ public class BlogPlanRunService {
             long localPostId = publishLocal(run.getId(), plan, ready);
             markLocalPost(run.getId(), localPostId);
 
+            if (Boolean.FALSE.equals(plan.getAutoPublish())) {
+                blogService.updateBlogStatus(localPostId, BlogService.STATUS_DRAFT);
+                finishSucceeded(run.getId());
+                return;
+            }
+
             if (plan.getSyncCsdn() == Boolean.TRUE) {
                 publishCsdn(run.getId(), plan, ready);
             }
@@ -148,6 +157,20 @@ public class BlogPlanRunService {
         }
         if (StringUtils.hasText(plan.getTone())) {
             input.append("\n文风语气：").append(plan.getTone());
+        }
+        if (StringUtils.hasText(plan.getAiOption())) {
+            input.append("\n内容规划方向：").append(switch (plan.getAiOption()) {
+                case "PRACTICAL" -> "实战教程，强调步骤和可操作示例";
+                case "NEWS" -> "资讯解读，突出时效性与关键信息";
+                case "OPINION" -> "观点评论，给出清晰论点与论据";
+                default -> "深度解析，讲清核心原理与最佳实践";
+            });
+        }
+        if (plan.getKnowledgeMaterialId() != null) {
+            var material = recitationService.getMaterial(userId, plan.getKnowledgeMaterialId());
+            input.append("\n请优先依据以下个人知识材料进行创作：\n")
+                    .append(material.title()).append("\n")
+                    .append(limit(material.content(), 8000));
         }
         // Recurring single-topic plans must not repeat themselves: tell the
         // agent which titles this plan already published so it picks a fresh
@@ -385,12 +408,7 @@ public class BlogPlanRunService {
 
     /** Computes the next daily trigger after the given reference instant. */
     public Instant resolveNextRun(BlogContentPlan plan, Instant reference) {
-        ZoneId zone = EmailReminderScheduleCalculator.resolveZone(plan.getTimezone());
-        return EmailReminderScheduleCalculator.resolveNextDailyAfter(
-                zone,
-                EmailReminderScheduleCalculator.parseSendTimes(plan.allTriggerTimes()),
-                reference
-        );
+        return BlogContentPlanScheduleCalculator.nextRun(plan, reference);
     }
 
     public BlogPlanRunVO toRunVO(BlogPlanRun run) {

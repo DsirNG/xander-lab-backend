@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,6 +18,10 @@ import java.util.List;
 @Data
 @TableName("blog_content_plan")
 public class BlogContentPlan {
+
+    public static final String SCHEDULE_DAILY = "DAILY";
+    public static final String SCHEDULE_WEEKLY = "WEEKLY";
+    public static final String SCHEDULE_ONCE = "ONCE";
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -37,6 +42,16 @@ public class BlogContentPlan {
     private String topic;
     private String audience;
     private String tone;
+    /** DAILY / WEEKLY / ONCE. Historical rows default to DAILY. */
+    private String scheduleType;
+    /** User-selected local date for ONCE or the first WEEKLY occurrence. */
+    private LocalDate scheduledDate;
+    /** DEEP / PRACTICAL / NEWS / OPINION, used to steer article generation. */
+    private String aiOption;
+    /** Optional personal knowledge material used as generation grounding. */
+    private Long knowledgeMaterialId;
+    /** True publishes immediately; false stores the generated local article as draft. */
+    private Boolean autoPublish;
     /** IANA timezone, e.g. Asia/Shanghai */
     private String timezone;
     /** HH:mm local trigger time in `timezone` (single-time mode) */

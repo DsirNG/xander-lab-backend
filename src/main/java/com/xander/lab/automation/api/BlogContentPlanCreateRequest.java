@@ -6,12 +6,19 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.List;
+import java.time.LocalDate;
 
 /** Body for creating a daily content plan. `triggerTimes` enables several
  * daily triggers; when blank the legacy single `triggerTime` is used.
  * `topics` seeds a multi-day topic queue: each run consumes the next topic. */
 @Data
 public class BlogContentPlanCreateRequest {
+
+    @Pattern(regexp = "DAILY|WEEKLY|ONCE", message = "计划类型只支持 DAILY / WEEKLY / ONCE")
+    private String scheduleType;
+
+    /** ONCE 的执行日期，或 WEEKLY 首次执行日期（并据此确定星期几）。 */
+    private LocalDate scheduledDate;
 
     @NotBlank(message = "请输入文章主题")
     @Size(max = 500, message = "文章主题不能超过 500 个字符")
@@ -45,4 +52,12 @@ public class BlogContentPlanCreateRequest {
 
     @Size(max = 60, message = "文风语气不能超过 60 个字符")
     private String tone;
+
+    @Pattern(regexp = "DEEP|PRACTICAL|NEWS|OPINION", message = "不支持的 AI 规划方向")
+    private String aiOption;
+
+    private Long knowledgeMaterialId;
+
+    /** false 时生成后保存为本站草稿，不同步外部平台。 */
+    private Boolean autoPublish;
 }

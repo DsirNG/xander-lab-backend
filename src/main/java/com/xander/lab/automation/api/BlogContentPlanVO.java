@@ -4,6 +4,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 /** View of a daily content plan for C-end APIs. `nextRunAt` is the absolute
@@ -18,6 +19,11 @@ public class BlogContentPlanVO {
     private Integer nextTopicIndex;
     private String audience;
     private String tone;
+    private String scheduleType;
+    private LocalDate scheduledDate;
+    private String aiOption;
+    private Long knowledgeMaterialId;
+    private Boolean autoPublish;
     private String timezone;
     private String triggerTime;
     private Boolean syncCsdn;

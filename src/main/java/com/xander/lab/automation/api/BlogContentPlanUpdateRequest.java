@@ -5,11 +5,17 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.List;
+import java.time.LocalDate;
 
 /** Body for editing an existing daily content plan. Only editable while the
  * plan is ACTIVE or PAUSED; a RUNNING plan rejects updates. */
 @Data
 public class BlogContentPlanUpdateRequest {
+
+    @Pattern(regexp = "DAILY|WEEKLY|ONCE", message = "计划类型只支持 DAILY / WEEKLY / ONCE")
+    private String scheduleType;
+
+    private LocalDate scheduledDate;
 
     @Size(max = 500, message = "文章主题不能超过 500 个字符")
     private String topic;
@@ -37,4 +43,11 @@ public class BlogContentPlanUpdateRequest {
 
     @Size(max = 60, message = "文风语气不能超过 60 个字符")
     private String tone;
+
+    @Pattern(regexp = "DEEP|PRACTICAL|NEWS|OPINION", message = "不支持的 AI 规划方向")
+    private String aiOption;
+
+    private Long knowledgeMaterialId;
+
+    private Boolean autoPublish;
 }
