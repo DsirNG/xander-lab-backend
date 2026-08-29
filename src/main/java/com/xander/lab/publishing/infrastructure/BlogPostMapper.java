@@ -16,6 +16,17 @@ import java.util.List;
 public interface BlogPostMapper extends BaseMapper<BlogPost> {
 
     @Select("""
+            SELECT
+              SUM(CASE WHEN status IN (0, 1) THEN 1 ELSE 0 END) AS totalArticles,
+              SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS drafts,
+              SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS published,
+              SUM(CASE WHEN status = -1 THEN 1 ELSE 0 END) AS trashed
+            FROM blog_post
+            WHERE user_id = #{userId}
+            """)
+    BlogArticleStatusCounts selectArticleStatusCounts(@Param("userId") Long userId);
+
+    @Select("""
             SELECT published_at
             FROM blog_post
             WHERE user_id = #{userId}

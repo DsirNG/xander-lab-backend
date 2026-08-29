@@ -7,6 +7,7 @@ import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.api.BlogPublishRhythmVO;
+import com.xander.lab.publishing.api.BlogManageStatsVO;
 import com.xander.lab.publishing.api.CategoryVO;
 import com.xander.lab.publishing.api.TagVO;
 import com.xander.lab.common.PageData;
@@ -17,6 +18,8 @@ import com.xander.lab.identity.domain.User;
 import com.xander.lab.publishing.infrastructure.BlogCategoryMapper;
 import com.xander.lab.publishing.infrastructure.BlogPostMapper;
 import com.xander.lab.publishing.infrastructure.BlogPostViewMapper;
+import com.xander.lab.publishing.infrastructure.BlogArticleStatusCounts;
+import com.xander.lab.publishing.infrastructure.BlogDailyViewCount;
 import com.xander.lab.publishing.infrastructure.BlogTagMapper;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +60,35 @@ public class BlogService {
     private final BlogPostViewMapper blogPostViewMapper;
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
+
+    public BlogManageStatsVO getManageStats(Long userId, LocalDate today) {
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        LocalDate endDate = today == null ? LocalDate.now() : today;
+        LocalDate startDate = endDate.minusDays(6);
+        BlogArticleStatusCounts overview = blogPostMapper.selectArticleStatusCounts(userId);
+        List<LocalDate> publishedDates = blogPostMapper.selectPublishedDates(userId, startDate, endDate);
+        Map<LocalDate, Long> viewCounts = blogPostViewMapper.selectDailyViews(userId, startDate, endDate)
+                .stream().collect(Collectors.toMap(BlogDailyViewCount::getDate, BlogDailyViewCount::getViews));
+        List<BlogManageStatsVO.DailyViews> days = startDate.datesUntil(endDate.plusDays(1))
+                .map(date -> new BlogManageStatsVO.DailyViews(date, viewCounts.getOrDefault(date, 0L)))
+                .toList();
+        long recentViews = days.stream().mapToLong(BlogManageStatsVO.DailyViews::views).sum();
+        long recentPublished = publishedDates == null ? 0 : publishedDates.size();
+        BlogArticleStatusCounts counts = overview == null ? new BlogArticleStatusCounts() : overview;
+        return BlogManageStatsVO.builder()
+                .totalArticles(counts.getTotalArticles())
+                .drafts(counts.getDrafts())
+                .published(counts.getPublished())
+                .trashed(counts.getTrashed())
+                .recentViews(recentViews)
+                .recentPublished(recentPublished)
+                .averageViews(recentPublished == 0 ? BigDecimal.ZERO.setScale(1)
+                        : BigDecimal.valueOf(recentViews).divide(BigDecimal.valueOf(recentPublished), 1, RoundingMode.HALF_UP))
+                .dailyViews(days)
+                .build();
+    }
 
     /** Current user's actual local-site publishing counts for Monday through Sunday. */
     public BlogPublishRhythmVO getWeeklyPublishRhythm(Long userId, LocalDate today) {
