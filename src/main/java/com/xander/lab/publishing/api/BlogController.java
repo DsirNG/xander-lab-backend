@@ -71,6 +71,11 @@ public class BlogController {
         }
     }
 
+    @GetMapping("/posts/mine/publish-rhythm")
+    public Result<BlogPublishRhythmVO> getMyPublishRhythm() {
+        return Result.success(blogService.getWeeklyPublishRhythm(UserContext.getUserId(), null));
+    }
+
     @GetMapping("/posts/mine/{id}")
     public Result<BlogPostVO> getMyPostById(@PathVariable Long id) {
         BlogPostVO vo = blogService.getManagedBlogById(UserContext.getUserId(), id);

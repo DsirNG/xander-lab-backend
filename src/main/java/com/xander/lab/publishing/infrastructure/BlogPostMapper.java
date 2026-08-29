@@ -7,11 +7,24 @@ import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.domain.BlogPost;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Mapper
 public interface BlogPostMapper extends BaseMapper<BlogPost> {
+
+    @Select("""
+            SELECT published_at
+            FROM blog_post
+            WHERE user_id = #{userId}
+              AND status = 1
+              AND published_at BETWEEN #{startDate} AND #{endDate}
+            """)
+    List<LocalDate> selectPublishedDates(@Param("userId") Long userId,
+                                         @Param("startDate") LocalDate startDate,
+                                         @Param("endDate") LocalDate endDate);
 
     /**
      * 查询文章列表（不含 content，支持分类/标签/关键词动态筛选，支持分页）

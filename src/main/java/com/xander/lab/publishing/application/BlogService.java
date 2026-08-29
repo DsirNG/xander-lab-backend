@@ -6,6 +6,7 @@ import com.xander.lab.common.Constants;
 import com.xander.lab.identity.security.UserContext;
 import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.publishing.api.BlogPublishRhythmVO;
 import com.xander.lab.publishing.api.CategoryVO;
 import com.xander.lab.publishing.api.TagVO;
 import com.xander.lab.common.PageData;
@@ -26,6 +27,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.DayOfWeek;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.temporal.TemporalAdjusters;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -50,6 +57,30 @@ public class BlogService {
     private final BlogPostViewMapper blogPostViewMapper;
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
+
+    /** Current user's actual local-site publishing counts for Monday through Sunday. */
+    public BlogPublishRhythmVO getWeeklyPublishRhythm(Long userId, LocalDate today) {
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        LocalDate reference = today == null ? LocalDate.now() : today;
+        LocalDate weekStart = reference.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate weekEnd = weekStart.plusDays(6);
+        Map<LocalDate, Long> counts = blogPostMapper
+                .selectPublishedDates(userId, weekStart, weekEnd).stream()
+                .filter(date -> date != null)
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        List<BlogPublishRhythmVO.DayCount> days = weekStart.datesUntil(weekStart.plusDays(7))
+                .map(date -> new BlogPublishRhythmVO.DayCount(date, counts.getOrDefault(date, 0L)))
+                .toList();
+        long total = days.stream().mapToLong(BlogPublishRhythmVO.DayCount::count).sum();
+        return BlogPublishRhythmVO.builder()
+                .weekStart(weekStart)
+                .dailyAverage(BigDecimal.valueOf(total)
+                        .divide(BigDecimal.valueOf(7), 1, RoundingMode.HALF_UP))
+                .days(days)
+                .build();
+    }
 
     /**
      * 根据 ID 批量查询当前用户的文章标题（仅已发布，用于定时发文计划
