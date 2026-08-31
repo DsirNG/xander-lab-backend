@@ -97,7 +97,10 @@ class AgentModelClientTest {
         assertThat(requestPayload.path("instructions").asText())
                 .contains("必须调用它下发结构化答题卡")
                 .contains("禁止把题目、选项或逐题作答要求写进 reply")
-                .contains("答题卡支持自由翻阅并一次性提交全部答案");
+                .contains("答题卡支持自由翻阅并一次性提交全部答案")
+                .contains("$\\frac{3}{5}$")
+                .contains("$\\frac{\\sqrt{3}}{2}$")
+                .contains("先调用 grade_answer 完成逐题判分");
     }
 
     @Test

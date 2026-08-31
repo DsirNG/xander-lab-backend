@@ -114,6 +114,10 @@ public class GradeAnswerTool implements AgentTool {
         outcome.put("hint", "掌握度已经落库，score 是服务端按逐题得分算出的，不要在回复里改写它。"
                 + "把得分、错在哪、建议的下次复习时间告诉用户；"
                 + "分数不理想时直接就着答错的点讲清楚，别只报个分数。");
+        // 判分结果需要先完成用户可见讲评；否则模型容易跳过反馈，直接再次发题。
+        outcome.put("hint", outcome.path("hint").asText()
+                + "本轮判分后必须先以 done=true 把逐题正误、正确答案和错因讲评给用户；"
+                + "不要在同一轮调用 emit_quiz 下发纠错练习，等用户读完讲评后再按其意愿继续。");
         return outcome;
     }
 
