@@ -16,8 +16,8 @@ import org.springframework.stereotype.Component;
  * 比任何独立的出题服务都更清楚该考什么、上次错在哪。工具只负责把材料摆到它面前，
  * 出题、追问、判分都发生在它自己的推理里。</p>
  *
- * <p>与之配套的收口动作是 {@link GradeAnswerTool}：不调用它，这场测验就只是聊天，
- * 掌握度不会动。</p>
+ * <p>出好的题目交给 {@link EmitQuizTool} 发成答题卡，收口动作是 {@link GradeAnswerTool}：
+ * 不调用它，这场测验就只是聊天，掌握度不会动。</p>
  */
 @Component
 public class QuizKnowledgeTool implements AgentTool {
@@ -44,9 +44,9 @@ public class QuizKnowledgeTool implements AgentTool {
                 + "不知道 materialId 就先用 query_knowledge 找到它。"
                 + "拿到结果后由你自己出题：3 到 5 题，覆盖原文的关键点，"
                 + "recentQuizzes 里上次答错的地方要优先再考一遍；"
-                + "题目写在你的回复里让用户作答，同一条回复里不要把答案写出来；"
-                + "出完题就以 done=true 结束这一轮等用户作答，不要在同一轮里继续空转。"
-                + "用户在下一条消息里答完后，必须把返回的 quizSessionId 交给 grade_answer 记录评分，"
+                + "题目不要写在回复正文里，紧接着调用 " + EmitQuizTool.NAME + " 把它们发成一张答题卡，"
+                + "并把返回的 quizSessionId 原样交给它；发完卡就以 done=true 结束这一轮等用户作答。"
+                + "用户在答题卡上提交后，必须把同一个 quizSessionId 交给 grade_answer 记录评分，"
                 + "否则这次测验不计入掌握度。";
     }
 
@@ -122,8 +122,10 @@ public class QuizKnowledgeTool implements AgentTool {
         } else {
             hint.append("recentQuizzes 是历史评分，别原样重复上次的题目，但要覆盖上次答错的点。");
         }
-        hint.append("现在把题目写进你的回复（先别给答案），并以 done=true 结束这一轮让用户作答；"
-                + "用户在下一条消息里答完之后，再把 quizSessionId 原样交给 grade_answer 逐题判分。"
+        hint.append("现在把题目交给 " + EmitQuizTool.NAME + " 发成一张答题卡（quizSessionId="
+                + session.quizSessionId() + "），题面里先别给答案，回复正文也不要重复题面；"
+                + "发完卡就以 done=true 结束这一轮让用户作答。"
+                + "用户在答题卡上提交后你会收到逐题作答，那一轮再把同一个 quizSessionId 交给 grade_answer 逐题判分。"
                 + "本轮不要为了等用户作答而继续输出没有工具的决策。");
         return hint.toString();
     }

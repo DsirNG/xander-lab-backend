@@ -84,6 +84,7 @@ public class AgentConversationService {
     private final AgentPlanService planService;
     private final AgentMemoryService memoryService;
     private final AgentTurnEvaluator turnEvaluator;
+    private final AgentQuizService quizService;
 
     /**
      * 根据首条消息生成标题并创建会话壳（ready、无消息、不启动轮次）。
@@ -119,15 +120,22 @@ public class AgentConversationService {
             throw new IllegalArgumentException("消息内容不能为空");
         }
         billingService.ensureAvailable(userId);
+        // 答题卡交上来的是一段 JSON。在入口就翻译成可读的作答记录：历史、上下文窗口、
+        // 分享页此后只需要认识纯文本，不必各自再解一遍这个内部格式。
+        Optional<String> answers = quizService.renderSubmission(userMessage,
+                () -> listMessages(conversationId, userId));
+        String storedMessage = answers.orElse(userMessage);
+        String storedKind = answers.isPresent() ? "quiz_answer" : "message";
         return transactionTemplate.execute(status -> {
             long runVersion = claimConversation(conversationId, userId);
             // 新一轮诉求开始：上一轮的计划已经收口或作废，留着只会污染这一轮的自检。
             planService.clear(conversationId, userId);
-            saveMessage(conversationId, "user", "message", null, userMessage,
+            saveMessage(conversationId, "user", storedKind, null, storedMessage,
                     serializeAttachments(attachments));
             AgentConversation claimed = requireOwned(conversationId, userId);
-            if (isDefaultTitle(claimed.getTitle())) {
-                claimed.setTitle(excerpt(userMessage, 40));
+            // 一次作答不是新诉求，不该顶掉会话标题——那样标题会变成"测验会话 id=…"。
+            if (isDefaultTitle(claimed.getTitle()) && answers.isEmpty()) {
+                claimed.setTitle(excerpt(storedMessage, 40));
                 conversationMapper.updateById(claimed);
             }
             if (!Long.valueOf(runVersion).equals(claimed.getRunVersion())) {
@@ -218,7 +226,9 @@ public class AgentConversationService {
     private AgentConversation runLoop(Long conversationId, Long userId, long runVersion,
                                       String currentUserMessage, Consumer<AgentEvent> listener) {
         long turnStartedNanos = System.nanoTime();
+        // 答题卡提交是一段 JSON，拿它去召回记忆只会命中噪声；这种轮次退回上一条真实诉求。
         String latestUserMessage = StringUtils.hasText(currentUserMessage)
+                && !quizService.isSubmission(currentUserMessage)
                 ? currentUserMessage : latestUserMessage(conversationId, userId);
         // 工具表不再按关键词预筛：用不用、用哪个由模型自己判断。
         // 旧的关键词门禁会让匹配不上词表的诉求连工具都看不见，只能空口答应，那才是"工作流"。
@@ -354,6 +364,14 @@ public class AgentConversationService {
                     appendActive(conversationId, userId, runVersion, "plan",
                             JsonNodeFactory.instance.objectNode().set("items", result.path("items")),
                             listener);
+                }
+                // 答题卡要落成一条消息而不只是一个事件：它是用户接下来要操作的界面，
+                // 刷新页面后必须还在，而事件只在本轮的流里活着。
+                if (EmitQuizTool.NAME.equals(toolName) && result.has(EmitQuizTool.QUIZ_FIELD)) {
+                    JsonNode quiz = result.path(EmitQuizTool.QUIZ_FIELD);
+                    saveActiveMessage(conversationId, userId, runVersion,
+                            "assistant", "quiz", null, quiz.toString());
+                    appendActive(conversationId, userId, runVersion, "quiz", quiz, listener);
                 }
                 failures = 0;
                 lastError = null;
@@ -777,6 +795,9 @@ public class AgentConversationService {
                 case "tool_result" -> compactJson(message.getContent(), index == lastToolResultIndex
                         ? TOOL_RESULT_LATEST_CHARS : TOOL_RESULT_HISTORY_CHARS);
                 case "answer" -> "（回复：）" + message.getContent();
+                // 答题卡正文是给前端渲染的 JSON；渲染成题面清单，模型才知道自己问过什么。
+                case "quiz" -> "（已用答题卡出题：）" + quizService.renderQuiz(message.getContent());
+                case "quiz_answer" -> "（在答题卡上作答：）" + message.getContent();
                 default -> message.getContent();
             };
             builder.append("【").append(role).append("】").append(content).append("\n\n");

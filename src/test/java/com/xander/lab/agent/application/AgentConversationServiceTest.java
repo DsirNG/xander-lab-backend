@@ -106,7 +106,7 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator());
+                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
         org.mockito.Mockito.lenient().doReturn(leaseRenewal).when(agentLeaseRenewer)
                 .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
         org.mockito.Mockito.lenient().when(properties.getMaxSteps()).thenReturn(10);
@@ -159,7 +159,7 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, failingRegistry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator());
+                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
         AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(ready);
@@ -253,6 +253,71 @@ class AgentConversationServiceTest {
 
         service.prepareTurn(7L, 42L, "新消息");
 
+        org.mockito.Mockito.verify(conversationMapper, org.mockito.Mockito.never()).updateById(any());
+    }
+
+    @Test
+    void anAnswerCardIsPersistedAsAMessageSoItSurvivesAPageReload() {
+        // 答题卡是用户接下来要操作的界面：只发事件的话刷新一次就没了，必须同时落一条消息。
+        stubTransactions();
+        registry = new AgentToolRegistry(List.of(new EmitQuizTool()));
+        service = new AgentConversationService(
+                conversationMapper, messageMapper, modelClient, registry, properties,
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+        ObjectNode emit = decisionNode(false, "先把题目发出去", EmitQuizTool.NAME, null);
+        ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
+        args.put("quizSessionId", 99L);
+        args.put("title", "红楼梦第一回");
+        ObjectNode question = args.putArray("questions").addObject();
+        question.put("prompt", "作者是谁？");
+        question.put("type", "single");
+        question.putArray("options").add("曹雪芹").add("高鹗");
+        ObjectNode finish = decisionNode(true, "等用户作答", null, null);
+        finish.put("reply", "题目在卡片上，作答后我来判分");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(emit), call(finish));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        AtomicReference<String> card = new AtomicReference<>();
+        service.executeTurn(7L, 42L, "考考我", event -> {
+            if ("quiz".equals(event.getEventType())) card.set(event.getDataContent());
+        });
+
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "quiz", null), eq(42L), eq(1L));
+        // 同一份负载既落库也进流：前端两条路径渲染出的卡片必须一模一样。
+        assertThat(card.get()).contains("\"id\":\"99\"").contains("作者是谁？").contains("曹雪芹");
+    }
+
+    @Test
+    void aSubmittedCardIsStoredAsReadableTextAndDoesNotBecomeTheTitle() {
+        stubTransactions();
+        AgentConversation ready = conversation("ready");
+        ready.setTitle("新对话");
+        when(conversationMapper.selectById(7L)).thenReturn(ready);
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        AgentMessage emitted = new AgentMessage();
+        emitted.setId(1L);
+        emitted.setConversationId(7L);
+        emitted.setRole("assistant");
+        emitted.setKind("quiz");
+        emitted.setContent("{\"type\":\"quiz\",\"id\":\"99\",\"title\":\"红楼梦第一回\",\"questions\":"
+                + "[{\"id\":\"q1\",\"type\":\"single\",\"prompt\":\"作者是谁？\","
+                + "\"options\":[\"曹雪芹\",\"高鹗\"]}]}");
+        when(messageMapper.selectList(any())).thenReturn(List.of(emitted));
+
+        service.prepareTurn(7L, 42L, "{\"type\":\"submit_quiz\",\"quiz_id\":\"99\",\"answers\":"
+                + "[{\"question_id\":\"q1\",\"answer\":\"曹雪芹\"}]}");
+
+        verify(messageMapper).insert(org.mockito.ArgumentMatchers.argThat(message ->
+                "user".equals(message.getRole())
+                        && "quiz_answer".equals(message.getKind())
+                        && message.getContent().contains("作者是谁？")
+                        && message.getContent().contains("作答：曹雪芹")
+                        && !message.getContent().contains("submit_quiz")));
+        // 一次作答不是新诉求：标题不该变成"测验会话 id=…"。
         org.mockito.Mockito.verify(conversationMapper, org.mockito.Mockito.never()).updateById(any());
     }
 

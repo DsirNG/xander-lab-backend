@@ -12,9 +12,11 @@ import java.util.List;
 
 /**
  * One persisted turn inside an agent conversation. {@code kind} distinguishes
- * user input (message), assistant thinking (thought), tool invocation
- * (tool_call), tool outcome (tool_result) and the final assistant answer
- * (answer). Content of tool records is JSON.
+ * user input (message), assistant thinking (thought), self-critique
+ * (reflection), tool invocation (tool_call), tool outcome (tool_result), the
+ * final assistant answer (answer), an answer card the assistant handed the user
+ * (quiz) and the user's submission on that card (quiz_answer). Content of tool
+ * records and of quiz cards is JSON.
  */
 @Data
 @TableName("agent_message")
@@ -24,7 +26,7 @@ public class AgentMessage {
     private Long conversationId;
     /** 消息角色：user/assistant/tool */
     private String role;
-    /** 消息类型：message/thought/tool_call/tool_result/answer */
+    /** 消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz/quiz_answer */
     private String kind;
     /** 工具名，仅 kind=tool_call/tool_result 时非空 */
     private String toolName;

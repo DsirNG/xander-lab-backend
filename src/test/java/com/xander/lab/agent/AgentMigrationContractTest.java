@@ -88,6 +88,24 @@ class AgentMigrationContractTest {
                 .contains("20260825_agent_autonomy");
     }
 
+    @Test
+    void quizCardUpgradeOnlyRestatesTheEnlargedKindAndEventVocabulary() throws IOException {
+        String baseline = resource("db/agent_conversation_migration.sql");
+        String upgrade = resource("db/20260831_agent_quiz_card_migration.sql");
+
+        // 答题卡只是多了两种取值，两列都是无约束的 VARCHAR(24)：
+        // 新装和老库都不需要改类型，但注释里的取值表必须一致，否则线上字典对不上代码。
+        assertThat(baseline)
+                .contains("answer/quiz（下发的答题卡，正文为JSON）/quiz_answer")
+                .contains("tool_error/quiz/answer_delta");
+        assertThat(upgrade)
+                .contains("MODIFY COLUMN `kind` VARCHAR(24) NOT NULL")
+                .contains("answer/quiz（下发的答题卡，正文为JSON）/quiz_answer")
+                .contains("MODIFY COLUMN `event_type` VARCHAR(24) NOT NULL")
+                .contains("tool_error/quiz/answer_delta")
+                .contains("20260831_agent_quiz_card");
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertThat(input).as("classpath resource %s", path).isNotNull();
