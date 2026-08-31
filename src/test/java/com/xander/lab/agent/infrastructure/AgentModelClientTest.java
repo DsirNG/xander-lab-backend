@@ -89,6 +89,18 @@ class AgentModelClientTest {
     }
 
     @Test
+    void requiresStructuredQuizCardsInsteadOfMarkdownQuestions() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"请作答\",\"thought\":\"\",\"action\":null}"));
+
+        client().decideNextStep("请出三道选择题", "emit_quiz: 下发结构化答题卡");
+
+        assertThat(requestPayload.path("instructions").asText())
+                .contains("必须调用它下发结构化答题卡")
+                .contains("禁止把题目、选项或逐题作答要求写进 reply")
+                .contains("答题卡支持自由翻阅并一次性提交全部答案");
+    }
+
+    @Test
     void requestsLowReasoningEffortForLatencySensitiveGpt5AgentTurns() throws Exception {
         startServer(List.of("{\"done\":true,\"reply\":\"你好\",\"thought\":\"\",\"action\":null}"));
 

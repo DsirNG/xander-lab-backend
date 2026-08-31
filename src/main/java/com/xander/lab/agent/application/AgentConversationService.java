@@ -32,6 +32,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -243,6 +244,7 @@ public class AgentConversationService {
         int reflections = 0;
         int failures = 0;
         JsonNode lastError = null;
+        boolean quizCardEmitted = false;
         // 上一步自检的批评意见，只注入紧随其后的那一步。
         String critique = null;
         UsageAccumulator usage = new UsageAccumulator();
@@ -262,7 +264,8 @@ public class AgentConversationService {
             long modelStartedNanos = System.nanoTime();
             AnswerProgress answerProgress = new AnswerProgress(
                     conversationId, userId, runVersion, listener,
-                    step + 1, turnStartedNanos, modelStartedNanos);
+                    step + 1, turnStartedNanos, modelStartedNanos,
+                    !isQuizRequest(latestUserMessage) || quizCardEmitted);
             JsonNode decision;
             try {
                 List<AgentAttachment> attachments = recentAttachments(conversationId, userId);
@@ -300,6 +303,18 @@ public class AgentConversationService {
 
             if (decision.path("done").asBoolean(false)) {
                 String reply = normalizeAnswer(defaultText(decision.path("reply").asText(), "已完成你的请求。"));
+                if (isQuizRequest(latestUserMessage) && allowedTools.contains(EmitQuizTool.NAME) && !quizCardEmitted
+                        && reflections < maxReflections) {
+                    reflections++;
+                    critique = "自检未通过：用户要求出题，但你还没有调用 emit_quiz 下发答题卡。"
+                            + "不要在 reply 里列题或选项；下一步必须调用 emit_quiz，普通练习可不传 quizSessionId。";
+                    saveActiveMessage(conversationId, userId, runVersion,
+                            "assistant", "reflection", null, critique);
+                    appendActive(conversationId, userId, runVersion, "reflection",
+                            JsonNodeFactory.instance.objectNode().put("round", reflections).put("critique", critique),
+                            listener);
+                    continue;
+                }
                 Optional<String> verdict = turnEvaluator.critique(reply, plan, lastError);
                 if (verdict.isPresent() && reflections < maxReflections) {
                     // 自检不通过：不把这次回复交给用户，把批评意见回灌让智能体自己纠偏。
@@ -372,6 +387,7 @@ public class AgentConversationService {
                     saveActiveMessage(conversationId, userId, runVersion,
                             "assistant", "quiz", null, quiz.toString());
                     appendActive(conversationId, userId, runVersion, "quiz", quiz, listener);
+                    quizCardEmitted = true;
                 }
                 failures = 0;
                 lastError = null;
@@ -420,6 +436,14 @@ public class AgentConversationService {
         saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, exhausted);
         appendActive(conversationId, userId, runVersion, "answer", exhausted, listener);
         return finalizeReady(conversationId, userId, runVersion, usage, listener);
+    }
+
+    private boolean isQuizRequest(String message) {
+        if (!StringUtils.hasText(message)) return false;
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("出题") || normalized.contains("题目") || normalized.contains("测验")
+                || normalized.contains("练习") || normalized.contains("选择题") || normalized.contains("quiz")
+                || normalized.contains("question");
     }
 
     private JsonNode progressPayload(String tool, String message) {
@@ -1030,12 +1054,13 @@ public class AgentConversationService {
         private final int step;
         private final long turnStartedNanos;
         private final long modelStartedNanos;
+        private final boolean deliverDeltas;
         private final StringBuilder deltaBuffer = new StringBuilder();
         private boolean firstDeltaDelivered;
 
         private AnswerProgress(Long conversationId, Long userId, long runVersion,
-                               Consumer<AgentEvent> listener, int step,
-                               long turnStartedNanos, long modelStartedNanos) {
+                                Consumer<AgentEvent> listener, int step,
+                                long turnStartedNanos, long modelStartedNanos, boolean deliverDeltas) {
             this.conversationId = conversationId;
             this.userId = userId;
             this.runVersion = runVersion;
@@ -1043,10 +1068,12 @@ public class AgentConversationService {
             this.step = step;
             this.turnStartedNanos = turnStartedNanos;
             this.modelStartedNanos = modelStartedNanos;
+            this.deliverDeltas = deliverDeltas;
         }
 
         private void accept(String delta) {
             if (delta == null || delta.isEmpty()) return;
+            if (!deliverDeltas) return;
             String normalized = normalizeAnswer(delta);
             if (!firstDeltaDelivered) {
                 firstDeltaDelivered = true;

@@ -292,6 +292,34 @@ class AgentConversationServiceTest {
     }
 
     @Test
+    void rejectsMarkdownQuestionsUntilAnAdHocQuizCardIsEmitted() {
+        stubTransactions();
+        registry = new AgentToolRegistry(List.of(new EmitQuizTool()));
+        service = new AgentConversationService(
+                conversationMapper, messageMapper, modelClient, registry, properties,
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+        ObjectNode markdownQuestions = decisionNode(true, "1. sin 90° 等于多少？", null, null);
+        ObjectNode emit = decisionNode(false, "", EmitQuizTool.NAME, null);
+        ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
+        ObjectNode question = args.putArray("questions").addObject();
+        question.put("prompt", "sin 90° 等于多少？");
+        question.put("type", "single");
+        question.putArray("options").add("0").add("1");
+        ObjectNode finish = decisionNode(true, "请在答题卡中作答", null, null);
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(markdownQuestions), call(emit), call(finish));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "给我出三道选择题", ignored -> { });
+
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "quiz", null), eq(42L), eq(1L));
+        verify(modelClient, org.mockito.Mockito.times(3)).decideNextStepStream(any(), any(), any(), any());
+    }
+
+    @Test
     void aSubmittedCardIsStoredAsReadableTextAndDoesNotBecomeTheTitle() {
         stubTransactions();
         AgentConversation ready = conversation("ready");

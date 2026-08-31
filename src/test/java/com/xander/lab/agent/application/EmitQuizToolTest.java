@@ -47,6 +47,17 @@ class EmitQuizToolTest {
     }
 
     @Test
+    void emitsAnAdHocCardWithoutAKnowledgeQuizSession() {
+        ObjectNode args = JsonNodeFactory.instance.objectNode();
+        args.putArray("questions").add(question("sin 90° 等于多少？", "single", "0", "1"));
+
+        JsonNode result = tool.execute(new AgentToolContext(42L, 7L, 3L), args, new NoopProgress());
+
+        assertThat(result.has("quizSessionId")).isFalse();
+        assertThat(result.path(EmitQuizTool.QUIZ_FIELD).path("id").asText()).isEqualTo("adhoc-7-3");
+    }
+
+    @Test
     void keepsAtMostTenQuestionsSoTheCardStaysAnswerable() {
         ObjectNode args = JsonNodeFactory.instance.objectNode();
         args.put("quizSessionId", 99L);
@@ -61,11 +72,7 @@ class EmitQuizToolTest {
     }
 
     @Test
-    void refusesACardThatCouldNotBeGradedOrRendered() {
-        assertThatThrownBy(() -> tool.execute(new AgentToolContext(42L, 7L, 3L),
-                args(0L, "", question("作者是谁？", "text")), new NoopProgress()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("quizSessionId");
+    void refusesACardThatCouldNotBeRendered() {
         assertThatThrownBy(() -> tool.execute(new AgentToolContext(42L, 7L, 3L),
                 JsonNodeFactory.instance.objectNode().put("quizSessionId", 99L), new NoopProgress()))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -88,10 +95,10 @@ class EmitQuizToolTest {
     }
 
     @Test
-    void schemaRequiresTheSessionIdAndAdvertisesTheThreeQuestionTypes() {
+    void schemaMakesTheSessionIdOptionalAndAdvertisesTheThreeQuestionTypes() {
         JsonNode schema = tool.parametersSchema();
 
-        assertThat(schema.path("required").toString()).isEqualTo("[\"quizSessionId\",\"questions\"]");
+        assertThat(schema.path("required").toString()).isEqualTo("[\"questions\"]");
         JsonNode question = schema.path("properties").path("questions").path("items");
         assertThat(question.path("required").toString()).isEqualTo("[\"prompt\",\"type\"]");
         assertThat(question.path("properties").path("type").path("enum").toString())

@@ -44,7 +44,7 @@ public class EmitQuizTool implements AgentTool {
         return "把你出好的题目发成一张答题卡，用户在卡片上逐题作答后一次性提交。"
                 + "使用时机：调用 quiz_knowledge 拿到知识原文之后，紧接着调用本工具下发题目；"
                 + "题目数量 3 到 5 题最合适，最多 " + MAX_QUESTIONS + " 题。"
-                + "quizSessionId 必须原样使用 quiz_knowledge 返回的那一个，否则这场测验无法判分。"
+                + "来自 quiz_knowledge 时 quizSessionId 必须原样使用；普通练习不需要该字段，会生成临时答题卡。"
                 + "题面里不要写答案，也不要在回复正文里把题目重复一遍——用户已经在卡片上看到了。"
                 + "发完卡就以 done=true 结束这一轮等用户作答；"
                 + "用户提交后你会收到逐题作答，那一轮再把同一个 quizSessionId 交给 grade_answer。";
@@ -58,7 +58,7 @@ public class EmitQuizTool implements AgentTool {
         ObjectNode properties = schema.putObject("properties");
         properties.putObject("quizSessionId")
                 .put("type", "integer")
-                .put("description", "quiz_knowledge 返回的测验会话 id，必须原样传回；答题卡靠它绑定到这场测验");
+                .put("description", "可选。quiz_knowledge 返回的测验会话 id，传入后答题卡可用于记录掌握度；普通练习留空");
         properties.putObject("title")
                 .put("type", "string")
                 .put("description", "答题卡标题，通常就是这条知识的标题，最多 " + MAX_TITLE_CHARS + " 个字符，可选");
@@ -81,7 +81,7 @@ public class EmitQuizTool implements AgentTool {
         options.put("description", "选项原文，single/multiple 需要 " + MIN_OPTIONS + " 到 " + MAX_OPTIONS
                 + " 项且其中必须有正确答案；text 题留空。用户提交回来的就是选项原文");
         question.putArray("required").add("prompt").add("type");
-        schema.putArray("required").add("quizSessionId").add("questions");
+        schema.putArray("required").add("questions");
         return schema;
     }
 
@@ -98,24 +98,25 @@ public class EmitQuizTool implements AgentTool {
             throw new IllegalStateException("emit_quiz 必须在会话上下文中执行");
         }
         long quizSessionId = args.path("quizSessionId").isNumber() ? args.path("quizSessionId").asLong() : 0L;
-        if (quizSessionId <= 0) {
-            throw new IllegalArgumentException("emit_quiz 需要 quiz_knowledge 返回的 quizSessionId");
-        }
         ObjectNode quiz = JsonNodeFactory.instance.objectNode();
         quiz.put("type", AgentQuizService.PAYLOAD_TYPE);
-        // 卡片 id 直接用测验会话 id：用户提交时原样带回，判分不必再做一次映射。
-        quiz.put("id", String.valueOf(quizSessionId));
+        // 知识库测验以会话 id 回指判分；普通练习使用本轮稳定的临时 id，仅用于聚合提交答案。
+        quiz.put("id", quizSessionId > 0 ? String.valueOf(quizSessionId)
+                : "adhoc-" + context.conversationId() + "-" + context.runVersion());
         quiz.put("title", limit(args.path("title").asText(""), MAX_TITLE_CHARS));
         int count = appendQuestions(quiz.putArray("questions"), args.path("questions"));
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
-        outcome.put("quizSessionId", quizSessionId);
+        if (quizSessionId > 0) outcome.put("quizSessionId", quizSessionId);
         outcome.put("questionCount", count);
         outcome.set(QUIZ_FIELD, quiz);
-        outcome.put("hint", "答题卡已经发给用户了，回复正文里不要重复题面，只用一句话请他在卡片上作答。"
+        outcome.put("hint", quizSessionId > 0
+                ? "答题卡已经发给用户了，回复正文里不要重复题面，只用一句话请他在卡片上作答。"
                 + "现在就以 done=true 结束这一轮；用户提交后你会收到逐题作答，"
-                + "那一轮把 quizSessionId=" + quizSessionId + " 交给 grade_answer 判分，否则这场测验不计入掌握度。");
+                + "那一轮把 quizSessionId=" + quizSessionId + " 交给 grade_answer 判分，否则这场测验不计入掌握度。"
+                : "答题卡已经发给用户了，回复正文里不要重复题面，只用一句话请他在卡片上作答。"
+                + "这是普通练习卡，只需等待用户一次性提交答案。");
         return outcome;
     }
 
