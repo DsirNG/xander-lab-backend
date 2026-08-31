@@ -100,7 +100,9 @@ class AgentModelClientTest {
                 .contains("答题卡支持自由翻阅并一次性提交全部答案")
                 .contains("$\\frac{3}{5}$")
                 .contains("$\\frac{\\sqrt{3}}{2}$")
-                .contains("先调用 grade_answer 完成逐题判分");
+                .contains("先调用 grade_answer 完成逐题判分")
+                .contains("如果你愿意，我也可以为你出一组纠错练习")
+                .contains("不要自动执行该动作");
     }
 
     @Test
