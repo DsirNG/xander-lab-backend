@@ -15,6 +15,9 @@ public class BlogNotificationVO {
     private String message;
     private Long planId;
     private Long runId;
+    /** 通用关联资源类型，如 KNOWLEDGE_FILE；前端据此决定点击通知跳去哪里。 */
+    private String resourceType;
+    private Long resourceId;
     private Boolean isRead;
     private Instant createdAt;
 }

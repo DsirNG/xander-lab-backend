@@ -10,6 +10,7 @@ import com.xander.lab.automation.infrastructure.BlogNotificationMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -73,6 +74,32 @@ public class BlogNotificationService {
                 .set(BlogNotification::getIsRead, true));
     }
 
+    /**
+     * 为「非计划类」业务写一条带回跳资源的通知。跨模块的唯一入口：
+     * 其他模块要发通知只能调这里，不允许直接用 BlogNotificationMapper。
+     *
+     * <p>独立事务：通知只是旁路提醒，写不进去不该把调用方的主流程一起回滚。</p>
+     *
+     * @param resourceType 见 {@link BlogNotification#RESOURCE_KNOWLEDGE_FILE}
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public Long notifyResource(Long userId, String type, String title, String message,
+                              String resourceType, Long resourceId) {
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        BlogNotification notification = new BlogNotification();
+        notification.setUserId(userId);
+        notification.setType(type);
+        notification.setTitle(title);
+        notification.setMessage(message);
+        notification.setResourceType(resourceType);
+        notification.setResourceId(resourceId);
+        notification.setIsRead(false);
+        notificationMapper.insert(notification);
+        return notification.getId();
+    }
+
     private BlogNotificationVO toVO(BlogNotification notification) {
         return BlogNotificationVO.builder()
                 .id(notification.getId())
@@ -81,6 +108,8 @@ public class BlogNotificationService {
                 .message(notification.getMessage())
                 .planId(notification.getPlanId())
                 .runId(notification.getRunId())
+                .resourceType(notification.getResourceType())
+                .resourceId(notification.getResourceId())
                 .isRead(notification.getIsRead())
                 .createdAt(notification.getCreatedAt())
                 .build();

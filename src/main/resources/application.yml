@@ -280,3 +280,27 @@ billing:
     csdn-publish: ${BILLING_FLAT_CSDN_PUBLISH:10000}
     juejin-publish: ${BILLING_FLAT_JUEJIN_PUBLISH:10000}
 
+
+# 知识库文件中心。上传大小上限受 spring.servlet.multipart 约束，两处要一起改。
+# reaper 会删本地暂存目录里的文件，默认关闭，由部署方显式打开。
+knowledge-base:
+  max-folder-depth: ${KNOWLEDGE_BASE_MAX_FOLDER_DEPTH:8}
+  max-folders: ${KNOWLEDGE_BASE_MAX_FOLDERS:2000}
+  max-file-bytes: ${KNOWLEDGE_BASE_MAX_FILE_BYTES:52428800}
+  max-extract-chars: ${KNOWLEDGE_BASE_MAX_EXTRACT_CHARS:2000000}
+  max-chapters: ${KNOWLEDGE_BASE_MAX_CHAPTERS:2000}
+  # 章节数超过阈值或正文超过字数上限时不整本出结构图，改为发通知、按章按需生成。
+  auto-structure-chapter-threshold: ${KNOWLEDGE_BASE_AUTO_STRUCTURE_CHAPTER_THRESHOLD:12}
+  auto-structure-max-chars: ${KNOWLEDGE_BASE_AUTO_STRUCTURE_MAX_CHARS:200000}
+  max-points-per-node: ${KNOWLEDGE_BASE_MAX_POINTS_PER_NODE:8}
+  summary-length: ${KNOWLEDGE_BASE_SUMMARY_LENGTH:200}
+  max-auto-tags: ${KNOWLEDGE_BASE_MAX_AUTO_TAGS:5}
+  max-tags: ${KNOWLEDGE_BASE_MAX_TAGS:500}
+  chunk-staging-dir: ${KNOWLEDGE_BASE_CHUNK_STAGING_DIR:data/knowledge-base/chunks}
+  min-chunk-size: ${KNOWLEDGE_BASE_MIN_CHUNK_SIZE:262144}
+  max-chunk-size: ${KNOWLEDGE_BASE_MAX_CHUNK_SIZE:16777216}
+  session-ttl-hours: ${KNOWLEDGE_BASE_SESSION_TTL_HOURS:24}
+  reaper-enabled: ${KNOWLEDGE_BASE_REAPER_ENABLED:false}
+  reaper-batch-size: ${KNOWLEDGE_BASE_REAPER_BATCH_SIZE:50}
+  reaper-interval-ms: ${KNOWLEDGE_BASE_REAPER_INTERVAL_MS:3600000}
+  reaper-initial-delay-ms: ${KNOWLEDGE_BASE_REAPER_INITIAL_DELAY_MS:60000}

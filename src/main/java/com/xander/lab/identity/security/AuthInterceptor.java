@@ -167,6 +167,13 @@ public class AuthInterceptor implements HandlerInterceptor {
             return requireAdmin(request, response);
         }
 
+        // 知识库文件中心整体属于当前用户的私有资料：文件夹、文件、正文、标签、上传会话没有一条是公开的。
+        // 这里按前缀整段要求登录，而不是逐条登记路由——未匹配的 GET 默认公开，
+        // 逐条登记一旦漏一条就会静默泄露某个用户的文件内容。
+        if (path.startsWith("/api/knowledge-base/")) {
+            return requireAuth(request, response);
+        }
+
         // 公开的GET读操作直接放行（但仍尝试解析token以便记录用户信息）
         // This matches the public post-detail wildcard below, but idempotent
         // publish status belongs to the authenticated user only.

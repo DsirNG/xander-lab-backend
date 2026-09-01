@@ -19,6 +19,11 @@ public class BlogNotification {
     public static final String TYPE_JUEJIN_FAILED = "JUEJIN_FAILED";
     public static final String TYPE_RUN_FAILED = "RUN_FAILED";
     public static final String TYPE_PLAN_STALLED = "PLAN_STALLED";
+    /** 大部头知识库文件未自动生成结构图，提示用户按章生成。 */
+    public static final String TYPE_KNOWLEDGE_STRUCTURE_PENDING = "KNOWLEDGE_STRUCTURE_PENDING";
+
+    /** 通用关联资源类型：知识库文件。 */
+    public static final String RESOURCE_KNOWLEDGE_FILE = "KNOWLEDGE_FILE";
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -28,6 +33,10 @@ public class BlogNotification {
     private String message;
     private Long planId;
     private Long runId;
+    /** 通用关联资源类型，与 planId/runId 互斥使用；见 {@link #RESOURCE_KNOWLEDGE_FILE}。 */
+    private String resourceType;
+    /** 通用关联资源主键，配合 {@code resourceType} 解释。 */
+    private Long resourceId;
     private Boolean isRead;
     private Instant createdAt;
     private Instant updatedAt;

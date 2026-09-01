@@ -104,11 +104,13 @@ CREATE TABLE IF NOT EXISTS `blog_plan_run` (
 CREATE TABLE IF NOT EXISTS `blog_notification` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '通知主键',
   `user_id` BIGINT NOT NULL COMMENT '所属用户ID，关联 sys_user.id',
-  `type` VARCHAR(24) NOT NULL COMMENT '通知类型：REVIEW_REJECTED/CSDN_FAILED/JUEJIN_FAILED/RUN_FAILED/PLAN_STALLED',
+  `type` VARCHAR(48) NOT NULL COMMENT '通知类型：REVIEW_REJECTED/CSDN_FAILED/JUEJIN_FAILED/RUN_FAILED/PLAN_STALLED/KNOWLEDGE_STRUCTURE_PENDING',
   `title` VARCHAR(200) NOT NULL COMMENT '通知标题',
   `message` VARCHAR(1000) NOT NULL COMMENT '通知正文（可直接展示）',
   `plan_id` BIGINT NULL COMMENT '关联计划ID，关联 blog_content_plan.id',
   `run_id` BIGINT NULL COMMENT '关联执行记录ID，关联 blog_plan_run.id',
+  `resource_type` VARCHAR(32) NULL COMMENT '通用关联资源类型，如 KNOWLEDGE_FILE；与 plan_id/run_id 互斥使用，供非计划类通知回跳',
+  `resource_id` BIGINT NULL COMMENT '通用关联资源主键，配合 resource_type 解释；为空表示该通知没有可回跳的资源',
   `is_read` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已读（0 未读 / 1 已读）',
   `created_at` TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
   `updated_at` TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
