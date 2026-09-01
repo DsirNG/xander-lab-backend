@@ -20,7 +20,7 @@ CREATE TABLE `sys_user` (
                             `avatar` varchar(255) DEFAULT NULL COMMENT '头像URL',
                             `openid` varchar(64) DEFAULT NULL COMMENT '微信小程序 openid（登录渠道绑定，NULL=未绑定微信）',
                             `role` varchar(20) DEFAULT 'USER' COMMENT '角色: ADMIN, USER',
-                            `tier` varchar(20) NOT NULL DEFAULT 'FREE' COMMENT '订阅等级: FREE, PLUS, PRO, VIP',
+                            `tier` varchar(20) NOT NULL DEFAULT 'FREE' COMMENT '订阅等级顺序：FREE、PLUS、PRO、ULTRA',
                             `status` int DEFAULT '1' COMMENT '状态: 1=正常, 0=禁用',
                             `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
                             `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',

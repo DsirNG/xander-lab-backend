@@ -19,4 +19,22 @@ public interface UserMapper extends BaseMapper<User> {
      */
     @Update("UPDATE sys_user SET openid = NULL WHERE id = #{id}")
     int clearOpenid(@Param("id") Long id);
+
+    /** 在数据库时钟上累加订阅天数，避免重复客户端请求覆盖已购买周期。 */
+    @Update("""
+            UPDATE sys_user
+               SET tier = CASE
+                       WHEN FIELD(#{tier}, 'FREE', 'PLUS', 'PRO', 'ULTRA')
+                            > FIELD(COALESCE(tier, 'FREE'), 'FREE', 'PLUS', 'PRO', 'ULTRA')
+                       THEN #{tier} ELSE COALESCE(tier, 'FREE') END,
+                   tier_expires_at = DATE_ADD(
+                       CASE WHEN tier_expires_at IS NOT NULL AND tier_expires_at > NOW()
+                            THEN tier_expires_at ELSE NOW() END,
+                       INTERVAL #{durationDays} DAY),
+                   updated_at = NOW()
+             WHERE id = #{userId}
+            """)
+    int grantSubscription(@Param("userId") Long userId,
+                          @Param("tier") String tier,
+                          @Param("durationDays") int durationDays);
 }

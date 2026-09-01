@@ -106,6 +106,31 @@ class AuthInterceptorTest {
     }
 
     @Test
+    void wechatVirtualPayNotificationUsesItsOwnSignatureInsteadOfJwt() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/virtual-pay/notify");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void virtualPayOrderStatusRequiresAuthenticationButCatalogStaysPublic() {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(
+                new MockHttpServletRequest("GET", "/api/virtual-pay/orders/order-1"), response, new Object()))
+                .isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+
+        response = new MockHttpServletResponse();
+        assertThat(interceptor.preHandle(
+                new MockHttpServletRequest("GET", "/api/virtual-pay/products"), response, new Object()))
+                .isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
     void unmatchedWriteRouteAcceptsValidToken() {
         MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/flow/canvases/9/snapshot");
         request.addHeader("Authorization", "Bearer valid-token");

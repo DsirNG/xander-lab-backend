@@ -38,8 +38,11 @@ public class User {
     /** 角色：ADMIN, USER, GUEST */
     private String role;
 
-    /** 订阅等级：FREE, PLUS, PRO, VIP */
+    /** 订阅等级：FREE, PLUS, PRO, ULTRA */
     private String tier;
+
+    /** 当前订阅权益到期时间；FREE 或无期限权益可为空 */
+    private LocalDateTime tierExpiresAt;
 
     /** 状态：1=启用, 0=禁用 */
     private Integer status;
