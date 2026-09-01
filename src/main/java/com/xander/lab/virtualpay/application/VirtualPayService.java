@@ -9,7 +9,6 @@ import com.xander.lab.virtualpay.api.VirtualPayDtos;
 import com.xander.lab.virtualpay.domain.VirtualPayOrder;
 import com.xander.lab.virtualpay.domain.VirtualPayOrderStatus;
 import com.xander.lab.virtualpay.infrastructure.VirtualPayOrderMapper;
-import com.xander.lab.virtualpay.infrastructure.VirtualPayProperties;
 import com.xander.lab.virtualpay.infrastructure.VirtualPaySigner;
 import com.xander.lab.virtualpay.infrastructure.WechatDeliveryNotificationParser.DeliveryNotification;
 import com.xander.lab.virtualpay.infrastructure.WechatVirtualPayClient;
@@ -30,7 +29,7 @@ import java.util.Comparator;
 public class VirtualPayService {
     private static final String MODE = "short_series_goods";
     private static final SecureRandom RANDOM = new SecureRandom();
-    private final VirtualPayProperties properties;
+    private final VirtualPaySettingsService settingsService;
     private final VirtualPayOrderMapper orderMapper;
     private final VirtualPaySigner signer;
     private final WechatPaymentIdentityService identityService;
@@ -39,12 +38,12 @@ public class VirtualPayService {
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
 
-    public VirtualPayService(VirtualPayProperties properties, VirtualPayOrderMapper orderMapper,
+    public VirtualPayService(VirtualPaySettingsService settingsService, VirtualPayOrderMapper orderMapper,
                              VirtualPaySigner signer, WechatPaymentIdentityService identityService,
                              SubscriptionEntitlementService entitlementService,
                              WechatVirtualPayClient wechatClient, ObjectMapper objectMapper,
                              TransactionTemplate transactionTemplate) {
-        this.properties = properties;
+        this.settingsService = settingsService;
         this.orderMapper = orderMapper;
         this.signer = signer;
         this.identityService = identityService;
@@ -55,29 +54,31 @@ public class VirtualPayService {
     }
 
     public VirtualPayDtos.Catalog catalog() {
-        List<VirtualPayDtos.Product> products = properties.getProducts().stream()
+        VirtualPaySettingsService.ResolvedSettings settings = settingsService.resolve();
+        if (settings == null) return new VirtualPayDtos.Catalog(false, List.of());
+        List<VirtualPayDtos.Product> products = settings.products().stream()
                 .filter(this::validProduct)
-                .sorted(Comparator.comparingInt(p -> tierRank(p.getTier())))
-                .map(p -> new VirtualPayDtos.Product(p.getProductId(), p.getName(), p.getTier(),
-                        p.getGoodsPrice(), p.getDurationDays())).toList();
-        return new VirtualPayDtos.Catalog(properties.isEnabled() && configured() && !products.isEmpty(), products);
+                .sorted(Comparator.comparingInt(p -> tierRank(p.tier())))
+                .map(p -> new VirtualPayDtos.Product(p.productId(), p.name(), p.tier(),
+                        p.goodsPrice(), p.durationDays())).toList();
+        return new VirtualPayDtos.Catalog(!products.isEmpty(), products);
     }
 
     /** 每次创建订单使用全新微信 loginCode，session_key 只参与本次 HMAC 后立即丢弃。 */
     public VirtualPayDtos.PayData createOrder(Long userId, String productId, String loginCode) {
-        assertEnabled();
-        VirtualPayProperties.Product product = properties.getProducts().stream()
-                .filter(p -> p.getProductId().equals(productId) && validProduct(p)).findFirst()
+        VirtualPaySettingsService.ResolvedSettings settings = requireSettings();
+        VirtualPaySettingsService.Product product = settings.products().stream()
+                .filter(p -> p.productId().equals(productId) && validProduct(p)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("订阅商品不存在或未启用"));
         PaymentIdentity identity = identityService.resolve(userId, loginCode);
         String outTradeNo = newOutTradeNo();
         Map<String, Object> values = new LinkedHashMap<>();
-        values.put("offerId", properties.getOfferId());
+        values.put("offerId", settings.offerId());
         values.put("buyQuantity", 1);
         values.put("env", 0);
         values.put("currencyType", "CNY");
-        values.put("productId", product.getProductId());
-        values.put("goodsPrice", product.getGoodsPrice());
+        values.put("productId", product.productId());
+        values.put("goodsPrice", product.goodsPrice());
         values.put("outTradeNo", outTradeNo);
         values.put("attach", outTradeNo);
         try {
@@ -86,15 +87,15 @@ public class VirtualPayService {
             order.setOutTradeNo(outTradeNo);
             order.setUserId(userId);
             order.setOpenid(identity.openid());
-            order.setProductId(product.getProductId());
-            order.setTier(product.getTier());
-            order.setGoodsPrice(product.getGoodsPrice());
+            order.setProductId(product.productId());
+            order.setTier(product.tier());
+            order.setGoodsPrice(product.goodsPrice());
             order.setQuantity(1);
-            order.setDurationDays(product.getDurationDays());
+            order.setDurationDays(product.durationDays());
             order.setStatus(VirtualPayOrderStatus.PENDING.name());
             orderMapper.insert(order);
             return new VirtualPayDtos.PayData(outTradeNo, MODE, signData,
-                    signer.paySignature("requestVirtualPayment", signData, properties.getAppKey()),
+                    signer.paySignature("requestVirtualPayment", signData, settings.appKey()),
                     signer.userSignature(signData, identity.sessionKey()));
         } catch (DuplicateKeyException ex) {
             throw new IllegalStateException("支付订单号冲突，请重试");
@@ -174,23 +175,17 @@ public class VirtualPayService {
                 order.getDeliveredAt());
     }
 
-    private boolean validProduct(VirtualPayProperties.Product product) {
-        return product.getProductId() != null && !product.getProductId().isBlank()
-                && product.getName() != null && !product.getName().isBlank()
-                && List.of("PLUS", "PRO", "ULTRA").contains(product.getTier())
-                && product.getGoodsPrice() > 0 && product.getDurationDays() > 0;
+    private boolean validProduct(VirtualPaySettingsService.Product product) {
+        return product.productId() != null && !product.productId().isBlank()
+                && product.name() != null && !product.name().isBlank()
+                && List.of("PLUS", "PRO", "ULTRA").contains(product.tier())
+                && product.goodsPrice() > 0 && product.durationDays() > 0;
     }
 
-    private boolean configured() {
-        return properties.getOfferId() != null && !properties.getOfferId().isBlank()
-                && properties.getAppKey() != null && !properties.getAppKey().isBlank()
-                && properties.getMessageToken() != null && !properties.getMessageToken().isBlank();
-    }
-
-    private void assertEnabled() {
-        if (!properties.isEnabled() || !configured()) {
-            throw new IllegalArgumentException("微信虚拟支付尚未完成服务端配置");
-        }
+    private VirtualPaySettingsService.ResolvedSettings requireSettings() {
+        VirtualPaySettingsService.ResolvedSettings settings = settingsService.resolve();
+        if (settings == null) throw new IllegalArgumentException("微信虚拟支付尚未在管理台启用");
+        return settings;
     }
 
     private String newOutTradeNo() {

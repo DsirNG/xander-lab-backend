@@ -3,6 +3,7 @@ package com.xander.lab.virtualpay.infrastructure;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.identity.application.WechatCredentialService;
+import com.xander.lab.virtualpay.application.VirtualPaySettingsService;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -16,6 +17,7 @@ public class WechatVirtualPayClient {
     private final VirtualPayProperties properties;
     private final VirtualPaySigner signer;
     private final WechatCredentialService credentialService;
+    private final VirtualPaySettingsService settingsService;
     private final ObjectMapper objectMapper;
     private final RestClient client;
     private volatile AccessToken cachedToken;
@@ -23,10 +25,12 @@ public class WechatVirtualPayClient {
     public WechatVirtualPayClient(VirtualPayProperties properties,
                                   VirtualPaySigner signer,
                                   WechatCredentialService credentialService,
+                                  VirtualPaySettingsService settingsService,
                                   ObjectMapper objectMapper) {
         this.properties = properties;
         this.signer = signer;
         this.credentialService = credentialService;
+        this.settingsService = settingsService;
         this.objectMapper = objectMapper;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Math.toIntExact(properties.getConnectTimeoutMillis()));
@@ -38,7 +42,9 @@ public class WechatVirtualPayClient {
     public QueryResult queryOrder(String openid, String outTradeNo) {
         try {
             String body = objectMapper.writeValueAsString(new QueryBody(openid, 0, outTradeNo));
-            String paySig = signer.paySignature(QUERY_ORDER_URI, body, properties.getAppKey());
+            VirtualPaySettingsService.ResolvedSettings settings = settingsService.resolve();
+            if (settings == null) throw new IllegalStateException("微信虚拟支付尚未在管理台启用");
+            String paySig = signer.paySignature(QUERY_ORDER_URI, body, settings.appKey());
             String accessToken = accessToken();
             String response = client.post()
                     .uri(uriBuilder -> uriBuilder.path(QUERY_ORDER_URI)

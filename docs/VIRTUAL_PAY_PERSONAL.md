@@ -9,13 +9,13 @@
 
 ## 部署顺序
 
-1. 人工应用 `src/main/resources/db/virtual_pay_migration.sql`。
-2. 在 MP 后台发布 PLUS、PRO、ULTRA 三个道具，价格单位为分，ID 与环境变量完全一致。
-3. 设置环境变量；保持 `WECHAT_VIRTUAL_PAY_ENABLED=false` 启动并检查配置。
+1. 新环境应用 `virtual_pay_migration.sql`；已执行旧版迁移的环境再应用 `virtual_pay_settings_migration.sql`。
+2. 在 MP 后台发布 PLUS、PRO、ULTRA 三个道具，价格单位为分。
+3. 服务器只配置消息 Token；OfferID、AppKey、商品和开关由管理台入库维护。
 4. 在 MP 后台配置明文消息推送 URL：
    `https://api.dinqor.cn/api/virtual-pay/notify`，Token 与
    `WECHAT_VIRTUAL_PAY_MESSAGE_TOKEN` 一致。
-5. URL 校验成功后设置 `WECHAT_VIRTUAL_PAY_ENABLED=true` 并重启服务。
+5. URL 校验成功后在管理台完整填写三个商品并开启虚拟支付。
 6. 使用小额现网真单完成支付、推送、发货、查单和账单核对。
 
 密钥不得写入仓库、小程序包、请求参数或日志。当前接收器采用 HTTPS + 微信明文消息签名；MP
@@ -26,7 +26,7 @@
 - [ ] 个人主体、中国大陆居民身份证、工具类目、认证和备案均已满足
 - [ ] 已知晓全终端月支付限额 10 万元
 - [ ] MP 后台虚拟支付已开通并完成签约
-- [ ] AppID、OfferID、现网 AppKey 已准备；AppKey 仅在服务器环境变量
+- [ ] AppID、OfferID、现网 AppKey 已准备；AppKey 由管理台加密入库且不回显
 - [ ] PLUS、PRO、ULTRA 道具已发布，ID 和价格与后端配置一致
 - [ ] 如需 iOS：已配置小程序简称并开通 Apple IAP；微信版本要求不低于 8.0.68
 - [ ] 数据库迁移已应用，`virtual_pay_order` 唯一索引存在

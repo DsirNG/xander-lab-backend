@@ -183,31 +183,12 @@ wechat:
     code-2-session-url: ${WECHAT_MINI_CODE_2_SESSION_URL:https://api.weixin.qq.com/sns/jscode2session}
     connect-timeout-millis: ${WECHAT_MINI_CONNECT_TIMEOUT_MILLIS:5000}
     read-timeout-millis: ${WECHAT_MINI_READ_TIMEOUT_MILLIS:5000}
-  # 个人主体小程序虚拟支付仅支持现网 env=0；迁移、MP后台和商品配置完成前保持关闭。
+  # OfferID、AppKey、开关与商品由管理台加密入库；消息 Token 仍来自服务器环境变量。
   virtual-pay:
-    enabled: ${WECHAT_VIRTUAL_PAY_ENABLED:false}
-    offer-id: ${WECHAT_VIRTUAL_PAY_OFFER_ID:}
-    app-key: ${WECHAT_VIRTUAL_PAY_APP_KEY:}
     message-token: ${WECHAT_VIRTUAL_PAY_MESSAGE_TOKEN:}
     api-base-url: ${WECHAT_VIRTUAL_PAY_API_BASE_URL:https://api.weixin.qq.com}
     connect-timeout-millis: ${WECHAT_VIRTUAL_PAY_CONNECT_TIMEOUT_MILLIS:5000}
     read-timeout-millis: ${WECHAT_VIRTUAL_PAY_READ_TIMEOUT_MILLIS:10000}
-    products:
-      - product-id: ${WECHAT_VIRTUAL_PAY_PLUS_PRODUCT_ID:}
-        name: ${WECHAT_VIRTUAL_PAY_PLUS_NAME:PLUS月度订阅}
-        tier: PLUS
-        goods-price: ${WECHAT_VIRTUAL_PAY_PLUS_PRICE_CENTS:0}
-        duration-days: ${WECHAT_VIRTUAL_PAY_PLUS_DURATION_DAYS:30}
-      - product-id: ${WECHAT_VIRTUAL_PAY_PRO_PRODUCT_ID:}
-        name: ${WECHAT_VIRTUAL_PAY_PRO_NAME:PRO月度订阅}
-        tier: PRO
-        goods-price: ${WECHAT_VIRTUAL_PAY_PRO_PRICE_CENTS:0}
-        duration-days: ${WECHAT_VIRTUAL_PAY_PRO_DURATION_DAYS:30}
-      - product-id: ${WECHAT_VIRTUAL_PAY_ULTRA_PRODUCT_ID:}
-        name: ${WECHAT_VIRTUAL_PAY_ULTRA_NAME:ULTRA月度订阅}
-        tier: ULTRA
-        goods-price: ${WECHAT_VIRTUAL_PAY_ULTRA_PRICE_CENTS:0}
-        duration-days: ${WECHAT_VIRTUAL_PAY_ULTRA_DURATION_DAYS:30}
 
 agent:
   conversation:
