@@ -14,7 +14,7 @@ import java.util.List;
  * One persisted turn inside an agent conversation. {@code kind} distinguishes
  * user input (message), assistant thinking (thought), self-critique
  * (reflection), tool invocation (tool_call), tool outcome (tool_result), the
- * final assistant answer (answer), an answer card the assistant handed the user
+ * final assistant answer (answer), the agent task plan (plan), an answer card the assistant handed the user
  * (quiz) and the user's submission on that card (quiz_answer). Content of tool
  * records and of quiz cards is JSON.
  */

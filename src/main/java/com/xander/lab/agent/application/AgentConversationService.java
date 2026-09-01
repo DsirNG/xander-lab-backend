@@ -376,6 +376,9 @@ public class AgentConversationService {
                         listener);
                 // 计划变更单独发一个事件：前端要能把它当成"智能体的待办清单"渲染，而不是一段工具输出。
                 if (PlanTasksTool.NAME.equals(toolName) && result.has("items")) {
+                    // Preserve the plan as a conversation card so a page refresh can replay it in place.
+                    saveActiveMessage(conversationId, userId, runVersion,
+                            "assistant", "plan", null, result.path("items").toString());
                     appendActive(conversationId, userId, runVersion, "plan",
                             JsonNodeFactory.instance.objectNode().set("items", result.path("items")),
                             listener);
