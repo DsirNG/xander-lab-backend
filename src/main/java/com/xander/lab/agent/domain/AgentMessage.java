@@ -24,6 +24,8 @@ public class AgentMessage {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long conversationId;
+    /** Execution generation that created this message; used to update one plan card per user turn. */
+    private Long runVersion;
     /** 消息角色：user/assistant/tool */
     private String role;
     /** 消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz/quiz_answer */

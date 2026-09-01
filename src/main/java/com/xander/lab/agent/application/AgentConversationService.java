@@ -376,9 +376,8 @@ public class AgentConversationService {
                         listener);
                 // 计划变更单独发一个事件：前端要能把它当成"智能体的待办清单"渲染，而不是一段工具输出。
                 if (PlanTasksTool.NAME.equals(toolName) && result.has("items")) {
-                    // Preserve the plan as a conversation card so a page refresh can replay it in place.
-                    saveActiveMessage(conversationId, userId, runVersion,
-                            "assistant", "plan", null, result.path("items").toString());
+                    saveOrUpdateActivePlanMessage(conversationId, userId, runVersion,
+                            result.path("items").toString());
                     appendActive(conversationId, userId, runVersion, "plan",
                             JsonNodeFactory.instance.objectNode().set("items", result.path("items")),
                             listener);
@@ -760,6 +759,7 @@ public class AgentConversationService {
                                    String role, String kind, String toolName, String content) {
         AgentMessage message = new AgentMessage();
         message.setConversationId(conversationId);
+        message.setRunVersion(runVersion);
         message.setRole(role);
         message.setKind(kind);
         message.setToolName(toolName);
@@ -774,6 +774,37 @@ public class AgentConversationService {
                     .setSql("updated_at = CURRENT_TIMESTAMP")
                     );
             if (touched != 1 || messageMapper.insertForActiveRun(message, userId, runVersion) != 1) {
+                throw new AgentRunSupersededException(conversationId, runVersion);
+            }
+        });
+    }
+
+    /** One user turn owns one plan card; subsequent plan_tasks calls update that card's contents. */
+    private void saveOrUpdateActivePlanMessage(Long conversationId, Long userId, long runVersion,
+                                               String content) {
+        transactionTemplate.executeWithoutResult(status -> {
+            int touched = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversationId)
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "running")
+                    .eq(AgentConversation::getRunVersion, runVersion)
+                    .setSql("updated_at = CURRENT_TIMESTAMP"));
+            if (touched != 1) throw new AgentRunSupersededException(conversationId, runVersion);
+
+            int updated = messageMapper.update(null, new LambdaUpdateWrapper<AgentMessage>()
+                    .eq(AgentMessage::getConversationId, conversationId)
+                    .eq(AgentMessage::getRunVersion, runVersion)
+                    .eq(AgentMessage::getKind, "plan")
+                    .set(AgentMessage::getContent, content));
+            if (updated > 0) return;
+
+            AgentMessage message = new AgentMessage();
+            message.setConversationId(conversationId);
+            message.setRunVersion(runVersion);
+            message.setRole("assistant");
+            message.setKind("plan");
+            message.setContent(content);
+            if (messageMapper.insertForActiveRun(message, userId, runVersion) != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
             }
         });
