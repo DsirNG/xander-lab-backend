@@ -63,6 +63,11 @@ public class AgentConversationService {
     private static final int TOOL_RESULT_HISTORY_CHARS = 800;
     /** 最近一次工具结果的截断长度：下一步推理主要依赖它，留足正文才能据实作答。 */
     private static final int TOOL_RESULT_LATEST_CHARS = 4000;
+    /** “说交付了代码却什么都没给”的批评意见。做成常量，方便去重后只提一次。 */
+    private static final String UNDELIVERED_CODE_CRITIQUE =
+            "自检未通过：用户要的是可运行的代码，但你的回复里既没有代码围栏，也没有调用 emit_artifact，"
+                    + "用户其实什么都没拿到。下一步必须调用 emit_artifact，把每个文件的完整源码交出来；"
+                    + "确实做不到就如实说明卡在哪里，不要把没交付说成已完成。";
 
     /**
      * 模型常把 Markdown 反引号转义成 \`；CommonMark 会把 \` 渲染成裸反引号。
@@ -267,6 +272,8 @@ public class AgentConversationService {
         int failures = 0;
         JsonNode lastError = null;
         boolean quizCardEmitted = false;
+        // 本轮有没有真的交付过代码：收口时用来判断“说完成了却什么都没给”。
+        boolean artifactEmitted = false;
         // 上一步自检的批评意见，只注入紧随其后的那一步。
         String critique = null;
         // 已经提过的批评意见：同一句话第二次出现说明智能体不会因为再听一遍而改变做法，
@@ -338,6 +345,23 @@ public class AgentConversationService {
                     reflections++;
                     critique = "自检未通过：用户要求出题，但你还没有调用 emit_quiz 下发答题卡。"
                             + "不要在 reply 里列题或选项；下一步必须调用 emit_quiz，普通练习可不传 quizSessionId。";
+                    saveActiveMessage(conversationId, userId, runVersion,
+                            "assistant", "reflection", null, critique);
+                    appendActive(conversationId, userId, runVersion, "reflection",
+                            JsonNodeFactory.instance.objectNode().put("round", reflections).put("critique", critique),
+                            listener);
+                    continue;
+                }
+                // 说做完了却什么都没给：用户要的是代码，回复里既没有代码围栏，这一轮也没发过交付卡。
+                // 这是诚实性自检，和深度思考无关；同一句批评只提一次，提过就放行，不跟模型拉锯。
+                if (reflections < maxReflections && allowedTools.contains(EmitArtifactTool.NAME)
+                        && !spentCritiques.contains(UNDELIVERED_CODE_CRITIQUE)
+                        && claimsUndeliveredCode(latestUserMessage, reply, artifactEmitted)) {
+                    reflections++;
+                    critique = UNDELIVERED_CODE_CRITIQUE;
+                    spentCritiques.add(critique);
+                    log.info("agent turn reflection conversation={} run={} round={} kind=UNDELIVERED_ARTIFACT",
+                            conversationId, runVersion, reflections);
                     saveActiveMessage(conversationId, userId, runVersion,
                             "assistant", "reflection", null, critique);
                     appendActive(conversationId, userId, runVersion, "reflection",
@@ -424,6 +448,14 @@ public class AgentConversationService {
                     appendActive(conversationId, userId, runVersion, "quiz", quiz, listener);
                     quizCardEmitted = true;
                 }
+                // 交付卡同理：代码是这一轮真正的产出，必须落成消息，刷新页面后还能拿到源码。
+                if (EmitArtifactTool.NAME.equals(toolName) && result.has(EmitArtifactTool.ARTIFACT_FIELD)) {
+                    JsonNode artifact = result.path(EmitArtifactTool.ARTIFACT_FIELD);
+                    saveActiveMessage(conversationId, userId, runVersion,
+                            "assistant", "artifact", null, artifact.toString());
+                    appendActive(conversationId, userId, runVersion, "artifact", artifact, listener);
+                    artifactEmitted = true;
+                }
                 failures = 0;
                 lastError = null;
             } catch (CancellationException exception) {
@@ -493,6 +525,51 @@ public class AgentConversationService {
         return normalized.contains("出题") || normalized.contains("题目") || normalized.contains("测验")
                 || normalized.contains("练习") || normalized.contains("选择题") || normalized.contains("quiz")
                 || normalized.contains("question");
+    }
+
+    /**
+     * 用户要代码，却什么都没拿到。
+     *
+     * <p>三个条件同时成立才算：这一轮没发过交付卡、回复里也没有代码围栏、而回复还自称做完了。
+     * 少任何一个都不拦——已经贴了围栏的照常放行，只是分析或提问的回复也不该被拦。</p>
+     */
+    private boolean claimsUndeliveredCode(String userMessage, String reply, boolean artifactEmitted) {
+        if (artifactEmitted || !StringUtils.hasText(reply) || reply.contains("```")) return false;
+        return isCodeRequest(userMessage) && claimsCompletion(reply);
+    }
+
+    /**
+     * 这条诉求要的是可运行的代码吗。
+     *
+     * <p>要求“动手做”的动词和“代码产物”的名词同时出现，且不是写文章类的诉求。
+     * 判宽了会让正常回复白等一轮自检，那正是用户抱怨过的体验，所以这里宁可漏判：
+     * 真正的兜底靠 emit_artifact 的工具说明，这道门只拦最典型的“空口交付”。</p>
+     */
+    private boolean isCodeRequest(String message) {
+        if (!StringUtils.hasText(message)) return false;
+        String normalized = message.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, "博客", "文章", "文案", "大纲", "总结", "报告", "邮件", "提醒")) return false;
+        boolean build = containsAny(normalized, "写", "实现", "生成", "做一个", "做个", "搭", "开发", "编写",
+                "create", "build", "write", "implement");
+        boolean artifact = containsAny(normalized, "代码", "源码", "脚本", "示例", "例子", "程序", "项目",
+                "组件", "页面", "网页", "接口", "服务端", "客户端", "demo", "html", "css", "javascript",
+                "python", "code", "script", "component");
+        return build && artifact;
+    }
+
+    /** 回复自称已经交付了。只看“做完了”这类断言，提问或给方案的回复不算。 */
+    private boolean claimsCompletion(String reply) {
+        String normalized = reply.toLowerCase(Locale.ROOT);
+        return containsAny(normalized, "已完成", "已经完成", "完成了", "已实现", "已经实现", "已生成",
+                "已经生成", "已写好", "写好了", "已创建", "已交付", "已为你", "已经为你", "搞定",
+                "如下", "见下", "done");
+    }
+
+    private boolean containsAny(String text, String... needles) {
+        for (String needle : needles) {
+            if (text.contains(needle)) return true;
+        }
+        return false;
     }
 
     private JsonNode progressPayload(String tool, String message) {
@@ -903,6 +980,8 @@ public class AgentConversationService {
                 // 答题卡正文是给前端渲染的 JSON；渲染成题面清单，模型才知道自己问过什么。
                 case "quiz" -> "（已用答题卡出题：）" + quizService.renderQuiz(message.getContent());
                 case "quiz_answer" -> "（在答题卡上作答：）" + message.getContent();
+                // 交付卡正文是完整源码，回灌会占满上下文；只报文件清单，模型知道“已经交过了”就够了。
+                case "artifact" -> "（已用交付卡把代码交给用户：）" + renderArtifact(message.getContent());
                 default -> message.getContent();
             };
             builder.append("【").append(role).append("】").append(content).append("\n\n");
@@ -1028,6 +1107,34 @@ public class AgentConversationService {
     private String compactJson(String content, int maxLength) {
         if (!StringUtils.hasText(content)) return "";
         return content.length() <= maxLength ? content : content.substring(0, maxLength) + "…";
+    }
+
+    /**
+     * 把交付卡渲染成一行文件清单。
+     *
+     * <p>卡片正文是全部源码，原样回灌几轮就能挤爆上下文窗口；模型这时需要知道的只是
+     * “哪些文件已经交出去了”，好在 reply 里讲怎么运行，而不是把源码再读一遍。</p>
+     */
+    private String renderArtifact(String content) {
+        if (!StringUtils.hasText(content)) return "";
+        try {
+            JsonNode artifact = objectMapper.readTree(content);
+            StringBuilder builder = new StringBuilder();
+            String name = artifact.path("name").asText("");
+            if (StringUtils.hasText(name)) builder.append(name).append(" ");
+            JsonNode files = artifact.path("files");
+            builder.append("共 ").append(files.size()).append(" 个文件：");
+            for (int index = 0; index < files.size(); index++) {
+                if (index > 0) builder.append("、");
+                builder.append(files.get(index).path("path").asText());
+            }
+            String entry = artifact.path("entry").asText("");
+            if (StringUtils.hasText(entry)) builder.append("；入口 ").append(entry);
+            return builder.toString();
+        } catch (Exception e) {
+            // 渲染失败不该拖垮整轮对话，退回截断后的原文。
+            return compactJson(content, TOOL_RESULT_HISTORY_CHARS);
+        }
     }
 
     private AgentConversation requireOwned(Long conversationId, Long userId) {

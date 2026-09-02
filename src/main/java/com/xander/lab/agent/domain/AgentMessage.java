@@ -15,8 +15,9 @@ import java.util.List;
  * user input (message), assistant thinking (thought), self-critique
  * (reflection), tool invocation (tool_call), tool outcome (tool_result), the
  * final assistant answer (answer), the agent task plan (plan), an answer card the assistant handed the user
- * (quiz) and the user's submission on that card (quiz_answer). Content of tool
- * records and of quiz cards is JSON.
+ * (quiz), the user's submission on that card (quiz_answer) and a code deliverable
+ * handed to the user (artifact). Content of tool records, quiz cards and
+ * artifacts is JSON.
  */
 @Data
 @TableName("agent_message")
@@ -28,7 +29,7 @@ public class AgentMessage {
     private Long runVersion;
     /** 消息角色：user/assistant/tool */
     private String role;
-    /** 消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz/quiz_answer */
+    /** 消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz/quiz_answer/artifact */
     private String kind;
     /** 工具名，仅 kind=tool_call/tool_result 时非空 */
     private String toolName;

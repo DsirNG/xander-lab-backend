@@ -24,7 +24,7 @@ public class WebConfig implements WebMvcConfigurer {
      * 禁止通配 + 携带凭据的组合；未显式配置时仅放行本地开发来源
      * 注意：nginx 反代 /api 时会保留浏览器 Origin 头，白名单必须包含实际页面 Origin
      */
-    @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000}")
+    @Value("${app.cors.allowed-origins:*}")
     private String[] allowedOrigins;
 
     @Override

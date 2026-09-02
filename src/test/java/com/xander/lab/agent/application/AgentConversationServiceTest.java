@@ -3,6 +3,7 @@ package com.xander.lab.agent.application;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.domain.AgentConversation;
@@ -317,6 +318,101 @@ class AgentConversationServiceTest {
         verify(messageMapper).insertForActiveRun(
                 argThatMessage("assistant", "quiz", null), eq(42L), eq(1L));
         verify(modelClient, org.mockito.Mockito.times(3)).decideNextStepStream(any(), any(), any(), any());
+    }
+
+    @Test
+    void aCodeDeliverableIsPersistedAsAMessageSoTheUserCanStillOpenItLater() {
+        // 代码是这一轮真正的产出：只发事件的话刷新一次源码就没了，必须同时落一条消息。
+        stubTransactions();
+        registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
+        service = new AgentConversationService(
+                conversationMapper, messageMapper, modelClient, registry, properties,
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+        ObjectNode emit = decisionNode(false, "把文件交出去", EmitArtifactTool.NAME, null);
+        ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
+        args.put("name", "WebSocket 聊天示例");
+        args.put("runHint", "npm install && node server.js");
+        ArrayNode files = args.putArray("files");
+        files.addObject().put("path", "server.js").put("content", "const ws = require('ws');");
+        files.addObject().put("path", "public/index.html").put("content", "<!doctype html><title>chat</title>");
+        ObjectNode finish = decisionNode(true, "", null, null);
+        finish.put("reply", "已完成，按 npm install && node server.js 跑起来就能聊天");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(emit), call(finish));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        AtomicReference<String> card = new AtomicReference<>();
+        service.executeTurn(7L, 42L, "帮我写一个 node.js + ws 的聊天示例", event -> {
+            if ("artifact".equals(event.getEventType())) card.set(event.getDataContent());
+        });
+
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "artifact", null), eq(42L), eq(1L));
+        // 同一份负载既落库也进流，并且入口自动落在能直接打开的 html 上。
+        assertThat(card.get()).contains("server.js").contains("public/index.html")
+                .contains("\"entry\":\"public/index.html\"");
+        // 已经交付过了，收口时不必再被自检拦一轮。
+        verify(modelClient, org.mockito.Mockito.times(2)).decideNextStepStream(any(), any(), any(), any());
+        verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
+                argThatMessage("assistant", "reflection", null), eq(42L), eq(1L));
+    }
+
+    @Test
+    void claimingTheCodeIsDoneWithoutDeliveringItIsSentBackExactlyOnce() {
+        // 用户的原话是"我说了东西，回复我给了，但是我没有看见东西"：
+        // 自称完成却没有任何代码，必须拦一次；模型第二次仍不交付就放行，不让用户反复干等。
+        stubTransactions();
+        registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
+        service = new AgentConversationService(
+                conversationMapper, messageMapper, modelClient, registry, properties,
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+        // 预算留够 3 轮：这样"只拦一次"证明的是同一句批评不再重复，而不是预算刚好用光。
+        org.mockito.Mockito.lenient().when(properties.getMaxReflections()).thenReturn(3);
+        ObjectNode empty = decisionNode(true, "", null, null);
+        empty.put("reply", "已完成 Node.js + ws 服务端及浏览器客户端聊天示例。");
+        ObjectNode stillEmpty = decisionNode(true, "", null, null);
+        stillEmpty.put("reply", "已完成，但我这边没法把文件交给你。");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(empty), call(stillEmpty));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        AtomicReference<String> critique = new AtomicReference<>();
+        service.executeTurn(7L, 42L, "帮我写一个 node.js + ws 的聊天示例", event -> {
+            if ("reflection".equals(event.getEventType())) critique.set(event.getDataContent());
+        });
+
+        assertThat(critique.get()).contains("emit_artifact");
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "reflection", null), eq(42L), eq(1L));
+        verify(modelClient, org.mockito.Mockito.times(2)).decideNextStepStream(any(), any(), any(), any());
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
+    }
+
+    @Test
+    void aReplyThatActuallyCarriesTheCodeIsNotSentBack() {
+        // 代码写在围栏里用户就看得见、复制得走，这种回复不该被"没交付"的门拦下。
+        stubTransactions();
+        registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
+        service = new AgentConversationService(
+                conversationMapper, messageMapper, modelClient, registry, properties,
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+        ObjectNode inline = decisionNode(true, "", null, null);
+        inline.put("reply", "已完成，代码如下：\n```js\nconsole.log('hi');\n```");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(inline));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "写一个打印 hi 的脚本", ignored -> { });
+
+        verify(modelClient, org.mockito.Mockito.times(1)).decideNextStepStream(any(), any(), any(), any());
+        verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
+                argThatMessage("assistant", "reflection", null), eq(42L), eq(1L));
     }
 
     @Test

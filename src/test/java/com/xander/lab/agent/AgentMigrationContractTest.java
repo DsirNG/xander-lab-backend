@@ -95,15 +95,34 @@ class AgentMigrationContractTest {
 
         // 答题卡只是多了两种取值，两列都是无约束的 VARCHAR(24)：
         // 新装和老库都不需要改类型，但注释里的取值表必须一致，否则线上字典对不上代码。
+        // 事件取值表后来还会继续加（artifact 就插在 quiz 之后），所以这里只钉住 quiz 自己那一段。
         assertThat(baseline)
                 .contains("answer/quiz（下发的答题卡，正文为JSON）/quiz_answer")
-                .contains("tool_error/quiz/answer_delta");
+                .contains("tool_error/quiz/");
         assertThat(upgrade)
                 .contains("MODIFY COLUMN `kind` VARCHAR(24) NOT NULL")
                 .contains("answer/quiz（下发的答题卡，正文为JSON）/quiz_answer")
                 .contains("MODIFY COLUMN `event_type` VARCHAR(24) NOT NULL")
                 .contains("tool_error/quiz/answer_delta")
                 .contains("20260831_agent_quiz_card");
+    }
+
+    @Test
+    void artifactCardUpgradeOnlyRestatesTheEnlargedKindAndEventVocabulary() throws IOException {
+        String baseline = resource("db/agent_conversation_migration.sql");
+        String upgrade = resource("db/20260902_agent_artifact_card_migration.sql");
+
+        // 代码交付卡同理：kind 和 event_type 都只是多一种取值，列类型不动，
+        // 但新装（baseline）和老库（upgrade）的注释必须同时写上 artifact，不然两条路径的字典会分叉。
+        assertThat(baseline)
+                .contains("quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）")
+                .contains("tool_error/quiz/artifact/answer_delta");
+        assertThat(upgrade)
+                .contains("MODIFY COLUMN `kind` VARCHAR(24) NOT NULL")
+                .contains("quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）")
+                .contains("MODIFY COLUMN `event_type` VARCHAR(24) NOT NULL")
+                .contains("tool_error/quiz/artifact/answer_delta")
+                .contains("20260902_agent_artifact_card");
     }
 
     private String resource(String path) throws IOException {
