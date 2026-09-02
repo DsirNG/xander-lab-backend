@@ -158,6 +158,7 @@ public class AgentConversationController {
             CompletableFuture.runAsync(() -> {
                 try {
                     service.executeClaimedTurn(id, userId, runVersion, content,
+                            request.isDeepThinking(),
                             event -> send(id, emitter, subscriberOpen, event));
                 } catch (Exception exception) {
                     // executeClaimedTurn persists and delivers the durable error event.
@@ -189,7 +190,8 @@ public class AgentConversationController {
         try {
             CompletableFuture.runAsync(() -> {
                 try {
-                    service.executeClaimedTurn(id, userId, runVersion, content, event -> {
+                    service.executeClaimedTurn(id, userId, runVersion, content,
+                            request.isDeepThinking(), event -> {
                     });
                 } catch (Exception exception) {
                     // executeClaimedTurn persists and delivers the durable error event.

@@ -488,7 +488,7 @@ class AgentConversationServiceTest {
         List<String> eventTypes = new java.util.ArrayList<>();
 
         AgentConversation result = service.executeTurn(
-                7L, 42L, "帮我复习", event -> eventTypes.add(event.getEventType()));
+                7L, 42L, "帮我复习", true, event -> eventTypes.add(event.getEventType()));
 
         assertThat(result.getStatus()).isEqualTo("ready");
         assertThat(eventTypes).containsSubsequence("reflection", "answer");
@@ -513,7 +513,7 @@ class AgentConversationServiceTest {
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
 
-        AgentConversation result = service.executeTurn(7L, 42L, "帮我复习", ignored -> { });
+        AgentConversation result = service.executeTurn(7L, 42L, "帮我复习", true, ignored -> { });
 
         assertThat(result.getStatus()).isEqualTo("ready");
         // maxReflections=1：驳回一次后放行，两次模型调用而不是打满 maxSteps。
@@ -521,6 +521,105 @@ class AgentConversationServiceTest {
                 .decideNextStepStream(any(), any(), any(), any());
         verify(messageMapper).insertForActiveRun(
                 argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
+    }
+
+    @Test
+    void fastModeSkipsThePlanSelfCheckSoTheAnswerArrivesInOneRound() {
+        // 用户没开深度思考：计划里还有未收口的步骤也直接交付，不再"先回复再撤回"。
+        stubTransactions();
+        when(planService.load(any())).thenReturn(List.of(
+                new AgentPlanItem("查一下知识库", "IN_PROGRESS", "")));
+        ObjectNode premature = decisionNode(true, "", null, null);
+        premature.put("reply", "都办好了");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(premature));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> eventTypes = new java.util.ArrayList<>();
+
+        AgentConversation result = service.executeTurn(
+                7L, 42L, "帮我复习", event -> eventTypes.add(event.getEventType()));
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        assertThat(eventTypes).contains("answer").doesNotContain("reflection");
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
+    }
+
+    @Test
+    void honestySelfCheckStillFiresWithoutDeepThinking() {
+        // 深度思考只放宽"做得更完整"的要求；把失败说成完成属于回复不诚实，任何模式都要拦。
+        stubTransactions();
+        ObjectNode failing = decisionNode(false, "调用工具", "failing_tool", null);
+        ObjectNode hides = decisionNode(true, "", null, null);
+        hides.put("reply", "已经帮你生成好了");
+        ObjectNode owns = decisionNode(true, "", null, null);
+        owns.put("reply", "工具调用失败了，我没能生成");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(failing), call(hides), call(owns));
+        service = new AgentConversationService(
+                conversationMapper, messageMapper, modelClient,
+                new AgentToolRegistry(List.of(new FailingTool("failing_tool"))), properties,
+                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> eventTypes = new java.util.ArrayList<>();
+
+        service.executeTurn(7L, 42L, "帮我生成", false,
+                event -> eventTypes.add(event.getEventType()));
+
+        assertThat(eventTypes).containsSubsequence("reflection", "answer");
+    }
+
+    @Test
+    void repeatingTheSameCritiqueStopsInsteadOfSpendingAnotherRound() {
+        // 用户看到的两张一模一样的自检卡就是这里来的：同一句批评回灌两次，
+        // 模型两次都没改计划，只是让人多等一轮。第二次直接放行。
+        stubTransactions();
+        org.mockito.Mockito.when(properties.getMaxReflections()).thenReturn(2);
+        when(planService.load(any())).thenReturn(List.of(
+                new AgentPlanItem("永远没做完的步骤", "PENDING", "")));
+        ObjectNode premature = decisionNode(true, "", null, null);
+        premature.put("reply", "都办好了");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(premature));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> eventTypes = new java.util.ArrayList<>();
+
+        service.executeTurn(7L, 42L, "帮我复习", true, event -> eventTypes.add(event.getEventType()));
+
+        assertThat(eventTypes.stream().filter("reflection"::equals)).hasSize(1);
+        verify(modelClient, org.mockito.Mockito.times(2))
+                .decideNextStepStream(any(), any(), any(), any());
+    }
+
+    @Test
+    void deepThinkingHoldsBackADraftTheSelfCheckIsLikelyToReject() {
+        // 会被驳回的草稿不流给用户：撤回比慢更难受。驳回预算用完后恢复流式。
+        stubTransactions();
+        when(planService.load(any())).thenReturn(List.of(
+                new AgentPlanItem("查一下知识库", "IN_PROGRESS", "")));
+        ObjectNode premature = decisionNode(true, "", null, null);
+        premature.put("reply", "都办好了");
+        ObjectNode settled = decisionNode(true, "", null, null);
+        settled.put("reply", "查询失败，我没能拿到知识库数据");
+        AtomicInteger calls = new AtomicInteger();
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Consumer<String> deltas = invocation.getArgument(2);
+            if (calls.getAndIncrement() == 0) {
+                deltas.accept("都办好了");
+                return call(premature);
+            }
+            deltas.accept("查询失败，我没能拿到知识库数据");
+            return call(settled);
+        });
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> eventTypes = new java.util.ArrayList<>();
+
+        service.executeTurn(7L, 42L, "帮我复习", true, event -> eventTypes.add(event.getEventType()));
+
+        assertThat(eventTypes.indexOf("answer_delta")).isGreaterThan(eventTypes.indexOf("reflection"));
+        assertThat(eventTypes).containsSubsequence("reflection", "answer_delta", "answer");
     }
 
     @Test

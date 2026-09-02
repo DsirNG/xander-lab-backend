@@ -20,6 +20,7 @@ import java.util.concurrent.ScheduledFuture;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -59,7 +60,7 @@ class AgentConversationControllerTest {
 
         assertThat(body.getConversation()).isSameAs(ready);
         verify(service).create(42L, "你好智能体");
-        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any(), any());
+        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any(), anyBoolean(), any());
     }
 
     @Test
@@ -87,8 +88,36 @@ class AgentConversationControllerTest {
         SseEmitter emitter = controller.sendMessage(7L, request, new MockHttpServletResponse());
 
         assertThat(emitter).isNotNull();
-        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), eq("继续"), any());
+        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), eq("继续"), eq(false), any());
         verify(heartbeat).cancel(false);
+    }
+
+    @Test
+    void messageStreamForwardsTheDeepThinkingChoiceToWorker() {
+        AgentConversationService service = mock(AgentConversationService.class);
+        AgentEventService eventService = mock(AgentEventService.class);
+        TaskExecutor directExecutor = Runnable::run;
+        TaskScheduler scheduler = mock(TaskScheduler.class);
+        ScheduledFuture<?> heartbeat = mock(ScheduledFuture.class);
+        org.mockito.Mockito.doReturn(heartbeat).when(scheduler).scheduleAtFixedRate(
+                any(Runnable.class), any(java.time.Instant.class), any(java.time.Duration.class));
+        AgentConversationController controller = new AgentConversationController(
+                service, mock(AgentAttachmentService.class), eventService,
+                directExecutor, directExecutor, scheduler);
+        AgentConversation claimed = new AgentConversation();
+        claimed.setId(7L);
+        claimed.setUserId(42L);
+        claimed.setStatus("running");
+        claimed.setRunVersion(9L);
+        when(service.prepareTurn(7L, 42L, "继续", List.of())).thenReturn(claimed);
+        UserContext.setUserId(42L);
+        AgentConversationMessageRequest request = new AgentConversationMessageRequest();
+        request.setContent("继续");
+        request.setDeepThinking(true);
+
+        controller.sendMessage(7L, request, new MockHttpServletResponse());
+
+        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), eq("继续"), eq(true), any());
     }
 
     @Test
@@ -112,7 +141,7 @@ class AgentConversationControllerTest {
         Long runVersion = controller.triggerMessage(7L, request).getData();
 
         assertThat(runVersion).isEqualTo(9L);
-        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), eq("继续"), any());
+        verify(service).executeClaimedTurn(eq(7L), eq(42L), eq(9L), eq("继续"), eq(false), any());
         verify(service, never()).failClaimedTurn(any(), any(), anyLong(), any());
     }
 
@@ -139,7 +168,7 @@ class AgentConversationControllerTest {
         assertThatThrownBy(() -> controller.triggerMessage(7L, request))
                 .isInstanceOfSatisfying(ResponseStatusException.class,
                         e -> assertThat(e.getStatusCode().value()).isEqualTo(503));
-        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any(), any());
+        verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any(), anyBoolean(), any());
         verify(service).failClaimedTurn(eq(7L), eq(42L), eq(9L), eq("智能体执行队列繁忙，请稍后重试"));
     }
 }

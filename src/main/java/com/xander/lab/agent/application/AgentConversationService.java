@@ -31,6 +31,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -156,6 +157,19 @@ public class AgentConversationService {
     public AgentConversation executeClaimedTurn(Long conversationId, Long userId, long runVersion,
                                                 String currentUserMessage,
                                                 Consumer<AgentEvent> onEvent) {
+        return executeClaimedTurn(conversationId, userId, runVersion, currentUserMessage, false, onEvent);
+    }
+
+    /**
+     * Runs a claimed turn，{@code deepThinking} 决定是否允许"追求完整"类自检多花轮次。
+     *
+     * <p>默认关闭：计划自检会把已经写好的回复退回去重做一遍，用户那边表现为"答案出现又被撤回、
+     * 而且很慢"。想要更细致的结果时由前端显式打开，把这份等待变成用户自己的选择。
+     * 与诚实性无关的优化才受此开关约束，工具失败没交代仍然一律拦截。</p>
+     */
+    public AgentConversation executeClaimedTurn(Long conversationId, Long userId, long runVersion,
+                                                String currentUserMessage, boolean deepThinking,
+                                                Consumer<AgentEvent> onEvent) {
         ScheduledFuture<?> leaseRenewal;
         try {
             leaseRenewal = startLeaseRenewal(conversationId, userId, runVersion);
@@ -165,7 +179,7 @@ public class AgentConversationService {
             throw exception;
         }
         try {
-            return runLoop(conversationId, userId, runVersion, currentUserMessage, onEvent);
+            return runLoop(conversationId, userId, runVersion, currentUserMessage, deepThinking, onEvent);
         } catch (AgentRunSupersededException exception) {
             log.info("agent worker generation superseded for conversation {} and run {}",
                     conversationId, runVersion);
@@ -220,12 +234,20 @@ public class AgentConversationService {
     /** Convenience entry point used by non-HTTP callers: claim, persist input, then execute. */
     public AgentConversation executeTurn(Long conversationId, Long userId, String message,
         Consumer<AgentEvent> onEvent) {
+        return executeTurn(conversationId, userId, message, false, onEvent);
+    }
+
+    /** Convenience entry point that also chooses the self-check depth for this turn. */
+    public AgentConversation executeTurn(Long conversationId, Long userId, String message,
+        boolean deepThinking, Consumer<AgentEvent> onEvent) {
         AgentConversation claimed = prepareTurn(conversationId, userId, message);
-        return executeClaimedTurn(conversationId, userId, claimed.getRunVersion(), message, onEvent);
+        return executeClaimedTurn(conversationId, userId, claimed.getRunVersion(), message,
+                deepThinking, onEvent);
     }
 
     private AgentConversation runLoop(Long conversationId, Long userId, long runVersion,
-                                      String currentUserMessage, Consumer<AgentEvent> listener) {
+                                      String currentUserMessage, boolean deepThinking,
+                                      Consumer<AgentEvent> listener) {
         long turnStartedNanos = System.nanoTime();
         // 答题卡提交是一段 JSON，拿它去召回记忆只会命中噪声；这种轮次退回上一条真实诉求。
         String latestUserMessage = StringUtils.hasText(currentUserMessage)
@@ -247,6 +269,9 @@ public class AgentConversationService {
         boolean quizCardEmitted = false;
         // 上一步自检的批评意见，只注入紧随其后的那一步。
         String critique = null;
+        // 已经提过的批评意见：同一句话第二次出现说明智能体不会因为再听一遍而改变做法，
+        // 继续驳回只是让用户多等一轮、多看一张自检卡，所以直接放行。
+        Set<String> spentCritiques = new HashSet<>();
         UsageAccumulator usage = new UsageAccumulator();
 
         for (int step = 0; step < maxSteps; step++) {
@@ -262,10 +287,15 @@ public class AgentConversationService {
             String context = buildContext(conversationId, userId, lastError, plan, memoryContext, critique);
             critique = null;
             long modelStartedNanos = System.nanoTime();
+            // 会被自检驳回的草稿干脆不要流给用户：先出现再撤回，比慢一点难受得多。
+            // 只在"这一步真有可能被驳回"时才憋着——计划自检要开了深度思考才会触发，
+            // 上一次工具失败则不论模式都可能拦，所以两者分别判断。
+            boolean planGateArmed = deepThinking && plan.stream().anyMatch(item -> !item.settled());
+            boolean rejectionLikely = reflections < maxReflections && (planGateArmed || lastError != null);
             AnswerProgress answerProgress = new AnswerProgress(
                     conversationId, userId, runVersion, listener,
                     step + 1, turnStartedNanos, modelStartedNanos,
-                    !isQuizRequest(latestUserMessage) || quizCardEmitted);
+                    (!isQuizRequest(latestUserMessage) || quizCardEmitted) && !rejectionLikely);
             JsonNode decision;
             try {
                 List<AgentAttachment> attachments = recentAttachments(conversationId, userId);
@@ -315,13 +345,16 @@ public class AgentConversationService {
                             listener);
                     continue;
                 }
-                Optional<String> verdict = turnEvaluator.critique(reply, plan, lastError);
-                if (verdict.isPresent() && reflections < maxReflections) {
+                Optional<AgentTurnEvaluator.Critique> verdict =
+                        turnEvaluator.critique(reply, plan, lastError);
+                if (verdict.isPresent() && shouldReflect(verdict.get(), deepThinking,
+                        reflections < maxReflections, spentCritiques)) {
                     // 自检不通过：不把这次回复交给用户，把批评意见回灌让智能体自己纠偏。
                     reflections++;
-                    critique = verdict.get();
-                    log.info("agent turn reflection conversation={} run={} round={}",
-                            conversationId, runVersion, reflections);
+                    critique = verdict.get().text();
+                    spentCritiques.add(critique);
+                    log.info("agent turn reflection conversation={} run={} round={} kind={}",
+                            conversationId, runVersion, reflections, verdict.get().kind());
                     saveActiveMessage(conversationId, userId, runVersion,
                             "assistant", "reflection", null, critique);
                     appendActive(conversationId, userId, runVersion, "reflection",
@@ -438,6 +471,20 @@ public class AgentConversationService {
         saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, exhausted);
         appendActive(conversationId, userId, runVersion, "answer", exhausted, listener);
         return finalizeReady(conversationId, userId, runVersion, usage, listener);
+    }
+
+    /**
+     * 这条自检结论值不值得再花一轮。
+     *
+     * <p>三条否决理由，都是从"用户体验"而不是"模型正确性"出发的：预算用光了不再纠缠；
+     * 同一句批评已经提过一次，再提一次也只会得到同样的回复；纯粹追求完整的优化在
+     * 非深度思考模式下让位于速度——用户要的是快点看到答案，而不是等一个更完美的答案。</p>
+     */
+    private boolean shouldReflect(AgentTurnEvaluator.Critique verdict, boolean deepThinking,
+                                  boolean budgetLeft, Set<String> spentCritiques) {
+        if (!budgetLeft) return false;
+        if (spentCritiques.contains(verdict.text())) return false;
+        return deepThinking || !verdict.optionalRefinement();
     }
 
     private boolean isQuizRequest(String message) {

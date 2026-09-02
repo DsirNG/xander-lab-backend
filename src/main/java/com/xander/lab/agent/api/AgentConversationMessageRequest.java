@@ -18,6 +18,14 @@ public class AgentConversationMessageRequest {
     @Size(max = 5, message = "每次最多上传5个附件")
     private List<AgentAttachmentRequest> attachments = new ArrayList<>();
 
+    /**
+     * 深度思考：允许智能体为"把计划做完"多花几轮自检，代价是回复更慢。
+     *
+     * <p>默认关闭。这类自检会把已经写好的回复退回重做，用户侧表现为答案迟迟不来，
+     * 所以要不要等由用户在前端自己决定，而不是所有对话默认承担。</p>
+     */
+    private boolean deepThinking = false;
+
     @AssertTrue(message = "消息内容和附件不能同时为空")
     public boolean isContentOrAttachmentPresent() {
         return (content != null && !content.isBlank()) || (attachments != null && !attachments.isEmpty());

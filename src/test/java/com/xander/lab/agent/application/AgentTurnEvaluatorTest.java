@@ -31,7 +31,7 @@ class AgentTurnEvaluatorTest {
                 item("查资料", "DONE"), item("写正文", "IN_PROGRESS"), item("发布", "PENDING")), null);
 
         assertThat(verdict).isPresent();
-        assertThat(verdict.orElseThrow())
+        assertThat(verdict.orElseThrow().text())
                 .contains("还有 2 个步骤没有收口")
                 .contains("「写正文」(IN_PROGRESS)")
                 .contains("「发布」(PENDING)")
@@ -49,7 +49,7 @@ class AgentTurnEvaluatorTest {
         var verdict = evaluator.critique("已经帮你生成好了", List.of(), error("上游超时"));
 
         assertThat(verdict).isPresent();
-        assertThat(verdict.orElseThrow())
+        assertThat(verdict.orElseThrow().text())
                 .contains("上游超时")
                 .contains("不要把失败说成完成");
     }
@@ -64,7 +64,7 @@ class AgentTurnEvaluatorTest {
     void fallsBackToTheWholeErrorPayloadWhenThereIsNoErrorMessage() {
         JsonNode raw = JsonNodeFactory.instance.objectNode().put("status", 502);
 
-        assertThat(evaluator.critique("已完成", List.of(), raw).orElseThrow()).contains("502");
+        assertThat(evaluator.critique("已完成", List.of(), raw).orElseThrow().text()).contains("502");
     }
 
     @Test
@@ -77,7 +77,22 @@ class AgentTurnEvaluatorTest {
     void unfinishedPlanIsReportedBeforeAnUnacknowledgedFailure() {
         // 先报计划：步骤没收口时让智能体继续干活，比先要它认错更可能真正完成诉求。
         assertThat(evaluator.critique("已完成", List.of(item("写正文", "PENDING")), error("上游超时"))
-                .orElseThrow()).contains("没有收口");
+                .orElseThrow().text()).contains("没有收口");
+    }
+
+    @Test
+    void marksOnlyThePlanRuleAsAnOptionalRefinement() {
+        // 计划没收口是"可以更好"，用户没开深度思考就不该为它多等一轮；
+        // 工具失败却说成完成是"回复不诚实"，任何模式都必须拦。
+        var planVerdict = evaluator.critique("都办好了", List.of(item("写正文", "PENDING")), null);
+        var failureVerdict = evaluator.critique("已经帮你生成好了", List.of(), error("上游超时"));
+
+        assertThat(planVerdict.orElseThrow().kind())
+                .isEqualTo(AgentTurnEvaluator.Critique.Kind.UNFINISHED_PLAN);
+        assertThat(planVerdict.orElseThrow().optionalRefinement()).isTrue();
+        assertThat(failureVerdict.orElseThrow().kind())
+                .isEqualTo(AgentTurnEvaluator.Critique.Kind.UNACKNOWLEDGED_FAILURE);
+        assertThat(failureVerdict.orElseThrow().optionalRefinement()).isFalse();
     }
 
     private AgentPlanItem item(String title, String status) {

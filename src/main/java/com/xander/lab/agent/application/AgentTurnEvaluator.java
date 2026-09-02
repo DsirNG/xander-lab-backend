@@ -24,6 +24,28 @@ public class AgentTurnEvaluator {
             "暂时不能", "稍后重试", "重试");
 
     /**
+     * 一条自检结论。
+     *
+     * <p>带上 {@link Kind} 是为了让调用方能按规则区分对待：计划没收口属于"做得更细"，
+     * 只在深度思考模式下才值得多花一轮；工具失败却说成完成属于"回复不诚实"，
+     * 任何模式都必须拦，否则用户会收到根本不存在的交付。</p>
+     */
+    public record Critique(Kind kind, String text) {
+
+        public enum Kind {
+            /** 计划里还有步骤没收口。 */
+            UNFINISHED_PLAN,
+            /** 上一次工具失败了，回复却没交代。 */
+            UNACKNOWLEDGED_FAILURE,
+        }
+
+        /** 只有"追求完整"类的自检需要深度思考模式；诚实性自检始终生效。 */
+        public boolean optionalRefinement() {
+            return kind == Kind.UNFINISHED_PLAN;
+        }
+    }
+
+    /**
      * 判断这一轮能否收口。
      *
      * @param reply     模型准备交给用户的最终回复
@@ -31,7 +53,7 @@ public class AgentTurnEvaluator {
      * @param lastError 上一次工具失败结果，成功或无调用时为 null
      * @return 需要继续纠偏时返回批评意见，可以收口时返回 empty
      */
-    public Optional<String> critique(String reply, List<AgentPlanItem> plan, JsonNode lastError) {
+    public Optional<Critique> critique(String reply, List<AgentPlanItem> plan, JsonNode lastError) {
         List<AgentPlanItem> unfinished = plan == null ? List.of()
                 : plan.stream().filter(item -> !item.settled()).toList();
         if (!unfinished.isEmpty()) {
@@ -45,13 +67,14 @@ public class AgentTurnEvaluator {
             }
             builder.append("。请继续执行这些步骤；确实不需要做的，用 plan_tasks 把它标成 DROPPED 并在 note 写明原因，"
                     + "然后再给最终回复。");
-            return Optional.of(builder.toString());
+            return Optional.of(new Critique(Critique.Kind.UNFINISHED_PLAN, builder.toString()));
         }
 
         if (lastError != null && !acknowledgesFailure(reply)) {
-            return Optional.of("自检未通过：上一次工具调用失败了（" + errorText(lastError)
-                    + "），但你的回复没有向用户交代这次失败。"
-                    + "请要么换一种参数或工具重试，要么在回复里如实说明失败原因和影响，不要把失败说成完成。");
+            return Optional.of(new Critique(Critique.Kind.UNACKNOWLEDGED_FAILURE,
+                    "自检未通过：上一次工具调用失败了（" + errorText(lastError)
+                            + "），但你的回复没有向用户交代这次失败。"
+                            + "请要么换一种参数或工具重试，要么在回复里如实说明失败原因和影响，不要把失败说成完成。"));
         }
         return Optional.empty();
     }
