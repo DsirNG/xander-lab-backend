@@ -38,7 +38,19 @@ public class VirtualPayController {
 
     @PostMapping("/orders")
     public Result<VirtualPayDtos.PayData> create(@Valid @RequestBody CreateVirtualPayOrderRequest request) {
-        return Result.success(service.createOrder(UserContext.getUserId(), request.productId(), request.loginCode()));
+        Long userId = UserContext.getUserId();
+        log.info("virtual pay order create started userId={} productId={}", userId, request.productId());
+        try {
+            Result<VirtualPayDtos.PayData> result = Result.success(
+                    service.createOrder(userId, request.productId(), request.loginCode()));
+            log.info("virtual pay order create succeeded userId={} productId={} outTradeNo={}",
+                    userId, request.productId(), result.getData().outTradeNo());
+            return result;
+        } catch (RuntimeException ex) {
+            log.warn("virtual pay order create failed userId={} productId={} exception={} reason={}",
+                    userId, request.productId(), ex.getClass().getSimpleName(), ex.getMessage());
+            throw ex;
+        }
     }
 
     @GetMapping("/orders/{outTradeNo}")
