@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -259,9 +260,11 @@ class KnowledgeTagServiceTest {
 
         List<KnowledgeTagView> views = service.tagsOfFile(7L, 500L);
 
-        assertThat(views).extracting(KnowledgeTagView::name).containsExactly("甲手动", "乙自动");
-        assertThat(views).extracting(KnowledgeTagView::source)
-                .containsExactly(TagSource.MANUAL.name(), TagSource.AUTO.name());
+        // 同一个文件上手动标签与自动标签并存，来源必须逐个跟着标签走。
+        assertThat(views).extracting(KnowledgeTagView::name, KnowledgeTagView::source)
+                .containsExactlyInAnyOrder(
+                        tuple("甲手动", TagSource.MANUAL.name()),
+                        tuple("乙自动", TagSource.AUTO.name()));
         assertThat(views).extracting(KnowledgeTagView::usageCount).containsOnlyNulls();
     }
 
@@ -318,8 +321,6 @@ class KnowledgeTagServiceTest {
         assertThat(capturedLinkDeleteValues()).contains(500L);
     }
 
-    // PLACEHOLDER_TESTS
-
     private static KnowledgeTag tag(Long id, String name) {
         KnowledgeTag tag = new KnowledgeTag();
         tag.setId(id);
@@ -343,13 +344,21 @@ class KnowledgeTagServiceTest {
         return captor.getAllValues();
     }
 
-    /** delete(...) 的条件值也走参数占位符，用它确认删的是哪一批关联。 */
+    /**
+     * delete(...) 的条件值也走参数占位符，用它确认删的是哪一批关联。
+     *
+     * <p>与 update 的 {@code set(...)} 不同，{@code eq(...)} 的取值是懒的：不先渲染一次 SQL，
+     * {@code paramNameValuePairs} 会一直是空的。</p>
+     */
     private List<Object> capturedLinkDeleteValues() {
         ArgumentCaptor<LambdaQueryWrapper<KnowledgeFileTag>> captor =
                 ArgumentCaptor.forClass(LambdaQueryWrapper.class);
         verify(fileTagMapper, org.mockito.Mockito.atLeastOnce()).delete(captor.capture());
         List<Object> values = new ArrayList<>();
-        captor.getAllValues().forEach(wrapper -> values.addAll(wrapper.getParamNameValuePairs().values()));
+        captor.getAllValues().forEach(wrapper -> {
+            wrapper.getSqlSegment();
+            values.addAll(wrapper.getParamNameValuePairs().values());
+        });
         return values;
     }
 }

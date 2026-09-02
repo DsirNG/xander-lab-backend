@@ -1,10 +1,10 @@
 package com.xander.lab.knowledgebase.application;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.xander.lab.automation.application.BlogNotificationService;
 import com.xander.lab.automation.domain.BlogNotification;
-import com.xander.lab.knowledgebase.domain.ChapterDetector;
 import com.xander.lab.knowledgebase.domain.DetectedChapter;
 import com.xander.lab.knowledgebase.domain.KnowledgeChapter;
 import com.xander.lab.knowledgebase.domain.KnowledgeFile;
@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -35,8 +36,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 知识化处理的分流规则。需求里最容易做丢的一条就在这儿：很大一本分章节的书不自动出整本结构图，
- * 而是发通知告诉用户「看哪一章时再为那一章生成」——所以阈值内外两条路径都要有用例钉住。
+ * 上传后的知识化处理。这里最要紧的是需求里那条分流规则：普通文档整本出结构图，
+ * 很大一本分章节的书不自动出图，只发通知说明「阅读某一章时再为该章生成」。
  */
 class KnowledgeIngestionServiceTest {
 
@@ -71,7 +72,7 @@ class KnowledgeIngestionServiceTest {
         service = new KnowledgeIngestionService(extractor, fileMapper, contentMapper, chapterMapper,
                 structureService, tagService, notificationService, properties);
 
-        AtomicLong nextChapterId = new AtomicLong(900);
+        AtomicLong nextChapterId = new AtomicLong(1);
         when(chapterMapper.insert(any(KnowledgeChapter.class))).thenAnswer(invocation -> {
             KnowledgeChapter chapter = invocation.getArgument(0);
             chapter.setId(nextChapterId.getAndIncrement());
@@ -79,127 +80,86 @@ class KnowledgeIngestionServiceTest {
         });
     }
 
-    private static final String TWO_CHAPTERS = """
-            # 第一章 甲
-            - 要点一
-            ## 1.1 甲之一
-            - 子要点
-            # 第二章 乙
-            - 要点二
-            """;
-
     @Test
-    void anOrdinaryDocumentGetsItsWholeGraphGeneratedImmediately() {
+    void anOrdinaryDocumentGetsItsWholeGraphRightAwayAndNoNotification() {
         KnowledgeFile file = file();
+        String text = book(3);
         when(extractor.extract(any(), eq("md")))
-                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, TWO_CHAPTERS));
+                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, text));
 
-        service.ingest(file, TWO_CHAPTERS.getBytes(), null);
+        service.ingest(file, text.getBytes(), null);
 
         assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.READY.name());
         assertThat(file.getTextExtracted()).isTrue();
-        assertThat(file.getCharCount()).isEqualTo(TWO_CHAPTERS.length());
-        assertThat(file.getChapterCount()).isEqualTo(2);
+        assertThat(file.getCharCount()).isEqualTo(text.length());
+        assertThat(file.getChapterCount()).isEqualTo(3);
         assertThat(file.getStructureMessage()).contains("结构图已生成");
-        verify(structureService).generateForFile(eq(7L), eq(file), eq(TWO_CHAPTERS), any());
-        // 阈值内的文档整本出图，没有任何需要告诉用户的事。
+        verify(structureService).generateForFile(eq(7L), eq(file), eq(text), anyList());
         verify(notificationService, never())
                 .notifyResource(anyLong(), anyString(), anyString(), anyString(), anyString(), anyLong());
-    }
-
-    @Test
-    void everyChapterIsMarkedReadyWhenTheWholeBookGraphWasGenerated() {
-        when(extractor.extract(any(), eq("md")))
-                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, TWO_CHAPTERS));
-
-        service.ingest(file(), TWO_CHAPTERS.getBytes(), null);
-
-        // 章节状态是「这一章的图有没有」的唯一依据，整本出图后必须一起翻成 READY。
+        // 整本出图时每一章都是现成的，章节状态要一并推到 READY。
         assertThat(insertedChapters()).allSatisfy(chapter ->
                 assertThat(chapter.getStructureStatus()).isEqualTo(StructureStatus.READY.name()));
-        verify(chapterMapper, org.mockito.Mockito.times(3)).updateById(any(KnowledgeChapter.class));
     }
 
     @Test
-    void aBookWithTooManyChaptersDefersTheGraphAndTellsTheUserWhy() {
-        properties.setAutoStructureChapterThreshold(2);
+    void aLargeChapterizedBookDefersItsGraphAndNotifiesTheUser() {
+        properties.setAutoStructureChapterThreshold(12);
         KnowledgeFile file = file();
+        String text = book(15);
         when(extractor.extract(any(), eq("md")))
-                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, TWO_CHAPTERS));
+                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, text));
 
-        service.ingest(file, TWO_CHAPTERS.getBytes(), null);
+        service.ingest(file, text.getBytes(), null);
 
-        // 需求原话：很大一本分章节的书不自动生成，发通知说明看某一章时再生成。
+        // 这就是需求里的那条规则：大部头不自动出图，改为看哪一章再生成，并且要通知用户。
         assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.CHAPTER_ON_DEMAND.name());
         assertThat(file.getStructureMessage()).contains("阅读某一章时会为该章单独生成");
-        verify(structureService, never()).generateForFile(any(), any(), anyString(), any());
+        verify(structureService, never()).generateForFile(any(), any(), anyString(), anyList());
         verify(notificationService).notifyResource(eq(7L),
                 eq(BlogNotification.TYPE_KNOWLEDGE_STRUCTURE_PENDING),
-                anyString(), anyString(),
-                eq(BlogNotification.RESOURCE_KNOWLEDGE_FILE), eq(500L));
-    }
-
-    @Test
-    void aVeryLongDocumentIsDeferredEvenWithOnlyAFewChapters() {
-        properties.setAutoStructureMaxChars(10);
-        KnowledgeFile file = file();
-        when(extractor.extract(any(), eq("md")))
-                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, TWO_CHAPTERS));
-
-        service.ingest(file, TWO_CHAPTERS.getBytes(), null);
-
-        // 章节少但正文长也要走按需：整本出图的耗时是按字数涨的。
-        assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.CHAPTER_ON_DEMAND.name());
-        assertThat(file.getStructureMessage()).contains("字，篇幅较大");
-    }
-
-    @Test
-    void deferredChaptersStayPendingSoTheyCanBeGeneratedWhenOpened() {
-        properties.setAutoStructureChapterThreshold(1);
-        when(extractor.extract(any(), eq("md")))
-                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, TWO_CHAPTERS));
-
-        service.ingest(file(), TWO_CHAPTERS.getBytes(), null);
-
+                anyString(), anyString(), eq(BlogNotification.RESOURCE_KNOWLEDGE_FILE), eq(500L));
+        // 章节目录照旧要落库，否则用户点开章节时没有可生成的对象。
+        assertThat(insertedChapters()).hasSize(15);
         assertThat(insertedChapters()).allSatisfy(chapter ->
                 assertThat(chapter.getStructureStatus()).isEqualTo(StructureStatus.PENDING.name()));
-        verify(chapterMapper, never()).updateById(any(KnowledgeChapter.class));
     }
 
     @Test
-    void aNotificationFailureDoesNotFailTheIngestion() {
+    void aVeryLongDocumentDefersEvenWithOnlyAFewChapters() {
+        properties.setAutoStructureMaxChars(40);
+        KnowledgeFile file = file();
+        String text = book(3);
+        when(extractor.extract(any(), eq("md")))
+                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, text));
+
+        service.ingest(file, text.getBytes(), null);
+
+        // 章节数不多但正文很长时同样不整本出图——出图成本跟字数一起涨。
+        assertThat(text.length()).isGreaterThan(40);
+        assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.CHAPTER_ON_DEMAND.name());
+        verify(structureService, never()).generateForFile(any(), any(), anyString(), anyList());
+    }
+
+    @Test
+    void aFailedNotificationDoesNotFailTheIngestion() {
         properties.setAutoStructureChapterThreshold(1);
         KnowledgeFile file = file();
+        String text = book(3);
         when(extractor.extract(any(), eq("md")))
-                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, TWO_CHAPTERS));
+                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, text));
         when(notificationService.notifyResource(anyLong(), anyString(), anyString(), anyString(),
                 anyString(), anyLong())).thenThrow(new IllegalStateException("通知服务不可用"));
 
-        service.ingest(file, TWO_CHAPTERS.getBytes(), null);
+        service.ingest(file, text.getBytes(), null);
 
-        // 文件已经存进对象存储了，发不出通知不该让整次上传看起来失败。
+        // 文件已经存好了，通知发不出去不该把整次知识化拖成失败。
         assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.CHAPTER_ON_DEMAND.name());
         verify(fileMapper).updateById(file);
     }
 
     @Test
-    void sectionsAreNestedUnderTheChapterTheyBelongTo() {
-        when(extractor.extract(any(), eq("md")))
-                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, TWO_CHAPTERS));
-
-        service.ingest(file(), TWO_CHAPTERS.getBytes(), null);
-
-        List<KnowledgeChapter> chapters = insertedChapters();
-        assertThat(chapters).extracting(KnowledgeChapter::getTitle)
-                .containsExactly("第一章 甲", "1.1 甲之一", "第二章 乙");
-        assertThat(chapters.get(0).getParentId()).isEqualTo(KnowledgeChapter.ROOT_PARENT_ID);
-        assertThat(chapters.get(1).getParentId()).isEqualTo(chapters.get(0).getId());
-        assertThat(chapters.get(2).getParentId()).isEqualTo(KnowledgeChapter.ROOT_PARENT_ID);
-        assertThat(chapters).extracting(KnowledgeChapter::getOrderIndex).containsExactly(0, 1, 2);
-    }
-
-    @Test
-    void anUnsupportedFormatKeepsTheFileUsableWithoutChaptersOrGraph() {
+    void anUnsupportedFormatKeepsTheFileAndExplainsWhyThereIsNoGraph() {
         KnowledgeFile file = file();
         file.setExtension("pdf");
         when(extractor.extract(any(), eq("pdf")))
@@ -209,108 +169,138 @@ class KnowledgeIngestionServiceTest {
 
         assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.UNSUPPORTED.name());
         assertThat(file.getTextExtracted()).isFalse();
-        assertThat(file.getChapterCount()).isZero();
-        verify(chapterMapper, never()).insert(any(KnowledgeChapter.class));
-        verify(contentMapper, never()).insert(any(KnowledgeFileContent.class));
-        // 抽不出正文也不该丢掉用户手填的标签。
+        assertThat(file.getStructureMessage()).contains("PDF").contains("可正常保存与下载");
+        // 抽不出正文也不该丢掉用户手填的标签，文件仍然要能被检索到。
         verify(tagService).attachByNames(7L, 500L, List.of("论文"));
-        verify(tagService, never()).applyAutoTags(anyLong(), anyLong(), any());
+        verify(contentMapper, never()).insert(any(KnowledgeFileContent.class));
+        verify(chapterMapper, never()).insert(any(KnowledgeChapter.class));
     }
 
     @Test
-    void autoTagsComeFromTopLevelTitlesWithTheNumberingStripped() {
-        List<DetectedChapter> detected = ChapterDetector.detect("""
-                # 第一章 记忆曲线
-                正文
-                ## 1.1 不该成为标签
-                正文
-                # 2. 间隔重复
-                正文
-                # Chapter 3: Retrieval Practice
-                正文
-                """, 100);
-
-        List<String> tags = service.autoTags(detected);
-
-        // 「第一章」「2.」「Chapter 3:」这类序号不是主题词，留着会污染标签表。
-        assertThat(tags).containsExactly("记忆曲线", "间隔重复", "Retrieval Practice");
-    }
-
-    @Test
-    void autoTagsAreCappedAndSkipTitlesThatAreTooShort() {
-        properties.setMaxAutoTags(2);
-        List<DetectedChapter> detected = ChapterDetector.detect("""
+    void sectionsArePersistedUnderTheChapterTheyBelongTo() {
+        KnowledgeFile file = file();
+        String text = """
                 # 甲
                 正文
-                # 记忆曲线
+                ## 甲一
                 正文
-                # 间隔重复
+                # 乙
                 正文
-                # 提取练习
-                正文
-                """, 100);
-
-        assertThat(service.autoTags(detected)).containsExactly("记忆曲线", "间隔重复");
-    }
-
-    @Test
-    void aFileWithoutRecognizableChaptersStillGetsAGraphAndNoAutoTags() {
-        String prose = "今天读完了这本书。它讲的是记忆与遗忘。";
-        KnowledgeFile file = file();
-        when(extractor.extract(any(), eq("md")))
-                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, prose));
-
-        service.ingest(file, prose.getBytes(), null);
-
-        assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.READY.name());
-        assertThat(file.getChapterCount()).isZero();
-        assertThat(file.getStructureMessage()).contains("未识别到章节标题");
-        verify(structureService).generateForFile(eq(7L), eq(file), eq(prose), eq(List.of()));
-        verify(tagService).applyAutoTags(7L, 500L, List.of());
-    }
-
-    @Test
-    void manualTagsAreKeptAlongsideTheAutomaticOnes() {
-        String text = """
-                # 第一章 记忆曲线
-                - 要点
-                # 第二章 间隔重复
-                - 要点
                 """;
         when(extractor.extract(any(), eq("md")))
                 .thenReturn(new DocumentTextExtractor.ExtractionResult(true, text));
 
-        service.ingest(file(), text.getBytes(), List.of("读书笔记"));
+        service.ingest(file, text.getBytes(), null);
 
-        // 自动标签会被整批替换，手填的走另一条路，两者不能互相清掉。
-        verify(tagService).applyAutoTags(7L, 500L, List.of("记忆曲线", "间隔重复"));
+        List<KnowledgeChapter> chapters = insertedChapters();
+        assertThat(chapters).extracting(KnowledgeChapter::getTitle).containsExactly("甲", "甲一", "乙");
+        // 章节树靠 parentId 串起来：小节挂在它上面那一章下，下一章回到根。
+        assertThat(chapters).extracting(KnowledgeChapter::getParentId)
+                .containsExactly(KnowledgeChapter.ROOT_PARENT_ID, 1L, KnowledgeChapter.ROOT_PARENT_ID);
+        assertThat(chapters).extracting(KnowledgeChapter::getOrderIndex).containsExactly(0, 1, 2);
+        assertThat(file.getChapterCount()).isEqualTo(2);
+    }
+
+    @Test
+    void aFileWithoutHeadingsStillGetsAGraphFromItsParagraphs() {
+        KnowledgeFile file = file();
+        String text = "今天读了一本书。它讲的是记忆。";
+        when(extractor.extract(any(), eq("md")))
+                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, text));
+
+        service.ingest(file, text.getBytes(), null);
+
+        assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.READY.name());
+        assertThat(file.getChapterCount()).isZero();
+        assertThat(file.getStructureMessage()).contains("未识别到章节标题");
+        verify(structureService).generateForFile(eq(7L), eq(file), eq(text), eq(List.of()));
+    }
+
+    @Test
+    void theExtractedTextIsStoredOnceReplacingAnyEarlierCopy() {
+        KnowledgeFile file = file();
+        String text = book(2);
+        when(extractor.extract(any(), eq("md")))
+                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, text));
+
+        service.ingest(file, text.getBytes(), null);
+
+        // 重新识别会再走一遍这里，先删后插才不会留下两份正文。
+        verify(contentMapper).deleteById(500L);
+        ArgumentCaptor<KnowledgeFileContent> captor = ArgumentCaptor.forClass(KnowledgeFileContent.class);
+        verify(contentMapper).insert(captor.capture());
+        assertThat(captor.getValue().getContent()).isEqualTo(text);
+        assertThat(captor.getValue().getFileId()).isEqualTo(500L);
+    }
+
+    @Test
+    void autoTagsComeFromTopLevelTitlesWithTheirNumberingStripped() {
+        List<String> tags = service.autoTags(List.of(
+                new DetectedChapter(1, "第一章 记忆的规律", 0, 10),
+                new DetectedChapter(2, "1.1 遗忘曲线", 10, 20),
+                new DetectedChapter(1, "Chapter 2: Spaced Repetition", 20, 30),
+                new DetectedChapter(1, "3.2 间隔重复", 30, 40)));
+
+        // 「第一章」「Chapter 2」「3.2」这类序号是位置信息，不是主题词。
+        assertThat(tags).containsExactly("记忆的规律", "Spaced Repetition", "间隔重复");
+    }
+
+    @Test
+    void autoTagsSkipTitlesThatAreTooShortOrTooLongAndStopAtTheCeiling() {
+        properties.setMaxAutoTags(2);
+
+        List<String> tags = service.autoTags(List.of(
+                new DetectedChapter(1, "第一章 一", 0, 10),
+                new DetectedChapter(1, "甲乙", 10, 20),
+                new DetectedChapter(1, "a".repeat(61), 20, 30),
+                new DetectedChapter(1, "丙丁", 30, 40),
+                new DetectedChapter(1, "戊己", 40, 50)));
+
+        assertThat(tags).containsExactly("甲乙", "丙丁");
+    }
+
+    @Test
+    void manualTagsAreAttachedAlongsideTheAutoOnes() {
+        KnowledgeFile file = file();
+        String text = book(2);
+        when(extractor.extract(any(), eq("md")))
+                .thenReturn(new DocumentTextExtractor.ExtractionResult(true, text));
+
+        service.ingest(file, text.getBytes(), List.of("读书笔记"));
+
+        verify(tagService).applyAutoTags(eq(7L), eq(500L), eq(List.of("标题1", "标题2")));
         verify(tagService).attachByNames(7L, 500L, List.of("读书笔记"));
     }
 
     @Test
-    void reIdentifyingUsesTheStoredTextInsteadOfDownloadingTheFileAgain() {
+    void reIdentifyingReusesTheStoredTextInsteadOfDownloadingTheFileAgain() {
         KnowledgeFile file = file();
+        String text = book(2);
 
-        service.ingestExtractedText(file, TWO_CHAPTERS, null);
+        service.ingestExtractedText(file, text, null);
 
-        // 章节偏移的坐标系就是抽取出的正文，没必要回源对象存储。
+        // 章节偏移是以抽取出的正文为坐标系的，重算不需要回源对象存储。
         assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.READY.name());
         verify(extractor, never()).extract(any(), anyString());
-        verify(contentMapper).insert(any(KnowledgeFileContent.class));
+        verify(structureService).generateForFile(eq(7L), eq(file), eq(text), anyList());
     }
 
     @Test
-    void ingestingNullTextIsTreatedAsEmptyRatherThanCrashing() {
-        KnowledgeFile file = file();
+    void resettingClearsTheOldChaptersGraphAndStoredTextBeforeARerun() {
+        service.resetKnowledge(7L, 500L);
 
-        service.ingestExtractedText(file, null, null);
-
-        assertThat(file.getCharCount()).isZero();
-        assertThat(file.getStructureStatus()).isEqualTo(StructureStatus.READY.name());
+        // 不清场就重新识别会留下两套章节，结构图还会指向已经不存在的旧章节。
+        ArgumentCaptor<LambdaQueryWrapper<KnowledgeChapter>> captor =
+                ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(chapterMapper).delete(captor.capture());
+        captor.getValue().getSqlSegment();
+        assertThat(captor.getValue().getParamNameValuePairs().values()).contains(7L, 500L);
+        verify(structureService).deleteByFile(7L, 500L);
+        verify(contentMapper).deleteById(500L);
     }
 
     @Test
-    void markFailedRecordsTheFailureAndPointsAtTheManualRetry() {
+    void aFailedIngestionIsRecordedWithoutThrowingAwayTheFile() {
         KnowledgeFile file = file();
 
         service.markFailed(file);
@@ -319,16 +309,9 @@ class KnowledgeIngestionServiceTest {
         assertThat(file.getStructureMessage()).contains("手动重新识别");
         assertThat(file.getTextExtracted()).isFalse();
         verify(fileMapper).updateById(file);
-    }
-
-    @Test
-    void resetKnowledgeClearsChaptersGraphAndStoredText() {
-        service.resetKnowledge(7L, 500L);
-
-        // 三样都要清：留下任何一样，重新识别的结果就会和旧数据混在一起。
-        verify(chapterMapper).delete(any());
-        verify(structureService).deleteByFile(7L, 500L);
-        verify(contentMapper).deleteById(500L);
+        // 失败只是没有结构图，正文与章节不该被这一步顺手删掉。
+        verify(contentMapper, never()).deleteById(anyLong());
+        verify(chapterMapper, never()).delete(any());
     }
 
     private static KnowledgeFile file() {
@@ -340,6 +323,15 @@ class KnowledgeIngestionServiceTest {
         file.setDisplayName("book.md");
         file.setExtension("md");
         return file;
+    }
+
+    private static String book(int chapterCount) {
+        StringBuilder text = new StringBuilder();
+        for (int i = 1; i <= chapterCount; i++) {
+            text.append("# 第").append(i).append("章 标题").append(i).append('\n')
+                    .append("- 要点").append(i).append('\n');
+        }
+        return text.toString();
     }
 
     private List<KnowledgeChapter> insertedChapters() {
