@@ -183,6 +183,12 @@ wechat:
     code-2-session-url: ${WECHAT_MINI_CODE_2_SESSION_URL:https://api.weixin.qq.com/sns/jscode2session}
     connect-timeout-millis: ${WECHAT_MINI_CONNECT_TIMEOUT_MILLIS:5000}
     read-timeout-millis: ${WECHAT_MINI_READ_TIMEOUT_MILLIS:5000}
+  # OfferID、AppKey、开关与商品由管理台加密入库；消息 Token 仍来自服务器环境变量。
+  virtual-pay:
+    message-token: ${WECHAT_VIRTUAL_PAY_MESSAGE_TOKEN:}
+    api-base-url: ${WECHAT_VIRTUAL_PAY_API_BASE_URL:https://api.weixin.qq.com}
+    connect-timeout-millis: ${WECHAT_VIRTUAL_PAY_CONNECT_TIMEOUT_MILLIS:5000}
+    read-timeout-millis: ${WECHAT_VIRTUAL_PAY_READ_TIMEOUT_MILLIS:10000}
 
 agent:
   conversation:

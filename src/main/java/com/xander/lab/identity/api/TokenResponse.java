@@ -51,6 +51,10 @@ public class TokenResponse {
         private String nickname;
         private String avatar;
         private String role;
+        /** 订阅等级：FREE / PLUS / PRO / ULTRA */
+        private String tier;
+        /** 当前订阅到期时间；免费用户为空 */
+        private LocalDateTime tierExpiresAt;
         /** 邮箱（登录账号，展示用，不支持修改） */
         private String email;
         /** 注册时间（账户信息页展示） */

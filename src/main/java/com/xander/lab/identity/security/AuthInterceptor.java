@@ -28,6 +28,10 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     /** 需要登录的受保护路径（写操作 + 私有读操作） */
     private static final List<String> PROTECTED_WRITE_PATTERNS = List.of(
+            // 虚拟支付商品目录公开，但订单创建、对账和私有订单状态必须登录。
+            "POST:/api/virtual-pay/orders",
+            "POST:/api/virtual-pay/orders/*",
+            "GET:/api/virtual-pay/orders/*",
             "POST:/api/blog/posts",
             "GET:/api/blog/posts/publish-status",
             "PUT:/api/blog/posts/*",
@@ -134,6 +138,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     /** 完全排除的路径（独立鉴权体系，如 MCP 传输与 OAuth 端点） */
     private static final List<String> EXCLUDED_PATTERNS = List.of(
             "/api/auth/",
+            "/api/virtual-pay/notify",
             "/api/mcp",
             "/api/studio/preview/",
             "/swagger-ui",

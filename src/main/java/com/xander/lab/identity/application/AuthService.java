@@ -659,6 +659,8 @@ public class AuthService {
                 .nickname(user.getNickname())
                 .avatar(user.getAvatar())
                 .role(user.getRole())
+                .tier(user.getTier())
+                .tierExpiresAt(user.getTierExpiresAt())
                 .email(user.getEmail())
                 .createdAt(user.getCreatedAt())
                 .build();

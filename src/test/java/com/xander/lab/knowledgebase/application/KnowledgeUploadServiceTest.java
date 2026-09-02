@@ -24,6 +24,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -464,6 +465,11 @@ class KnowledgeUploadServiceTest {
         return chunk;
     }
 
+    private static MockMultipartFile part(String content) {
+        return new MockMultipartFile(
+                "file", "chunk.bin", "application/octet-stream", content.getBytes(StandardCharsets.UTF_8));
+    }
+
     private static KnowledgeFile storedFile() {
         KnowledgeFile file = new KnowledgeFile();
         file.setId(500L);
@@ -494,5 +500,15 @@ class KnowledgeUploadServiceTest {
                 ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
         verify(sessionMapper, org.mockito.Mockito.atLeastOnce()).update(isNull(), captor.capture());
         return captor.getAllValues();
+    }
+
+    /** 完成流程可能先抢占再回滚，失败断言只应观察最后一次状态更新。 */
+    private List<Object> lastUpdateValues() {
+        ArgumentCaptor<LambdaUpdateWrapper<KnowledgeUploadSession>> captor =
+                ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
+        verify(sessionMapper, org.mockito.Mockito.atLeastOnce()).update(isNull(), captor.capture());
+        LambdaUpdateWrapper<KnowledgeUploadSession> last =
+                captor.getAllValues().get(captor.getAllValues().size() - 1);
+        return new ArrayList<>(last.getParamNameValuePairs().values());
     }
 }
