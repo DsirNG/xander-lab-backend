@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -369,7 +370,72 @@ class KnowledgeUploadServiceTest {
         assertThat(lastUpdateValues()).contains(UploadSessionStatus.UPLOADING.name(), "key");
     }
 
-    // PLACEHOLDER_TESTS
+    @Test
+    void completingTwiceReturnsTheSameFileWithoutMergingAgain() throws Exception {
+        KnowledgeUploadSession done = session(UploadSessionStatus.COMPLETED.name(), 3);
+        done.setFileId(500L);
+        when(sessionMapper.selectOne(any())).thenReturn(done);
+        when(fileMapper.selectOne(any())).thenReturn(storedFile());
+        when(fileService.detail(7L, 500L)).thenReturn(KnowledgeFileView.of(storedFile(), List.of()));
+
+        KnowledgeFileView view = service.complete(7L, UPLOAD_ID, null);
+
+        // 网络重试会把 complete 打两次，第二次必须是查询而不是又一次入库。
+        assertThat(view.id()).isEqualTo(500L);
+        verify(stagingStore, never()).merge(anyString(), anyInt());
+        verify(fileService, never()).store(any(), any(), anyString(), any(), any(), anyString(), any(), any());
+    }
+
+    @Test
+    void losingTheRaceToCompleteWaitsInsteadOfMergingInParallel() throws Exception {
+        when(sessionMapper.selectOne(any())).thenReturn(session(UploadSessionStatus.UPLOADING.name(), 3));
+        when(chunkMapper.selectList(any())).thenReturn(List.of(chunk(0), chunk(1), chunk(2)));
+        // 条件更新命中 0 行 = 另一个请求已经把会话抢走了。
+        when(sessionMapper.update(isNull(), any())).thenReturn(0);
+
+        assertThatThrownBy(() -> service.complete(7L, UPLOAD_ID, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("上传正在合并中，请稍后重试");
+        verify(stagingStore, never()).merge(anyString(), anyInt());
+    }
+
+    @Test
+    void aCompletedSessionWhoseFileWasDeletedSaysSoRatherThanReturningNothing() {
+        KnowledgeUploadSession done = session(UploadSessionStatus.COMPLETED.name(), 3);
+        done.setFileId(500L);
+        when(sessionMapper.selectOne(any())).thenReturn(done);
+        when(fileMapper.selectOne(any())).thenReturn(null);
+
+        assertThatThrownBy(() -> service.complete(7L, UPLOAD_ID, null))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("该会话生成的文件已被删除");
+    }
+
+    @Test
+    void abortingVoidsTheSessionAndClearsTheStagedChunks() {
+        when(sessionMapper.selectOne(any())).thenReturn(session(UploadSessionStatus.UPLOADING.name(), 1));
+
+        service.abort(7L, UPLOAD_ID);
+
+        assertThat(lastUpdateValues()).contains(UploadSessionStatus.ABORTED.name());
+        verify(stagingStore).discardQuietly(UPLOAD_ID);
+    }
+
+    @Test
+    void aCompletedSessionCannotBeAbortedBecauseTheFileAlreadyExists() {
+        KnowledgeUploadSession done = session(UploadSessionStatus.COMPLETED.name(), 3);
+        done.setFileId(500L);
+        when(sessionMapper.selectOne(any())).thenReturn(done);
+
+        assertThatThrownBy(() -> service.abort(7L, UPLOAD_ID))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("该会话已完成上传，无法放弃");
+        verify(stagingStore, never()).discardQuietly(anyString());
+    }
+
+    private static MockMultipartFile part(String content) {
+        return new MockMultipartFile("chunk", "chunk.bin", "application/octet-stream", content.getBytes());
+    }
 
     private KnowledgeUploadSession session(String status, Integer receivedChunks) {
         KnowledgeUploadSession session = new KnowledgeUploadSession();
@@ -409,11 +475,24 @@ class KnowledgeUploadServiceTest {
 
     /** set(...) 的值走参数占位符，断言要看 paramNameValuePairs 而不是 SQL 片段。 */
     private List<Object> capturedUpdateValues() {
+        List<Object> values = new ArrayList<>();
+        capturedUpdates().forEach(wrapper -> values.addAll(wrapper.getParamNameValuePairs().values()));
+        return values;
+    }
+
+    /**
+     * 只看最后一次更新。整段捕获会把条件里的 eq 值也算进来（抢占语句同时含 eq UPLOADING
+     * 与 set COMPLETED），断言「退回 UPLOADING」时必须落到最后那条语句上才有意义。
+     */
+    private List<Object> lastUpdateValues() {
+        List<LambdaUpdateWrapper<KnowledgeUploadSession>> updates = capturedUpdates();
+        return new ArrayList<>(updates.get(updates.size() - 1).getParamNameValuePairs().values());
+    }
+
+    private List<LambdaUpdateWrapper<KnowledgeUploadSession>> capturedUpdates() {
         ArgumentCaptor<LambdaUpdateWrapper<KnowledgeUploadSession>> captor =
                 ArgumentCaptor.forClass(LambdaUpdateWrapper.class);
         verify(sessionMapper, org.mockito.Mockito.atLeastOnce()).update(isNull(), captor.capture());
-        List<Object> values = new ArrayList<>();
-        captor.getAllValues().forEach(wrapper -> values.addAll(wrapper.getParamNameValuePairs().values()));
-        return values;
+        return captor.getAllValues();
     }
 }
