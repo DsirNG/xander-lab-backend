@@ -2,7 +2,9 @@ package com.xander.lab.agent.application;
 
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
+import com.xander.lab.agent.domain.AgentStep;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
+import com.xander.lab.common.ModelCallResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -11,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ScheduledFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /** Coordinates one already-claimed agent turn around the durable run lifecycle. */
@@ -21,6 +24,15 @@ public class AgentTurnCoordinator {
     private final AgentConversationMapper conversationMapper;
     private final AgentEventService eventService;
     private final AgentRunLifecycle runLifecycle;
+    private final AgentExecutionJournal executionJournal;
+    private final AgentStepExecutor stepExecutor;
+
+    /** Creates and settles one durable model step around the remote model call. */
+    ExecutedModelStep executeModelStep(AgentStepRequest request, Consumer<String> onAnswerDelta,
+                                       BooleanSupplier cancellationRequested) {
+        AgentStep step = executionJournal.startStep(request);
+        return new ExecutedModelStep(step, stepExecutor.execute(step, request, onAnswerDelta, cancellationRequested));
+    }
 
     /** Executes work outside transactions while preserving the claimed generation's terminal semantics. */
     AgentConversation execute(Long conversationId, Long userId, long runVersion,
@@ -99,4 +111,7 @@ public class AgentTurnCoordinator {
 @FunctionalInterface
 interface ClaimedTurnWork {
     AgentConversation run();
+}
+
+record ExecutedModelStep(AgentStep step, ModelCallResult result) {
 }

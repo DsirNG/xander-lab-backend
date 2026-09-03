@@ -79,7 +79,6 @@ public class AgentConversationService {
     private final AgentQuizService quizService;
     private final AgentExecutionJournal executionJournal;
     private final AgentRequestAssembler requestAssembler;
-    private final AgentStepExecutor stepExecutor;
     private final AgentRunLifecycle runLifecycle;
     private final AgentEventProjector eventProjector;
     private final AgentTurnCoordinator turnCoordinator;
@@ -93,7 +92,7 @@ public class AgentConversationService {
                                     AgentPlanService planService, AgentMemoryService memoryService,
                                     AgentQuizService quizService,
                                     AgentExecutionJournal executionJournal,
-                                    AgentRequestAssembler requestAssembler, AgentStepExecutor stepExecutor,
+                                    AgentRequestAssembler requestAssembler,
                                     AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector,
                                     AgentTurnCoordinator turnCoordinator) {
         this.conversationMapper = conversationMapper;
@@ -110,7 +109,6 @@ public class AgentConversationService {
         this.quizService = quizService;
         this.executionJournal = executionJournal;
         this.requestAssembler = requestAssembler;
-        this.stepExecutor = stepExecutor;
         this.runLifecycle = runLifecycle;
         this.eventProjector = eventProjector;
         this.turnCoordinator = turnCoordinator;
@@ -128,13 +126,13 @@ public class AgentConversationService {
                 eventService, billingService, objectMapper, planService, memoryService,
                 quizService, AgentExecutionJournal.disabled(),
                 AgentRequestAssembler.legacy(toolRegistry, properties, planService, quizService, objectMapper),
-                AgentStepExecutor.legacy(modelClient),
                 new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
                         properties, transactionTemplate, agentLeaseRenewer),
                 new AgentEventProjector(conversationMapper, messageMapper, eventService, transactionTemplate),
                 new AgentTurnCoordinator(conversationMapper, eventService,
                         new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
-                                properties, transactionTemplate, agentLeaseRenewer)));
+                                properties, transactionTemplate, agentLeaseRenewer),
+                        AgentExecutionJournal.disabled(), AgentStepExecutor.legacy(modelClient)));
     }
 
     /**
@@ -276,10 +274,12 @@ public class AgentConversationService {
                     step + 1, turnStartedNanos, modelStartedNanos,
                     true);
             JsonNode decision;
-            AgentStep journalStep = executionJournal.startStep(request);
+            AgentStep journalStep;
             try {
-                ModelCallResult call = stepExecutor.execute(journalStep, request, answerProgress::accept,
+                ExecutedModelStep executedStep = turnCoordinator.executeModelStep(request, answerProgress::accept,
                         () -> runLifecycle.isCancellationRequested(conversationId, userId, runVersion));
+                ModelCallResult call = executedStep.result();
+                journalStep = executedStep.step();
                 answerProgress.flush();
                 decision = call.payload();
                 usage.add(call.usage(), call.model());
