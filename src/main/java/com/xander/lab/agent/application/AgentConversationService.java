@@ -60,10 +60,6 @@ public class AgentConversationService {
     private static final int ANSWER_DELTA_FLUSH_CHARS = 24;
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
     private static final String DEFAULT_TITLE = "新对话";
-    /** 历史工具结果的截断长度：早期观察只保留摘要，够模型记得"做过什么"。 */
-    private static final int TOOL_RESULT_HISTORY_CHARS = 800;
-    /** 最近一次工具结果的截断长度：下一步推理主要依赖它，留足正文才能据实作答。 */
-    private static final int TOOL_RESULT_LATEST_CHARS = 4000;
     /** “说交付了代码却什么都没给”的批评意见。做成常量，方便去重后只提一次。 */
     private static final String UNDELIVERED_CODE_CRITIQUE =
             "自检未通过：用户要的是可运行的代码，但你的回复里既没有代码围栏，也没有调用 emit_artifact，"
@@ -94,6 +90,8 @@ public class AgentConversationService {
     private final AgentTurnEvaluator turnEvaluator;
     private final AgentQuizService quizService;
     private final AgentExecutionJournal executionJournal;
+    private final AgentRequestAssembler requestAssembler;
+    private final AgentStepExecutor stepExecutor;
 
     @Autowired
     public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
@@ -103,7 +101,8 @@ public class AgentConversationService {
                                     BillingService billingService, ObjectMapper objectMapper,
                                     AgentPlanService planService, AgentMemoryService memoryService,
                                     AgentTurnEvaluator turnEvaluator, AgentQuizService quizService,
-                                    AgentExecutionJournal executionJournal) {
+                                    AgentExecutionJournal executionJournal,
+                                    AgentRequestAssembler requestAssembler, AgentStepExecutor stepExecutor) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.modelClient = modelClient;
@@ -119,6 +118,8 @@ public class AgentConversationService {
         this.turnEvaluator = turnEvaluator;
         this.quizService = quizService;
         this.executionJournal = executionJournal;
+        this.requestAssembler = requestAssembler;
+        this.stepExecutor = stepExecutor;
     }
 
     /** Compatibility constructor retained for focused loop tests and embedded callers. */
@@ -131,7 +132,9 @@ public class AgentConversationService {
                                     AgentTurnEvaluator turnEvaluator, AgentQuizService quizService) {
         this(conversationMapper, messageMapper, modelClient, toolRegistry, properties, transactionTemplate,
                 eventService, agentLeaseRenewer, billingService, objectMapper, planService, memoryService,
-                turnEvaluator, quizService, AgentExecutionJournal.disabled());
+                turnEvaluator, quizService, AgentExecutionJournal.disabled(),
+                AgentRequestAssembler.legacy(toolRegistry, properties, planService, quizService, objectMapper),
+                AgentStepExecutor.legacy(modelClient));
     }
 
     /**
@@ -303,7 +306,6 @@ public class AgentConversationService {
         // 工具表不再按关键词预筛：用不用、用哪个由模型自己判断。
         // 旧的关键词门禁会让匹配不上词表的诉求连工具都看不见，只能空口答应，那才是"工作流"。
         Set<String> allowedTools = toolRegistry.allowedNames();
-        String toolDescriptions = toolRegistry.describeTools(allowedTools);
         String memoryContext = recallMemoryContext(userId, latestUserMessage);
         log.info("agent turn started conversation={} run={} toolCount={} memoryInjected={}",
                 conversationId, runVersion, allowedTools.size(), !memoryContext.isEmpty());
@@ -332,7 +334,10 @@ public class AgentConversationService {
             }
             // 每一步重新读计划：智能体上一步可能刚改写过它，这是会话状态而不是一次性输入。
             List<AgentPlanItem> plan = planService.load(requireOwned(conversationId, userId));
-            String context = buildContext(conversationId, userId, lastError, plan, memoryContext, critique);
+            List<AgentMessage> messages = listMessages(conversationId, userId);
+            AgentStepRequest request = requestAssembler.assemble(new AgentRequestAssemblyInput(
+                    conversationId, userId, runVersion, step + 1, messages, plan, memoryContext,
+                    lastError, critique, allowedTools, maxSteps - step, deepThinking));
             critique = null;
             long modelStartedNanos = System.nanoTime();
             // 会被自检驳回的草稿干脆不要流给用户：先出现再撤回，比慢一点难受得多。
@@ -345,33 +350,22 @@ public class AgentConversationService {
                     step + 1, turnStartedNanos, modelStartedNanos,
                     (!isQuizRequest(latestUserMessage) || quizCardEmitted) && !rejectionLikely);
             JsonNode decision;
-            AgentStep journalStep = executionJournal.startStep(conversationId, userId, runVersion, step + 1,
-                    stepRequestSnapshot(step + 1, context, allowedTools, attachmentsCount(conversationId, userId),
-                            plan.size(), deepThinking));
+            AgentStep journalStep = executionJournal.startStep(request);
             try {
-                List<AgentAttachment> attachments = recentAttachments(conversationId, userId);
-                ModelCallResult call = attachments.isEmpty()
-                        ? modelClient.decideNextStepStream(
-                                context, toolDescriptions, answerProgress::accept,
-                                () -> isCancelRequested(conversationId, userId, runVersion))
-                        : modelClient.decideNextStepStream(
-                                context, toolDescriptions, attachments, answerProgress::accept,
-                                () -> isCancelRequested(conversationId, userId, runVersion));
+                ModelCallResult call = stepExecutor.execute(journalStep, request, answerProgress::accept,
+                        () -> isCancelRequested(conversationId, userId, runVersion));
                 answerProgress.flush();
                 decision = call.payload();
                 usage.add(call.usage(), call.model());
-                executionJournal.completeStep(journalStep, call);
                 log.info("agent model decision conversation={} run={} step={} durationMs={} done={}",
                         conversationId, runVersion, step + 1,
                         elapsedMillis(modelStartedNanos), decision.path("done").asBoolean(false));
             } catch (CancellationException exception) {
-                executionJournal.cancelStep(journalStep);
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             } catch (RuntimeException exception) {
-                executionJournal.failStep(journalStep, safeMessage(exception));
                 throw exception;
             }
             if (isCancelRequested(conversationId, userId, runVersion)) {
@@ -1003,99 +997,6 @@ public class AgentConversationService {
         return event;
     }
 
-    /**
-     * 拼装模型上下文：长期记忆、任务计划、对话历史、最近失败、自检批评。
-     *
-     * <p>计划和记忆放在历史之前，因为它们是"我是谁、我打算怎么做"这类基线状态；
-     * 批评意见放在最后，紧贴决策点，避免被历史冲淡。</p>
-     */
-    private String buildContext(Long conversationId, Long userId, JsonNode lastError,
-                               List<AgentPlanItem> plan, String memoryContext, String critique) {
-        List<AgentMessage> recent = recentWindow(listMessages(conversationId, userId));
-        int lastToolResultIndex = lastToolResultIndex(recent);
-
-        StringBuilder builder = new StringBuilder();
-        if (StringUtils.hasText(memoryContext)) {
-            builder.append("以下是你对这位用户的长期记忆（跨会话有效，可直接使用；与用户当前说法冲突时以用户当前说法为准）：\n")
-                    .append(memoryContext).append("\n\n");
-        }
-        String renderedPlan = planService.render(plan);
-        if (StringUtils.hasText(renderedPlan)) {
-            builder.append("以下是你自己写下的任务计划（会话状态，用 plan_tasks 改写它）：\n")
-                    .append(renderedPlan).append("\n\n");
-        }
-        builder.append("以下是智能体与用户的对话记录：\n\n");
-        for (int index = 0; index < recent.size(); index++) {
-            AgentMessage message = recent.get(index);
-            String role = switch (message.getRole()) {
-                case "user" -> "用户";
-                case "tool" -> "工具结果";
-                default -> "智能体";
-            };
-            String content = switch (message.getKind()) {
-                case "thought" -> "（思考：）" + message.getContent();
-                case "reflection" -> "（自检：）" + message.getContent();
-                case "tool_call" -> "（调用了工具）" + message.getContent();
-                case "tool_result" -> compactJson(message.getContent(), index == lastToolResultIndex
-                        ? TOOL_RESULT_LATEST_CHARS : TOOL_RESULT_HISTORY_CHARS);
-                case "answer" -> "（回复：）" + message.getContent();
-                // 答题卡正文是给前端渲染的 JSON；渲染成题面清单，模型才知道自己问过什么。
-                case "quiz" -> "（已用答题卡出题：）" + quizService.renderQuiz(message.getContent());
-                case "quiz_answer" -> "（在答题卡上作答：）" + message.getContent();
-                // 交付卡正文是完整源码，回灌会占满上下文；只报文件清单，模型知道“已经交过了”就够了。
-                case "artifact" -> "（已用交付卡把代码交给用户：）" + renderArtifact(message.getContent());
-                default -> message.getContent();
-            };
-            builder.append("【").append(role).append("】").append(content).append("\n\n");
-            if (message.getAttachments() != null && !message.getAttachments().isEmpty()) {
-                builder.append("【附件】")
-                        .append(message.getAttachments().stream().map(AgentAttachment::name).toList())
-                        .append("\n\n");
-            }
-        }
-        if (lastError != null) {
-            builder.append("【最近一次工具失败】").append(lastError.toString()).append("\n\n");
-        }
-        if (StringUtils.hasText(critique)) {
-            builder.append("【自检结果】").append(critique).append("\n\n");
-        }
-        builder.append("请根据以上信息决定下一步：需要动手就返回 action，已经真正做完就返回 done=true 的最终回复。");
-        return builder.toString();
-    }
-
-    /** Builds a privacy-preserving request fact before the remote model call begins. */
-    private String stepRequestSnapshot(int stepNo, String context, Set<String> allowedTools,
-                                       int attachmentCount, int planSize, boolean deepThinking) {
-        ObjectNode snapshot = JsonNodeFactory.instance.objectNode();
-        snapshot.put("step", stepNo);
-        snapshot.put("contextChars", context.length());
-        snapshot.put("attachmentCount", attachmentCount);
-        snapshot.put("planItemCount", planSize);
-        snapshot.put("deepThinking", deepThinking);
-        snapshot.put("toolSetHash", Integer.toHexString(new java.util.TreeSet<>(allowedTools).toString().hashCode()));
-        return snapshot.toString();
-    }
-
-    private int attachmentsCount(Long conversationId, Long userId) {
-        return recentAttachments(conversationId, userId).size();
-    }
-
-    /** 注入模型的历史窗口；文本上下文和附件都取这一段，两者的"可见范围"必须一致。 */
-    private List<AgentMessage> recentWindow(List<AgentMessage> messages) {
-        int limit = Math.max(5, properties.getContextMessageLimit());
-        return messages.size() <= limit
-                ? messages
-                : messages.subList(messages.size() - limit, messages.size());
-    }
-
-    /** 最近一条工具结果在窗口中的下标；没有则返回 -1。 */
-    private int lastToolResultIndex(List<AgentMessage> recent) {
-        for (int index = recent.size() - 1; index >= 0; index--) {
-            if ("tool_result".equals(recent.get(index).getKind())) return index;
-        }
-        return -1;
-    }
-
     /** 召回与本轮输入相关的长期记忆；记忆是增益而非必需，失败不能拖垮整轮对话。 */
     private String recallMemoryContext(Long userId, String latestUserMessage) {
         try {
@@ -1121,34 +1022,6 @@ public class AgentConversationService {
 
     private String describeTool(String toolName) {
         return StringUtils.hasText(toolName) ? toolName : "（空工具名）";
-    }
-
-    /**
-     * 交给模型的附件只取上下文窗口内的用户消息。
-     *
-     * <p>原来的实现沿整条历史一路回溯，于是第一轮传的图片会在之后每一轮的每一步被重新上传：
-     * 既反复按图片计费，也让早就翻篇的图片继续参与推理。跟文本上下文用同一个窗口后，
-     * "看得见图"和"看得见提到图的那句话"始终一致，追问同一张图仍然有效。</p>
-     */
-    private List<AgentAttachment> recentAttachments(Long conversationId, Long userId) {
-        List<AgentMessage> window = recentWindow(listMessages(conversationId, userId));
-        java.util.LinkedHashMap<String, AgentAttachment> recent = new java.util.LinkedHashMap<>();
-        for (int index = window.size() - 1; index >= 0; index--) {
-            AgentMessage message = window.get(index);
-            if (!"user".equals(message.getRole()) || message.getAttachments() == null) continue;
-            for (AgentAttachment attachment : message.getAttachments()) {
-                recent.putIfAbsent(attachment.url(), attachment);
-                if (recent.size() >= 5) return reverseAttachments(recent);
-            }
-        }
-        return reverseAttachments(recent);
-    }
-
-    private List<AgentAttachment> reverseAttachments(
-            java.util.LinkedHashMap<String, AgentAttachment> attachments) {
-        java.util.ArrayList<AgentAttachment> ordered = new java.util.ArrayList<>(attachments.values());
-        java.util.Collections.reverse(ordered);
-        return List.copyOf(ordered);
     }
 
     private String serializeAttachments(List<AgentAttachment> attachments) {
@@ -1181,39 +1054,6 @@ public class AgentConversationService {
 
     private long elapsedMillis(long startedNanos) {
         return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
-    }
-
-    private String compactJson(String content, int maxLength) {
-        if (!StringUtils.hasText(content)) return "";
-        return content.length() <= maxLength ? content : content.substring(0, maxLength) + "…";
-    }
-
-    /**
-     * 把交付卡渲染成一行文件清单。
-     *
-     * <p>卡片正文是全部源码，原样回灌几轮就能挤爆上下文窗口；模型这时需要知道的只是
-     * “哪些文件已经交出去了”，好在 reply 里讲怎么运行，而不是把源码再读一遍。</p>
-     */
-    private String renderArtifact(String content) {
-        if (!StringUtils.hasText(content)) return "";
-        try {
-            JsonNode artifact = objectMapper.readTree(content);
-            StringBuilder builder = new StringBuilder();
-            String name = artifact.path("name").asText("");
-            if (StringUtils.hasText(name)) builder.append(name).append(" ");
-            JsonNode files = artifact.path("files");
-            builder.append("共 ").append(files.size()).append(" 个文件：");
-            for (int index = 0; index < files.size(); index++) {
-                if (index > 0) builder.append("、");
-                builder.append(files.get(index).path("path").asText());
-            }
-            String entry = artifact.path("entry").asText("");
-            if (StringUtils.hasText(entry)) builder.append("；入口 ").append(entry);
-            return builder.toString();
-        } catch (Exception e) {
-            // 渲染失败不该拖垮整轮对话，退回截断后的原文。
-            return compactJson(content, TOOL_RESULT_HISTORY_CHARS);
-        }
     }
 
     private AgentConversation requireOwned(Long conversationId, Long userId) {

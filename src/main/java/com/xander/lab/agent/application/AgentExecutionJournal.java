@@ -93,6 +93,12 @@ public class AgentExecutionJournal {
         return step;
     }
 
+    /** Writes a fully assembled request's durable reference snapshot before the model call. */
+    public AgentStep startStep(AgentStepRequest request) {
+        return startStep(request.conversationId(), request.userId(), request.runVersion(), request.stepNo(),
+                request.journalSnapshotJson());
+    }
+
     /** Saves parsed model output and usage after a successful remote call. */
     @Transactional
     public void completeStep(AgentStep step, ModelCallResult call) {

@@ -28,6 +28,29 @@ The design keeps current routes, serialized fields, `agent_conversation`,
 `agent_message`, `agent_event`, SSE, WebSocket, ownership checks, billing, and
 business-module ownership compatible throughout the migration.
 
+### 1.1 Implementation Status (2026-09-03)
+
+Phase 1 is implemented in commit `98af6f2` (`【dxd】引入智能体Harness执行日志`).
+New turns now create `agent_run`; every model request creates and settles an
+`agent_step`; every dispatched tool receives and records a stable UUID in
+`agent_tool_invocation`. Run completion, failure, stale recovery, tool failure,
+and cooperative cancellation all settle the corresponding journal record.
+
+This is intentionally a compatibility-first journal, not the finished core:
+
+- `AgentConversationService` still owns the execution loop and current prompt
+  construction.
+- The Phase 1 request snapshot contains only safe metadata (context length,
+  tool-set hash, attachment count and plan count). The durable messages and
+  attachments remain the source for user content.
+- The journal does not yet contain an approval record, selected skills, intent
+  output, or a versioned instruction/profile snapshot.
+- Existing HTTP, SSE and WebSocket event names and payloads are unchanged.
+
+The next pull request is therefore Phase 2, not Skills. It first separates the
+current loop into testable core components and makes each model request
+reconstructable from durable references without copying raw private prompts.
+
 ## 2. Current DinQorAI Baseline
 
 The existing implementation is a strong durable-agent foundation, not a
@@ -346,6 +369,10 @@ Do not replace `agent_event` or `agent_message` in the first migration. Add
 new records beside them, backfill only where there is an unambiguous mapping,
 and make new runs write both the journal and current projections.
 
+Phase 1 added the first three tables and their baseline/upgrade migrations.
+`agent_approval` remains pending for Phase 3 because no current API can safely
+create, display, resume and reject a pending action yet.
+
 ## 6. Migration Plan
 
 ### Phase 0: Baseline and Contract Tests
@@ -369,6 +396,12 @@ and make new runs write both the journal and current projections.
 Exit criterion: a completed or failed turn can be traced from run to every
 model step and tool invocation; existing clients work unchanged.
 
+**Status: completed in `98af6f2`.** The journal uses `(conversation_id,
+run_version)` as the unique run fence and `invocation_id` as the unique durable
+tool-call identity. Existing message and event projections remain the public
+compatibility surface. A following Phase 2 change must enrich the safe request
+snapshot; it must not redesign this schema or replay historical rows.
+
 ### Phase 2: Extract Execution Components
 
 - Extract lifecycle, request assembly, step execution and event projection
@@ -379,6 +412,12 @@ model step and tool invocation; existing clients work unchanged.
 
 Exit criterion: `AgentConversationService` no longer contains a monolithic
 model/tool loop, and unit tests cover each extracted policy boundary.
+
+**Status: in progress.** `AgentRequestAssembler` now creates the exact model
+input and the version 2 journal snapshot from one message window, while
+`AgentStepExecutor` owns one model call and its step outcome. Turn lifecycle,
+tool execution and compatibility event projection remain in the facade until
+their own behavior-preserving extractions are tested.
 
 ### Phase 3: Tool Pipeline and Idempotency
 
@@ -421,6 +460,65 @@ new card types do not require changes to the turn coordinator.
 - Keep historical message/event reads indefinitely or provide an explicit
   versioned reader for old conversations.
 
+### 6.1 Next Pull Request: Phase 2 Execution Extraction
+
+The next change is a behavior-preserving extraction from
+`AgentConversationService`. It must not enable skill filtering, alter model
+prompt text, add a new public endpoint, or change the SSE/WebSocket vocabulary.
+
+| New component | Owns | Must not own |
+| --- | --- | --- |
+| `AgentTurnCoordinator` | claimed-turn sequencing, lease lifecycle and terminal delegation | prompt rendering, tool-specific UI cards or business operations |
+| `AgentRequestAssembler` | immutable `AgentStepRequest` creation, context message IDs, attachment references, tool-schema-set hash, model route and instruction/profile version IDs | remote model I/O or message/event persistence |
+| `AgentStepExecutor` | one model invocation and normalized decision hand-off | turn claiming, final terminal transition or direct UI presentation |
+| `AgentEventProjector` | deriving current `agent_message` and `agent_event` compatibility records from run/step/invocation facts | model calls, tool execution and business state changes |
+| `AgentRunLifecycle` | fenced journal terminal transitions and stale-run reconciliation | API transport or live event fan-out |
+
+`AgentStepRequest` must persist stable references rather than duplicate user
+content: ordered `agent_message.id` values, attachment snapshots/URLs already
+owned by those messages, selected tool names plus a schema-set hash, model
+route, instruction-set version, remaining budget, and the active run/step
+identity. The rendered context is derived from those records. When a future
+field is model-visible, it must either be a durable fact or have a durable
+version/reference sufficient to reproduce the request.
+
+Phase 2 tests must freeze the current public behavior before moving code:
+
+1. Claim, lease-renewal, stale-worker fencing and cancellation retain their
+   present `runVersion` semantics.
+2. A completed run has an ordered run -> step -> invocation trace and each step
+   names the exact message IDs and tool-schema-set hash used for the request.
+3. An interrupted model call settles its running step; an interrupted tool call
+   retains its invocation identity and cannot be reported as unexecuted.
+4. Existing SSE replay and WebSocket replay tests continue to accept the same
+   event IDs, names and legacy payload fields.
+
+### 6.2 DeepSeek Harness Comparison and Adopted Decisions
+
+The comparison was made against `deepseek-harness` source at
+`packages/core/agent-loop`, `packages/core/session`, `packages/core/tools`,
+`packages/skill/skill`, `packages/interaction/user-approval`, and
+`packages/session/session-projection`. The following mechanisms are adopted as
+principles, not as a TypeScript or Cordis port.
+
+| DeepSeek Harness mechanism | DinQorAI interpretation | Delivery phase |
+| --- | --- | --- |
+| Append-only session log is the model-history source; model-visible input must be logged or reconstructable | `agent_message` remains user-content source; Phase 2 records the exact message/attachment references and versioned assembly inputs on `agent_step` | Phase 2 |
+| Turn and step driver has explicit pre-step/request/step-end extension points | Extract coordinator, assembler and executor before adding policies, so later skills and intent handling do not reopen the monolithic loop | Phase 2 |
+| One guarded `pre-execute` / `execute` / `post-execute` tool pipeline | Introduce `ToolExecutionPipeline` around the already durable invocation ID; perform visibility, authorization, approval, cancellation, idempotency and result normalization there | Phase 3 |
+| Approval writes an asked/decided durable pair inside the owning turn and fails closed without an answerer | Add `agent_approval` and an approval-resume path tied to the exact invocation fingerprint; no mutation may wait only in memory | Phase 3 |
+| Skills are provider-merged, scoped catalogs with explicit model/user invocation policy | Initial DinQorAI skills stay trusted compiled Spring beans. `AgentSkillRegistry` supplies deterministic selection and tool narrowing; no external marketplace or user-supplied executable skill is introduced | Phase 4 |
+| Client cards are pure projections of durable tool facts | Move quiz, plan and artifact branches out of the coordinator into registered result presenters after the tool pipeline is stable | Phase 5 |
+| Child agents carry explicit parent links, isolation and settlement | Replace the current bounded `SubAgentRunner` execution with child run/invocation records only after parent journal and policy boundaries are stable | Phase 5 |
+
+The Harness supports plugin-tree hot composition, workspace sandboxing and
+generic process tools. DinQorAI must not copy those areas: Spring owns bean
+composition, business modules remain the authority for domain mutations, and
+the product requires durable MySQL ownership/fencing rather than local session
+files. The useful invariant is smaller: new behavior contributes through a
+documented core/policy/skill/presenter extension point instead of adding another
+branch to the conversation loop.
+
 ## 7. Safety and Operational Rules
 
 - External model, tool and network calls remain outside transactions.
@@ -459,16 +557,29 @@ The refactor is complete only when all of the following are true:
    including false-positive mutation tests.
 9. Narrow module tests and the full Maven suite pass for each delivered phase.
 
-## 9. Implementation Order
+## 9. Implementation Order and Progress
 
-The recommended first pull request is deliberately narrow:
+Completed by the first pull request (`98af6f2`):
 
-1. Add typed run/step/invocation domain records and SQL migrations.
-2. Persist one `agent_run` when `prepareTurn` claims a conversation.
-3. Persist an `agent_step` around the current model decision.
-4. Persist `agent_tool_invocation` before and after the current tool call.
-5. Add regression tests for crash/retry boundaries.
+1. [x] Add typed run/step/invocation domain records and SQL migrations.
+2. [x] Persist one `agent_run` when `prepareTurn` claims a conversation.
+3. [x] Persist an `agent_step` around the current model decision.
+4. [x] Persist `agent_tool_invocation` before and after the current tool call.
+5. [x] Add journal schema and invocation-identity regression tests, then run
+   the full Maven suite.
 
-Do not start by replacing every prompt or adding a large catalog of skills.
-First make the current execution explainable and idempotent. Then add
-`AgentSkill` and the resolver on a durable execution substrate.
+Next pull request (Phase 2):
+
+1. [x] Add `AgentStepRequest` and `AgentRequestAssembler` with durable
+   message/attachment references and versioned assembly inputs.
+2. [~] Extract `AgentStepExecutor` behind the existing
+   `AgentConversationService` facade; `AgentRunLifecycle` and
+   `AgentTurnCoordinator` remain pending.
+3. [ ] Extract `AgentEventProjector` while preserving current event names and
+   serialized fields.
+4. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
+   tests for the extracted boundaries.
+
+Do not start a large Skill catalog or intent resolver in Phase 2. First make
+the current request assembly and loop boundaries explainable; then add the
+tool pipeline, approval and idempotency policies on that substrate.
