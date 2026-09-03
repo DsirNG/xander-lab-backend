@@ -7,6 +7,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Base64;
 import java.util.Map;
@@ -20,6 +21,7 @@ import java.util.Map;
  * {@link IllegalStateException}，由调用方转成业务错误提示。
  */
 @Component
+@Slf4j
 public class WechatMiniAppClient {
 
     /** 微信返回码为 0 表示成功（与平台约定一致） */
@@ -60,7 +62,11 @@ public class WechatMiniAppClient {
                             .queryParam("secret", credential.appSecret()).build())
                     .retrieve().body(String.class));
             String accessToken = textOrNull(token, "access_token");
-            if (accessToken == null || accessToken.isBlank()) throw new IllegalStateException("微信二维码服务暂不可用");
+            if (accessToken == null || accessToken.isBlank()) {
+                log.warn("[WeChat QR] 获取 access_token 失败: errcode={}, errmsg={}",
+                        token.path("errcode").asInt(), textOrNull(token, "errmsg"));
+                throw new IllegalStateException("微信二维码服务暂不可用");
+            }
             byte[] image = apiClient.post()
                     .uri(uriBuilder -> uriBuilder.scheme("https").host("api.weixin.qq.com").path("/wxa/getwxacodeunlimit")
                             .queryParam("access_token", accessToken).build())
@@ -68,14 +74,32 @@ public class WechatMiniAppClient {
                             "env_version", properties.getEnvVersion()))
                     .retrieve().body(byte[].class);
             if (image == null || image.length < 100 || (image[0] == '{' && image[1] == '"')) {
+                logWechatQrBody(image);
                 throw new IllegalStateException("微信二维码生成失败，请稍后重试");
             }
             return "data:image/png;base64," + Base64.getEncoder().encodeToString(image);
         } catch (RuntimeException ex) {
             if (ex instanceof IllegalStateException state) throw state;
+            log.warn("[WeChat QR] 请求异常: {}", ex.toString());
             throw new IllegalStateException("微信二维码服务暂不可用，请稍后重试");
         } catch (Exception ex) {
+            log.warn("[WeChat QR] 解析响应异常: {}", ex.toString());
             throw new IllegalStateException("微信二维码服务暂不可用，请稍后重试");
+        }
+    }
+
+    /** 微信二维码接口失败时通常返回 JSON；仅记录错误字段，不记录完整响应或敏感凭据。 */
+    private void logWechatQrBody(byte[] body) {
+        if (body == null || body.length == 0) {
+            log.warn("[WeChat QR] 接口返回空响应");
+            return;
+        }
+        try {
+            JsonNode error = objectMapper.readTree(body);
+            log.warn("[WeChat QR] 生成失败: errcode={}, errmsg={}",
+                    error.path("errcode").asInt(), textOrNull(error, "errmsg"));
+        } catch (Exception ex) {
+            log.warn("[WeChat QR] 生成失败，响应不是可解析 JSON (bytes={})", body.length);
         }
     }
 
