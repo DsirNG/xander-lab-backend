@@ -10,6 +10,10 @@ import java.util.List;
  * <p>{@code context} and {@code toolDescriptions} are transient renderings for the model.
  * {@code journalSnapshotJson} contains only durable references and safe assembly metadata,
  * never a second copy of the user prompt.</p>
+ *
+ * <p>{@code toolDescriptions} 是完整的工具面：schema 表加上在表工具自带的使用准则
+ * （见 {@link AgentToolRegistry#describeToolSurface}）。准则算在里面是有意的——
+ * 换了准则就是换了工具契约，{@code toolSchemaSetHash} 应该跟着变。</p>
  */
 public record AgentStepRequest(
         Long conversationId,

@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
+
 /**
  * 把一场测验的题目发成一张答题卡，交给前端渲染成可点选、可翻页的界面。
  *
@@ -48,6 +50,15 @@ public class EmitQuizTool implements AgentTool {
                 + "题面里不要写答案，也不要在回复正文里把题目重复一遍——用户已经在卡片上看到了。"
                 + "发完卡就以 done=true 结束这一轮等用户作答；"
                 + "用户提交后你会收到逐题作答，那一轮再把同一个 quizSessionId 交给 grade_answer。";
+    }
+
+    @Override
+    public Optional<AgentPromptSection> promptSection() {
+        return Optional.of(AgentPromptSection.delivery(
+                "用户要求出题、测验、练习或选择题时必须调用 " + NAME + " 下发结构化答题卡；"
+                        + "禁止把题目、选项或逐题作答要求写进 reply。答题卡支持自由翻阅并一次性提交全部答案。"
+                        + NAME + " 成功后以 done=true 收口，reply 只能简短提示用户在答题卡中作答，"
+                        + "等用户的下一条消息到达后再继续调工具。"));
     }
 
     @Override

@@ -19,6 +19,20 @@ public interface AgentTool {
     JsonNode parametersSchema();
 
     /**
+     * 这个工具自带的提示词准则，只在它本轮真在工具表里时才进提示词。
+     *
+     * <p>{@link #description()} 说的是"这个工具是什么"，会和 schema 一起渲染；
+     * 这里说的是"本轮该怎么用它、什么时候别用它"，属于行动准则的一部分。
+     * 两者分开是因为前者要短（每个工具都渲染），后者可以长。</p>
+     *
+     * <p>默认没有准则。工具只有在"用错了会直接毁掉这一轮答案"时才需要覆写它——
+     * 比如交付卡该不该开、答题卡能不能写进正文。</p>
+     */
+    default Optional<AgentPromptSection> promptSection() {
+        return Optional.empty();
+    }
+
+    /**
      * Executes the tool.
      *
      * @param userId    owning user

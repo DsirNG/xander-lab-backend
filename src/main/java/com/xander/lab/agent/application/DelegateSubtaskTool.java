@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -42,6 +43,15 @@ public class DelegateSubtaskTool implements AgentTool {
                 + "不要用于一两步就能做完的事，也不要用它替你写最终回复。"
                 + "子智能体看不到本次对话，brief 必须自包含：写清背景、已知结论、判断口径和你想要的产出格式。"
                 + "它不能再往下派发，也不能改写你的任务计划。";
+    }
+
+    @Override
+    public Optional<AgentPromptSection> promptSection() {
+        return Optional.of(AgentPromptSection.sideEffect(
+                "需要翻查大量资料、而那些原始结果对最终答案没有价值时，用 " + NAME + " 把取证交给子智能体，"
+                        + "主线只接收结论。子智能体看不到本轮对话，brief 必须自包含；"
+                        + "它只有只读工具，不能替你写入或发布，也不能改你的任务计划。"
+                        + "一步就能查到的事不要派发——那只是白花一次模型调用。"));
     }
 
     @Override

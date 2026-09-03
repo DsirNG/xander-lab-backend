@@ -58,6 +58,15 @@ public class PublishPostTool implements AgentTool {
     }
 
     @Override
+    public Optional<AgentPromptSection> promptSection() {
+        return Optional.of(AgentPromptSection.sideEffect(
+                "publish_post 会把内容推到站外，是这一轮里唯一不可撤销的动作。"
+                        + "调用前必须先确认具体哪一篇和哪个平台，不要用推测的 taskId/postId 试；"
+                        + "生成草稿不等于发布，用户没明确说要发就不要发。"
+                        + "发布失败时如实说明失败平台和原因，绝不把失败说成已发布。"));
+    }
+
+    @Override
     public JsonNode parametersSchema() {
         JsonNodeFactory factory = JsonNodeFactory.instance;
         ObjectNode schema = factory.objectNode();

@@ -3,6 +3,10 @@ package com.xander.lab.agent.infrastructure;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.common.ModelCallResult;
+import com.xander.lab.agent.application.AgentToolRegistry;
+import com.xander.lab.agent.application.EmitArtifactTool;
+import com.xander.lab.agent.application.EmitQuizTool;
+import com.xander.lab.agent.application.GradeAnswerTool;
 import com.xander.lab.agent.domain.AgentAttachment;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -13,6 +17,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -92,10 +97,10 @@ class AgentModelClientTest {
     void requiresStructuredQuizCardsInsteadOfMarkdownQuestions() throws Exception {
         startServer(List.of("{\"done\":true,\"reply\":\"请作答\",\"thought\":\"\",\"action\":null}"));
 
-        client().decideNextStep("请出三道选择题", "emit_quiz: 下发结构化答题卡");
+        client().decideNextStep("请出三道选择题", toolSurface("emit_quiz", "grade_answer"));
 
         assertThat(requestPayload.path("instructions").asText())
-                .contains("必须调用它下发结构化答题卡")
+                .contains("必须调用 emit_quiz 下发结构化答题卡")
                 .contains("禁止把题目、选项或逐题作答要求写进 reply")
                 .contains("答题卡支持自由翻阅并一次性提交全部答案")
                 .contains("$\\frac{3}{5}$")
@@ -103,6 +108,49 @@ class AgentModelClientTest {
                 .contains("先调用 grade_answer 完成逐题判分")
                 .contains("如果你愿意，我也可以为你出一组纠错练习")
                 .contains("不要自动执行该动作");
+    }
+
+    /**
+     * 代码交付形式的判据必须是"用户拿到之后要干什么"，而不是"有几个文件"。
+     *
+     * <p>回归：早先这条准则写的是"用户要的是可运行的代码、示例、项目或脚本时……必须调用
+     * emit_artifact"，唯一的例外是"两三行的小片段"。于是一句"给我一个 sse 代码"必然被开成交付卡
+     * ——SSE 演示写不到三行——用户想要的只是一段能扫一眼的片段。</p>
+     */
+    @Test
+    void prefersInlineCodeFencesOverForcingAnArtifactCard() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"给你一段\",\"thought\":\"\",\"action\":null}"));
+
+        client().decideNextStep("给我一个sse代码", toolSurface("emit_artifact"));
+
+        assertThat(requestPayload.path("instructions").asText())
+                .contains("默认写在 reply 的代码围栏里，不要一律开交付卡")
+                .contains("判据是用户拿到之后要干什么，而不是有几个文件")
+                .contains("“给我一个 SSE 的例子”“sse 代码怎么写”用围栏")
+                .contains("拿不准就先用围栏")
+                .contains("代码必须真的出现在这一轮里")
+                .doesNotContain("必须调用它把每个文件的完整源码交付出去");
+    }
+
+    /**
+     * 只有本轮真在工具表里的工具，它的准则才进提示词。
+     *
+     * <p>否则就是为模型根本调不到的工具规定行为：出题准则会跟着一句"给我一个 sse 代码"一起下发，
+     * 模型收到"必须下发答题卡"却没有 emit_quiz 可调。</p>
+     */
+    @Test
+    void doesNotStatePoliciesForToolsMissingFromThisTurnsTable() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"给你一段\",\"thought\":\"\",\"action\":null}"));
+
+        client().decideNextStep("给我一个sse代码", toolSurface("emit_artifact"));
+
+        String instructions = requestPayload.path("instructions").asText();
+        assertThat(instructions)
+                .contains("工具使用准则")
+                .doesNotContain("必须调用 emit_quiz 下发结构化答题卡")
+                .doesNotContain("先调用 grade_answer 完成逐题判分");
+        // 两份准则同时在场时模型要知道谁说了算：工具准则是针对本轮真实工具表写的。
+        assertThat(instructions).contains("以工具使用准则为准");
     }
 
     @Test
@@ -351,5 +399,18 @@ class AgentModelClientTest {
         properties.setModel(model);
         properties.setWebSearchEnabled(webSearchEnabled);
         return new AgentModelClient(properties, objectMapper);
+    }
+
+    /**
+     * 按生产路径渲染本轮的工具面：编排层交给模型的 toolDescriptions 就是这个字符串。
+     *
+     * <p>出题、判分、代码交付这些准则挂在各自的工具上（见 {@code AgentPromptSection}），
+     * 只有工具真在本轮工具表里，准则才会进提示词。这里若手写一段 toolDescriptions 字面量，
+     * 断言的就不再是模型真正收到的内容——准则从全局行动准则搬到工具上时不会有任何测试报警。</p>
+     */
+    private String toolSurface(String... names) {
+        AgentToolRegistry registry = new AgentToolRegistry(
+                List.of(new EmitQuizTool(), new GradeAnswerTool(null), new EmitArtifactTool()));
+        return registry.describeToolSurface(new LinkedHashSet<>(List.of(names)));
     }
 }

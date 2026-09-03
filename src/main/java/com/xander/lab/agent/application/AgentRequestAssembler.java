@@ -57,7 +57,7 @@ public class AgentRequestAssembler {
         List<AgentMessage> recent = recentWindow(input.messages());
         List<AgentAttachment> attachments = recentAttachments(recent);
         List<String> toolNames = input.allowedTools().stream().sorted().toList();
-        String toolDescriptions = toolRegistry.describeTools(input.allowedTools());
+        String toolDescriptions = toolRegistry.describeToolSurface(input.allowedTools());
         String context = renderContext(recent, input.plan(), input.memoryContext(),
                 input.lastError(), input.critique(), input.skillSelection());
         String schemaHash = sha256(toolDescriptions);

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Evaluator：把一场测验的逐题判分落库，并据此推进掌握度与复习时间。
@@ -43,6 +44,14 @@ public class GradeAnswerTool implements AgentTool {
                 + "判分要严格：答不出、答错就给 0，只说对一半给 0.5，完整正确才给 1；"
                 + "userAnswer 要填用户的原话而不是你的转述。"
                 + "虚高的分数会把没掌握的知识排到 30 天后才复习，是在害用户。";
+    }
+
+    @Override
+    public Optional<AgentPromptSection> promptSection() {
+        return Optional.of(AgentPromptSection.assessment(
+                "用户提交答题卡后，先调用 " + NAME + " 完成逐题判分，"
+                        + "再以 done=true 给出正确/错误、正确答案和错因的讲评；"
+                        + "不要在同一轮直接下发纠错练习。讲评结束后，等用户确认或提出继续练习，再出更聚焦的题。"));
     }
 
     @Override

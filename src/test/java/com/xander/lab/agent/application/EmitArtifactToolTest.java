@@ -134,15 +134,25 @@ class EmitArtifactToolTest {
                 .hasMessageContaining("必须在会话上下文中执行");
     }
 
+    /**
+     * 描述必须同时说清"什么时候开卡"和"什么时候别开卡"。
+     *
+     * <p>早先只写了"必须调用本工具"，于是一句"给我一个 sse 代码"也会被开成一张交付卡，
+     * 而用户要的只是一段能扫一眼的片段。</p>
+     */
     @Test
-    void theSchemaAndDescriptionTellTheModelWhenACardIsRequired() {
+    void theDescriptionTellsTheModelWhenToOpenACardAndWhenNotTo() {
         JsonNode schema = tool.parametersSchema();
 
         assertThat(schema.path("required").toString()).isEqualTo("[\"files\"]");
         assertThat(schema.path("properties").path("files").path("items").path("required").toString())
                 .isEqualTo("[\"path\",\"content\"]");
         assertThat(tool.name()).isEqualTo(EmitArtifactTool.NAME);
-        assertThat(tool.description()).contains("完整源码").contains("什么都拿不到");
+        assertThat(tool.description())
+                .contains("完整源码")
+                .contains("只在用户是要把这份代码留下来接着用时才调用")
+                .contains("不要调用本工具")
+                .contains("代码围栏");
     }
 
     private ObjectNode args(String name, String framework, ObjectNode... files) {

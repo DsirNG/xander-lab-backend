@@ -19,8 +19,10 @@ public class BuiltinAgentSkills {
     @Bean
     AgentSkill blogWritingSkill() {
         return skill("blog-writing", Set.of("blog_generate", "image_generate", "query_knowledge",
-                        "create_knowledge", "recall_memory", "remember", "emit_artifact"), 3,
-                "当前是内容创作任务：先理解主题、受众和交付形式；生成草稿不等于发布，发布必须由独立发布能力处理。",
+                        "create_knowledge", "recall_memory", "remember", "emit_artifact",
+                        "delegate_subtask"), 3,
+                "当前是内容创作任务：先理解主题、受众和交付形式；生成草稿不等于发布，发布必须由独立发布能力处理。"
+                        + "需要翻查大量资料才能动笔时，把取证交给 delegate_subtask，主线只接收结论。",
                 "blog/article/draft/content request");
     }
 
@@ -41,8 +43,10 @@ public class BuiltinAgentSkills {
 
     @Bean
     AgentSkill knowledgeCurationSkill() {
-        return skill("knowledge-curation", Set.of("query_knowledge", "create_knowledge", "recall_memory", "remember"), 3,
-                "当前是知识整理任务：保留来源和用户边界；写入长期记忆前必须确认内容确实适合跨会话保存。",
+        return skill("knowledge-curation", Set.of("query_knowledge", "create_knowledge", "recall_memory",
+                        "remember", "delegate_subtask"), 3,
+                "当前是知识整理任务：保留来源和用户边界；写入长期记忆前必须确认内容确实适合跨会话保存。"
+                        + "要横向翻查很多条目才能归纳时，把检索交给 delegate_subtask，避免原始结果灌满主上下文。",
                 "knowledge/note/memory request");
     }
 
@@ -57,7 +61,10 @@ public class BuiltinAgentSkills {
     @Bean
     AgentSkill artifactDeliverySkill() {
         return skill("artifact-delivery", Set.of("emit_artifact"), 3,
-                "当前需要交付可复制或下载的代码/文件：多文件结果必须通过 artifact 工具持久化，不能只声称已经生成。",
+                "当前话题涉及代码。默认把代码写在回复的代码围栏里——用户多数时候是要读它（问写法、要示例、"
+                        + "让你解释或改一处 bug），围栏本身就是完整交付。只有用户要把这份代码留下来接着用时"
+                        + "（要项目/完整源码/可下载的脚手架、多文件必须互相配合、或长到贴在对话里读不下去）"
+                        + "才开交付卡。判据是用户拿到之后要干什么，不是有几个文件；无论哪种形式，代码必须真的给出来。",
                 "code/project/file delivery request");
     }
 

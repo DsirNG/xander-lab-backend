@@ -321,8 +321,9 @@ public class AgentConversationService {
         String latestUserMessage = StringUtils.hasText(currentUserMessage)
                 && !quizService.isSubmission(currentUserMessage)
                 ? currentUserMessage : latestUserMessage(conversationId, userId);
-        // 工具表不再按关键词预筛：用不用、用哪个由模型自己判断。
-        // 旧的关键词门禁会让匹配不上词表的诉求连工具都看不见，只能空口答应，那才是"工作流"。
+        // 技能只加宽工具面：AgentSkillRegistry.BASELINE_TOOLS 每轮无条件在表里，命中的技能往上加。
+        // 早先是命中的技能整体替换工具表，于是关键词决定了模型有什么能力——一句"给我一个 sse 代码"
+        // 当轮只剩 emit_artifact，除了开交付卡别无选择，而用户要的只是一段片段。
         AgentSkillSelection skillSelection = skillRegistry.resolve(latestUserMessage);
         Set<String> allowedTools = skillSelection.toolNames();
         executionJournal.recordSkillSelection(conversationId, userId, runVersion, skillSelection);
