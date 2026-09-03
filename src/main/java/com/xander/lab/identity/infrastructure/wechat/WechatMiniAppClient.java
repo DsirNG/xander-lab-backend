@@ -55,6 +55,7 @@ public class WechatMiniAppClient {
             throw new IllegalStateException("微信登录未配置，请联系管理员");
         }
         try {
+            log.info("[WeChat QR] requesting access token");
             JsonNode token = objectMapper.readTree(apiClient.get()
                     .uri(uriBuilder -> uriBuilder.scheme("https").host("api.weixin.qq.com").path("/cgi-bin/token")
                             .queryParam("grant_type", "client_credential")
@@ -62,6 +63,8 @@ public class WechatMiniAppClient {
                             .queryParam("secret", credential.appSecret()).build())
                     .header("User-Agent", "Mozilla/5.0 (compatible; DinQorAI/1.0)")
                     .header("Accept", "application/json")
+                    .header("Accept-Language", "zh-CN,zh;q=0.9")
+                    .header("Connection", "close")
                     .retrieve().body(String.class));
             String accessToken = textOrNull(token, "access_token");
             if (accessToken == null || accessToken.isBlank()) {
@@ -69,11 +72,15 @@ public class WechatMiniAppClient {
                         token.path("errcode").asInt(), textOrNull(token, "errmsg"));
                 throw new IllegalStateException("微信二维码服务暂不可用");
             }
+            log.info("[WeChat QR] requesting unlimited QR code, envVersion={}, page={}",
+                    properties.getEnvVersion(), properties.getLoginPage());
             byte[] image = apiClient.post()
                     .uri(uriBuilder -> uriBuilder.scheme("https").host("api.weixin.qq.com").path("/wxa/getwxacodeunlimit")
                             .queryParam("access_token", accessToken).build())
                     .header("User-Agent", "Mozilla/5.0 (compatible; DinQorAI/1.0)")
                     .header("Accept", "image/*, application/json")
+                    .header("Accept-Language", "zh-CN,zh;q=0.9")
+                    .header("Connection", "close")
                     .header("Content-Type", "application/json")
                     .body(Map.of("scene", scene, "page", properties.getLoginPage(), "check_path", false,
                             "env_version", properties.getEnvVersion()))
