@@ -9,6 +9,8 @@ import com.xander.lab.blogagent.application.BlogAgentService;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.Optional;
+
 /**
  * Exposes the full blog generation pipeline (analyze → research → write →
  * illustrate → review) as one agent tool. Progress stages are forwarded to
@@ -51,6 +53,11 @@ public class BlogGenerationTool implements AgentTool {
 
     @Override
     public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+        return execute(AgentToolContext.ofUser(userId), args, onProgress);
+    }
+
+    @Override
+    public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         String input = args.path("input").asText("");
         if (!StringUtils.hasText(input)) {
@@ -58,9 +65,10 @@ public class BlogGenerationTool implements AgentTool {
         }
         BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
         request.setInput(input);
-        var task = blogAgentService.create(userId, request);
+        request.setClientRequestId(context.invocationId());
+        var task = blogAgentService.create(context.userId(), request);
         onProgress.onProgress("收到，开始处理你的主题…");
-        BlogAgentTaskVO result = blogAgentService.runStream(task.getId(), userId, (event, data) -> {
+        BlogAgentTaskVO result = blogAgentService.runStream(task.getId(), context.userId(), (event, data) -> {
                     if ("stage".equals(event)) {
                         onProgress.onProgress(prettyStage(String.valueOf(data)));
                     } else if ("delta".equals(event) && StringUtils.hasText(data)) {
@@ -69,13 +77,24 @@ public class BlogGenerationTool implements AgentTool {
                 }, onProgress::isCancellationRequested);
         onProgress.checkCancellation();
 
+        return outcome(result.getTask());
+    }
+
+    @Override
+    public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
+        if (!StringUtils.hasText(context.invocationId())) return Optional.empty();
+        var task = blogAgentService.findReadyTaskByClientRequestId(context.userId(), context.invocationId());
+        return task == null ? Optional.empty() : Optional.of(outcome(task));
+    }
+
+    private ObjectNode outcome(com.xander.lab.blogagent.domain.BlogAgentTask task) {
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("taskId", task.getId());
-        outcome.put("title", defaultText(result.getTask().getTitle(), ""));
-        outcome.put("summary", defaultText(result.getTask().getSummary(), ""));
-        outcome.put("publishedPostId", result.getTask().getPublishedPostId() == null
-                ? -1 : result.getTask().getPublishedPostId());
+        outcome.put("title", defaultText(task.getTitle(), ""));
+        outcome.put("summary", defaultText(task.getSummary(), ""));
+        outcome.put("publishedPostId", task.getPublishedPostId() == null
+                ? -1 : task.getPublishedPostId());
         outcome.put("hint", "文章已生成。你可以继续让用户在会话中修改，或提示用户查看任务 " + task.getId() + " 进行发布。");
         return outcome;
     }

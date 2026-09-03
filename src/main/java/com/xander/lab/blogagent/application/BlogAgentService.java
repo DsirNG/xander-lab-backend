@@ -32,6 +32,7 @@ import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.publishing.domain.PublishCommand;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,8 +79,14 @@ public class BlogAgentService {
 
     @Transactional
     public BlogAgentTask create(Long userId, BlogAgentTaskCreateRequest request) {
+        String clientRequestId = normalizeClientRequestId(request.getClientRequestId());
+        if (clientRequestId != null) {
+            BlogAgentTask existing = findTaskByClientRequestId(userId, clientRequestId);
+            if (existing != null) return existing;
+        }
         BlogAgentTask task = new BlogAgentTask();
         task.setUserId(userId);
+        task.setClientRequestId(clientRequestId);
         task.setInput(request.getInput().trim());
         task.setInputType("pending");
         task.setAudience("");
@@ -87,9 +94,25 @@ public class BlogAgentService {
         task.setStatus("created");
         task.setStage("analyze");
         task.setTagsJson("[]");
-        taskMapper.insert(task);
+        try {
+            taskMapper.insert(task);
+        } catch (DuplicateKeyException duplicate) {
+            // A retry may race with the first durable insert. Return the winner instead of creating a second task.
+            BlogAgentTask existing = findTaskByClientRequestId(userId, clientRequestId);
+            if (existing != null) return existing;
+            throw duplicate;
+        }
         saveMessage(task.getId(), "user", "message", null, task.getInput());
         return task;
+    }
+
+    /** Returns a completed task proven to belong to a stable create-request key. */
+    @Transactional(readOnly = true)
+    public BlogAgentTask findReadyTaskByClientRequestId(Long userId, String clientRequestId) {
+        String normalized = normalizeClientRequestId(clientRequestId);
+        if (userId == null || normalized == null) return null;
+        BlogAgentTask task = findTaskByClientRequestId(userId, normalized);
+        return task != null && "ready".equals(task.getStatus()) ? task : null;
     }
 
     /** Generates a deduplicated topic series for a scheduled plan's topic queue.
@@ -657,6 +680,23 @@ public class BlogAgentService {
             throw new IllegalArgumentException("博客生成助手任务不存在");
         }
         return task;
+    }
+
+    private BlogAgentTask findTaskByClientRequestId(Long userId, String clientRequestId) {
+        if (userId == null || clientRequestId == null) return null;
+        return taskMapper.selectOne(new LambdaQueryWrapper<BlogAgentTask>()
+                .eq(BlogAgentTask::getUserId, userId)
+                .eq(BlogAgentTask::getClientRequestId, clientRequestId)
+                .last("LIMIT 1"));
+    }
+
+    private String normalizeClientRequestId(String clientRequestId) {
+        if (!StringUtils.hasText(clientRequestId)) return null;
+        String normalized = clientRequestId.trim();
+        if (normalized.length() > 64) {
+            throw new IllegalArgumentException("请求幂等标识不能超过 64 个字符");
+        }
+        return normalized;
     }
 
     /** Runs the compliance gate against a ready article. A model outage is

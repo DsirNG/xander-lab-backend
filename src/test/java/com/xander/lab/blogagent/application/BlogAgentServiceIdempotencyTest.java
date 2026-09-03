@@ -6,6 +6,7 @@ import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.blogagent.infrastructure.BlogAgentModelClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentLeaseScheduler;
+import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.publishing.application.BlogMediaService;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
@@ -35,6 +36,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -163,6 +165,32 @@ class BlogAgentServiceIdempotencyTest {
         BlogAgentTask result = service.resolveStaleTask(stale, 42L);
 
         assertThat(result.getStatus()).isEqualTo("failed");
+    }
+
+    @Test
+    void createReturnsExistingTaskForTheSameClientRequestId() {
+        BlogAgentTask existing = task(10L, 42L, "created");
+        BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
+        request.setInput("幂等的生成请求");
+        request.setClientRequestId("invocation-10");
+        when(taskMapper.selectOne(any())).thenReturn(existing);
+
+        BlogAgentTask actual = service.create(42L, request);
+
+        assertThat(actual).isSameAs(existing);
+        verify(taskMapper, org.mockito.Mockito.never()).insert(any());
+    }
+
+    @Test
+    void findsOnlyReadyTaskForAClientRequestId() {
+        BlogAgentTask ready = task(11L, 42L, "ready");
+        BlogAgentTask running = task(12L, 42L, "running");
+        when(taskMapper.selectOne(any())).thenReturn(ready, running);
+
+        assertThat(service.findReadyTaskByClientRequestId(42L, "invocation-11"))
+                .isSameAs(ready);
+        assertThat(service.findReadyTaskByClientRequestId(42L, "invocation-12"))
+                .isNull();
     }
 
 

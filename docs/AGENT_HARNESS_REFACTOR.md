@@ -49,14 +49,18 @@ This is intentionally a compatibility-first journal, not the finished core:
   package.
 - Existing HTTP, SSE and WebSocket event names and payloads are unchanged.
 
-The next delivery should add the remaining mutation policies and timeout
-classification.
+The next delivery should add the remaining mutation policies.
 `email_reminder` and `schedule_plan` now use their journal `invocationId` as
 an owning-service create key and reconcile `UNKNOWN` calls with a read-only
 business lookup. `publish_post` now reconciles local publication and persisted
 CSDN/Juejin successes from owning-module records without any vendor lookup or
 republication. A remote success with no durable `blog_publish_record` proof,
-as well as deletion, generation and other mutations, stays `UNKNOWN`.
+as well as deletion and other mutations, stays `UNKNOWN`. `blog_generate`
+persists the invocation UUID as its task-create key and reconciles only a
+durable `ready` task; it never restarts model work to discover an outcome.
+Recognized remote timeouts, connection-access failures and HTTP 5xx responses
+now become `UNKNOWN` for read-only reconciliation rather than being reported
+as a proven failure.
 The current Skill resolver is a deliberately deterministic first version; it
 narrows the model surface but is not yet an LLM intent classifier.
 
@@ -474,8 +478,11 @@ ID as a per-user unique create key, and a scheduled read-only reconciler moves
 only proven effects to `SUCCEEDED`. `publish_post` can likewise settle local,
 CSDN, and Juejin outcomes only when their owning modules have persisted proof;
 it never probes a vendor or retries publication to discover the result.
-Unproven remote outcomes remain `UNKNOWN`. Timeout classification and policies
-for the remaining mutations are still required before any automatic retry.
+`blog_generate` similarly settles only a ready task tied to its invocation
+key. Recognized remote timeouts, connection-access failures and HTTP 5xx
+responses become `UNKNOWN`; validation and determinate business failures stay
+`FAILED`. Policies for the remaining mutations are still required before any
+automatic retry.
 
 High-impact approval is now durable for `publish_post`, `email_reminder`,
 `schedule_plan`, and destructive plan/reminder updates. The pipeline writes an

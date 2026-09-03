@@ -51,8 +51,14 @@ invocation is otherwise marked `UNKNOWN`, never replayed automatically.
 `publish_post` reconciles local publication and CSDN/Juejin synchronization
 only from durable records in the owning modules; it never probes a vendor or
 re-publishes to infer an outcome. A remote success that was never persisted in
-`blog_publish_record` remains `UNKNOWN`. Approval and idempotency for other
-mutating tools remain pending. `agent_approval` owns user decisions for
+`blog_publish_record` remains `UNKNOWN`. `blog_generate` persists its
+invocation UUID as a per-user task-create key and may recover only a durable
+`ready` task; created, running, failed, or missing tasks remain `UNKNOWN` and
+are never restarted automatically. Recognized remote uncertainty (timeouts,
+connection-access failures, and HTTP 5xx responses) is likewise persisted as
+`UNKNOWN` for read-only reconciliation; validation and other determinate
+business failures remain `FAILED`. Approval and idempotency for other mutating
+tools remain pending. `agent_approval` owns user decisions for
 high-impact invocations: publishing, scheduled mail/content plans, and
 destructive plan/reminder actions pause the conversation as
 `awaiting_approval`; approval executes the same invocation UUID, while
@@ -222,6 +228,9 @@ database use this order:
 9. `20260903_agent_harness_approval_migration.sql`. This adds durable approval
    records plus the waiting-approval run, invocation, conversation, and event
    vocabularies required to resume the original invocation safely.
+10. `20260903_blog_agent_task_invocation_idempotency_migration.sql`. This adds
+    the per-user creation key used to prove a completed `blog_generate`
+    invocation without restarting model work.
 
 The older `blog_agent_*_migration.sql` files are upgrade-only deltas for a
 database that predates the current `blog_agent_schema.sql`; do not apply those

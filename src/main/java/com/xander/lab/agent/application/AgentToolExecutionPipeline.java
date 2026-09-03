@@ -77,7 +77,12 @@ public class AgentToolExecutionPipeline {
         } catch (AgentApprovalRequiredException exception) {
             throw exception;
         } catch (Exception exception) {
-            executionJournal.failInvocation(invocation, safeMessage(exception));
+            if (AgentToolOutcomeClassifier.requiresReconciliation(exception)) {
+                executionJournal.markInvocationUnknown(invocation,
+                        "工具远端执行结果未确认：" + safeMessage(exception));
+            } else {
+                executionJournal.failInvocation(invocation, safeMessage(exception));
+            }
             throw exception;
         }
     }

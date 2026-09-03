@@ -27,7 +27,11 @@ class BlogGenerationToolTest {
         BlogAgentTask completed = task(9L, "生成标题", "生成摘要");
         BlogAgentTaskVO completedView = new BlogAgentTaskVO();
         completedView.setTask(completed);
-        when(blogAgentService.create(eq(42L), any())).thenReturn(created);
+        when(blogAgentService.create(eq(42L), any())).thenAnswer(invocation -> {
+            assertThat(invocation.<com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest>getArgument(1)
+                    .getClientRequestId()).isEqualTo("invocation-9");
+            return created;
+        });
         when(blogAgentService.runStream(eq(9L), eq(42L), any(), any())).thenAnswer(invocation -> {
             BiConsumer<String, String> events = invocation.getArgument(2);
             BooleanSupplier cancellation = invocation.getArgument(3);
@@ -40,7 +44,7 @@ class BlogGenerationToolTest {
 
         BlogGenerationTool tool = new BlogGenerationTool(blogAgentService);
         RecordingProgress progress = new RecordingProgress();
-        JsonNode result = tool.execute(42L,
+        JsonNode result = tool.execute(new AgentToolContext(42L, 7L, 3L, "invocation-9"),
                 JsonNodeFactory.instance.objectNode().put("input", "写一篇流式博客"), progress);
 
         assertThat(progress.progress).contains(
@@ -49,6 +53,35 @@ class BlogGenerationToolTest {
         assertThat(progress.deltas).containsExactly("{\"title\":\"增量");
         assertThat(result.path("taskId").asLong()).isEqualTo(9L);
         assertThat(result.path("title").asText()).isEqualTo("生成标题");
+    }
+
+    @Test
+    void reconcilesOnlyAPersistedReadyTaskWithoutRestartingGeneration() {
+        BlogAgentService blogAgentService = mock(BlogAgentService.class);
+        BlogAgentTask ready = task(9L, "生成标题", "生成摘要");
+        when(blogAgentService.findReadyTaskByClientRequestId(42L, "invocation-9")).thenReturn(ready);
+        BlogGenerationTool tool = new BlogGenerationTool(blogAgentService);
+
+        JsonNode result = tool.reconcile(new AgentToolContext(42L, 7L, 3L, "invocation-9"),
+                JsonNodeFactory.instance.objectNode().put("input", "写一篇博客"))
+                .orElseThrow();
+
+        assertThat(result.path("taskId").asLong()).isEqualTo(9L);
+        org.mockito.Mockito.verify(blogAgentService, org.mockito.Mockito.never())
+                .runStream(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void leavesGenerationUnknownWhenNoReadyTaskIsPersisted() {
+        BlogAgentService blogAgentService = mock(BlogAgentService.class);
+        BlogGenerationTool tool = new BlogGenerationTool(blogAgentService);
+
+        assertThat(tool.reconcile(new AgentToolContext(42L, 7L, 3L, "invocation-9"),
+                JsonNodeFactory.instance.objectNode().put("input", "写一篇博客"))).isEmpty();
+        org.mockito.Mockito.verify(blogAgentService, org.mockito.Mockito.never())
+                .runStream(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                        org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     private BlogAgentTask task(Long id, String title, String summary) {

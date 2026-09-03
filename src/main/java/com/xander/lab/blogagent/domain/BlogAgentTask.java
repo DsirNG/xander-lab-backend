@@ -13,6 +13,7 @@ public class BlogAgentTask {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
+    private String clientRequestId;
     private String input;
     private String inputType;
     private String audience;

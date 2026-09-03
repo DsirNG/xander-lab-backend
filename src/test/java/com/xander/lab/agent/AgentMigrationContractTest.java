@@ -173,6 +173,20 @@ class AgentMigrationContractTest {
                 .contains("20260903_agent_harness_approval");
     }
 
+    @Test
+    void blogGenerationInvocationKeyIsPresentForFreshAndExistingDatabases() throws IOException {
+        String baseline = resource("db/blog_agent_schema.sql");
+        String upgrade = resource("db/20260903_blog_agent_task_invocation_idempotency_migration.sql");
+
+        assertThat(baseline)
+                .contains("`client_request_id` VARCHAR(64) NULL COMMENT")
+                .contains("UNIQUE KEY `uk_blog_agent_task_user_request`");
+        assertThat(upgrade)
+                .contains("ALTER TABLE `blog_agent_task`")
+                .contains("ADD COLUMN `client_request_id` VARCHAR(64) NULL COMMENT")
+                .contains("ADD UNIQUE KEY `uk_blog_agent_task_user_request`");
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertThat(input).as("classpath resource %s", path).isNotNull();

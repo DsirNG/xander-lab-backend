@@ -2,6 +2,7 @@
 CREATE TABLE IF NOT EXISTS `blog_agent_task` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   `user_id` BIGINT NOT NULL COMMENT '所属用户ID，关联 sys_user.id',
+  `client_request_id` VARCHAR(64) NULL COMMENT '创建命令幂等标识，在同一用户内唯一',
   `input` TEXT NOT NULL COMMENT '用户原始输入',
   `input_type` VARCHAR(16) NOT NULL DEFAULT 'topic' COMMENT '输入类型，如 topic/outline',
   `audience` VARCHAR(120) NOT NULL COMMENT '目标读者',
@@ -24,6 +25,7 @@ CREATE TABLE IF NOT EXISTS `blog_agent_task` (
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_blog_agent_task_user_request` (`user_id`, `client_request_id`),
   KEY `idx_blog_agent_task_user_created` (`user_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='博客写作 Agent 任务主表';
 

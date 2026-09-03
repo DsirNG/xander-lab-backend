@@ -6,6 +6,7 @@ import com.xander.lab.agent.domain.AgentStep;
 import com.xander.lab.agent.domain.AgentToolInvocation;
 import org.junit.jupiter.api.Test;
 
+import java.net.SocketTimeoutException;
 import java.util.List;
 import java.util.Set;
 
@@ -99,6 +100,33 @@ class AgentToolExecutionPipelineTest {
 
         verify(journal).waitForApproval(invocation);
         verify(journal, never()).completeInvocation(any(), any());
+    }
+
+    @Test
+    void leavesRemoteTimeoutOutcomeUnknownForReadOnlyReconciliation() {
+        AgentTool tool = new AgentTool() {
+            @Override public String name() { return "publish_post"; }
+            @Override public String description() { return "publish"; }
+            @Override public JsonNode parametersSchema() { return JsonNodeFactory.instance.objectNode(); }
+            @Override public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+                throw new IllegalStateException("publisher timed out", new SocketTimeoutException("read timed out"));
+            }
+        };
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        AgentToolInvocation invocation = new AgentToolInvocation();
+        invocation.setId(12L);
+        when(journal.startInvocation(any(), any(), any(), any())).thenReturn(invocation);
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(
+                new AgentToolRegistry(List.of(tool)), journal);
+
+        assertThatThrownBy(() -> pipeline.execute(new AgentStep(), 42L, 7L, 3L,
+                Set.of("publish_post"), "publish_post", JsonNodeFactory.instance.objectNode(),
+                message -> { }, ignored -> { }))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(journal).markInvocationUnknown(org.mockito.ArgumentMatchers.eq(invocation),
+                org.mockito.ArgumentMatchers.contains("未确认"));
+        verify(journal, never()).failInvocation(any(), any());
     }
 
     private AgentTool tool(String name, String... required) {

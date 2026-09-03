@@ -10,6 +10,7 @@ import com.xander.lab.agent.infrastructure.AgentApprovalMapper;
 import com.xander.lab.agent.infrastructure.AgentRunMapper;
 import org.junit.jupiter.api.Test;
 
+import java.net.SocketTimeoutException;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,6 +94,49 @@ class AgentApprovalServiceTest {
         verify(journal, org.mockito.Mockito.never()).startApprovedInvocation(any());
         verify(lifecycle).completeAfterApproval(eq(7L), eq(42L), eq(3L), eq(4L),
                 eq("approval_rejected"), any());
+    }
+
+    @Test
+    void approvedRemoteTimeoutLeavesInvocationUnknownForReconciliation() {
+        AgentApprovalMapper approvalMapper = mock(AgentApprovalMapper.class);
+        AgentRunMapper runMapper = mock(AgentRunMapper.class);
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        AgentRunLifecycle lifecycle = mock(AgentRunLifecycle.class);
+        AgentTool tool = new AgentTool() {
+            @Override public String name() { return "publish_post"; }
+            @Override public String description() { return "publish"; }
+            @Override public JsonNode parametersSchema() { return JsonNodeFactory.instance.objectNode(); }
+            @Override public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener progress) {
+                throw new IllegalStateException("publisher timed out", new SocketTimeoutException("read timed out"));
+            }
+            @Override public JsonNode execute(Long userId, JsonNode args, ProgressListener progress) {
+                throw new AssertionError("context execution expected");
+            }
+        };
+        AgentApproval approval = approval();
+        AgentRun run = new AgentRun();
+        run.setId(4L);
+        run.setUserId(42L);
+        run.setRunVersion(3L);
+        run.setStatus(AgentRun.STATUS_WAITING_APPROVAL);
+        AgentToolInvocation invocation = new AgentToolInvocation();
+        invocation.setId(5L);
+        invocation.setInvocationId("invocation-1");
+        invocation.setToolName("publish_post");
+        invocation.setArgumentsJson("{}");
+        when(approvalMapper.selectOne(any())).thenReturn(approval);
+        when(approvalMapper.update(any(), any())).thenReturn(1);
+        when(runMapper.selectById(4L)).thenReturn(run);
+        when(journal.startApprovedInvocation(5L)).thenReturn(invocation);
+
+        AgentApprovalService service = new AgentApprovalService(approvalMapper, runMapper,
+                new AgentToolRegistry(List.of(tool)), journal, lifecycle, mock(AgentEventService.class),
+                new ObjectMapper());
+        service.decide(7L, 9L, 42L, true, "confirm");
+
+        verify(journal).markInvocationUnknown(eq(invocation), org.mockito.ArgumentMatchers.contains("未确认"));
+        verify(journal, org.mockito.Mockito.never()).failInvocation(any(), any());
+        verify(lifecycle).failAfterApproval(eq(7L), eq(42L), eq(3L), eq(4L), any(), any());
     }
 
     private AgentApproval approval() {

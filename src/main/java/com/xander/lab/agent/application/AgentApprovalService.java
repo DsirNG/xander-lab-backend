@@ -106,7 +106,7 @@ public class AgentApprovalService {
         AgentToolInvocation invocation = executionJournal.startApprovedInvocation(approval.getInvocationDbId());
         AgentTool tool = toolRegistry.get(invocation.getToolName());
         if (tool == null) {
-            return failApprovedExecution(approval, run, invocation, "审批关联的工具不存在");
+            return failApprovedExecution(approval, run, invocation, "审批关联的工具不存在", false);
         }
         try {
             JsonNode arguments = objectMapper.readTree(invocation.getArgumentsJson());
@@ -125,13 +125,19 @@ public class AgentApprovalService {
                             "invocationId", invocation.getInvocationId(), "tool", invocation.getToolName()));
             return approval;
         } catch (Exception exception) {
-            return failApprovedExecution(approval, run, invocation, safeMessage(exception));
+            return failApprovedExecution(approval, run, invocation, safeMessage(exception),
+                    AgentToolOutcomeClassifier.requiresReconciliation(exception));
         }
     }
 
     private AgentApproval failApprovedExecution(AgentApproval approval, AgentRun run,
-                                                AgentToolInvocation invocation, String reason) {
-        executionJournal.failInvocation(invocation, reason);
+                                                AgentToolInvocation invocation, String reason,
+                                                boolean outcomeUnknown) {
+        if (outcomeUnknown) {
+            executionJournal.markInvocationUnknown(invocation, "工具远端执行结果未确认：" + reason);
+        } else {
+            executionJournal.failInvocation(invocation, reason);
+        }
         runLifecycle.failAfterApproval(approval.getConversationId(), approval.getUserId(), run.getRunVersion(),
                 run.getId(), reason, java.util.Map.of("tool", approval.getToolName(), "error", reason));
         return approval;
