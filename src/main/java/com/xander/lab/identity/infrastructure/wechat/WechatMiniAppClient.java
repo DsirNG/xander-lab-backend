@@ -11,6 +11,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Base64;
 import java.util.Map;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 /**
  * 微信小程序 jscode2session 客户端：用登录 code 换取 openid。
@@ -31,6 +38,7 @@ public class WechatMiniAppClient {
     private final WechatCredentialService wechatCredentialService;
     private final RestClient client;
     private final RestClient apiClient;
+    private final HttpClient qrHttpClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public WechatMiniAppClient(WechatMiniAppProperties properties,
@@ -46,6 +54,9 @@ public class WechatMiniAppClient {
                 .requestFactory(factory)
                 .build();
         this.apiClient = RestClient.builder().requestFactory(factory).build();
+        this.qrHttpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofMillis(properties.getConnectTimeoutMillis()))
+                .version(HttpClient.Version.HTTP_1_1).build();
     }
 
     /** Generate a real WeChat Mini Program unlimited scene code for PC login. */
@@ -74,22 +85,36 @@ public class WechatMiniAppClient {
             }
             log.info("[WeChat QR] requesting unlimited QR code, envVersion={}, page={}",
                     properties.getEnvVersion(), properties.getLoginPage());
-            byte[] image = apiClient.post()
-                    .uri(uriBuilder -> uriBuilder.scheme("https").host("api.weixin.qq.com").path("/wxa/getwxacodeunlimit")
-                            .queryParam("access_token", accessToken).build())
+            byte[] requestBody = objectMapper.writeValueAsBytes(Map.of("scene", scene,
+                    "page", properties.getLoginPage(), "check_path", false,
+                    "env_version", properties.getEnvVersion()));
+            String url = "https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token="
+                    + URLEncoder.encode(accessToken, StandardCharsets.UTF_8);
+            HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url))
+                    .timeout(Duration.ofMillis(properties.getReadTimeoutMillis()))
+                    .header("Content-Type", "application/json; charset=UTF-8")
+                    .header("Accept", "image/jpeg,image/png,application/json,*/*")
                     .header("User-Agent", "Mozilla/5.0 (compatible; DinQorAI/1.0)")
-                    .header("Accept", "image/*, application/json")
-                    .header("Accept-Language", "zh-CN,zh;q=0.9")
-                    .header("Connection", "close")
-                    .header("Content-Type", "application/json")
-                    .body(Map.of("scene", scene, "page", properties.getLoginPage(), "check_path", false,
-                            "env_version", properties.getEnvVersion()))
-                    .retrieve().body(byte[].class);
-            if (image == null || image.length < 100 || (image[0] == '{' && image[1] == '"')) {
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(requestBody)).build();
+            HttpResponse<byte[]> response = qrHttpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            byte[] image = response.body();
+            String contentType = response.headers().firstValue("Content-Type").orElse("");
+            log.info("[WeChat QR] response: status={}, contentType={}, bytes={}", response.statusCode(), contentType,
+                    image == null ? 0 : image.length);
+            if (response.statusCode() != 200) {
+                log.warn("[WeChat QR] HTTP 请求失败: status={}, contentType={}, bytes={}", response.statusCode(), contentType,
+                        image == null ? 0 : image.length);
+                if (isJsonResponse(contentType, image)) logWechatQrBody(image);
+                throw new IllegalStateException("微信二维码服务暂不可用，请稍后重试");
+            }
+            if (isJsonResponse(contentType, image) || image == null || image.length < 100) {
                 logWechatQrBody(image);
                 throw new IllegalStateException("微信二维码生成失败，请稍后重试");
             }
-            return "data:image/png;base64," + Base64.getEncoder().encodeToString(image);
+            return "data:" + detectImageMime(contentType, image) + ";base64," + Base64.getEncoder().encodeToString(image);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("微信二维码服务暂不可用，请稍后重试");
         } catch (RestClientResponseException ex) {
             String body = ex.getResponseBodyAsString();
             if (body != null && body.length() > 500) body = body.substring(0, 500);
@@ -119,6 +144,19 @@ public class WechatMiniAppClient {
         } catch (Exception ex) {
             log.warn("[WeChat QR] 生成失败，响应不是可解析 JSON (bytes={})", body.length);
         }
+    }
+
+    private boolean isJsonResponse(String contentType, byte[] body) {
+        if (contentType != null && contentType.toLowerCase().contains("json")) return true;
+        if (body == null) return false;
+        for (byte b : body) { if (!Character.isWhitespace((char)(b & 0xff))) return b == '{' || b == '['; }
+        return false;
+    }
+
+    private String detectImageMime(String contentType, byte[] body) {
+        if (contentType != null && contentType.toLowerCase().contains("image/png")) return "image/png";
+        if (body != null && body.length >= 3 && (body[0]&0xff)==0xff && (body[1]&0xff)==0xd8 && (body[2]&0xff)==0xff) return "image/jpeg";
+        return "image/png";
     }
 
     /**
