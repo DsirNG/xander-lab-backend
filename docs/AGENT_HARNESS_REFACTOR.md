@@ -65,7 +65,7 @@ prototype to discard.
 | Business integration | `AgentTool` adapters call owning application services | Keep |
 | Model routing and billing | `AgentModelClient` and `ModelGateway`; usage charged at terminal result | Keep |
 | Tool discovery | Every registered tool is visible by default | Replace with skill-driven capability selection |
-| Main loop | One service combines lifecycle, context, prompt, model call, tool execution, UI cards and reflection | Split into Harness Core components |
+| Main loop | One service combines lifecycle, context, prompt, model call, tool execution and UI cards | Split into Harness Core components; do not retain a generic self-check retry loop |
 | Decision evidence | Messages/events retain outcomes, but not the complete model request policy and capability snapshot | Add durable step snapshots |
 | Side-effect replay | Tool result persistence failure after a remote mutation can require reconciliation | Add invocation identity and idempotency policy |
 
@@ -435,6 +435,14 @@ upsert, and tool-progress payload shape. The loop still decides when a thought,
 tool, plan, quiz, artifact, or answer exists; it delegates only persistence and
 projection, preserving event names, ordering, and serialized fields.
 
+The generic reflection loop has been retired by product decision. A `done=true`
+decision is projected immediately: unfinished plan items, a missing quiz or
+artifact card, and an unacknowledged tool failure no longer cause an automatic
+critique event or another model call. Tool failures remain durable facts in the
+next request context, so the model can voluntarily retry or explain them.
+`deepThinking` remains accepted and journaled for API compatibility but no
+longer enables hidden self-check retries.
+
 ### Phase 3: Tool Pipeline and Idempotency
 
 - Route every current `AgentTool` through `ToolExecutionPipeline`.
@@ -606,7 +614,15 @@ Completed Phase 2 event projection checkpoint:
    durable legacy-event projection, listener delivery, and tool-progress payload
    shaping; direct tests freeze those compatibility behaviors.
 2. [x] Keep the loop responsible for deciding whether a tool result creates a
-   plan, quiz, artifact, thought, reflection, or answer projection.
+   plan, quiz, artifact, thought, or answer projection.
+
+Completed generic self-check retirement:
+
+1. [x] Remove `AgentTurnEvaluator` and all automatic `reflection` retry paths.
+2. [x] Freeze direct-delivery behavior for `done=true`, including unfinished
+   plans, tool failures, code claims, quiz requests, and `deepThinking=true`.
+3. [x] Preserve historical `reflection` messages and event vocabulary for old
+   conversation replay; new turns do not create them.
 
 Next Phase 2 extraction batch:
 

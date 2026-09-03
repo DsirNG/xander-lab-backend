@@ -107,14 +107,13 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+                planService, memoryService, new AgentQuizService(objectMapper));
         org.mockito.Mockito.lenient().doReturn(leaseRenewal).when(agentLeaseRenewer)
                 .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
         org.mockito.Mockito.lenient().when(properties.getMaxSteps()).thenReturn(10);
         org.mockito.Mockito.lenient().when(properties.getMaxToolFailures()).thenReturn(2);
         org.mockito.Mockito.lenient().when(properties.getContextMessageLimit()).thenReturn(30);
         org.mockito.Mockito.lenient().when(properties.getStaleConversationMinutes()).thenReturn(30);
-        org.mockito.Mockito.lenient().when(properties.getMaxReflections()).thenReturn(1);
     }
 
     @Test
@@ -160,7 +159,7 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, failingRegistry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+                planService, memoryService, new AgentQuizService(objectMapper));
         AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(ready);
@@ -265,7 +264,7 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+                planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode emit = decisionNode(false, "先把题目发出去", EmitQuizTool.NAME, null);
         ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
         args.put("quizSessionId", 99L);
@@ -293,13 +292,13 @@ class AgentConversationServiceTest {
     }
 
     @Test
-    void rejectsMarkdownQuestionsUntilAnAdHocQuizCardIsEmitted() {
+    void acceptsMarkdownQuestionsWithoutForcingAnAdHocQuizCard() {
         stubTransactions();
         registry = new AgentToolRegistry(List.of(new EmitQuizTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+                planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode markdownQuestions = decisionNode(true, "1. sin 90° 等于多少？", null, null);
         ObjectNode emit = decisionNode(false, "", EmitQuizTool.NAME, null);
         ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
@@ -315,9 +314,9 @@ class AgentConversationServiceTest {
 
         service.executeTurn(7L, 42L, "给我出三道选择题", ignored -> { });
 
-        verify(messageMapper).insertForActiveRun(
+        verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
                 argThatMessage("assistant", "quiz", null), eq(42L), eq(1L));
-        verify(modelClient, org.mockito.Mockito.times(3)).decideNextStepStream(any(), any(), any(), any());
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
     }
 
     @Test
@@ -328,7 +327,7 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+                planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode emit = decisionNode(false, "把文件交出去", EmitArtifactTool.NAME, null);
         ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
         args.put("name", "WebSocket 聊天示例");
@@ -360,35 +359,24 @@ class AgentConversationServiceTest {
     }
 
     @Test
-    void claimingTheCodeIsDoneWithoutDeliveringItIsSentBackExactlyOnce() {
-        // 用户的原话是"我说了东西，回复我给了，但是我没有看见东西"：
-        // 自称完成却没有任何代码，必须拦一次；模型第二次仍不交付就放行，不让用户反复干等。
+    void claimingTheCodeIsDoneWithoutDeliveringItIsReturnedDirectly() {
         stubTransactions();
         registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
-        // 预算留够 3 轮：这样"只拦一次"证明的是同一句批评不再重复，而不是预算刚好用光。
-        org.mockito.Mockito.lenient().when(properties.getMaxReflections()).thenReturn(3);
+                planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode empty = decisionNode(true, "", null, null);
         empty.put("reply", "已完成 Node.js + ws 服务端及浏览器客户端聊天示例。");
-        ObjectNode stillEmpty = decisionNode(true, "", null, null);
-        stillEmpty.put("reply", "已完成，但我这边没法把文件交给你。");
-        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
-                .thenReturn(call(empty), call(stillEmpty));
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(empty));
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
 
-        AtomicReference<String> critique = new AtomicReference<>();
-        service.executeTurn(7L, 42L, "帮我写一个 node.js + ws 的聊天示例", event -> {
-            if ("reflection".equals(event.getEventType())) critique.set(event.getDataContent());
-        });
+        service.executeTurn(7L, 42L, "帮我写一个 node.js + ws 的聊天示例", ignored -> { });
 
-        assertThat(critique.get()).contains("emit_artifact");
-        verify(messageMapper).insertForActiveRun(
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
+        verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
                 argThatMessage("assistant", "reflection", null), eq(42L), eq(1L));
-        verify(modelClient, org.mockito.Mockito.times(2)).decideNextStepStream(any(), any(), any(), any());
         verify(messageMapper).insertForActiveRun(
                 argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
     }
@@ -401,7 +389,7 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+                planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode inline = decisionNode(true, "", null, null);
         inline.put("reply", "已完成，代码如下：\n```js\nconsole.log('hi');\n```");
         when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(inline));
@@ -568,17 +556,14 @@ class AgentConversationServiceTest {
     }
 
     @Test
-    void reflectionGateBlocksAPrematureDoneAndFeedsTheCritiqueBack() {
+    void aDoneReplyIsDeliveredWithoutAPlanReflection() {
         stubTransactions();
         when(planService.load(any())).thenReturn(List.of(
                 new AgentPlanItem("查一下知识库", "IN_PROGRESS", "")));
         when(planService.render(any())).thenReturn("1. 查一下知识库 (IN_PROGRESS)");
         ObjectNode premature = decisionNode(true, "", null, null);
         premature.put("reply", "都办好了");
-        ObjectNode settled = decisionNode(true, "", null, null);
-        settled.put("reply", "查询失败，我没能拿到知识库数据");
-        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
-                .thenReturn(call(premature), call(settled));
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(premature));
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
         List<String> eventTypes = new java.util.ArrayList<>();
@@ -587,19 +572,12 @@ class AgentConversationServiceTest {
                 7L, 42L, "帮我复习", true, event -> eventTypes.add(event.getEventType()));
 
         assertThat(result.getStatus()).isEqualTo("ready");
-        assertThat(eventTypes).containsSubsequence("reflection", "answer");
-        var contexts = org.mockito.ArgumentCaptor.forClass(String.class);
-        verify(modelClient, org.mockito.Mockito.times(2))
-                .decideNextStepStream(contexts.capture(), any(), any(), any());
-        assertThat(contexts.getAllValues().get(0)).doesNotContain("【自检结果】");
-        assertThat(contexts.getAllValues().get(1))
-                .contains("【自检结果】")
-                .contains("还有 1 个步骤没有收口")
-                .contains("查一下知识库");
+        assertThat(eventTypes).contains("answer").doesNotContain("reflection");
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
     }
 
     @Test
-    void reflectionBudgetIsBoundedSoTheTurnCannotSpinForever() {
+    void unfinishedPlansDoNotCauseExtraModelRounds() {
         stubTransactions();
         when(planService.load(any())).thenReturn(List.of(
                 new AgentPlanItem("永远没做完的步骤", "PENDING", "")));
@@ -612,9 +590,7 @@ class AgentConversationServiceTest {
         AgentConversation result = service.executeTurn(7L, 42L, "帮我复习", true, ignored -> { });
 
         assertThat(result.getStatus()).isEqualTo("ready");
-        // maxReflections=1：驳回一次后放行，两次模型调用而不是打满 maxSteps。
-        verify(modelClient, org.mockito.Mockito.times(2))
-                .decideNextStepStream(any(), any(), any(), any());
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
         verify(messageMapper).insertForActiveRun(
                 argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
     }
@@ -641,21 +617,18 @@ class AgentConversationServiceTest {
     }
 
     @Test
-    void honestySelfCheckStillFiresWithoutDeepThinking() {
-        // 深度思考只放宽"做得更完整"的要求；把失败说成完成属于回复不诚实，任何模式都要拦。
+    void aToolFailureDoesNotCauseAnAutomaticCritiqueRound() {
         stubTransactions();
         ObjectNode failing = decisionNode(false, "调用工具", "failing_tool", null);
         ObjectNode hides = decisionNode(true, "", null, null);
         hides.put("reply", "已经帮你生成好了");
-        ObjectNode owns = decisionNode(true, "", null, null);
-        owns.put("reply", "工具调用失败了，我没能生成");
         when(modelClient.decideNextStepStream(any(), any(), any(), any()))
-                .thenReturn(call(failing), call(hides), call(owns));
+                .thenReturn(call(failing), call(hides));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient,
                 new AgentToolRegistry(List.of(new FailingTool("failing_tool"))), properties,
                 transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
-                planService, memoryService, new AgentTurnEvaluator(), new AgentQuizService(objectMapper));
+                planService, memoryService, new AgentQuizService(objectMapper));
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
         List<String> eventTypes = new java.util.ArrayList<>();
@@ -663,15 +636,12 @@ class AgentConversationServiceTest {
         service.executeTurn(7L, 42L, "帮我生成", false,
                 event -> eventTypes.add(event.getEventType()));
 
-        assertThat(eventTypes).containsSubsequence("reflection", "answer");
+        assertThat(eventTypes).containsSubsequence("tool_error", "answer").doesNotContain("reflection");
     }
 
     @Test
-    void repeatingTheSameCritiqueStopsInsteadOfSpendingAnotherRound() {
-        // 用户看到的两张一模一样的自检卡就是这里来的：同一句批评回灌两次，
-        // 模型两次都没改计划，只是让人多等一轮。第二次直接放行。
+    void deepThinkingDoesNotRepeatTheSameDoneDecision() {
         stubTransactions();
-        org.mockito.Mockito.when(properties.getMaxReflections()).thenReturn(2);
         when(planService.load(any())).thenReturn(List.of(
                 new AgentPlanItem("永远没做完的步骤", "PENDING", "")));
         ObjectNode premature = decisionNode(true, "", null, null);
@@ -683,21 +653,17 @@ class AgentConversationServiceTest {
 
         service.executeTurn(7L, 42L, "帮我复习", true, event -> eventTypes.add(event.getEventType()));
 
-        assertThat(eventTypes.stream().filter("reflection"::equals)).hasSize(1);
-        verify(modelClient, org.mockito.Mockito.times(2))
-                .decideNextStepStream(any(), any(), any(), any());
+        assertThat(eventTypes).contains("answer").doesNotContain("reflection");
+        verify(modelClient).decideNextStepStream(any(), any(), any(), any());
     }
 
     @Test
-    void deepThinkingHoldsBackADraftTheSelfCheckIsLikelyToReject() {
-        // 会被驳回的草稿不流给用户：撤回比慢更难受。驳回预算用完后恢复流式。
+    void deepThinkingStreamsTheFirstDoneDraftWithoutHoldingItBack() {
         stubTransactions();
         when(planService.load(any())).thenReturn(List.of(
                 new AgentPlanItem("查一下知识库", "IN_PROGRESS", "")));
         ObjectNode premature = decisionNode(true, "", null, null);
         premature.put("reply", "都办好了");
-        ObjectNode settled = decisionNode(true, "", null, null);
-        settled.put("reply", "查询失败，我没能拿到知识库数据");
         AtomicInteger calls = new AtomicInteger();
         when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenAnswer(invocation -> {
             java.util.function.Consumer<String> deltas = invocation.getArgument(2);
@@ -705,8 +671,7 @@ class AgentConversationServiceTest {
                 deltas.accept("都办好了");
                 return call(premature);
             }
-            deltas.accept("查询失败，我没能拿到知识库数据");
-            return call(settled);
+            throw new AssertionError("done=true must end the turn without a self-check retry");
         });
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
@@ -714,8 +679,7 @@ class AgentConversationServiceTest {
 
         service.executeTurn(7L, 42L, "帮我复习", true, event -> eventTypes.add(event.getEventType()));
 
-        assertThat(eventTypes.indexOf("answer_delta")).isGreaterThan(eventTypes.indexOf("reflection"));
-        assertThat(eventTypes).containsSubsequence("reflection", "answer_delta", "answer");
+        assertThat(eventTypes).containsSubsequence("answer_delta", "answer").doesNotContain("reflection");
     }
 
     @Test

@@ -33,9 +33,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -58,12 +56,6 @@ public class AgentConversationService {
     private static final int TOOL_DELTA_FLUSH_CHARS = 256;
     private static final int ANSWER_DELTA_FLUSH_CHARS = 24;
     private static final String DEFAULT_TITLE = "新对话";
-    /** “说交付了代码却什么都没给”的批评意见。做成常量，方便去重后只提一次。 */
-    private static final String UNDELIVERED_CODE_CRITIQUE =
-            "自检未通过：用户要的是可运行的代码，但你的回复里既没有代码围栏，也没有调用 emit_artifact，"
-                    + "用户其实什么都没拿到。下一步必须调用 emit_artifact，把每个文件的完整源码交出来；"
-                    + "确实做不到就如实说明卡在哪里，不要把没交付说成已完成。";
-
     /**
      * 模型常把 Markdown 反引号转义成 \`；CommonMark 会把 \` 渲染成裸反引号。
      * 归一化为真正的反引号，保证行内代码与代码围栏正确渲染。
@@ -84,7 +76,6 @@ public class AgentConversationService {
     private final ObjectMapper objectMapper;
     private final AgentPlanService planService;
     private final AgentMemoryService memoryService;
-    private final AgentTurnEvaluator turnEvaluator;
     private final AgentQuizService quizService;
     private final AgentExecutionJournal executionJournal;
     private final AgentRequestAssembler requestAssembler;
@@ -99,7 +90,7 @@ public class AgentConversationService {
                                     AgentEventService eventService,
                                     BillingService billingService, ObjectMapper objectMapper,
                                     AgentPlanService planService, AgentMemoryService memoryService,
-                                    AgentTurnEvaluator turnEvaluator, AgentQuizService quizService,
+                                    AgentQuizService quizService,
                                     AgentExecutionJournal executionJournal,
                                     AgentRequestAssembler requestAssembler, AgentStepExecutor stepExecutor,
                                     AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector) {
@@ -114,7 +105,6 @@ public class AgentConversationService {
         this.objectMapper = objectMapper;
         this.planService = planService;
         this.memoryService = memoryService;
-        this.turnEvaluator = turnEvaluator;
         this.quizService = quizService;
         this.executionJournal = executionJournal;
         this.requestAssembler = requestAssembler;
@@ -130,10 +120,10 @@ public class AgentConversationService {
                                     AgentEventService eventService, ScheduledExecutorService agentLeaseRenewer,
                                     BillingService billingService, ObjectMapper objectMapper,
                                     AgentPlanService planService, AgentMemoryService memoryService,
-                                    AgentTurnEvaluator turnEvaluator, AgentQuizService quizService) {
+                                    AgentQuizService quizService) {
         this(conversationMapper, messageMapper, modelClient, toolRegistry, properties, transactionTemplate,
                 eventService, billingService, objectMapper, planService, memoryService,
-                turnEvaluator, quizService, AgentExecutionJournal.disabled(),
+                quizService, AgentExecutionJournal.disabled(),
                 AgentRequestAssembler.legacy(toolRegistry, properties, planService, quizService, objectMapper),
                 AgentStepExecutor.legacy(modelClient),
                 new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
@@ -214,13 +204,7 @@ public class AgentConversationService {
         return executeClaimedTurn(conversationId, userId, runVersion, currentUserMessage, false, onEvent);
     }
 
-    /**
-     * Runs a claimed turn，{@code deepThinking} 决定是否允许"追求完整"类自检多花轮次。
-     *
-     * <p>默认关闭：计划自检会把已经写好的回复退回去重做一遍，用户那边表现为"答案出现又被撤回、
-     * 而且很慢"。想要更细致的结果时由前端显式打开，把这份等待变成用户自己的选择。
-     * 与诚实性无关的优化才受此开关约束，工具失败没交代仍然一律拦截。</p>
-     */
+    /** Runs a claimed turn; deep-thinking metadata is retained without self-check retries. */
     public AgentConversation executeClaimedTurn(Long conversationId, Long userId, long runVersion,
                                                 String currentUserMessage, boolean deepThinking,
                                                 Consumer<AgentEvent> onEvent) {
@@ -314,18 +298,8 @@ public class AgentConversationService {
         log.info("agent turn started conversation={} run={} toolCount={} memoryInjected={}",
                 conversationId, runVersion, allowedTools.size(), !memoryContext.isEmpty());
         int maxSteps = Math.max(1, properties.getMaxSteps());
-        int maxReflections = Math.max(0, properties.getMaxReflections());
-        int reflections = 0;
         int failures = 0;
         JsonNode lastError = null;
-        boolean quizCardEmitted = false;
-        // 本轮有没有真的交付过代码：收口时用来判断“说完成了却什么都没给”。
-        boolean artifactEmitted = false;
-        // 上一步自检的批评意见，只注入紧随其后的那一步。
-        String critique = null;
-        // 已经提过的批评意见：同一句话第二次出现说明智能体不会因为再听一遍而改变做法，
-        // 继续驳回只是让用户多等一轮、多看一张自检卡，所以直接放行。
-        Set<String> spentCritiques = new HashSet<>();
         UsageAccumulator usage = new UsageAccumulator();
 
         for (int step = 0; step < maxSteps; step++) {
@@ -341,18 +315,12 @@ public class AgentConversationService {
             List<AgentMessage> messages = listMessages(conversationId, userId);
             AgentStepRequest request = requestAssembler.assemble(new AgentRequestAssemblyInput(
                     conversationId, userId, runVersion, step + 1, messages, plan, memoryContext,
-                    lastError, critique, allowedTools, maxSteps - step, deepThinking));
-            critique = null;
+                    lastError, null, allowedTools, maxSteps - step, deepThinking));
             long modelStartedNanos = System.nanoTime();
-            // 会被自检驳回的草稿干脆不要流给用户：先出现再撤回，比慢一点难受得多。
-            // 只在"这一步真有可能被驳回"时才憋着——计划自检要开了深度思考才会触发，
-            // 上一次工具失败则不论模式都可能拦，所以两者分别判断。
-            boolean planGateArmed = deepThinking && plan.stream().anyMatch(item -> !item.settled());
-            boolean rejectionLikely = reflections < maxReflections && (planGateArmed || lastError != null);
             AnswerProgress answerProgress = new AnswerProgress(
                     conversationId, userId, runVersion, listener,
                     step + 1, turnStartedNanos, modelStartedNanos,
-                    (!isQuizRequest(latestUserMessage) || quizCardEmitted) && !rejectionLikely);
+                    true);
             JsonNode decision;
             AgentStep journalStep = executionJournal.startStep(request);
             try {
@@ -387,54 +355,6 @@ public class AgentConversationService {
 
             if (decision.path("done").asBoolean(false)) {
                 String reply = normalizeAnswer(defaultText(decision.path("reply").asText(), "已完成你的请求。"));
-                if (isQuizRequest(latestUserMessage) && allowedTools.contains(EmitQuizTool.NAME) && !quizCardEmitted
-                        && reflections < maxReflections) {
-                    reflections++;
-                    critique = "自检未通过：用户要求出题，但你还没有调用 emit_quiz 下发答题卡。"
-                            + "不要在 reply 里列题或选项；下一步必须调用 emit_quiz，普通练习可不传 quizSessionId。";
-                    saveActiveMessage(conversationId, userId, runVersion,
-                            "assistant", "reflection", null, critique);
-                    appendActive(conversationId, userId, runVersion, "reflection",
-                            JsonNodeFactory.instance.objectNode().put("round", reflections).put("critique", critique),
-                            listener);
-                    continue;
-                }
-                // 说做完了却什么都没给：用户要的是代码，回复里既没有代码围栏，这一轮也没发过交付卡。
-                // 这是诚实性自检，和深度思考无关；同一句批评只提一次，提过就放行，不跟模型拉锯。
-                if (reflections < maxReflections && allowedTools.contains(EmitArtifactTool.NAME)
-                        && !spentCritiques.contains(UNDELIVERED_CODE_CRITIQUE)
-                        && claimsUndeliveredCode(latestUserMessage, reply, artifactEmitted)) {
-                    reflections++;
-                    critique = UNDELIVERED_CODE_CRITIQUE;
-                    spentCritiques.add(critique);
-                    log.info("agent turn reflection conversation={} run={} round={} kind=UNDELIVERED_ARTIFACT",
-                            conversationId, runVersion, reflections);
-                    saveActiveMessage(conversationId, userId, runVersion,
-                            "assistant", "reflection", null, critique);
-                    appendActive(conversationId, userId, runVersion, "reflection",
-                            JsonNodeFactory.instance.objectNode().put("round", reflections).put("critique", critique),
-                            listener);
-                    continue;
-                }
-                Optional<AgentTurnEvaluator.Critique> verdict =
-                        turnEvaluator.critique(reply, plan, lastError);
-                if (verdict.isPresent() && shouldReflect(verdict.get(), deepThinking,
-                        reflections < maxReflections, spentCritiques)) {
-                    // 自检不通过：不把这次回复交给用户，把批评意见回灌让智能体自己纠偏。
-                    reflections++;
-                    critique = verdict.get().text();
-                    spentCritiques.add(critique);
-                    log.info("agent turn reflection conversation={} run={} round={} kind={}",
-                            conversationId, runVersion, reflections, verdict.get().kind());
-                    saveActiveMessage(conversationId, userId, runVersion,
-                            "assistant", "reflection", null, critique);
-                    appendActive(conversationId, userId, runVersion, "reflection",
-                            JsonNodeFactory.instance.objectNode()
-                                    .put("round", reflections)
-                                    .put("critique", critique),
-                            listener);
-                    continue;
-                }
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
                 appendActive(conversationId, userId, runVersion, "answer", reply, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
@@ -499,7 +419,6 @@ public class AgentConversationService {
                     saveActiveMessage(conversationId, userId, runVersion,
                             "assistant", "quiz", null, quiz.toString());
                     appendActive(conversationId, userId, runVersion, "quiz", quiz, listener);
-                    quizCardEmitted = true;
                 }
                 // 交付卡同理：代码是这一轮真正的产出，必须落成消息，刷新页面后还能拿到源码。
                 if (EmitArtifactTool.NAME.equals(toolName) && result.has(EmitArtifactTool.ARTIFACT_FIELD)) {
@@ -507,7 +426,6 @@ public class AgentConversationService {
                     saveActiveMessage(conversationId, userId, runVersion,
                             "assistant", "artifact", null, artifact.toString());
                     appendActive(conversationId, userId, runVersion, "artifact", artifact, listener);
-                    artifactEmitted = true;
                 }
                 failures = 0;
                 lastError = null;
@@ -558,73 +476,6 @@ public class AgentConversationService {
         saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, exhausted);
         appendActive(conversationId, userId, runVersion, "answer", exhausted, listener);
         return finalizeReady(conversationId, userId, runVersion, usage, listener);
-    }
-
-    /**
-     * 这条自检结论值不值得再花一轮。
-     *
-     * <p>三条否决理由，都是从"用户体验"而不是"模型正确性"出发的：预算用光了不再纠缠；
-     * 同一句批评已经提过一次，再提一次也只会得到同样的回复；纯粹追求完整的优化在
-     * 非深度思考模式下让位于速度——用户要的是快点看到答案，而不是等一个更完美的答案。</p>
-     */
-    private boolean shouldReflect(AgentTurnEvaluator.Critique verdict, boolean deepThinking,
-                                  boolean budgetLeft, Set<String> spentCritiques) {
-        if (!budgetLeft) return false;
-        if (spentCritiques.contains(verdict.text())) return false;
-        return deepThinking || !verdict.optionalRefinement();
-    }
-
-    private boolean isQuizRequest(String message) {
-        if (!StringUtils.hasText(message)) return false;
-        String normalized = message.toLowerCase(Locale.ROOT);
-        return normalized.contains("出题") || normalized.contains("题目") || normalized.contains("测验")
-                || normalized.contains("练习") || normalized.contains("选择题") || normalized.contains("quiz")
-                || normalized.contains("question");
-    }
-
-    /**
-     * 用户要代码，却什么都没拿到。
-     *
-     * <p>三个条件同时成立才算：这一轮没发过交付卡、回复里也没有代码围栏、而回复还自称做完了。
-     * 少任何一个都不拦——已经贴了围栏的照常放行，只是分析或提问的回复也不该被拦。</p>
-     */
-    private boolean claimsUndeliveredCode(String userMessage, String reply, boolean artifactEmitted) {
-        if (artifactEmitted || !StringUtils.hasText(reply) || reply.contains("```")) return false;
-        return isCodeRequest(userMessage) && claimsCompletion(reply);
-    }
-
-    /**
-     * 这条诉求要的是可运行的代码吗。
-     *
-     * <p>要求“动手做”的动词和“代码产物”的名词同时出现，且不是写文章类的诉求。
-     * 判宽了会让正常回复白等一轮自检，那正是用户抱怨过的体验，所以这里宁可漏判：
-     * 真正的兜底靠 emit_artifact 的工具说明，这道门只拦最典型的“空口交付”。</p>
-     */
-    private boolean isCodeRequest(String message) {
-        if (!StringUtils.hasText(message)) return false;
-        String normalized = message.toLowerCase(Locale.ROOT);
-        if (containsAny(normalized, "博客", "文章", "文案", "大纲", "总结", "报告", "邮件", "提醒")) return false;
-        boolean build = containsAny(normalized, "写", "实现", "生成", "做一个", "做个", "搭", "开发", "编写",
-                "create", "build", "write", "implement");
-        boolean artifact = containsAny(normalized, "代码", "源码", "脚本", "示例", "例子", "程序", "项目",
-                "组件", "页面", "网页", "接口", "服务端", "客户端", "demo", "html", "css", "javascript",
-                "python", "code", "script", "component");
-        return build && artifact;
-    }
-
-    /** 回复自称已经交付了。只看“做完了”这类断言，提问或给方案的回复不算。 */
-    private boolean claimsCompletion(String reply) {
-        String normalized = reply.toLowerCase(Locale.ROOT);
-        return containsAny(normalized, "已完成", "已经完成", "完成了", "已实现", "已经实现", "已生成",
-                "已经生成", "已写好", "写好了", "已创建", "已交付", "已为你", "已经为你", "搞定",
-                "如下", "见下", "done");
-    }
-
-    private boolean containsAny(String text, String... needles) {
-        for (String needle : needles) {
-            if (text.contains(needle)) return true;
-        }
-        return false;
     }
 
     private JsonNode progressPayload(String tool, String message) {

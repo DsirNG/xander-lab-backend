@@ -19,10 +19,10 @@ public class AgentConversationMessageRequest {
     private List<AgentAttachmentRequest> attachments = new ArrayList<>();
 
     /**
-     * 深度思考：允许智能体为"把计划做完"多花几轮自检，代价是回复更慢。
+     * Retained request metadata for compatibility and execution journaling.
      *
-     * <p>默认关闭。这类自检会把已经写好的回复退回重做，用户侧表现为答案迟迟不来，
-     * 所以要不要等由用户在前端自己决定，而不是所有对话默认承担。</p>
+     * <p>It no longer enables automatic self-check retries or holds back a
+     * completed reply; a {@code done=true} decision is delivered directly.</p>
      */
     private boolean deepThinking = false;
 
