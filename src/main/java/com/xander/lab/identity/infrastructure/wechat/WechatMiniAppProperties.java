@@ -25,6 +25,9 @@ public class WechatMiniAppProperties {
     /** 小程序扫码确认页路径。 */
     private String loginPage = "pages/scan-login/index";
 
+    /** 二维码对应的小程序版本：develop、trial 或 release。 */
+    private String envVersion = "trial";
+
     public String getCode2SessionUrl() {
         return code2SessionUrl;
     }
@@ -55,5 +58,13 @@ public class WechatMiniAppProperties {
 
     public void setLoginPage(String loginPage) {
         this.loginPage = loginPage;
+    }
+
+    public String getEnvVersion() {
+        return envVersion;
+    }
+
+    public void setEnvVersion(String envVersion) {
+        this.envVersion = envVersion;
     }
 }

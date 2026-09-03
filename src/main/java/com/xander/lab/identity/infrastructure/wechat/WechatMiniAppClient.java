@@ -64,7 +64,8 @@ public class WechatMiniAppClient {
             byte[] image = apiClient.post()
                     .uri(uriBuilder -> uriBuilder.scheme("https").host("api.weixin.qq.com").path("/wxa/getwxacodeunlimit")
                             .queryParam("access_token", accessToken).build())
-                    .body(Map.of("scene", scene, "page", properties.getLoginPage(), "check_path", false, "env_version", "release"))
+                    .body(Map.of("scene", scene, "page", properties.getLoginPage(), "check_path", false,
+                            "env_version", properties.getEnvVersion()))
                     .retrieve().body(byte[].class);
             if (image == null || image.length < 100 || (image[0] == '{' && image[1] == '"')) {
                 throw new IllegalStateException("微信二维码生成失败，请稍后重试");
