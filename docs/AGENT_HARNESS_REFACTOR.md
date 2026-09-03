@@ -429,6 +429,12 @@ stale-run recovery into `AgentRunLifecycle`. Tool execution and compatibility
 event projection remain in the facade until their own behavior-preserving
 extractions are tested.
 
+The next extraction adds `AgentEventProjector`. It owns the existing active-run
+message fence, durable legacy-event projection, listener delivery, plan-card
+upsert, and tool-progress payload shape. The loop still decides when a thought,
+tool, plan, quiz, artifact, or answer exists; it delegates only persistence and
+projection, preserving event names, ordering, and serialized fields.
+
 ### Phase 3: Tool Pipeline and Idempotency
 
 - Route every current `AgentTool` through `ToolExecutionPipeline`.
@@ -594,13 +600,19 @@ Completed Phase 2 lifecycle checkpoint:
 2. [x] Preserve the existing facade constructor for focused loop tests and
    embedded callers while moving the lease executor dependency to the lifecycle.
 
+Completed Phase 2 event projection checkpoint:
+
+1. [x] `AgentEventProjector` owns active-run message fencing, plan-card upsert,
+   durable legacy-event projection, listener delivery, and tool-progress payload
+   shaping; direct tests freeze those compatibility behaviors.
+2. [x] Keep the loop responsible for deciding whether a tool result creates a
+   plan, quiz, artifact, thought, reflection, or answer projection.
+
 Next Phase 2 extraction batch:
 
-1. [ ] Extract `AgentEventProjector` while preserving current event names and
-   serialized fields.
-2. [ ] Move `runLoop` ownership into `AgentTurnCoordinator`; retain
+1. [ ] Move `runLoop` ownership into `AgentTurnCoordinator`; retain
    `AgentConversationService` as the public compatibility facade.
-3. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
+2. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
    tests for the extracted boundaries.
 
 Do not start a large Skill catalog or intent resolver in Phase 2. First make

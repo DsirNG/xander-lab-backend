@@ -90,6 +90,7 @@ public class AgentConversationService {
     private final AgentRequestAssembler requestAssembler;
     private final AgentStepExecutor stepExecutor;
     private final AgentRunLifecycle runLifecycle;
+    private final AgentEventProjector eventProjector;
 
     @Autowired
     public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
@@ -101,7 +102,7 @@ public class AgentConversationService {
                                     AgentTurnEvaluator turnEvaluator, AgentQuizService quizService,
                                     AgentExecutionJournal executionJournal,
                                     AgentRequestAssembler requestAssembler, AgentStepExecutor stepExecutor,
-                                    AgentRunLifecycle runLifecycle) {
+                                    AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.modelClient = modelClient;
@@ -119,6 +120,7 @@ public class AgentConversationService {
         this.requestAssembler = requestAssembler;
         this.stepExecutor = stepExecutor;
         this.runLifecycle = runLifecycle;
+        this.eventProjector = eventProjector;
     }
 
     /** Compatibility constructor retained for focused loop tests and embedded callers. */
@@ -135,7 +137,8 @@ public class AgentConversationService {
                 AgentRequestAssembler.legacy(toolRegistry, properties, planService, quizService, objectMapper),
                 AgentStepExecutor.legacy(modelClient),
                 new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
-                        properties, transactionTemplate, agentLeaseRenewer));
+                        properties, transactionTemplate, agentLeaseRenewer),
+                new AgentEventProjector(conversationMapper, messageMapper, eventService, transactionTemplate));
     }
 
     /**
@@ -625,16 +628,7 @@ public class AgentConversationService {
     }
 
     private JsonNode progressPayload(String tool, String message) {
-        ObjectNode payload = JsonNodeFactory.instance.objectNode().put("tool", tool);
-        String raw = defaultText(message, "");
-        int separator = raw.indexOf('|');
-        if (separator > 0) {
-            payload.put("stage", raw.substring(0, separator));
-            payload.put("message", raw.substring(separator + 1));
-        } else {
-            payload.put("message", raw);
-        }
-        return payload;
+        return eventProjector.progressPayload(tool, message);
     }
 
     private AgentConversation finalizeReady(Long conversationId, Long userId, long runVersion,
@@ -789,64 +783,18 @@ public class AgentConversationService {
 
     private void saveActiveMessage(Long conversationId, Long userId, long runVersion,
                                    String role, String kind, String toolName, String content) {
-        AgentMessage message = new AgentMessage();
-        message.setConversationId(conversationId);
-        message.setRunVersion(runVersion);
-        message.setRole(role);
-        message.setKind(kind);
-        message.setToolName(toolName);
-        message.setContent(content);
-        transactionTemplate.executeWithoutResult(status -> {
-            int touched = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                    .eq(AgentConversation::getId, conversationId)
-                    .eq(AgentConversation::getUserId, userId)
-                    .eq(AgentConversation::getStatus, "running")
-                    .eq(AgentConversation::getRunVersion, runVersion)
-                    // MyBatis-Plus update wrapper 必须包含 SET；同时用更新时间续租当前执行中的会话。
-                    .setSql("updated_at = CURRENT_TIMESTAMP")
-                    );
-            if (touched != 1 || messageMapper.insertForActiveRun(message, userId, runVersion) != 1) {
-                throw new AgentRunSupersededException(conversationId, runVersion);
-            }
-        });
+        eventProjector.saveActiveMessage(conversationId, userId, runVersion, role, kind, toolName, content);
     }
 
     /** One user turn owns one plan card; subsequent plan_tasks calls update that card's contents. */
     private void saveOrUpdateActivePlanMessage(Long conversationId, Long userId, long runVersion,
                                                String content) {
-        transactionTemplate.executeWithoutResult(status -> {
-            int touched = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                    .eq(AgentConversation::getId, conversationId)
-                    .eq(AgentConversation::getUserId, userId)
-                    .eq(AgentConversation::getStatus, "running")
-                    .eq(AgentConversation::getRunVersion, runVersion)
-                    .setSql("updated_at = CURRENT_TIMESTAMP"));
-            if (touched != 1) throw new AgentRunSupersededException(conversationId, runVersion);
-
-            int updated = messageMapper.update(null, new LambdaUpdateWrapper<AgentMessage>()
-                    .eq(AgentMessage::getConversationId, conversationId)
-                    .eq(AgentMessage::getRunVersion, runVersion)
-                    .eq(AgentMessage::getKind, "plan")
-                    .set(AgentMessage::getContent, content));
-            if (updated > 0) return;
-
-            AgentMessage message = new AgentMessage();
-            message.setConversationId(conversationId);
-            message.setRunVersion(runVersion);
-            message.setRole("assistant");
-            message.setKind("plan");
-            message.setContent(content);
-            if (messageMapper.insertForActiveRun(message, userId, runVersion) != 1) {
-                throw new AgentRunSupersededException(conversationId, runVersion);
-            }
-        });
+        eventProjector.saveOrUpdateActivePlanMessage(conversationId, userId, runVersion, content);
     }
 
     private AgentEvent appendActive(Long conversationId, Long userId, long runVersion,
                                     String eventType, Object data, Consumer<AgentEvent> listener) {
-        AgentEvent event = eventService.storeActive(conversationId, userId, runVersion, eventType, data);
-        eventService.deliver(event, listener);
-        return event;
+        return eventProjector.appendActive(conversationId, userId, runVersion, eventType, data, listener);
     }
 
     /** 召回与本轮输入相关的长期记忆；记忆是增益而非必需，失败不能拖垮整轮对话。 */
