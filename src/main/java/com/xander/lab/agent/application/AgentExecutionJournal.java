@@ -180,6 +180,87 @@ public class AgentExecutionJournal {
         transitionInvocation(invocation, AgentToolInvocation.STATUS_CANCELLED, null, "用户取消");
     }
 
+    /** Moves a durable invocation into the non-executing approval wait state. */
+    @Transactional
+    public void waitForApproval(AgentToolInvocation invocation) {
+        if (!enabled || invocation == null || invocation.getId() == null) return;
+        int changed = invocationMapper.update(null, new LambdaUpdateWrapper<AgentToolInvocation>()
+                .eq(AgentToolInvocation::getId, invocation.getId())
+                .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_RUNNING)
+                .set(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_WAITING_APPROVAL));
+        if (changed != 1) throw new IllegalStateException("工具调用审批状态已变化");
+        invocation.setStatus(AgentToolInvocation.STATUS_WAITING_APPROVAL);
+    }
+
+    /** Pauses the durable run after its invocation is safely waiting for a user decision. */
+    @Transactional
+    public void waitRunForApproval(Long conversationId, Long userId, long runVersion) {
+        if (!enabled) return;
+        AgentRun run = findRun(conversationId, runVersion);
+        if (run == null) throw new AgentRunSupersededException(conversationId, runVersion);
+        int changed = runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
+                .eq(AgentRun::getId, run.getId())
+                .eq(AgentRun::getUserId, userId)
+                .eq(AgentRun::getStatus, AgentRun.STATUS_RUNNING)
+                .set(AgentRun::getStatus, AgentRun.STATUS_WAITING_APPROVAL));
+        if (changed != 1) throw new AgentRunSupersededException(conversationId, runVersion);
+    }
+
+    /** Claims an approved invocation exactly once before its side effect begins. */
+    @Transactional
+    public AgentToolInvocation startApprovedInvocation(Long invocationDbId) {
+        if (!enabled) throw new IllegalStateException("审批执行需要启用执行日志");
+        AgentToolInvocation invocation = invocationMapper.selectById(invocationDbId);
+        if (invocation == null) throw new IllegalStateException("审批关联的工具调用不存在");
+        int changed = invocationMapper.update(null, new LambdaUpdateWrapper<AgentToolInvocation>()
+                .eq(AgentToolInvocation::getId, invocationDbId)
+                .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_WAITING_APPROVAL)
+                .set(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_RUNNING));
+        if (changed != 1) throw new IllegalStateException("工具调用审批状态已变化");
+        invocation.setStatus(AgentToolInvocation.STATUS_RUNNING);
+        return invocation;
+    }
+
+    /** Cancels a still-pending invocation after its owner rejects the exact requested action. */
+    @Transactional
+    public void rejectWaitingInvocation(Long invocationDbId, String reason) {
+        if (!enabled) return;
+        int changed = invocationMapper.update(null, new LambdaUpdateWrapper<AgentToolInvocation>()
+                .eq(AgentToolInvocation::getId, invocationDbId)
+                .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_WAITING_APPROVAL)
+                .set(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_CANCELLED)
+                .set(AgentToolInvocation::getErrorMessage, limit(reason, 1000))
+                .set(AgentToolInvocation::getCompletedAt, LocalDateTime.now()));
+        if (changed != 1) throw new IllegalStateException("工具调用审批状态已变化");
+    }
+
+    /** Completes a run that was deliberately paused for approval rather than actively executing. */
+    @Transactional
+    public void completeWaitingRun(Long runId, Long userId) {
+        if (!enabled) return;
+        int changed = runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
+                .eq(AgentRun::getId, runId)
+                .eq(AgentRun::getUserId, userId)
+                .eq(AgentRun::getStatus, AgentRun.STATUS_WAITING_APPROVAL)
+                .set(AgentRun::getStatus, AgentRun.STATUS_COMPLETED)
+                .set(AgentRun::getCompletedAt, LocalDateTime.now()));
+        if (changed != 1) throw new IllegalStateException("智能体审批运行状态已变化");
+    }
+
+    /** Fails a run that was paused for approval after its approved tool failed. */
+    @Transactional
+    public void failWaitingRun(Long runId, Long userId, String reason) {
+        if (!enabled) return;
+        int changed = runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
+                .eq(AgentRun::getId, runId)
+                .eq(AgentRun::getUserId, userId)
+                .eq(AgentRun::getStatus, AgentRun.STATUS_WAITING_APPROVAL)
+                .set(AgentRun::getStatus, AgentRun.STATUS_FAILED)
+                .set(AgentRun::getFailureReason, limit(reason, 1000))
+                .set(AgentRun::getCompletedAt, LocalDateTime.now()));
+        if (changed != 1) throw new IllegalStateException("智能体审批运行状态已变化");
+    }
+
     /** Returns a bounded batch of interrupted tool calls for read-only business reconciliation. */
     @Transactional(readOnly = true)
     public List<AgentToolInvocation> unknownInvocations(int batchSize) {
@@ -188,6 +269,29 @@ public class AgentExecutionJournal {
                 .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_UNKNOWN)
                 .orderByAsc(AgentToolInvocation::getUpdatedAt)
                 .last("LIMIT " + Math.min(Math.max(batchSize, 1), 100)));
+    }
+
+    /** Finds approval-resumed calls whose worker disappeared before it could settle an outcome. */
+    @Transactional(readOnly = true)
+    public List<AgentToolInvocation> runningInvocationsBefore(LocalDateTime cutoff, int batchSize) {
+        if (!enabled) return List.of();
+        return invocationMapper.selectList(new LambdaQueryWrapper<AgentToolInvocation>()
+                .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_RUNNING)
+                .le(AgentToolInvocation::getUpdatedAt, cutoff)
+                .orderByAsc(AgentToolInvocation::getUpdatedAt)
+                .last("LIMIT " + Math.min(Math.max(batchSize, 1), 100)));
+    }
+
+    /** Converts only an expired approved execution into an explicit reconciliation state. */
+    @Transactional
+    public void markInvocationUnknown(AgentToolInvocation invocation, String reason) {
+        if (!enabled || invocation == null || invocation.getId() == null) return;
+        invocationMapper.update(null, new LambdaUpdateWrapper<AgentToolInvocation>()
+                .eq(AgentToolInvocation::getId, invocation.getId())
+                .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_RUNNING)
+                .set(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_UNKNOWN)
+                .set(AgentToolInvocation::getErrorMessage, limit(reason, 1000))
+                .set(AgentToolInvocation::getCompletedAt, LocalDateTime.now()));
     }
 
     /** Marks an interrupted invocation as settled only when its owning tool proved its effect exists. */

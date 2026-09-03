@@ -131,6 +131,38 @@ class PublishPostToolTest {
                 .hasMessageContaining("taskId");
     }
 
+    @Test
+    void reconcilesPersistedCsdnResultWithoutCallingThePlatformAgain() {
+        BlogService blogService = mock(BlogService.class);
+        when(blogService.getManagedBlogById(42L, 5L)).thenReturn(post(5L, "CSDN 同步", 1));
+        CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
+        when(csdn.findSucceeded(42L, 5L))
+                .thenReturn(new PublishResult("csdn", "123", "https://csdn.example.com/123"));
+        PublishPostTool tool = new PublishPostTool(mock(BlogAgentService.class), blogService, csdn,
+                mock(JuejinBlogSyncService.class), mock(BillingService.class));
+
+        JsonNode result = tool.reconcile(new AgentToolContext(42L, 7L, 3L, "invocation-1"),
+                JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn"))
+                .orElseThrow();
+
+        assertThat(result.path("externalId").asText()).isEqualTo("123");
+        verify(csdn, never()).sync(any(), any());
+    }
+
+    @Test
+    void leavesExternalPublishUnknownWithoutAPersistedSuccessRecord() {
+        BlogService blogService = mock(BlogService.class);
+        when(blogService.getManagedBlogById(42L, 5L)).thenReturn(post(5L, "CSDN 同步", 1));
+        CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
+        PublishPostTool tool = new PublishPostTool(mock(BlogAgentService.class), blogService, csdn,
+                mock(JuejinBlogSyncService.class), mock(BillingService.class));
+
+        assertThat(tool.reconcile(new AgentToolContext(42L, 7L, 3L, "invocation-1"),
+                JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn")))
+                .isEmpty();
+        verify(csdn, never()).sync(any(), any());
+    }
+
     private BlogPostVO post(Long id, String title, Integer status) {
         BlogPostVO post = new BlogPostVO();
         post.setId(id);

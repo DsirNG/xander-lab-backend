@@ -25,4 +25,9 @@ public class CsdnBlogSyncService {
                 post.getCategoryName(), post.getCoverImage(), post.getTags());
         return publicationService.publish(command, "csdn");
     }
+
+    /** Looks up a completed CSDN synchronization without issuing another external request. */
+    public PublishResult findSucceeded(Long userId, Long postId) {
+        return postId == null ? null : publicationService.findSucceeded(userId, -postId, "csdn");
+    }
 }

@@ -66,6 +66,41 @@ class AgentToolExecutionPipelineTest {
         verify(journal).completeInvocation(any(), any());
     }
 
+    @Test
+    void persistsApprovalAndDoesNotExecuteToolBeforeTheOwnerDecides() {
+        AgentTool tool = new AgentTool() {
+            @Override public String name() { return "publish_post"; }
+            @Override public String description() { return "publish"; }
+            @Override public JsonNode parametersSchema() { return JsonNodeFactory.instance.objectNode(); }
+            @Override public java.util.Optional<String> approvalReason(JsonNode args) {
+                return java.util.Optional.of("publishes content");
+            }
+            @Override public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+                throw new AssertionError("approved tool must not execute before a decision");
+            }
+        };
+        AgentToolRegistry registry = new AgentToolRegistry(List.of(tool));
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        AgentToolInvocation invocation = new AgentToolInvocation();
+        invocation.setId(12L);
+        invocation.setInvocationId("invocation-1");
+        invocation.setToolName("publish_post");
+        when(journal.startInvocation(any(), any(), any(), any())).thenReturn(invocation);
+        AgentApprovalService approvals = mock(AgentApprovalService.class);
+        com.xander.lab.agent.domain.AgentApproval approval = new com.xander.lab.agent.domain.AgentApproval();
+        approval.setId(9L);
+        when(approvals.request(any(), any(), any(), any(), any(), any())).thenReturn(approval);
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(registry, journal, approvals);
+
+        assertThatThrownBy(() -> pipeline.execute(new AgentStep(), 42L, 7L, 3L,
+                Set.of("publish_post"), "publish_post", JsonNodeFactory.instance.objectNode(),
+                message -> { }, ignored -> { }))
+                .isInstanceOf(AgentApprovalRequiredException.class);
+
+        verify(journal).waitForApproval(invocation);
+        verify(journal, never()).completeInvocation(any(), any());
+    }
+
     private AgentTool tool(String name, String... required) {
         return new AgentTool() {
             @Override public String name() { return name; }

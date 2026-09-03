@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Manages a scheduled email reminder (定时邮件提醒): pause, resume or delete
@@ -55,6 +56,14 @@ public class UpdateEmailReminderTool implements AgentTool {
         action.put("description", "操作类型：PAUSE/PAUSED 暂停 / RESUME 恢复 / DELETE 删除（必填）");
         schema.putArray("required").add("taskId").add("action");
         return schema;
+    }
+
+    @Override
+    public Optional<String> approvalReason(JsonNode args) {
+        String action = args.path("action").asText("").trim().toUpperCase(Locale.ROOT);
+        return "DELETE".equals(action)
+                ? Optional.of("删除定时邮件提醒，该操作不可恢复")
+                : Optional.empty();
     }
 
     @Override

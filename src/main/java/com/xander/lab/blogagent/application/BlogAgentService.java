@@ -644,6 +644,13 @@ public class BlogAgentService {
         return published;
     }
 
+    /** Returns the local post already published by a generation task, without changing task or post state. */
+    @Transactional(readOnly = true)
+    public BlogPostVO findPublishedPost(Long taskId, Long userId) {
+        BlogAgentTask task = requireOwnedTask(taskId, userId);
+        return task.getPublishedPostId() == null ? null : blogService.getBlogById(task.getPublishedPostId());
+    }
+
     private BlogAgentTask requireOwnedTask(Long taskId, Long userId) {
         BlogAgentTask task = taskMapper.selectById(taskId);
         if (task == null || userId == null || !userId.equals(task.getUserId())) {

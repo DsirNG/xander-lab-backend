@@ -3,6 +3,8 @@ package com.xander.lab.agent.api;
 import com.xander.lab.agent.application.AgentConversationService;
 import com.xander.lab.agent.application.AgentAttachmentService;
 import com.xander.lab.agent.application.AgentEventService;
+import com.xander.lab.agent.application.AgentApprovalService;
+import com.xander.lab.agent.domain.AgentApproval;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.identity.security.UserContext;
 import org.junit.jupiter.api.AfterEach;
@@ -170,5 +172,26 @@ class AgentConversationControllerTest {
                         e -> assertThat(e.getStatusCode().value()).isEqualTo(503));
         verify(service, never()).executeClaimedTurn(any(), any(), anyLong(), any(), anyBoolean(), any());
         verify(service).failClaimedTurn(eq(7L), eq(42L), eq(9L), eq("智能体执行队列繁忙，请稍后重试"));
+    }
+
+    @Test
+    void approvalDecisionIsScopedToTheCurrentConversationOwner() {
+        AgentApprovalService approvals = mock(AgentApprovalService.class);
+        AgentConversationController controller = new AgentConversationController(
+                mock(AgentConversationService.class), mock(AgentAttachmentService.class),
+                mock(AgentEventService.class), approvals, Runnable::run, Runnable::run, mock(TaskScheduler.class));
+        AgentApproval approval = new AgentApproval();
+        approval.setId(9L);
+        approval.setStatus(AgentApproval.STATUS_APPROVED);
+        when(approvals.decide(7L, 9L, 42L, true, "confirm")).thenReturn(approval);
+        UserContext.setUserId(42L);
+        AgentApprovalDecisionRequest request = new AgentApprovalDecisionRequest();
+        request.setApproved(true);
+        request.setReason("confirm");
+
+        AgentApproval result = controller.decideApproval(7L, 9L, request).getData();
+
+        assertThat(result).isSameAs(approval);
+        verify(approvals).decide(7L, 9L, 42L, true, "confirm");
     }
 }

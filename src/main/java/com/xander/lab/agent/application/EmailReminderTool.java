@@ -90,6 +90,11 @@ public class EmailReminderTool implements AgentTool {
     }
 
     @Override
+    public Optional<String> approvalReason(JsonNode args) {
+        return Optional.of("创建定时邮件提醒，系统会在指定时间向收件人发送邮件");
+    }
+
+    @Override
     public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         EmailReminderCreateRequest request = new EmailReminderCreateRequest();

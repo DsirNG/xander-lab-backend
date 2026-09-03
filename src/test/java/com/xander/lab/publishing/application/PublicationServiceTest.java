@@ -116,4 +116,32 @@ class PublicationServiceTest {
         verify(valueOps, never()).setIfAbsent(anyString(), anyString(), anyLong(), any());
         verify(records, never()).selectCount(any());
     }
+
+    @Test
+    void findsOnlyDurablySucceededPublicationWithoutCallingPublisher() {
+        BlogPublishRecord succeeded = new BlogPublishRecord();
+        succeeded.setStatus("SUCCEEDED");
+        succeeded.setExternalId("csdn-9");
+        succeeded.setUrl("https://blog.csdn.net/x/9");
+        when(records.selectOne(any())).thenReturn(succeeded);
+
+        PublishResult result = service.findSucceeded(42L, -7L, "csdn");
+
+        assertThat(result).isEqualTo(new PublishResult("csdn", "csdn-9", "https://blog.csdn.net/x/9"));
+        verify(csdn, never()).publish(any());
+    }
+
+    @Test
+    void doesNotTreatFailedOrIncompletePublicationAsSucceeded() {
+        BlogPublishRecord failed = new BlogPublishRecord();
+        failed.setStatus("FAILED");
+        failed.setExternalId("csdn-9");
+        BlogPublishRecord missingExternalId = new BlogPublishRecord();
+        missingExternalId.setStatus("SUCCEEDED");
+        when(records.selectOne(any())).thenReturn(failed, missingExternalId);
+
+        assertThat(service.findSucceeded(42L, -7L, "csdn")).isNull();
+        assertThat(service.findSucceeded(42L, -7L, "csdn")).isNull();
+        verify(csdn, never()).publish(any());
+    }
 }

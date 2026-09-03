@@ -89,6 +89,11 @@ public class SchedulePlanTool implements AgentTool {
     }
 
     @Override
+    public Optional<String> approvalReason(JsonNode args) {
+        return Optional.of("创建自动发文计划，系统会按计划生成并发布内容");
+    }
+
+    @Override
     public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         String topic = args.path("topic").asText("");

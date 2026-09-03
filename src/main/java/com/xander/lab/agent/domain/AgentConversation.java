@@ -16,7 +16,7 @@ public class AgentConversation {
     private Long id;
     private Long userId;
     private String title;
-    /** 会话状态：ready/failed 表示空闲可继续对话，running 表示一轮执行进行中。 */
+    /** 会话状态：ready/failed 可继续对话，running 正在执行，awaiting_approval 等待用户决定。 */
     private String status;
     private String errorMessage;
     /** 当前执行代次；每次成功 claim 后递增，用于隔离旧 worker 的迟到写入。 */

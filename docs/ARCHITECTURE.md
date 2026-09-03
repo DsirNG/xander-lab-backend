@@ -48,8 +48,15 @@ records an invocation UUID before execution. `email_reminder` and
 keys; `AgentToolInvocationReconciler` later performs read-only lookups for
 their interrupted calls and settles proven effects. A stale `RUNNING`
 invocation is otherwise marked `UNKNOWN`, never replayed automatically.
-Approval, external-publication reconciliation, and idempotency for other
-mutating tools remain pending. Skills are
+`publish_post` reconciles local publication and CSDN/Juejin synchronization
+only from durable records in the owning modules; it never probes a vendor or
+re-publishes to infer an outcome. A remote success that was never persisted in
+`blog_publish_record` remains `UNKNOWN`. Approval and idempotency for other
+mutating tools remain pending. `agent_approval` owns user decisions for
+high-impact invocations: publishing, scheduled mail/content plans, and
+destructive plan/reminder actions pause the conversation as
+`awaiting_approval`; approval executes the same invocation UUID, while
+rejection cancels it. Skills are
 compiled Spring beans in this phase; user-uploaded executable skills are not
 supported. The
 `blog_generate` adapter calls the `blogagent` application service and returns a
@@ -212,6 +219,9 @@ database use this order:
 8. `20260903_blog_content_plan_invocation_idempotency_migration.sql`. This
    adds the per-user create key used by the `schedule_plan` tool; the matching
    fresh-install column and unique index live in `blog_content_plan_schema.sql`.
+9. `20260903_agent_harness_approval_migration.sql`. This adds durable approval
+   records plus the waiting-approval run, invocation, conversation, and event
+   vocabularies required to resume the original invocation safely.
 
 The older `blog_agent_*_migration.sql` files are upgrade-only deltas for a
 database that predates the current `blog_agent_schema.sql`; do not apply those

@@ -9,6 +9,7 @@ import com.xander.lab.publishing.infrastructure.BlogPublishRecordMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -69,6 +70,25 @@ public class PublicationService {
             recordMapper.updateById(record);
             throw ex;
         }
+    }
+
+    /** Returns a proven durable publication result without contacting the target platform. */
+    @Transactional(readOnly = true)
+    public PublishResult findSucceeded(Long userId, Long taskId, String platform) {
+        if (userId == null || taskId == null || platform == null || platform.isBlank()) {
+            return null;
+        }
+        BlogPublishRecord record = recordMapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<BlogPublishRecord>()
+                .eq("task_id", taskId)
+                .eq("user_id", userId)
+                .eq("platform", platform)
+                .eq("status", "SUCCEEDED")
+                .last("LIMIT 1"));
+        if (record == null || !"SUCCEEDED".equals(record.getStatus())
+                || record.getExternalId() == null || record.getExternalId().isBlank()) {
+            return null;
+        }
+        return new PublishResult(platform, record.getExternalId(), record.getUrl());
     }
 
     /** CSDN 同步限流：每用户每日最多 5 次成功同步；连续同步间隔至少 30 秒。 */

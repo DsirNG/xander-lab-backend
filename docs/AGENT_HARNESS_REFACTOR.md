@@ -49,11 +49,14 @@ This is intentionally a compatibility-first journal, not the finished core:
   package.
 - Existing HTTP, SSE and WebSocket event names and payloads are unchanged.
 
-The next delivery should add approval and the remaining mutation policies.
+The next delivery should add the remaining mutation policies and timeout
+classification.
 `email_reminder` and `schedule_plan` now use their journal `invocationId` as
 an owning-service create key and reconcile `UNKNOWN` calls with a read-only
-business lookup. External publication, deletion, generation and other
-mutations still stay `UNKNOWN` until their owning modules can prove an outcome.
+business lookup. `publish_post` now reconciles local publication and persisted
+CSDN/Juejin successes from owning-module records without any vendor lookup or
+republication. A remote success with no durable `blog_publish_record` proof,
+as well as deletion, generation and other mutations, stays `UNKNOWN`.
 The current Skill resolver is a deliberately deterministic first version; it
 narrows the model surface but is not yet an LLM intent classifier.
 
@@ -468,9 +471,19 @@ durable invocation UUID. Stale failures settle running invocations to
 `UNKNOWN`, which prevents the journal from claiming that the operation never
 started. `email_reminder` and `schedule_plan` now persist the same invocation
 ID as a per-user unique create key, and a scheduled read-only reconciler moves
-only proven effects to `SUCCEEDED`. Approval, timeout classification, external
-publication reconciliation, and policies for the remaining mutations remain
-required before any of them can be retried automatically.
+only proven effects to `SUCCEEDED`. `publish_post` can likewise settle local,
+CSDN, and Juejin outcomes only when their owning modules have persisted proof;
+it never probes a vendor or retries publication to discover the result.
+Unproven remote outcomes remain `UNKNOWN`. Timeout classification and policies
+for the remaining mutations are still required before any automatic retry.
+
+High-impact approval is now durable for `publish_post`, `email_reminder`,
+`schedule_plan`, and destructive plan/reminder updates. The pipeline writes an
+`agent_approval` record and changes the conversation/run/invocation to a
+waiting state before any side effect. The owner can approve or reject through
+the approval API; approval resumes the original invocation UUID without a new
+model call, while rejection cancels it. Approved work that crashes still needs
+its tool-specific reconciliation policy before automatic recovery is enabled.
 
 ### Phase 4: Skills and Intent Resolver
 
@@ -662,9 +675,10 @@ Next Phase 2 extraction batch:
 3. [~] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
    tests for the extracted boundaries. Stale invocations now settle to
    `UNKNOWN`; reminder and plan creation prove outcomes through a read-only
-   reconciler, while remote reconciliation and approval-resume scenarios remain.
+   reconciler. Approval request, decision, and same-invocation resume now have
+   unit coverage; remote reconciliation scenarios remain.
 
-The next implementation batch is approval and high-impact mutation policy, not
-a larger Skill catalog. The main capability boundary now exists; external
-publication, deletion, charging and generation must use it before the product
-permits automatic retries.
+The next implementation batch is external-mutation reconciliation and timeout
+policy, not a larger Skill catalog. The main capability boundary now exists;
+external publication, charging and generation need owning-module proof of
+outcome before the product permits automatic retries.

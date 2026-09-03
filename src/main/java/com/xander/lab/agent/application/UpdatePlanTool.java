@@ -13,6 +13,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Manages a recurring content plan (定时发文计划): pause, resume, cancel, delete
@@ -89,6 +90,16 @@ public class UpdatePlanTool implements AgentTool {
         timezone.put("description", "新的 IANA 时区（仅 EDIT 时可选）");
         schema.putArray("required").add("planId").add("action");
         return schema;
+    }
+
+    @Override
+    public Optional<String> approvalReason(JsonNode args) {
+        String action = args.path("action").asText("").trim().toUpperCase(Locale.ROOT);
+        return switch (action) {
+            case "CANCEL", "CANCELLED" -> Optional.of("取消自动发文计划，该计划不会再被调度执行");
+            case "DELETE" -> Optional.of("删除自动发文计划，该操作不可恢复");
+            default -> Optional.empty();
+        };
     }
 
     @Override

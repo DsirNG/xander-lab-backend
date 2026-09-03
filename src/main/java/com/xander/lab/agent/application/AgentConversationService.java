@@ -387,6 +387,12 @@ public class AgentConversationService {
                 }
                 failures = 0;
                 lastError = null;
+            } catch (AgentApprovalRequiredException exception) {
+                progress.flushToolDelta();
+                AgentEvent approvalEvent = runLifecycle.waitForApproval(conversationId, userId, runVersion,
+                        exception.approval());
+                eventService.deliver(approvalEvent, listener);
+                return requireOwned(conversationId, userId);
             } catch (CancellationException exception) {
                 progress.flushToolDelta();
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";

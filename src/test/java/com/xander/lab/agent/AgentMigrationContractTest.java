@@ -156,6 +156,23 @@ class AgentMigrationContractTest {
                 .contains("20260903_agent_harness_invocation_unknown");
     }
 
+    @Test
+    void approvalUpgradeAddsDurableDecisionRecordsAndPausedExecutionStates() throws IOException {
+        String baseline = resource("db/agent_harness_schema.sql");
+        String upgrade = resource("db/20260903_agent_harness_approval_migration.sql");
+
+        assertThat(baseline)
+                .contains("CREATE TABLE IF NOT EXISTS `agent_approval`")
+                .contains("UNIQUE KEY `uk_agent_approval_invocation`")
+                .contains("`request_fingerprint` CHAR(64) NOT NULL COMMENT");
+        assertThat(upgrade)
+                .contains("MODIFY COLUMN `status` VARCHAR(24) NOT NULL")
+                .contains("WAITING_APPROVAL")
+                .contains("CREATE TABLE IF NOT EXISTS `agent_approval`")
+                .contains("approval_required/approval_approved/approval_rejected/approval_executed")
+                .contains("20260903_agent_harness_approval");
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertThat(input).as("classpath resource %s", path).isNotNull();

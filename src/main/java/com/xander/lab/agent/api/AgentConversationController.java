@@ -6,12 +6,14 @@ import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.application.AgentConversationService;
 import com.xander.lab.agent.application.AgentAttachmentService;
 import com.xander.lab.agent.application.AgentEventService;
+import com.xander.lab.agent.application.AgentApprovalService;
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.security.UserContext;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -40,22 +42,37 @@ public class AgentConversationController {
     private final AgentConversationService service;
     private final AgentAttachmentService attachmentService;
     private final AgentEventService eventService;
+    private final AgentApprovalService approvalService;
     private final TaskExecutor agentTaskExecutor;
     private final TaskExecutor agentSseExecutor;
     private final TaskScheduler agentHeartbeatScheduler;
 
+    @Autowired
     public AgentConversationController(AgentConversationService service,
                                        AgentAttachmentService attachmentService,
                                        AgentEventService eventService,
+                                       AgentApprovalService approvalService,
                                        @Qualifier("agentTaskExecutor") TaskExecutor agentTaskExecutor,
                                        @Qualifier("agentSseExecutor") TaskExecutor agentSseExecutor,
                                        @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler) {
         this.service = service;
         this.attachmentService = attachmentService;
         this.eventService = eventService;
+        this.approvalService = approvalService;
         this.agentTaskExecutor = agentTaskExecutor;
         this.agentSseExecutor = agentSseExecutor;
         this.agentHeartbeatScheduler = agentHeartbeatScheduler;
+    }
+
+    /** Compatibility constructor for focused controller tests that do not exercise approvals. */
+    AgentConversationController(AgentConversationService service,
+                                AgentAttachmentService attachmentService,
+                                AgentEventService eventService,
+                                TaskExecutor agentTaskExecutor,
+                                TaskExecutor agentSseExecutor,
+                                TaskScheduler agentHeartbeatScheduler) {
+        this(service, attachmentService, eventService, null, agentTaskExecutor, agentSseExecutor,
+                agentHeartbeatScheduler);
     }
 
     /** 根据首条消息确定标题并创建 ready 会话壳；消息执行仍由 /messages/stream 负责。 */
@@ -114,6 +131,21 @@ public class AgentConversationController {
     @PostMapping("/{id}/cancel")
     public Result<AgentConversation> cancel(@PathVariable Long id) {
         return Result.success(service.cancel(id, UserContext.getUserId()));
+    }
+
+    /** Lists durable approval requests so reloads never lose a pending high-impact action. */
+    @GetMapping("/{id}/approvals")
+    public Result<List<com.xander.lab.agent.domain.AgentApproval>> approvals(@PathVariable Long id) {
+        return Result.success(approvalService.list(id, UserContext.getUserId()));
+    }
+
+    /** Approves or rejects the exact persisted tool fingerprint without creating a new invocation. */
+    @PostMapping("/{id}/approvals/{approvalId}/decision")
+    public Result<com.xander.lab.agent.domain.AgentApproval> decideApproval(
+            @PathVariable Long id, @PathVariable Long approvalId,
+            @Valid @RequestBody AgentApprovalDecisionRequest request) {
+        return Result.success(approvalService.decide(id, approvalId, UserContext.getUserId(),
+                request.getApproved(), request.getReason()));
     }
 
     /** 上报已读：清掉会话列表上的"生成完成"提醒，不改变会话的排序时间。 */

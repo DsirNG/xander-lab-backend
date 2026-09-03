@@ -15,6 +15,8 @@ import com.xander.lab.publishing.domain.PublishResult;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.Optional;
+
 /**
  * Publishes a blog post. Accepts either the id of a finished blog-generation
  * task (from {@code blog_generate}) or an existing local post id, and may
@@ -72,6 +74,43 @@ public class PublishPostTool implements AgentTool {
         platform.set("enum", JsonNodeFactory.instance.arrayNode().add("local").add("csdn").add("juejin"));
         platform.put("description", "发布目标平台，默认 local");
         return schema;
+    }
+
+    @Override
+    public Optional<String> approvalReason(JsonNode args) {
+        String platform = normalizePlatform(args.path("platform").asText("local"));
+        return Optional.of("将文章发布到 " + platform + "，可能公开内容并触发平台操作");
+    }
+
+    @Override
+    public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
+        long taskId = args.path("taskId").asLong(-1L);
+        long postId = args.path("postId").asLong(-1L);
+        String platform = normalizePlatform(args.path("platform").asText("local"));
+        BlogPostVO local = taskId > 0
+                ? blogAgentService.findPublishedPost(taskId, context.userId())
+                : postId > 0 ? blogService.getManagedBlogById(context.userId(), postId) : null;
+        if (local == null || local.getId() == null) return Optional.empty();
+
+        ObjectNode outcome = JsonNodeFactory.instance.objectNode()
+                .put("ok", true)
+                .put("postId", local.getId())
+                .put("title", defaultText(local.getTitle(), ""))
+                .put("platform", platform);
+        if ("csdn".equals(platform)) {
+            PublishResult result = csdnBlogSyncService.findSucceeded(context.userId(), local.getId());
+            if (result == null) return Optional.empty();
+            fillPlatformResult(outcome, result);
+        } else if ("juejin".equals(platform)) {
+            PublishResult result = juejinBlogSyncService.findSucceeded(context.userId(), local.getId());
+            if (result == null) return Optional.empty();
+            fillPlatformResult(outcome, result);
+        } else if (local.getStatus() == null || local.getStatus() != 1) {
+            return Optional.empty();
+        } else {
+            outcome.put("hint", "文章已发布到本站");
+        }
+        return Optional.of(outcome);
     }
 
     @Override

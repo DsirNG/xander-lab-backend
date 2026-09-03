@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 @TableName("agent_tool_invocation")
 public class AgentToolInvocation {
     public static final String STATUS_RUNNING = "RUNNING";
+    /** Invocation is durable and bound to an approval, but its tool has not run. */
+    public static final String STATUS_WAITING_APPROVAL = "WAITING_APPROVAL";
     public static final String STATUS_SUCCEEDED = "SUCCEEDED";
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_CANCELLED = "CANCELLED";
@@ -27,7 +29,7 @@ public class AgentToolInvocation {
     private String toolName;
     /** Model-supplied arguments, retained only inside the private agent journal. */
     private String argumentsJson;
-    /** RUNNING/SUCCEEDED/FAILED/CANCELLED. */
+    /** RUNNING/WAITING_APPROVAL/SUCCEEDED/FAILED/CANCELLED/UNKNOWN. */
     private String status;
     private String resultJson;
     private String errorMessage;

@@ -46,6 +46,11 @@ public interface AgentTool {
         return Optional.empty();
     }
 
+    /** Returns why this exact call needs user approval, or empty when pre-approved. */
+    default Optional<String> approvalReason(JsonNode args) {
+        return Optional.empty();
+    }
+
     /** Receives human-readable progress hints during a long-running tool call. */
     interface ProgressListener {
         void onProgress(String message);

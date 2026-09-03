@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.xander.lab.agent.domain.AgentStep;
 import com.xander.lab.agent.domain.AgentToolInvocation;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Set;
 import java.util.UUID;
@@ -21,10 +22,18 @@ import java.util.function.Consumer;
 public class AgentToolExecutionPipeline {
     private final AgentToolRegistry toolRegistry;
     private final AgentExecutionJournal executionJournal;
+    private final AgentApprovalService approvalService;
 
     public AgentToolExecutionPipeline(AgentToolRegistry toolRegistry, AgentExecutionJournal executionJournal) {
+        this(toolRegistry, executionJournal, null);
+    }
+
+    @Autowired
+    public AgentToolExecutionPipeline(AgentToolRegistry toolRegistry, AgentExecutionJournal executionJournal,
+                                      AgentApprovalService approvalService) {
         this.toolRegistry = toolRegistry;
         this.executionJournal = executionJournal;
+        this.approvalService = approvalService;
     }
 
     /** Compatibility factory for focused legacy loop tests without journal persistence. */
@@ -47,6 +56,16 @@ public class AgentToolExecutionPipeline {
         String invocationId = UUID.randomUUID().toString();
         AgentToolInvocation invocation = executionJournal.startInvocation(step, invocationId, toolName, args);
         onStarted.accept(invocationId);
+        var approvalReason = tool.approvalReason(args);
+        if (approvalReason.isPresent()) {
+            if (approvalService == null) {
+                throw new IllegalStateException("当前执行环境未配置工具审批服务");
+            }
+            var approval = approvalService.request(step, invocation, userId, conversationId,
+                    approvalReason.get(), args);
+            executionJournal.waitForApproval(invocation);
+            throw new AgentApprovalRequiredException(approval);
+        }
         try {
             JsonNode result = tool.execute(new AgentToolContext(userId, conversationId, runVersion, invocationId),
                     args, progress);
@@ -54,6 +73,8 @@ public class AgentToolExecutionPipeline {
             return new ExecutedToolInvocation(invocationId, result);
         } catch (CancellationException exception) {
             executionJournal.cancelInvocation(invocation);
+            throw exception;
+        } catch (AgentApprovalRequiredException exception) {
             throw exception;
         } catch (Exception exception) {
             executionJournal.failInvocation(invocation, safeMessage(exception));

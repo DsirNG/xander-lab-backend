@@ -12,6 +12,8 @@ import java.time.LocalDateTime;
 @TableName("agent_run")
 public class AgentRun {
     public static final String STATUS_RUNNING = "RUNNING";
+    /** A durable tool call is waiting for its owner's decision. */
+    public static final String STATUS_WAITING_APPROVAL = "WAITING_APPROVAL";
     public static final String STATUS_COMPLETED = "COMPLETED";
     public static final String STATUS_FAILED = "FAILED";
 
@@ -22,7 +24,7 @@ public class AgentRun {
     private Long conversationId;
     /** Immutable conversation execution generation, unique within one conversation. */
     private Long runVersion;
-    /** RUNNING/COMPLETED/FAILED. */
+    /** RUNNING/WAITING_APPROVAL/COMPLETED/FAILED. */
     private String status;
     /** Reserved for the later skill resolver; no user prompt is stored here in phase 1. */
     private String intentJson;

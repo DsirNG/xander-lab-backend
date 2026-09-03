@@ -34,4 +34,9 @@ public class JuejinBlogSyncService {
                 juejinCategoryId, post.getCoverImage(), tags);
         return publicationService.publish(command, "juejin");
     }
+
+    /** Looks up a completed Juejin synchronization without issuing another external request. */
+    public PublishResult findSucceeded(Long userId, Long postId) {
+        return postId == null ? null : publicationService.findSucceeded(userId, -postId, "juejin");
+    }
 }

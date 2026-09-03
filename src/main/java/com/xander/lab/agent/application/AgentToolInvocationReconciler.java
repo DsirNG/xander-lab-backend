@@ -11,6 +11,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
+import java.time.LocalDateTime;
 
 /**
  * Settles interrupted local tool calls by querying their owning business service.
@@ -22,6 +23,7 @@ import java.util.Optional;
 public class AgentToolInvocationReconciler {
     private static final Logger log = LoggerFactory.getLogger(AgentToolInvocationReconciler.class);
     private static final int BATCH_SIZE = 50;
+    private static final int APPROVAL_EXECUTION_TIMEOUT_MINUTES = 10;
 
     private final AgentExecutionJournal executionJournal;
     private final AgentToolRegistry toolRegistry;
@@ -41,8 +43,20 @@ public class AgentToolInvocationReconciler {
     /** Periodically settles only effects that can be proven through an owning service lookup. */
     @Scheduled(fixedDelayString = "${agent-harness.reconciliation-delay-ms:60000}")
     public void reconcileUnknownInvocations() {
+        recoverExpiredApprovedExecutions();
         for (AgentToolInvocation invocation : executionJournal.unknownInvocations(BATCH_SIZE)) {
             reconcile(invocation);
+        }
+    }
+
+    private void recoverExpiredApprovedExecutions() {
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(APPROVAL_EXECUTION_TIMEOUT_MINUTES);
+        for (AgentToolInvocation invocation : executionJournal.runningInvocationsBefore(cutoff, BATCH_SIZE)) {
+            AgentRun run = runMapper.selectById(invocation.getRunId());
+            if (run != null && AgentRun.STATUS_WAITING_APPROVAL.equals(run.getStatus())) {
+                // The approval decision is durable, but the worker is gone. Never replay blindly.
+                executionJournal.markInvocationUnknown(invocation, "审批后的工具执行超时，等待对账");
+            }
         }
     }
 

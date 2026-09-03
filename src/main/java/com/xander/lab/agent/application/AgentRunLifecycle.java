@@ -154,6 +154,70 @@ public class AgentRunLifecycle {
         });
     }
 
+    /** Stops the worker lease while retaining the run and invocation for an explicit user decision. */
+    AgentEvent waitForApproval(Long conversationId, Long userId, long runVersion,
+                                com.xander.lab.agent.domain.AgentApproval approval) {
+        return transactionTemplate.execute(status -> {
+            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversationId)
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "running")
+                    .eq(AgentConversation::getRunVersion, runVersion)
+                    .set(AgentConversation::getStatus, "awaiting_approval")
+                    .set(AgentConversation::getCancelRequested, 0));
+            if (updated != 1) throw new AgentRunSupersededException(conversationId, runVersion);
+            executionJournal.waitRunForApproval(conversationId, userId, runVersion);
+            java.util.Map<String, Object> payload = java.util.Map.of(
+                    "approvalId", approval.getId(),
+                    "invocationId", approval.getInvocationId(),
+                    "tool", approval.getToolName(),
+                    "summary", approval.getSummaryJson());
+            return eventService.storeForRun(conversationId, userId, runVersion,
+                    "approval_required", payload, false);
+        });
+    }
+
+    /** Closes an approval-paused run after a decision has either executed or rejected its one call. */
+    AgentEvent completeAfterApproval(Long conversationId, Long userId, long runVersion, Long runId,
+                                     String eventType, Object payload) {
+        return transactionTemplate.execute(status -> {
+            LocalDateTime now = LocalDateTime.now();
+            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversationId)
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "awaiting_approval")
+                    .eq(AgentConversation::getRunVersion, runVersion)
+                    .set(AgentConversation::getStatus, "ready")
+                    .set(AgentConversation::getErrorMessage, null)
+                    .set(AgentConversation::getLastCompletedAt, now));
+            if (updated != 1) throw new AgentRunSupersededException(conversationId, runVersion);
+            executionJournal.completeWaitingRun(runId, userId);
+            eventService.storeForRun(conversationId, userId, runVersion, eventType, payload, false);
+            return eventService.storeForRun(conversationId, userId, runVersion, "complete",
+                    java.util.Map.of("status", "ready"), false);
+        });
+    }
+
+    /** Closes an approval-paused run as failed when the approved action cannot be completed. */
+    AgentEvent failAfterApproval(Long conversationId, Long userId, long runVersion, Long runId,
+                                 String reason, Object payload) {
+        return transactionTemplate.execute(status -> {
+            LocalDateTime now = LocalDateTime.now();
+            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversationId)
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "awaiting_approval")
+                    .eq(AgentConversation::getRunVersion, runVersion)
+                    .set(AgentConversation::getStatus, "failed")
+                    .set(AgentConversation::getErrorMessage, limit(reason, 1000))
+                    .set(AgentConversation::getLastCompletedAt, now));
+            if (updated != 1) throw new AgentRunSupersededException(conversationId, runVersion);
+            executionJournal.failWaitingRun(runId, userId, reason);
+            eventService.storeForRun(conversationId, userId, runVersion, "tool_error", payload, false);
+            return eventService.storeForRun(conversationId, userId, runVersion, "error", reason, false);
+        });
+    }
+
     /** Recovers an expired running generation without overwriting a newer owner or generation. */
     void recoverStale(AgentConversation conversation, Long userId) {
         if (!"running".equals(conversation.getStatus()) || conversation.getUpdatedAt() == null) return;
