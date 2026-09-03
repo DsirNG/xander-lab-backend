@@ -82,6 +82,7 @@ public class AgentConversationService {
     private final AgentStepExecutor stepExecutor;
     private final AgentRunLifecycle runLifecycle;
     private final AgentEventProjector eventProjector;
+    private final AgentTurnCoordinator turnCoordinator;
 
     @Autowired
     public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
@@ -93,7 +94,8 @@ public class AgentConversationService {
                                     AgentQuizService quizService,
                                     AgentExecutionJournal executionJournal,
                                     AgentRequestAssembler requestAssembler, AgentStepExecutor stepExecutor,
-                                    AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector) {
+                                    AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector,
+                                    AgentTurnCoordinator turnCoordinator) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.modelClient = modelClient;
@@ -111,6 +113,7 @@ public class AgentConversationService {
         this.stepExecutor = stepExecutor;
         this.runLifecycle = runLifecycle;
         this.eventProjector = eventProjector;
+        this.turnCoordinator = turnCoordinator;
     }
 
     /** Compatibility constructor retained for focused loop tests and embedded callers. */
@@ -128,7 +131,10 @@ public class AgentConversationService {
                 AgentStepExecutor.legacy(modelClient),
                 new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
                         properties, transactionTemplate, agentLeaseRenewer),
-                new AgentEventProjector(conversationMapper, messageMapper, eventService, transactionTemplate));
+                new AgentEventProjector(conversationMapper, messageMapper, eventService, transactionTemplate),
+                new AgentTurnCoordinator(conversationMapper, eventService,
+                        new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
+                                properties, transactionTemplate, agentLeaseRenewer)));
     }
 
     /**
@@ -208,65 +214,13 @@ public class AgentConversationService {
     public AgentConversation executeClaimedTurn(Long conversationId, Long userId, long runVersion,
                                                 String currentUserMessage, boolean deepThinking,
                                                 Consumer<AgentEvent> onEvent) {
-        ScheduledFuture<?> leaseRenewal;
-        try {
-            leaseRenewal = runLifecycle.startLeaseRenewal(conversationId, userId, runVersion);
-        } catch (RuntimeException exception) {
-            failClaimedTurn(conversationId, userId, runVersion,
-                    "智能体执行租约服务繁忙，请稍后重试", onEvent);
-            throw exception;
-        }
-        try {
-            return runLoop(conversationId, userId, runVersion, currentUserMessage, deepThinking, onEvent);
-        } catch (AgentRunSupersededException exception) {
-            log.info("agent worker generation superseded for conversation {} and run {}",
-                    conversationId, runVersion);
-            return requireOwned(conversationId, userId);
-        } catch (RuntimeException exception) {
-            // 这里最终会把未知异常转换成“智能体任务失败，请稍后重试”；必须在转换前记录完整堆栈，
-            // 否则线上只能看到兜底文案，无法判断是模型、工具、数据库还是事件持久化失败。
-            log.error("agent turn execution failed conversationId={} userId={} runVersion={} phase=runLoop exceptionType={} message={}",
-                    conversationId, userId, runVersion, exception.getClass().getName(), exception.getMessage(), exception);
-            AgentEvent errorEvent = null;
-            try {
-                errorEvent = markFailed(conversationId, userId, runVersion, safeMessage(exception));
-            } catch (AgentRunSupersededException superseded) {
-                log.info("agent failure ignored for superseded conversation {} and run {}",
-                        conversationId, runVersion);
-                return requireOwned(conversationId, userId);
-            } catch (RuntimeException persistenceFailure) {
-                exception.addSuppressed(persistenceFailure);
-                log.error("agent terminal failure could not be persisted conversationId={} userId={} runVersion={} phase=markFailed exceptionType={} message={}",
-                        conversationId, userId, runVersion, persistenceFailure.getClass().getName(),
-                        persistenceFailure.getMessage(), persistenceFailure);
-            }
-            if (errorEvent != null) {
-                eventService.deliver(errorEvent, onEvent);
-            }
-            throw exception;
-        } finally {
-            leaseRenewal.cancel(false);
-        }
+        return turnCoordinator.execute(conversationId, userId, runVersion, onEvent,
+                () -> runLoop(conversationId, userId, runVersion, currentUserMessage, deepThinking, onEvent));
     }
 
     /** Persists a terminal error when a claimed turn cannot be submitted to the worker pool. */
     public void failClaimedTurn(Long conversationId, Long userId, long runVersion, String message) {
-        failClaimedTurn(conversationId, userId, runVersion, message, null);
-    }
-
-    private void failClaimedTurn(Long conversationId, Long userId, long runVersion, String message,
-                                 Consumer<AgentEvent> onEvent) {
-        try {
-            AgentEvent errorEvent = markFailed(conversationId, userId, runVersion, message);
-            log.info("agent claimed turn failed before worker execution for conversation {} and event {}",
-                    conversationId, errorEvent.getId());
-            if (onEvent != null) {
-                eventService.deliver(errorEvent, onEvent);
-            }
-        } catch (AgentRunSupersededException ignored) {
-            log.info("agent queue rejection ignored for superseded conversation {} and run {}",
-                    conversationId, runVersion);
-        }
+        turnCoordinator.failBeforeStart(conversationId, userId, runVersion, message, null);
     }
 
     /** Convenience entry point used by non-HTTP callers: claim, persist input, then execute. */

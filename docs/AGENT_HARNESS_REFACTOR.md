@@ -626,8 +626,10 @@ Completed generic self-check retirement:
 
 Next Phase 2 extraction batch:
 
-1. [ ] Move `runLoop` ownership into `AgentTurnCoordinator`; retain
-   `AgentConversationService` as the public compatibility facade.
+1. [~] `AgentTurnCoordinator` owns claimed-turn lease start/stop, supersession
+   handling, terminal failure persistence, live error delivery, and queue-entry
+   failure handling. The model/tool step loop remains in the facade for the next
+   behavior-preserving move.
 2. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
    tests for the extracted boundaries.
 
