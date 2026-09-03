@@ -198,11 +198,29 @@ public class AgentRequestAssembler {
         }
     }
 
-    /** Text and multimodal history use one window so a visible image always has visible text context. */
+    /**
+     * 这一步可见的那段对话记录。
+     *
+     * <p>地板是最近一个压缩检查点：它之前的消息已经被那份检查点代表了，
+     * 再送一遍就等于压缩没发生。每一步都在这里重新裁，
+     * 所以重启续跑、审批恢复这些不经过压缩调用的路径也照同一条地板走。</p>
+     *
+     * <p>条数上限只是兜底，正常路径上压缩会先把头部换掉、把条数压到上限之内。
+     * 真的溢出时优先扔掉检查点后面那些最旧的消息：检查点代表的是一整段历史，
+     * 丢它的代价远大于丢一条紧随其后的旧消息。文本与多模态共用这一个窗口，
+     * 所以可见的图片总有可见的文字上下文。</p>
+     */
     private List<AgentMessage> recentWindow(List<AgentMessage> messages) {
+        List<AgentMessage> since = AgentCompactionService.afterLatestCheckpoint(messages);
         int limit = Math.max(5, conversationProperties.getContextMessageLimit());
-        return messages.size() <= limit ? List.copyOf(messages)
-                : List.copyOf(messages.subList(messages.size() - limit, messages.size()));
+        if (since.size() <= limit) return since;
+        if (!AgentCompactionService.CHECKPOINT_KIND.equals(since.get(0).getKind())) {
+            return List.copyOf(since.subList(since.size() - limit, since.size()));
+        }
+        List<AgentMessage> window = new ArrayList<>();
+        window.add(since.get(0));
+        window.addAll(since.subList(since.size() - (limit - 1), since.size()));
+        return List.copyOf(window);
     }
 
     private List<AgentAttachment> recentAttachments(List<AgentMessage> messages) {

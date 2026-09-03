@@ -84,6 +84,7 @@ public class AgentConversationService {
     private final AgentEventProjector eventProjector;
     private final AgentTurnCoordinator turnCoordinator;
     private final AgentSkillRegistry skillRegistry;
+    private final AgentCompactionService compactionService;
 
     @Autowired
     public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
@@ -96,7 +97,8 @@ public class AgentConversationService {
                                      AgentExecutionJournal executionJournal,
                                      AgentRequestAssembler requestAssembler,
                                      AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector,
-                                     AgentTurnCoordinator turnCoordinator, AgentSkillRegistry skillRegistry) {
+                                     AgentTurnCoordinator turnCoordinator, AgentSkillRegistry skillRegistry,
+                                     AgentCompactionService compactionService) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.modelClient = modelClient;
@@ -115,6 +117,7 @@ public class AgentConversationService {
         this.eventProjector = eventProjector;
         this.turnCoordinator = turnCoordinator;
         this.skillRegistry = skillRegistry;
+        this.compactionService = compactionService;
     }
 
     /** Compatibility constructor retained for focused loop tests and embedded callers. */
@@ -137,7 +140,10 @@ public class AgentConversationService {
                                  properties, transactionTemplate, agentLeaseRenewer),
                          AgentExecutionJournal.disabled(), AgentStepExecutor.legacy(modelClient),
                          AgentToolExecutionPipeline.legacy(toolRegistry)),
-                 AgentSkillRegistry.legacy(toolRegistry));
+                 AgentSkillRegistry.legacy(toolRegistry),
+                 new AgentCompactionService(modelClient, properties,
+                         new AgentEventProjector(conversationMapper, messageMapper, eventService,
+                                 transactionTemplate)));
     }
 
     /**
@@ -348,18 +354,26 @@ public class AgentConversationService {
             }
             // 每一步重新读计划：智能体上一步可能刚改写过它，这是会话状态而不是一次性输入。
             List<AgentPlanItem> plan = planService.load(requireOwned(conversationId, userId));
-            List<AgentMessage> messages = listMessages(conversationId, userId);
-            AgentStepRequest request = requestAssembler.assemble(new AgentRequestAssemblyInput(
-                    conversationId, userId, runVersion, step, messages, plan, memoryContext,
-                    lastError, null, allowedTools, maxSteps - step + 1, deepThinking, skillSelection));
-            long modelStartedNanos = System.nanoTime();
-            AnswerProgress answerProgress = new AnswerProgress(
-                    conversationId, userId, runVersion, listener,
-                    step, turnStartedNanos, modelStartedNanos,
-                    true);
             JsonNode decision;
             AgentStep journalStep;
             try {
+                // 压缩排在装配之前：装配吃掉的正是这一步可见的那段对话记录。
+                // 工具面按同一份 allowedTools 现算，与装配层拿到的那份逐字节相同，
+                // 摘要调用因此是主请求的真前缀，不会把上游的前缀缓存打断。
+                // 它自己也烧 token，用量并回本轮账单，否则压缩就成了一条绕过计费的模型调用。
+                AgentCompactionService.Compacted compacted = compactionService.compactIfNeeded(
+                        conversationId, userId, runVersion, listMessages(conversationId, userId),
+                        toolRegistry.describeToolSurface(allowedTools),
+                        () -> runLifecycle.isCancellationRequested(conversationId, userId, runVersion));
+                usage.add(compacted.usage(), compacted.model());
+                AgentStepRequest request = requestAssembler.assemble(new AgentRequestAssemblyInput(
+                        conversationId, userId, runVersion, step, compacted.messages(), plan, memoryContext,
+                        lastError, null, allowedTools, maxSteps - step + 1, deepThinking, skillSelection));
+                long modelStartedNanos = System.nanoTime();
+                AnswerProgress answerProgress = new AnswerProgress(
+                        conversationId, userId, runVersion, listener,
+                        step, turnStartedNanos, modelStartedNanos,
+                        true);
                 ExecutedModelStep executedStep = turnCoordinator.executeModelStep(request, answerProgress::accept,
                         () -> runLifecycle.isCancellationRequested(conversationId, userId, runVersion));
                 ModelCallResult call = executedStep.result();
