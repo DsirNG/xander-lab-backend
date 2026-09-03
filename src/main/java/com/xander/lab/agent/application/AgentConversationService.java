@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.application.AgentTool.ProgressListener;
 import com.xander.lab.agent.domain.AgentConversation;
+import com.xander.lab.agent.domain.AgentApproval;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentMemory;
 import com.xander.lab.agent.domain.AgentMessage;
@@ -239,6 +240,79 @@ public class AgentConversationService {
                 deepThinking, onEvent);
     }
 
+    /** Executes one already-approved invocation, then resumes the parent run from its next model step. */
+    void resumeApprovedInvocation(AgentApproval approval, AgentToolInvocation invocation) {
+        Long conversationId = approval.getConversationId();
+        Long userId = approval.getUserId();
+        long runVersion = requireRunVersion(invocation, approval);
+        AgentTool tool = toolRegistry.get(invocation.getToolName());
+        if (tool == null) {
+            failApprovedInvocation(approval, invocation, "审批关联的工具不存在", false);
+            return;
+        }
+        UsageAccumulator approvalUsage = new UsageAccumulator();
+        ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, invocation.getToolName(),
+                ignored -> { }, approvalUsage);
+        try {
+            JsonNode arguments = objectMapper.readTree(invocation.getArgumentsJson());
+            progress.checkCancellation();
+            JsonNode result = tool.execute(new AgentToolContext(userId, conversationId, runVersion,
+                    invocation.getInvocationId()), arguments, progress);
+            progress.flushToolDelta();
+            executionJournal.completeInvocation(invocation, result);
+            saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", invocation.getToolName(),
+                    result.toString());
+            appendActive(conversationId, userId, runVersion, "tool_end",
+                    JsonNodeFactory.instance.objectNode().put("tool", invocation.getToolName()).set("result", result),
+                    ignored -> { });
+            appendActive(conversationId, userId, runVersion, "approval_executed",
+                    java.util.Map.of("approvalId", approval.getId(), "invocationId", invocation.getInvocationId(),
+                            "tool", invocation.getToolName()), ignored -> { });
+            executeClaimedTurn(conversationId, userId, runVersion, null, false, ignored -> { });
+        } catch (CancellationException exception) {
+            progress.flushToolDelta();
+            executionJournal.cancelInvocation(invocation);
+            // Re-enter the normal loop so cancellation writes the usual user-visible answer and billing closure.
+            executeClaimedTurn(conversationId, userId, runVersion, null, false, ignored -> { });
+        } catch (Exception exception) {
+            progress.flushToolDelta();
+            failApprovedInvocation(approval, invocation, safeMessage(exception),
+                    AgentToolOutcomeClassifier.requiresReconciliation(exception));
+        }
+    }
+
+    /** Persists a terminal failure when a resumed approval cannot enter the bounded agent worker pool. */
+    void failResumedApproval(AgentApproval approval, AgentToolInvocation invocation, String reason) {
+        executionJournal.failInvocation(invocation, reason);
+        AgentEvent errorEvent = runLifecycle.fail(approval.getConversationId(), approval.getUserId(),
+                requireOwned(approval.getConversationId(), approval.getUserId()).getRunVersion(), reason);
+        eventService.deliver(errorEvent, ignored -> { });
+    }
+
+    private long requireRunVersion(AgentToolInvocation invocation, AgentApproval approval) {
+        if (invocation.getRunId() == null || !invocation.getRunId().equals(approval.getRunId())) {
+            throw new IllegalStateException("审批调用与运行记录不一致");
+        }
+        AgentConversation conversation = requireOwned(approval.getConversationId(), approval.getUserId());
+        if (!"running".equals(conversation.getStatus())) {
+            throw new AgentRunSupersededException(approval.getConversationId(),
+                    conversation.getRunVersion() == null ? 0L : conversation.getRunVersion());
+        }
+        return conversation.getRunVersion();
+    }
+
+    private void failApprovedInvocation(AgentApproval approval, AgentToolInvocation invocation, String reason,
+                                        boolean outcomeUnknown) {
+        if (outcomeUnknown) {
+            executionJournal.markInvocationUnknown(invocation, "工具远端执行结果未确认：" + reason);
+        } else {
+            executionJournal.failInvocation(invocation, reason);
+        }
+        AgentEvent errorEvent = runLifecycle.fail(approval.getConversationId(), approval.getUserId(),
+                requireOwned(approval.getConversationId(), approval.getUserId()).getRunVersion(), reason);
+        eventService.deliver(errorEvent, ignored -> { });
+    }
+
     private AgentConversation runLoop(Long conversationId, Long userId, long runVersion,
                                       String currentUserMessage, boolean deepThinking,
                                       Consumer<AgentEvent> listener) {
@@ -256,11 +330,14 @@ public class AgentConversationService {
         log.info("agent turn started conversation={} run={} toolCount={} memoryInjected={}",
                 conversationId, runVersion, allowedTools.size(), !memoryContext.isEmpty());
         int maxSteps = Math.max(1, properties.getMaxSteps());
+        int nextStepNo = executionJournal.nextStepNo(conversationId, runVersion);
         int failures = 0;
         JsonNode lastError = null;
         UsageAccumulator usage = new UsageAccumulator();
+        executionJournal.usageBeforeStep(conversationId, runVersion, nextStepNo)
+                .ifPresent(carried -> usage.addPersisted(carried.usage(), carried.model()));
 
-        for (int step = 0; step < maxSteps; step++) {
+        for (int step = nextStepNo; step <= maxSteps; step++) {
             // 用户取消请求优先于模型调用，工具执行结束后下一轮即退出。
             if (runLifecycle.isCancellationRequested(conversationId, userId, runVersion)) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
@@ -272,12 +349,12 @@ public class AgentConversationService {
             List<AgentPlanItem> plan = planService.load(requireOwned(conversationId, userId));
             List<AgentMessage> messages = listMessages(conversationId, userId);
             AgentStepRequest request = requestAssembler.assemble(new AgentRequestAssemblyInput(
-                    conversationId, userId, runVersion, step + 1, messages, plan, memoryContext,
-                    lastError, null, allowedTools, maxSteps - step, deepThinking, skillSelection));
+                    conversationId, userId, runVersion, step, messages, plan, memoryContext,
+                    lastError, null, allowedTools, maxSteps - step + 1, deepThinking, skillSelection));
             long modelStartedNanos = System.nanoTime();
             AnswerProgress answerProgress = new AnswerProgress(
                     conversationId, userId, runVersion, listener,
-                    step + 1, turnStartedNanos, modelStartedNanos,
+                    step, turnStartedNanos, modelStartedNanos,
                     true);
             JsonNode decision;
             AgentStep journalStep;
@@ -290,7 +367,7 @@ public class AgentConversationService {
                 decision = call.payload();
                 usage.add(call.usage(), call.model());
                 log.info("agent model decision conversation={} run={} step={} durationMs={} done={}",
-                        conversationId, runVersion, step + 1,
+                        conversationId, runVersion, step,
                         elapsedMillis(modelStartedNanos), decision.path("done").asBoolean(false));
             } catch (CancellationException exception) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
@@ -835,6 +912,14 @@ public class AgentConversationService {
             if (StringUtils.hasText(usedModel)) {
                 if (model == null) model = usedModel;
                 else if (!model.equals(usedModel)) mixedModels = true;
+            }
+        }
+
+        void addPersisted(ModelUsage usage, String usedModel) {
+            add(usage, usedModel);
+            if (usage != null && usedModel == null
+                    && (usage.inputTokens() > 0 || usage.cachedTokens() > 0 || usage.outputTokens() > 0)) {
+                mixedModels = true;
             }
         }
 

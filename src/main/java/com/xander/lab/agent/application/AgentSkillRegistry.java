@@ -2,6 +2,7 @@ package com.xander.lab.agent.application;
 
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.Comparator;
 import java.util.LinkedHashSet;
@@ -21,6 +22,7 @@ public class AgentSkillRegistry {
     private final AgentToolRegistry toolRegistry;
     private final boolean legacyAllTools;
 
+    @Autowired
     public AgentSkillRegistry(List<AgentSkill> skills, AgentToolRegistry toolRegistry) {
         this(skills, toolRegistry, false);
     }

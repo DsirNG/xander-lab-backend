@@ -61,8 +61,12 @@ business failures remain `FAILED`. Approval and idempotency for other mutating
 tools remain pending. `agent_approval` owns user decisions for
 high-impact invocations: publishing, scheduled mail/content plans, and
 destructive plan/reminder actions pause the conversation as
-`awaiting_approval`; approval executes the same invocation UUID, while
-rejection cancels it. Skills are
+`awaiting_approval`. Approval atomically reopens the same fenced run, executes
+the same invocation UUID on the agent worker, records its result, and resumes
+the next model step; rejection cancels the invocation and closes the run.
+`delegate_subtask` is deliberately read-only because child loops do not yet own
+an independent invocation journal or approval lifecycle, so all mutations stay
+in the parent execution pipeline. Skills are
 compiled Spring beans in this phase; user-uploaded executable skills are not
 supported. The
 `blog_generate` adapter calls the `blogagent` application service and returns a

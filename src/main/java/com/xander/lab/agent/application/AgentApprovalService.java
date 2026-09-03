@@ -11,8 +11,13 @@ import com.xander.lab.agent.domain.AgentStep;
 import com.xander.lab.agent.domain.AgentToolInvocation;
 import com.xander.lab.agent.infrastructure.AgentApprovalMapper;
 import com.xander.lab.agent.infrastructure.AgentRunMapper;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -23,23 +28,25 @@ import java.security.NoSuchAlgorithmException;
 public class AgentApprovalService {
     private final AgentApprovalMapper approvalMapper;
     private final AgentRunMapper runMapper;
-    private final AgentToolRegistry toolRegistry;
     private final AgentExecutionJournal executionJournal;
     private final AgentRunLifecycle runLifecycle;
-    private final AgentEventService eventService;
     private final ObjectMapper objectMapper;
+    private final TaskExecutor agentTaskExecutor;
+    private final ObjectProvider<AgentConversationService> conversationServiceProvider;
 
     public AgentApprovalService(AgentApprovalMapper approvalMapper, AgentRunMapper runMapper,
-                                AgentToolRegistry toolRegistry, AgentExecutionJournal executionJournal,
-                                AgentRunLifecycle runLifecycle, AgentEventService eventService,
-                                ObjectMapper objectMapper) {
+                                AgentExecutionJournal executionJournal,
+                                AgentRunLifecycle runLifecycle,
+                                ObjectMapper objectMapper,
+                                @Qualifier("agentTaskExecutor") TaskExecutor agentTaskExecutor,
+                                ObjectProvider<AgentConversationService> conversationServiceProvider) {
         this.approvalMapper = approvalMapper;
         this.runMapper = runMapper;
-        this.toolRegistry = toolRegistry;
         this.executionJournal = executionJournal;
         this.runLifecycle = runLifecycle;
-        this.eventService = eventService;
         this.objectMapper = objectMapper;
+        this.agentTaskExecutor = agentTaskExecutor;
+        this.conversationServiceProvider = conversationServiceProvider;
     }
 
     /** Persists the exact user-visible action before any requested tool side effect can start. */
@@ -72,9 +79,9 @@ public class AgentApprovalService {
     }
 
     /**
-     * Records an owner decision and, on approval, executes the original durable invocation exactly once.
-     * The side effect deliberately runs outside a database transaction.
+     * Records an owner decision and schedules the original durable invocation after the state change commits.
      */
+    @Transactional
     public AgentApproval decide(Long conversationId, Long approvalId, Long userId, boolean approved,
                                 String decisionReason) {
         AgentApproval approval = requirePending(conversationId, approvalId, userId);
@@ -104,43 +111,35 @@ public class AgentApprovalService {
         }
 
         AgentToolInvocation invocation = executionJournal.startApprovedInvocation(approval.getInvocationDbId());
-        AgentTool tool = toolRegistry.get(invocation.getToolName());
-        if (tool == null) {
-            return failApprovedExecution(approval, run, invocation, "审批关联的工具不存在", false);
-        }
-        try {
-            JsonNode arguments = objectMapper.readTree(invocation.getArgumentsJson());
-            eventService.storeForRun(conversationId, userId, run.getRunVersion(), "approval_approved",
-                    java.util.Map.of("approvalId", approvalId, "invocationId", approval.getInvocationId(),
-                            "tool", approval.getToolName()), false);
-            JsonNode result = tool.execute(new AgentToolContext(userId, conversationId, run.getRunVersion(),
-                    invocation.getInvocationId()), arguments, new AgentTool.ProgressListener() {
-                @Override public void onProgress(String message) { }
-            });
-            executionJournal.completeInvocation(invocation, result);
-            eventService.storeForRun(conversationId, userId, run.getRunVersion(), "tool_end",
-                    java.util.Map.of("tool", invocation.getToolName(), "result", result), false);
-            runLifecycle.completeAfterApproval(conversationId, userId, run.getRunVersion(), run.getId(),
-                    "approval_executed", java.util.Map.of("approvalId", approvalId,
-                            "invocationId", invocation.getInvocationId(), "tool", invocation.getToolName()));
-            return approval;
-        } catch (Exception exception) {
-            return failApprovedExecution(approval, run, invocation, safeMessage(exception),
-                    AgentToolOutcomeClassifier.requiresReconciliation(exception));
-        }
+        runLifecycle.resumeAfterApproval(conversationId, userId, run.getRunVersion(), run.getId(),
+                java.util.Map.of("approvalId", approvalId, "invocationId", approval.getInvocationId(),
+                        "tool", approval.getToolName()));
+        scheduleAfterCommit(
+                () -> conversationServiceProvider.getObject().resumeApprovedInvocation(approval, invocation),
+                () -> conversationServiceProvider.getObject().failResumedApproval(
+                        approval, invocation, "审批恢复工作线程繁忙，请稍后重试"));
+        return approval;
     }
 
-    private AgentApproval failApprovedExecution(AgentApproval approval, AgentRun run,
-                                                AgentToolInvocation invocation, String reason,
-                                                boolean outcomeUnknown) {
-        if (outcomeUnknown) {
-            executionJournal.markInvocationUnknown(invocation, "工具远端执行结果未确认：" + reason);
-        } else {
-            executionJournal.failInvocation(invocation, reason);
+    private void scheduleAfterCommit(Runnable continuation, Runnable onRejected) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            submit(continuation, onRejected);
+            return;
         }
-        runLifecycle.failAfterApproval(approval.getConversationId(), approval.getUserId(), run.getRunVersion(),
-                run.getId(), reason, java.util.Map.of("tool", approval.getToolName(), "error", reason));
-        return approval;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                submit(continuation, onRejected);
+            }
+        });
+    }
+
+    private void submit(Runnable continuation, Runnable onRejected) {
+        try {
+            agentTaskExecutor.execute(continuation);
+        } catch (RuntimeException rejected) {
+            onRejected.run();
+        }
     }
 
     private AgentApproval requirePending(Long conversationId, Long approvalId, Long userId) {
@@ -165,12 +164,6 @@ public class AgentApprovalService {
                     org.springframework.http.HttpStatus.CONFLICT, "审批关联的执行已变化");
         }
         return run;
-    }
-
-    private String safeMessage(Exception exception) {
-        String message = exception.getMessage();
-        if (message == null || message.isBlank()) return "审批后的工具执行失败";
-        return limit(message, 1000);
     }
 
     private String limit(String value, int max) {

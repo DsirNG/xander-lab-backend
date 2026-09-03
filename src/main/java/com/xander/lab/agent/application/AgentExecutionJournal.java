@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Writes the execution facts around the existing conversation loop.
@@ -313,6 +314,61 @@ public class AgentExecutionJournal {
         transitionRun(conversationId, userId, runVersion, AgentRun.STATUS_COMPLETED, null);
     }
 
+    /** Reopens one approval-paused run before its already-approved invocation resumes. */
+    @Transactional
+    public void resumeWaitingRun(Long runId, Long userId) {
+        if (!enabled) return;
+        int changed = runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
+                .eq(AgentRun::getId, runId)
+                .eq(AgentRun::getUserId, userId)
+                .eq(AgentRun::getStatus, AgentRun.STATUS_WAITING_APPROVAL)
+                .set(AgentRun::getStatus, AgentRun.STATUS_RUNNING));
+        if (changed != 1) throw new IllegalStateException("智能体审批运行状态已变化");
+    }
+
+    /** Returns the next unused one-based model-step number for an active run. */
+    @Transactional(readOnly = true)
+    public int nextStepNo(Long conversationId, long runVersion) {
+        if (!enabled) return 1;
+        AgentRun run = findRun(conversationId, runVersion);
+        if (run == null) throw new AgentRunSupersededException(conversationId, runVersion);
+        List<AgentStep> steps = stepMapper.selectList(new LambdaQueryWrapper<AgentStep>()
+                .eq(AgentStep::getRunId, run.getId()));
+        return steps == null ? 1 : steps.stream()
+                .map(AgentStep::getStepNo)
+                .filter(java.util.Objects::nonNull)
+                .max(Integer::compareTo)
+                .map(stepNo -> stepNo + 1)
+                .orElse(1);
+    }
+
+    /** Aggregates completed steps before a resumed loop so approval pauses cannot omit earlier billing. */
+    @Transactional(readOnly = true)
+    public Optional<AgentRunUsage> usageBeforeStep(Long conversationId, long runVersion, int nextStepNo) {
+        if (!enabled) return Optional.empty();
+        AgentRun run = findRun(conversationId, runVersion);
+        if (run == null) return Optional.empty();
+        List<AgentStep> steps = stepMapper.selectList(new LambdaQueryWrapper<AgentStep>()
+                .eq(AgentStep::getRunId, run.getId())
+                .lt(AgentStep::getStepNo, nextStepNo)
+                .eq(AgentStep::getStatus, AgentStep.STATUS_COMPLETED));
+        if (steps == null || steps.isEmpty()) return Optional.empty();
+        long input = 0L;
+        long cached = 0L;
+        long output = 0L;
+        String model = null;
+        boolean mixedModels = false;
+        for (AgentStep step : steps) {
+            input += Math.max(0L, valueOrZero(step.getInputTokens()));
+            cached += Math.max(0L, valueOrZero(step.getCachedTokens()));
+            output += Math.max(0L, valueOrZero(step.getOutputTokens()));
+            if (step.getModelName() == null || step.getModelName().isBlank()) continue;
+            if (model == null) model = step.getModelName();
+            else if (!model.equals(step.getModelName())) mixedModels = true;
+        }
+        return Optional.of(new AgentRunUsage(new ModelUsage(input, cached, output), mixedModels ? null : model));
+    }
+
     @Transactional
     public void failRun(Long conversationId, Long userId, long runVersion, String reason) {
         transitionRun(conversationId, userId, runVersion, AgentRun.STATUS_FAILED, reason);
@@ -413,4 +469,12 @@ public class AgentExecutionJournal {
         if (value == null || value.length() <= max) return value;
         return value.substring(0, max);
     }
+
+    private long valueOrZero(Long value) {
+        return value == null ? 0L : value;
+    }
+}
+
+/** Persisted aggregate of one agent run's completed model usage. */
+record AgentRunUsage(ModelUsage usage, String model) {
 }

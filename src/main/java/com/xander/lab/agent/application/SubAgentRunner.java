@@ -55,6 +55,13 @@ public class SubAgentRunner {
      */
     static final Set<String> FORBIDDEN_TOOLS = Set.of(DelegateSubtaskTool.NAME, PlanTasksTool.NAME,
             GradeAnswerTool.NAME);
+    /**
+     * Child loops have no independent invocation journal or approval lifecycle. They may therefore
+     * inspect user-owned state only; every mutation stays in the parent execution pipeline.
+     */
+    static final Set<String> READ_ONLY_TOOLS = Set.of(
+            "query_knowledge", "query_posts", "query_plans", "query_email_reminders",
+            "query_unsynced_posts", "recall_memory");
 
     // 注册表按 List<AgentTool> 收集全部工具，其中包含派发工具本身；用 ObjectProvider 延迟取用打断构造期循环。
     private final ObjectProvider<AgentToolRegistry> registryProvider;
@@ -155,6 +162,7 @@ public class SubAgentRunner {
 
     private Set<String> resolveTools(AgentToolRegistry registry, Set<String> requested) {
         Set<String> available = new LinkedHashSet<>(registry.names());
+        available.retainAll(READ_ONLY_TOOLS);
         available.removeAll(FORBIDDEN_TOOLS);
         // 注册表按名字排序，保持插入序让工具表与拒绝提示每次渲染都一致（便于上游 prompt 缓存）。
         if (requested == null || requested.isEmpty()) return Collections.unmodifiableSet(available);

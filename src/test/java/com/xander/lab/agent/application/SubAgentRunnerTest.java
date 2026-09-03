@@ -77,6 +77,7 @@ class SubAgentRunnerTest {
                 new RecordingTool(DelegateSubtaskTool.NAME, "{}"),
                 new RecordingTool(PlanTasksTool.NAME, "{}"),
                 new RecordingTool(GradeAnswerTool.NAME, "{}"),
+                new RecordingTool("publish_post", "{}"),
                 new RecordingTool("query_knowledge", "{}"));
 
         SubAgentRunner.SubAgentResult result = runner.run(context, "随便查查", "", Set.of(), new CapturingProgress());
@@ -87,7 +88,9 @@ class SubAgentRunnerTest {
                 .doesNotContain(DelegateSubtaskTool.NAME)
                 .doesNotContain(PlanTasksTool.NAME)
                 // 子智能体看不到用户的作答，让它判分等于凭空改写掌握度。
-                .doesNotContain(GradeAnswerTool.NAME);
+                .doesNotContain(GradeAnswerTool.NAME)
+                // 子智能体没有独立审批、幂等和调用日志，任何写入工具都必须留在主执行管线。
+                .doesNotContain("publish_post");
     }
 
     @Test

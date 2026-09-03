@@ -198,6 +198,23 @@ public class AgentRunLifecycle {
         });
     }
 
+    /** Reopens the paused generation before its approved invocation and remaining model steps continue. */
+    AgentEvent resumeAfterApproval(Long conversationId, Long userId, long runVersion, Long runId,
+                                   Object payload) {
+        return transactionTemplate.execute(status -> {
+            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                    .eq(AgentConversation::getId, conversationId)
+                    .eq(AgentConversation::getUserId, userId)
+                    .eq(AgentConversation::getStatus, "awaiting_approval")
+                    .eq(AgentConversation::getRunVersion, runVersion)
+                    .set(AgentConversation::getStatus, "running")
+                    .set(AgentConversation::getCancelRequested, 0));
+            if (updated != 1) throw new AgentRunSupersededException(conversationId, runVersion);
+            executionJournal.resumeWaitingRun(runId, userId);
+            return eventService.storeActive(conversationId, userId, runVersion, "approval_approved", payload);
+        });
+    }
+
     /** Closes an approval-paused run as failed when the approved action cannot be completed. */
     AgentEvent failAfterApproval(Long conversationId, Long userId, long runVersion, Long runId,
                                  String reason, Object payload) {
