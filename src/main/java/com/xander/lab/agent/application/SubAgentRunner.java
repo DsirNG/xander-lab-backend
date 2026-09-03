@@ -101,7 +101,9 @@ public class SubAgentRunner {
             onProgress.checkCancellation();
             step++;
             ModelCallResult call = modelClient.decideNextStepStream(
-                    buildContext(goal, brief, observations, maxSteps - step),
+                    // 子智能体的上下文是自包含的一段 brief，就是一轮 user。
+                    List.of(com.xander.lab.agent.domain.AgentInputTurn.user(
+                            buildContext(goal, brief, observations, maxSteps - step))),
                     toolDescriptions,
                     // 子智能体的回复是给主智能体看的观察，不能当成用户可见的流式答复。
                     ignored -> { },

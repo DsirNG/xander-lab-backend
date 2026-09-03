@@ -385,7 +385,10 @@ public class AgentConversationService {
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
 
-            String thought = decision.path("thought").asText("");
+            // thought 是实时推给用户的一行进度，不是模型的内部推理；
+            // 提示词这么要求了，但保证在这里（见 AgentThoughtSanitizer）。
+            String thought = AgentThoughtSanitizer.sanitize(
+                    decision.path("thought").asText(""), toolRegistry.names());
             if (!decision.path("done").asBoolean(false) && StringUtils.hasText(thought)) {
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "thought", null, thought);
                 appendActive(conversationId, userId, runVersion, "thought", thought, listener);

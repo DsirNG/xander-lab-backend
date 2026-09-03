@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.domain.AgentAttachment;
+import com.xander.lab.agent.domain.AgentInputTurn;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.domain.AgentPlanItem;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
@@ -58,22 +59,79 @@ public class AgentRequestAssembler {
         List<AgentAttachment> attachments = recentAttachments(recent);
         List<String> toolNames = input.allowedTools().stream().sorted().toList();
         String toolDescriptions = toolRegistry.describeToolSurface(input.allowedTools());
-        String context = renderContext(recent, input.plan(), input.memoryContext(),
+        List<AgentInputTurn> turns = renderTurns(recent, input.plan(), input.memoryContext(),
                 input.lastError(), input.critique(), input.skillSelection());
         String schemaHash = sha256(toolDescriptions);
         String modelRoute = "agent-config:" + defaultText(modelProperties.getModel(), "unconfigured");
         List<Long> messageIds = recent.stream().map(AgentMessage::getId)
                 .filter(java.util.Objects::nonNull).toList();
-        String snapshot = snapshot(input, context, attachments, messageIds, toolNames, schemaHash, modelRoute);
+        String snapshot = snapshot(input, turns, attachments, messageIds, toolNames, schemaHash, modelRoute);
         return new AgentStepRequest(input.conversationId(), input.userId(), input.runVersion(), input.stepNo(),
-                context, toolDescriptions, attachments, messageIds, toolNames, schemaHash, modelRoute,
+                turns, toolDescriptions, attachments, messageIds, toolNames, schemaHash, modelRoute,
                 INSTRUCTION_SET_VERSION, input.remainingSteps(), input.deepThinking(), snapshot);
     }
 
-    private String renderContext(List<AgentMessage> recent, List<AgentPlanItem> plan,
-                                 String memoryContext, JsonNode lastError, String critique,
-                                 AgentSkillSelection skillSelection) {
+    /**
+     * 渲染这一步交给模型的输入轮次，顺序刻意是"稳定的在前、会变的在后"。
+     *
+     * <p>前缀缓存按字节前缀命中：从第一个不同的字节开始，后面全部要重新计算。
+     * 对话记录是只追加的，所以把它放在最前面，同一轮里第 N 步的输入
+     * 就是第 N-1 步的输入加上新追加的几条——前面那一大段能整段命中缓存。</p>
+     *
+     * <p>反过来的写法（早先就是这样）把长期记忆和任务计划放在最前面：
+     * 模型中途调一次 plan_tasks 改了计划，整段对话记录的字节位置就全部后移，
+     * 这一轮剩下每一步的提示词都得从头算。所以计划、失败回灌、自检批评、Skill 规则
+     * 这些一轮之内会变的东西，全部收在最后那一轮 user 里。</p>
+     *
+     * <p>剩下的一处不稳定是有意留的：最新一条工具结果给 4000 字符预算、更早的给 800，
+     * 于是新结果到达时上一条会被重新截短。它发生在对话记录的尾部，
+     * 失效的只是尾巴而不是整段；相比让每条工具结果都占满预算，这样更省上下文。</p>
+     */
+    private List<AgentInputTurn> renderTurns(List<AgentMessage> recent, List<AgentPlanItem> plan,
+                                             String memoryContext, JsonNode lastError, String critique,
+                                             AgentSkillSelection skillSelection) {
         int lastToolResultIndex = lastToolResultIndex(recent);
+        List<AgentInputTurn> turns = new ArrayList<>();
+        for (int index = 0; index < recent.size(); index++) {
+            AgentMessage message = recent.get(index);
+            turns.add(renderMessage(message, index == lastToolResultIndex));
+        }
+        turns.add(AgentInputTurn.user(renderVolatileTail(plan, memoryContext, lastError, critique, skillSelection)));
+        return AgentInputTurn.merged(turns);
+    }
+
+    /**
+     * 一条历史消息渲染成一轮。role 由谁说的决定，正文里的【】只用来标出这句话是什么东西。
+     *
+     * <p>工具结果没有原生 tool role 可用，作为观察挂在 user 轮里；
+     * 智能体自己的思考、工具调用、回复、卡片都归 assistant，模型因此能认出哪些是它自己干的。</p>
+     */
+    private AgentInputTurn renderMessage(AgentMessage message, boolean latestToolResult) {
+        String content = switch (message.getKind()) {
+            case "thought" -> "（思考：）" + message.getContent();
+            case "reflection" -> "（自检：）" + message.getContent();
+            case "tool_call" -> "（调用了工具）" + message.getContent();
+            case "tool_result" -> "【工具结果】" + compactJson(message.getContent(),
+                    latestToolResult ? TOOL_RESULT_LATEST_CHARS : TOOL_RESULT_HISTORY_CHARS);
+            case "quiz" -> "（已用答题卡出题：）" + quizService.renderQuiz(message.getContent());
+            case "quiz_answer" -> "（在答题卡上作答：）" + message.getContent();
+            case "artifact" -> "（已用交付卡把代码交给用户：）" + renderArtifact(message.getContent());
+            default -> message.getContent();
+        };
+        String attachments = renderAttachmentNames(message);
+        String text = StringUtils.hasText(attachments) ? content + "\n\n" + attachments : content;
+        return "assistant".equals(message.getRole()) ? AgentInputTurn.assistant(text) : AgentInputTurn.user(text);
+    }
+
+    private String renderAttachmentNames(AgentMessage message) {
+        if (message.getAttachments() == null || message.getAttachments().isEmpty()) return "";
+        return "【附件】" + message.getAttachments().stream().map(AgentAttachment::name).toList();
+    }
+
+    /** 一轮之内会变的会话状态，全部收在最后一轮 user 里，前面的对话记录因此保持字节稳定。 */
+    private String renderVolatileTail(List<AgentPlanItem> plan, String memoryContext,
+                                      JsonNode lastError, String critique,
+                                      AgentSkillSelection skillSelection) {
         StringBuilder builder = new StringBuilder();
         if (StringUtils.hasText(memoryContext)) {
             builder.append("以下是你对这位用户的长期记忆（跨会话有效，可直接使用；与用户当前说法冲突时以用户当前说法为准）：\n")
@@ -83,33 +141,6 @@ public class AgentRequestAssembler {
         if (StringUtils.hasText(renderedPlan)) {
             builder.append("以下是你自己写下的任务计划（会话状态，用 plan_tasks 改写它）：\n")
                     .append(renderedPlan).append("\n\n");
-        }
-        builder.append("以下是智能体与用户的对话记录：\n\n");
-        for (int index = 0; index < recent.size(); index++) {
-            AgentMessage message = recent.get(index);
-            String role = switch (message.getRole()) {
-                case "user" -> "用户";
-                case "tool" -> "工具结果";
-                default -> "智能体";
-            };
-            String content = switch (message.getKind()) {
-                case "thought" -> "（思考：）" + message.getContent();
-                case "reflection" -> "（自检：）" + message.getContent();
-                case "tool_call" -> "（调用了工具）" + message.getContent();
-                case "tool_result" -> compactJson(message.getContent(), index == lastToolResultIndex
-                        ? TOOL_RESULT_LATEST_CHARS : TOOL_RESULT_HISTORY_CHARS);
-                case "answer" -> "（回复：）" + message.getContent();
-                case "quiz" -> "（已用答题卡出题：）" + quizService.renderQuiz(message.getContent());
-                case "quiz_answer" -> "（在答题卡上作答：）" + message.getContent();
-                case "artifact" -> "（已用交付卡把代码交给用户：）" + renderArtifact(message.getContent());
-                default -> message.getContent();
-            };
-            builder.append("【").append(role).append("】").append(content).append("\n\n");
-            if (message.getAttachments() != null && !message.getAttachments().isEmpty()) {
-                builder.append("【附件】")
-                        .append(message.getAttachments().stream().map(AgentAttachment::name).toList())
-                        .append("\n\n");
-            }
         }
         if (lastError != null) {
             builder.append("【最近一次工具失败】").append(lastError).append("\n\n");
@@ -126,13 +157,14 @@ public class AgentRequestAssembler {
         return builder.toString();
     }
 
-    private String snapshot(AgentRequestAssemblyInput input, String context,
+    private String snapshot(AgentRequestAssemblyInput input, List<AgentInputTurn> turns,
                             List<AgentAttachment> attachments, List<Long> messageIds,
                             List<String> toolNames, String schemaHash, String modelRoute) {
         ObjectNode snapshot = JsonNodeFactory.instance.objectNode();
         snapshot.put("schemaVersion", 2);
         snapshot.put("step", input.stepNo());
-        snapshot.put("contextChars", context.length());
+        snapshot.put("contextChars", turns.stream().mapToInt(turn -> turn.text().length()).sum());
+        snapshot.put("inputTurns", turns.size());
         snapshot.put("instructionSetVersion", INSTRUCTION_SET_VERSION);
         snapshot.put("responseLanguagePolicy", "current-user-language-or-zh-when-ambiguous");
         snapshot.put("modelRoute", modelRoute);

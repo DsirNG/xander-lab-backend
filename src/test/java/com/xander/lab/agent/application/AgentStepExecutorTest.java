@@ -2,6 +2,7 @@ package com.xander.lab.agent.application;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.xander.lab.agent.domain.AgentAttachment;
+import com.xander.lab.agent.domain.AgentInputTurn;
 import com.xander.lab.agent.domain.AgentStep;
 import com.xander.lab.agent.infrastructure.AgentModelClient;
 import com.xander.lab.common.ModelCallResult;
@@ -36,7 +37,8 @@ class AgentStepExecutorTest {
     }
 
     private AgentStepRequest request(List<AgentAttachment> attachments) {
-        return new AgentStepRequest(7L, 42L, 3L, 1, "context", "tools", attachments,
+        return new AgentStepRequest(7L, 42L, 3L, 1,
+                List.of(AgentInputTurn.user("context")), "tools", attachments,
                 List.of(10L), List.of("query_posts"), "hash", "agent-config:test",
                 AgentRequestAssembler.INSTRUCTION_SET_VERSION, 4, false, "{}");
     }

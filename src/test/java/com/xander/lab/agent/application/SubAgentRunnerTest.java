@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xander.lab.agent.domain.AgentInputTurn;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentModelClient;
 import com.xander.lab.common.ModelCallResult;
@@ -68,6 +69,23 @@ class SubAgentRunnerTest {
         assertThat(model.contexts.get(1))
                 .contains("1) 调用 query_knowledge 得到：{\"items\":[\"极限\"]}")
                 .contains("剩余可用步数：4");
+    }
+
+    @Test
+    void packsTheWholeSubContextIntoASingleUserTurnBecauseItHasNoTranscript() {
+        RecordingTool tool = new RecordingTool("query_knowledge", "{\"items\":[\"极限\"]}");
+        ScriptedModel model = new ScriptedModel(decideTool("query_knowledge"), done("查到了极限"));
+        SubAgentRunner runner = runner(model, 6, tool);
+
+        runner.run(context, "盘点笔记", "自包含背景", Set.of(), new CapturingProgress());
+
+        // 主循环把对话记录拆成 user/assistant 交替的多轮，子智能体没有对话记录：
+        // 它看到的是一份自包含简报，所以永远只有一轮 user——多出 assistant 轮意味着
+        // 有人把主会话的历史漏进了隔离上下文，隔离就白做了。
+        assertThat(model.turns).allSatisfy(stepTurns -> {
+            assertThat(stepTurns).hasSize(1);
+            assertThat(stepTurns.get(0).isUser()).isTrue();
+        });
     }
 
     @Test
@@ -260,7 +278,7 @@ class SubAgentRunnerTest {
         AgentConversationProperties properties = new AgentConversationProperties();
         properties.setMaxSubAgentSteps(maxSubAgentSteps);
         AgentModelClient client = mock(AgentModelClient.class);
-        when(client.decideNextStepStream(anyString(), anyString(), any(), any())).thenAnswer(model);
+        when(client.decideNextStepStream(any(), anyString(), any(), any())).thenAnswer(model);
         return new SubAgentRunner(provider, client, properties);
     }
 
@@ -268,6 +286,8 @@ class SubAgentRunnerTest {
     private static final class ScriptedModel
             implements org.mockito.stubbing.Answer<ModelCallResult> {
         private final Deque<ModelCallResult> script = new ArrayDeque<>();
+        /** 每一步的原始轮次，用来断言子上下文确实只有一轮 user。 */
+        private final List<List<AgentInputTurn>> turns = new ArrayList<>();
         private final List<String> contexts = new ArrayList<>();
         private final List<String> toolDescriptions = new ArrayList<>();
 
@@ -277,7 +297,10 @@ class SubAgentRunnerTest {
 
         @Override
         public ModelCallResult answer(org.mockito.invocation.InvocationOnMock invocation) {
-            contexts.add(invocation.getArgument(0));
+            List<AgentInputTurn> stepTurns = invocation.getArgument(0);
+            turns.add(stepTurns);
+            contexts.add(stepTurns.stream().map(AgentInputTurn::text)
+                    .collect(java.util.stream.Collectors.joining("\n\n")));
             toolDescriptions.add(invocation.getArgument(1));
             ModelCallResult next = script.poll();
             if (next == null) throw new AssertionError("子智能体超出脚本继续调用了模型");

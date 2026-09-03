@@ -39,9 +39,9 @@ public class AgentStepExecutor {
                                    BooleanSupplier cancellationRequested) {
         try {
             ModelCallResult call = request.attachments().isEmpty()
-                    ? modelClient.decideNextStepStream(request.context(), request.toolDescriptions(),
+                    ? modelClient.decideNextStepStream(request.turns(), request.toolDescriptions(),
                             onAnswerDelta, cancellationRequested)
-                    : modelClient.decideNextStepStream(request.context(), request.toolDescriptions(),
+                    : modelClient.decideNextStepStream(request.turns(), request.toolDescriptions(),
                             request.attachments(), onAnswerDelta, cancellationRequested);
             executionJournal.completeStep(step, call);
             return call;

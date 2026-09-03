@@ -8,6 +8,7 @@ import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import com.xander.lab.agent.domain.AgentAttachment;
+import com.xander.lab.agent.domain.AgentInputTurn;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -64,6 +65,9 @@ public class AgentModelClient {
     /**
      * Asks the model to pick the next step: either conclude with a reply or
      * invoke one of the provided tools. Returns a JSON decision object with usage.
+     *
+     * <p>单段文本的入口：整段作为一轮 user 发出。给只有一段自包含输入的调用方用
+     * （子智能体的 brief、聚焦测试），主循环走 role 化的 {@link AgentInputTurn} 重载。</p>
      */
     public ModelCallResult decideNextStep(String context, String toolDescriptions) {
         return decideNextStepStream(context, toolDescriptions, ignored -> { });
@@ -76,7 +80,8 @@ public class AgentModelClient {
      */
     public ModelCallResult decideNextStepStream(String context, String toolDescriptions,
                                          Consumer<String> onAnswerDelta) {
-        return decideNextStepStream(context, toolDescriptions, onAnswerDelta, () -> false);
+        return decideNextStepStream(List.of(AgentInputTurn.user(context)), toolDescriptions,
+                onAnswerDelta, () -> false);
     }
 
     /**
@@ -84,14 +89,14 @@ public class AgentModelClient {
      * When the admin gateway configured a fallback endpoint, exhausted primary attempts
      * fail over to it, still never re-streaming deltas that were already delivered.
      */
-    public ModelCallResult decideNextStepStream(String context, String toolDescriptions,
+    public ModelCallResult decideNextStepStream(List<AgentInputTurn> turns, String toolDescriptions,
                                          Consumer<String> onAnswerDelta,
                                          BooleanSupplier cancellationRequested) {
-        return decideNextStepStream(context, toolDescriptions, List.of(), onAnswerDelta, cancellationRequested);
+        return decideNextStepStream(turns, toolDescriptions, List.of(), onAnswerDelta, cancellationRequested);
     }
 
     /** Sends the latest turn's images and documents as native Responses multimodal inputs. */
-    public ModelCallResult decideNextStepStream(String context, String toolDescriptions,
+    public ModelCallResult decideNextStepStream(List<AgentInputTurn> turns, String toolDescriptions,
                                          List<AgentAttachment> attachments,
                                          Consumer<String> onAnswerDelta,
                                          BooleanSupplier cancellationRequested) {
@@ -106,7 +111,7 @@ public class AgentModelClient {
         for (int index = 0; index < endpoints.size(); index++) {
             ModelEndpoint endpoint = endpoints.get(index);
             try {
-                return decideNextStepStreamPerEndpoint(endpoint, context, toolDescriptions, attachments,
+                return decideNextStepStreamPerEndpoint(endpoint, turns, toolDescriptions, attachments,
                         guardedDelta, visibleDelta, cancellationRequested);
             } catch (RuntimeException exception) {
                 lastFailure = exception;
@@ -120,7 +125,7 @@ public class AgentModelClient {
         throw lastFailure;
     }
 
-    private ModelCallResult decideNextStepStreamPerEndpoint(ModelEndpoint endpoint, String context,
+    private ModelCallResult decideNextStepStreamPerEndpoint(ModelEndpoint endpoint, List<AgentInputTurn> turns,
                                                      String toolDescriptions, List<AgentAttachment> attachments,
                                                      Consumer<String> onAnswerDelta,
                                                      AtomicBoolean visibleDelta,
@@ -128,7 +133,7 @@ public class AgentModelClient {
         for (int attempt = 1; ; attempt++) {
             checkCancellation(cancellationRequested);
             try {
-                return decideNextStepStreamOnce(endpoint, context, toolDescriptions, attachments,
+                return decideNextStepStreamOnce(endpoint, turns, toolDescriptions, attachments,
                         onAnswerDelta, cancellationRequested);
             } catch (ModelGatewayException exception) {
                 if (!TRANSIENT_STATUS.contains(exception.status())
@@ -153,12 +158,13 @@ public class AgentModelClient {
                 properties.getApiKey(), properties.getModel()));
     }
 
-    private ModelCallResult decideNextStepStreamOnce(ModelEndpoint endpoint, String context, String toolDescriptions,
+    private ModelCallResult decideNextStepStreamOnce(ModelEndpoint endpoint, List<AgentInputTurn> turns,
+                                                String toolDescriptions,
                                                 List<AgentAttachment> attachments,
                                                 Consumer<String> onAnswerDelta,
                                                 BooleanSupplier cancellationRequested) {
         long requestStartedNanos = System.nanoTime();
-        Map<String, Object> payload = requestPayload(endpoint.model(), context, toolDescriptions, attachments);
+        Map<String, Object> payload = requestPayload(endpoint.model(), turns, toolDescriptions, attachments);
         payload.put("stream", true);
         boolean directConversation = !StringUtils.hasText(toolDescriptions);
 
@@ -292,7 +298,7 @@ public class AgentModelClient {
         decoder.accept(delta);
     }
 
-    private Map<String, Object> requestPayload(String model, String context, String toolDescriptions,
+    private Map<String, Object> requestPayload(String model, List<AgentInputTurn> turns, String toolDescriptions,
                                                List<AgentAttachment> attachments) {
         // 搜索能力开关只看配置，不再按关键词猜。词表猜不中时模型会以为自己不能联网，
         // 于是凭记忆作答；把决定权交给模型更符合智能体语义，实际搜索仍只在它调用时才发生。
@@ -301,7 +307,7 @@ public class AgentModelClient {
         payload.put("model", model);
         payload.put("store", false);
         payload.put("instructions", instructions(toolDescriptions, webSearchEnabled));
-        payload.put("input", multimodalInput(context, attachments));
+        payload.put("input", roleStructuredInput(turns, attachments));
         if (StringUtils.hasText(toolDescriptions)) {
             payload.put("text", structuredDecisionText());
         }
@@ -315,10 +321,45 @@ public class AgentModelClient {
         return payload;
     }
 
-    private Object multimodalInput(String context, List<AgentAttachment> attachments) {
-        if (attachments == null || attachments.isEmpty()) return context;
+    /**
+     * 把轮次渲染成 Responses 的 input 数组：每轮一条 role 化消息。
+     *
+     * <p>附件挂在最后一轮 user 上——那一轮就是"当前这次诉求"，图片和文档属于它。
+     * 若最后一轮不是 user（正常不会发生，装配层总以一轮 user 收尾），
+     * 就补一轮只带附件的 user，避免把图片挂到模型自己说的话上。</p>
+     */
+    private Object roleStructuredInput(List<AgentInputTurn> turns, List<AgentAttachment> attachments) {
+        List<AgentInputTurn> effective = turns == null || turns.isEmpty()
+                ? List.of(AgentInputTurn.user("")) : turns;
+        int attachmentTurn = hasAttachments(attachments) ? lastUserTurnIndex(effective) : -1;
+        List<Map<String, Object>> input = new java.util.ArrayList<>();
+        for (int index = 0; index < effective.size(); index++) {
+            AgentInputTurn turn = effective.get(index);
+            Object content = index == attachmentTurn
+                    ? multimodalContent(turn.text(), attachments) : turn.text();
+            input.add(Map.of("role", turn.role(), "content", content));
+        }
+        if (hasAttachments(attachments) && attachmentTurn < 0) {
+            input.add(Map.of("role", AgentInputTurn.USER,
+                    "content", multimodalContent("", attachments)));
+        }
+        return List.copyOf(input);
+    }
+
+    private boolean hasAttachments(List<AgentAttachment> attachments) {
+        return attachments != null && !attachments.isEmpty();
+    }
+
+    private int lastUserTurnIndex(List<AgentInputTurn> turns) {
+        for (int index = turns.size() - 1; index >= 0; index--) {
+            if (turns.get(index).isUser()) return index;
+        }
+        return -1;
+    }
+
+    private Object multimodalContent(String text, List<AgentAttachment> attachments) {
         java.util.ArrayList<Map<String, Object>> content = new java.util.ArrayList<>();
-        content.add(Map.of("type", "input_text", "text", context));
+        content.add(Map.of("type", "input_text", "text", text));
         for (AgentAttachment attachment : attachments) {
             if (attachment.image()) {
                 content.add(Map.of(
@@ -331,7 +372,7 @@ public class AgentModelClient {
                         "file_url", attachment.url()));
             }
         }
-        return List.of(Map.of("role", "user", "content", content));
+        return List.copyOf(content);
     }
 
     /**

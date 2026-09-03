@@ -8,6 +8,7 @@ import com.xander.lab.agent.application.EmitArtifactTool;
 import com.xander.lab.agent.application.EmitQuizTool;
 import com.xander.lab.agent.application.GradeAnswerTool;
 import com.xander.lab.agent.domain.AgentAttachment;
+import com.xander.lab.agent.domain.AgentInputTurn;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
@@ -55,7 +56,7 @@ class AgentModelClientTest {
         startServer(List.of("附件已解析"));
 
         client().decideNextStepStream(
-                "请分析附件", "",
+                List.of(AgentInputTurn.user("请分析附件")), "",
                 List.of(
                         new AgentAttachment("https://cdn.example.com/photo.png", "photo.png", "image/png", 12L),
                         new AgentAttachment("https://cdn.example.com/report.pdf", "report.pdf", "application/pdf", 34L)),
@@ -69,6 +70,51 @@ class AgentModelClientTest {
         assertThat(content.path(2).path("type").asText()).isEqualTo("input_file");
         assertThat(content.path(2).path("file_url").asText())
                 .isEqualTo("https://cdn.example.com/report.pdf");
+    }
+
+    /**
+     * 对话记录按 role 发出去，而不是压成一段"【用户】…【智能体】…"的纯文本。
+     *
+     * <p>压成一段时模型看到的全都是用户说的话，包括它自己上一轮的回复；
+     * 谁说的只能靠正文里的方括号标记去猜，而那些标记用户自己也能打出来。</p>
+     */
+    @Test
+    void sendsTheTranscriptAsRoleStructuredInputMessages() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"好的\",\"thought\":\"\",\"action\":null}"));
+
+        client().decideNextStepStream(
+                List.of(AgentInputTurn.user("帮我整理这批笔记"),
+                        AgentInputTurn.assistant("（回复：）已经整理好了"),
+                        AgentInputTurn.user("【工具结果】{\"ok\":true}")),
+                "query_posts: 查文章", ignored -> { }, () -> false);
+
+        JsonNode input = requestPayload.path("input");
+        assertThat(input.isArray()).isTrue();
+        assertThat(input).hasSize(3);
+        assertThat(input.path(0).path("role").asText()).isEqualTo("user");
+        assertThat(input.path(0).path("content").asText()).isEqualTo("帮我整理这批笔记");
+        assertThat(input.path(1).path("role").asText()).isEqualTo("assistant");
+        assertThat(input.path(2).path("role").asText()).isEqualTo("user");
+        assertThat(input.path(2).path("content").asText()).contains("【工具结果】");
+    }
+
+    /** 附件属于"当前这次诉求"，所以挂在最后一轮 user 上，而不是模型自己说的话上。 */
+    @Test
+    void attachesFilesToTheLastUserTurnRatherThanTheFirst() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"好的\",\"thought\":\"\",\"action\":null}"));
+
+        client().decideNextStepStream(
+                List.of(AgentInputTurn.user("第一轮"),
+                        AgentInputTurn.assistant("中间回复"),
+                        AgentInputTurn.user("看看这张图")),
+                "query_posts: 查文章",
+                List.of(new AgentAttachment("https://cdn.example.com/photo.png", "photo.png", "image/png", 12L)),
+                ignored -> { }, () -> false);
+
+        JsonNode input = requestPayload.path("input");
+        assertThat(input.path(0).path("content").asText()).isEqualTo("第一轮");
+        assertThat(input.path(2).path("content").path(0).path("text").asText()).isEqualTo("看看这张图");
+        assertThat(input.path(2).path("content").path(1).path("type").asText()).isEqualTo("input_image");
     }
 
     @Test
@@ -91,6 +137,25 @@ class AgentModelClientTest {
         assertThat(requestPayload.path("text").path("format").path("schema")
                 .path("required").toString())
                 .isEqualTo("[\"done\",\"reply\",\"thought\",\"action\"]");
+    }
+
+    /**
+     * thought 每步都会实时推给用户，所以协议里它是"一句进度"，不是模型的思维链。
+     *
+     * <p>回归：用户发"给我一个 sse 代码"，界面上出现的是模型的原始推理，还带着内部工具契约。
+     * 当时协议只说 thought 是"本步的简要思考"——模型照做了，是这句定义写错了。</p>
+     */
+    @Test
+    void definesThoughtAsAUserFacingProgressLineRatherThanChainOfThought() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"你好\",\"thought\":\"\",\"action\":null}"));
+
+        client().decideNextStep("context", "tools");
+
+        assertThat(requestPayload.path("instructions").asText())
+                .contains("thought 是直接显示给用户的一句进度说明，不是你的内部推理")
+                .contains("不要写工具名、参数、字段名")
+                .contains("真正的推理留在你自己的思考里")
+                .doesNotContain("本步的简要思考");
     }
 
     @Test

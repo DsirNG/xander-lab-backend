@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
+import com.xander.lab.agent.domain.AgentInputTurn;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.domain.AgentPlanItem;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
@@ -30,6 +31,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -146,6 +148,35 @@ class AgentConversationServiceTest {
                 argThatMessage("tool", "tool_call", "blog_generate"), eq(42L), eq(1L));
         verify(messageMapper).insertForActiveRun(
                 argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
+    }
+
+    /**
+     * thought 是每步实时推给前端的，所以它必须是一句给用户看的进度，不是模型的内部推理。
+     *
+     * <p>回归：用户发"给我一个sse代码"，界面上出现了模型的原始思考——连内部工具契约一起摊给了用户。
+     * 提示词已经改口径了，这里守的是即使模型不听话也不会漏出去（见 {@link AgentThoughtSanitizer}）。</p>
+     */
+    @Test
+    void rawReasoningInThoughtNeverReachesTheUser() {
+        stubTransactions();
+        ObjectNode leaking = decisionNode(false,
+                "用户需要可运行的 SSE 示例，且是多文件代码，必须通过 artifact 工具交付。"
+                        + "准备提供一个零依赖的 Node.js SSE 服务端和浏览器客户端。",
+                "blog_generate", "sse 示例");
+        ObjectNode done = decisionNode(true, "", null, null);
+        done.put("reply", "给你一段 SSE 示例");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(leaking), call(done));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        List<AgentEvent> events = new ArrayList<>();
+        service.executeTurn(7L, 42L, "给我一个sse代码", events::add);
+
+        assertThat(events).noneMatch(event -> "thought".equals(event.getEventType()));
+        assertThat(events).noneMatch(event -> String.valueOf(event.getDataContent()).contains("artifact"));
+        verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
+                argThatMessage("assistant", "thought", null), eq(42L), eq(1L));
     }
 
     @Test
@@ -542,16 +573,41 @@ class AgentConversationServiceTest {
         when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(decision));
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        when(messageMapper.selectList(any())).thenReturn(List.of(
+                message("user", "text", "上一轮我问了什么"),
+                message("assistant", "text", "上一轮我答了什么"),
+                message("user", "text", "随便聊聊")));
 
         service.executeTurn(7L, 42L, "随便聊聊", ignored -> { });
 
-        var context = org.mockito.ArgumentCaptor.forClass(String.class);
+        @SuppressWarnings("unchecked")
+        var turns = (org.mockito.ArgumentCaptor<List<AgentInputTurn>>)
+                (org.mockito.ArgumentCaptor<?>) org.mockito.ArgumentCaptor.forClass(List.class);
         var toolDescriptions = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(modelClient).decideNextStepStream(
-                context.capture(), toolDescriptions.capture(), any(), any());
+                turns.capture(), toolDescriptions.capture(), any(), any());
         assertThat(toolDescriptions.getValue()).contains("blog_generate");
-        assertThat(context.getValue())
-                .contains("以下是智能体与用户的对话记录")
+        List<AgentInputTurn> sent = turns.getValue();
+        // 对话记录不再靠"以下是……对话记录"这行标题来声明，role 本身就是标题：
+        // 用户说的话进 user 轮、智能体自己说过的话进 assistant 轮，
+        // 模型因此不用靠猜标题就知道哪句是它自己上一轮说的。
+        assertThat(sent).anySatisfy(turn -> {
+            assertThat(turn.isUser()).isTrue();
+            assertThat(turn.text()).contains("上一轮我问了什么");
+        });
+        assertThat(sent).anySatisfy(turn -> {
+            assertThat(turn.isUser()).isFalse();
+            assertThat(turn.text()).contains("上一轮我答了什么");
+        });
+        // 会话状态收在最后一轮 user，模型要回答的正是这一轮；严格交替则是为了兼容
+        // 那些拒收连续同 role 的 OpenAI 兼容端点。
+        assertThat(sent).hasSizeGreaterThan(1);
+        assertThat(sent.get(0).isUser()).isTrue();
+        assertThat(sent.get(sent.size() - 1).isUser()).isTrue();
+        for (int index = 1; index < sent.size(); index++) {
+            assertThat(sent.get(index).role()).isNotEqualTo(sent.get(index - 1).role());
+        }
+        assertThat(sent.get(sent.size() - 1).text())
                 .endsWith("请根据以上信息决定下一步：需要动手就返回 action，已经真正做完就返回 done=true 的最终回复。");
     }
 
@@ -952,6 +1008,16 @@ class AgentConversationServiceTest {
         conversation.setRunVersion(1L);
         conversation.setUpdatedAt(LocalDateTime.now());
         return conversation;
+    }
+
+    private AgentMessage message(String role, String kind, String content) {
+        AgentMessage message = new AgentMessage();
+        message.setId(1L);
+        message.setConversationId(7L);
+        message.setRole(role);
+        message.setKind(kind);
+        message.setContent(content);
+        return message;
     }
 
     private ObjectNode decisionNode(boolean done, String thought, String tool, String input) {
