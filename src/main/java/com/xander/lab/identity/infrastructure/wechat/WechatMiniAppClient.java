@@ -60,6 +60,8 @@ public class WechatMiniAppClient {
                             .queryParam("grant_type", "client_credential")
                             .queryParam("appid", credential.appId())
                             .queryParam("secret", credential.appSecret()).build())
+                    .header("User-Agent", "Mozilla/5.0 (compatible; DinQorAI/1.0)")
+                    .header("Accept", "application/json")
                     .retrieve().body(String.class));
             String accessToken = textOrNull(token, "access_token");
             if (accessToken == null || accessToken.isBlank()) {
@@ -70,6 +72,9 @@ public class WechatMiniAppClient {
             byte[] image = apiClient.post()
                     .uri(uriBuilder -> uriBuilder.scheme("https").host("api.weixin.qq.com").path("/wxa/getwxacodeunlimit")
                             .queryParam("access_token", accessToken).build())
+                    .header("User-Agent", "Mozilla/5.0 (compatible; DinQorAI/1.0)")
+                    .header("Accept", "image/*, application/json")
+                    .header("Content-Type", "application/json")
                     .body(Map.of("scene", scene, "page", properties.getLoginPage(), "check_path", false,
                             "env_version", properties.getEnvVersion()))
                     .retrieve().body(byte[].class);
@@ -78,6 +83,12 @@ public class WechatMiniAppClient {
                 throw new IllegalStateException("微信二维码生成失败，请稍后重试");
             }
             return "data:image/png;base64," + Base64.getEncoder().encodeToString(image);
+        } catch (RestClientResponseException ex) {
+            String body = ex.getResponseBodyAsString();
+            if (body != null && body.length() > 500) body = body.substring(0, 500);
+            log.warn("[WeChat QR] HTTP 请求失败: status={}, headers={}, body={}",
+                    ex.getStatusCode().value(), ex.getResponseHeaders(), body);
+            throw new IllegalStateException("微信二维码服务暂不可用，请稍后重试");
         } catch (RuntimeException ex) {
             if (ex instanceof IllegalStateException state) throw state;
             log.warn("[WeChat QR] 请求异常: {}", ex.toString());
