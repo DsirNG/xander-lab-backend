@@ -279,6 +279,9 @@ An assembled request contains references or snapshots of:
 - memory and plan snapshot versions;
 - current step, remaining token/step budget and cancellation capability;
 - system and skill instruction version identifiers;
+- response-language policy version: reply in the current user's natural
+  language, defaulting to Chinese only when the input is linguistically
+  ambiguous or consists only of names/identifiers;
 - normalized model output contract.
 
 The model may still receive a compact rendered context. The journal persists
@@ -413,11 +416,16 @@ snapshot; it must not redesign this schema or replay historical rows.
 Exit criterion: `AgentConversationService` no longer contains a monolithic
 model/tool loop, and unit tests cover each extracted policy boundary.
 
-**Status: in progress.** `AgentRequestAssembler` now creates the exact model
-input and the version 2 journal snapshot from one message window, while
-`AgentStepExecutor` owns one model call and its step outcome. Turn lifecycle,
-tool execution and compatibility event projection remain in the facade until
-their own behavior-preserving extractions are tested.
+**Status: in progress.** Checkpoint `419f5dd` (`【dxd】拆分智能体请求与步骤执行`)
+completed `AgentRequestAssembler`, immutable `AgentStepRequest`, and
+`AgentStepExecutor`. The exact model input and version 2 journal snapshot now
+come from one message window, and one model call settles its matching step.
+The request now instructs the model to reply in the current user's natural
+language; only linguistically ambiguous requests, including names and
+identifiers without natural-language context, default to Chinese. `AgentRunLifecycle`
+now owns successful, failed and stale-run terminal transitions. Lease renewal,
+claim/cancel commands, tool execution and compatibility event projection remain
+in the facade until their own behavior-preserving extractions are tested.
 
 ### Phase 3: Tool Pipeline and Idempotency
 
@@ -568,15 +576,23 @@ Completed by the first pull request (`98af6f2`):
 5. [x] Add journal schema and invocation-identity regression tests, then run
    the full Maven suite.
 
-Next pull request (Phase 2):
+Completed Phase 2 checkpoint (`419f5dd`):
 
 1. [x] Add `AgentStepRequest` and `AgentRequestAssembler` with durable
    message/attachment references and versioned assembly inputs.
-2. [~] Extract `AgentStepExecutor` behind the existing
-   `AgentConversationService` facade; `AgentRunLifecycle` and
-   `AgentTurnCoordinator` remain pending.
-3. [ ] Extract `AgentEventProjector` while preserving current event names and
+2. [x] Extract `AgentStepExecutor` behind the existing
+   `AgentConversationService` facade.
+
+Next Phase 2 extraction batch:
+
+1. [~] `AgentRunLifecycle` now owns successful, failed and stale-run terminal
+   transitions fenced by `runVersion`; it returns durable outcomes and does not
+   fan out live events or charge billing. Claim-state validation, lease renewal
+   and explicit cancellation remain pending.
+2. [ ] Extract `AgentEventProjector` while preserving current event names and
    serialized fields.
+3. [ ] Move `runLoop` ownership into `AgentTurnCoordinator`; retain
+   `AgentConversationService` as the public compatibility facade.
 4. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
    tests for the extracted boundaries.
 

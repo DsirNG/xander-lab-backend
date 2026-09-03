@@ -27,9 +27,14 @@ import java.util.Set;
 @Service
 @RequiredArgsConstructor
 public class AgentRequestAssembler {
-    static final String INSTRUCTION_SET_VERSION = "legacy-conversation-v1";
+    static final String INSTRUCTION_SET_VERSION = "conversation-v2-language-policy";
     private static final int TOOL_RESULT_HISTORY_CHARS = 800;
     private static final int TOOL_RESULT_LATEST_CHARS = 4000;
+    private static final String RESPONSE_LANGUAGE_INSTRUCTION = """
+            输出语言规则：使用用户当前诉求所使用的自然语言回复。不要因为系统说明或工具结果是中文而改变回复语言。
+            若当前诉求没有足以判断语言的自然语言文本，或内容仅由专有名称、产品名、代码、文件名、URL、数字或缩写组成，默认使用中文。
+            不翻译代码、命令、文件路径、API 名称、参数名和其他标识符；必要的解释文字仍使用确定的回复语言。
+            """;
 
     private final AgentToolRegistry toolRegistry;
     private final AgentConversationProperties conversationProperties;
@@ -111,6 +116,7 @@ public class AgentRequestAssembler {
         if (StringUtils.hasText(critique)) {
             builder.append("【自检结果】").append(critique).append("\n\n");
         }
+        builder.append(RESPONSE_LANGUAGE_INSTRUCTION).append("\n");
         builder.append("请根据以上信息决定下一步：需要动手就返回 action，已经真正做完就返回 done=true 的最终回复。");
         return builder.toString();
     }
@@ -123,6 +129,7 @@ public class AgentRequestAssembler {
         snapshot.put("step", input.stepNo());
         snapshot.put("contextChars", context.length());
         snapshot.put("instructionSetVersion", INSTRUCTION_SET_VERSION);
+        snapshot.put("responseLanguagePolicy", "current-user-language-or-zh-when-ambiguous");
         snapshot.put("modelRoute", modelRoute);
         snapshot.put("toolSchemaSetHash", schemaHash);
         snapshot.put("remainingSteps", input.remainingSteps());

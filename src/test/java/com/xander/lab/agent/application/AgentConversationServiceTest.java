@@ -974,7 +974,7 @@ class AgentConversationServiceTest {
             callback.accept(mock(TransactionStatus.class));
             return null;
         }).when(transactionTemplate).executeWithoutResult(any());
-        doAnswer(invocation -> {
+        org.mockito.Mockito.lenient().doAnswer(invocation -> {
             org.springframework.transaction.support.TransactionCallback<?> callback = invocation.getArgument(0);
             return callback.doInTransaction(mock(TransactionStatus.class));
         }).when(transactionTemplate).execute(any());

@@ -60,6 +60,27 @@ class AgentRequestAssemblerTest {
                 .isEqualTo("https://cdn.example.com/a.png");
     }
 
+    @Test
+    void instructsTheModelToFollowTheCurrentUserLanguageAndDefaultToChineseWhenAmbiguous() {
+        AgentConversationProperties conversationProperties = mock(AgentConversationProperties.class);
+        when(conversationProperties.getContextMessageLimit()).thenReturn(5);
+        AgentRequestAssembler assembler = new AgentRequestAssembler(
+                new AgentToolRegistry(List.of(tool("query_posts"))), conversationProperties,
+                new AgentModelProperties(), mock(AgentPlanService.class), new AgentQuizService(objectMapper), objectMapper);
+
+        AgentStepRequest request = assembler.assemble(new AgentRequestAssemblyInput(
+                7L, 42L, 3L, 1, List.of(message(1L, "user", "message", "Explain this in English", List.of())),
+                List.of(), "", null, null, Set.of("query_posts"), 4, false));
+
+        assertThat(request.context())
+                .contains("使用用户当前诉求所使用的自然语言回复")
+                .contains("默认使用中文")
+                .contains("不要因为系统说明或工具结果是中文而改变回复语言");
+        assertThat(request.journalSnapshotJson())
+                .contains("conversation-v2-language-policy")
+                .contains("current-user-language-or-zh-when-ambiguous");
+    }
+
     private AgentMessage message(Long id, String role, String kind, String content,
                                  List<AgentAttachment> attachments) {
         AgentMessage message = new AgentMessage();

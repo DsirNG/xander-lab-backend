@@ -92,6 +92,7 @@ public class AgentConversationService {
     private final AgentExecutionJournal executionJournal;
     private final AgentRequestAssembler requestAssembler;
     private final AgentStepExecutor stepExecutor;
+    private final AgentRunLifecycle runLifecycle;
 
     @Autowired
     public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
@@ -102,7 +103,8 @@ public class AgentConversationService {
                                     AgentPlanService planService, AgentMemoryService memoryService,
                                     AgentTurnEvaluator turnEvaluator, AgentQuizService quizService,
                                     AgentExecutionJournal executionJournal,
-                                    AgentRequestAssembler requestAssembler, AgentStepExecutor stepExecutor) {
+                                    AgentRequestAssembler requestAssembler, AgentStepExecutor stepExecutor,
+                                    AgentRunLifecycle runLifecycle) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.modelClient = modelClient;
@@ -120,6 +122,7 @@ public class AgentConversationService {
         this.executionJournal = executionJournal;
         this.requestAssembler = requestAssembler;
         this.stepExecutor = stepExecutor;
+        this.runLifecycle = runLifecycle;
     }
 
     /** Compatibility constructor retained for focused loop tests and embedded callers. */
@@ -134,7 +137,9 @@ public class AgentConversationService {
                 eventService, agentLeaseRenewer, billingService, objectMapper, planService, memoryService,
                 turnEvaluator, quizService, AgentExecutionJournal.disabled(),
                 AgentRequestAssembler.legacy(toolRegistry, properties, planService, quizService, objectMapper),
-                AgentStepExecutor.legacy(modelClient));
+                AgentStepExecutor.legacy(modelClient),
+                new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
+                        properties, transactionTemplate));
     }
 
     /**
@@ -638,32 +643,7 @@ public class AgentConversationService {
 
     private AgentConversation finalizeReady(Long conversationId, Long userId, long runVersion,
                                             UsageAccumulator usage, Consumer<AgentEvent> onEvent) {
-        TerminalResult terminal = transactionTemplate.execute(status -> {
-            LocalDateTime now = LocalDateTime.now();
-            AgentConversation current = requireOwned(conversationId, userId);
-            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                    .eq(AgentConversation::getId, conversationId)
-                    .eq(AgentConversation::getUserId, userId)
-                    .eq(AgentConversation::getStatus, "running")
-                    .eq(AgentConversation::getRunVersion, runVersion)
-                    .set(AgentConversation::getStatus, "ready")
-                    .set(AgentConversation::getErrorMessage, null)
-                    .set(AgentConversation::getCancelRequested, 0)
-                    // 终态时间是列表未读提醒的事实来源：用户不在这个会话时靠它点亮蓝点。
-                    .set(AgentConversation::getLastCompletedAt, now)
-                    );
-            if (updated != 1) {
-                throw new AgentRunSupersededException(conversationId, runVersion);
-            }
-            executionJournal.completeRun(conversationId, userId, runVersion);
-            current.setStatus("ready");
-            current.setErrorMessage(null);
-            current.setCancelRequested(0);
-            current.setLastCompletedAt(now);
-            AgentEvent event = eventService.storeForRun(
-                    conversationId, userId, runVersion, "complete", current, false);
-            return new TerminalResult(current, event);
-        });
+        TerminalTransition terminal = runLifecycle.complete(conversationId, userId, runVersion);
         billingService.chargeTokens(userId, BillingBiz.AGENT_TURN,
                 "conv:" + conversationId + ":run:" + runVersion, "conv:" + conversationId,
                 usage.sum(), usage.model(), "智能体会话单轮执行");
@@ -751,62 +731,12 @@ public class AgentConversationService {
     }
 
     private AgentEvent markFailed(Long conversationId, Long userId, long runVersion, String errorMessage) {
-        return transactionTemplate.execute(status -> {
-            String safeError = limit(defaultText(errorMessage, "智能体任务失败，请稍后重试"), 1000);
-            LocalDateTime now = LocalDateTime.now();
-            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                    .eq(AgentConversation::getId, conversationId)
-                    .eq(AgentConversation::getUserId, userId)
-                    .eq(AgentConversation::getStatus, "running")
-                    .eq(AgentConversation::getRunVersion, runVersion)
-                    .set(AgentConversation::getStatus, "failed")
-                    .set(AgentConversation::getErrorMessage, safeError)
-                    // 失败同样是"这一轮有结果要看"，与成功收口一样点亮未读提醒。
-                    .set(AgentConversation::getLastCompletedAt, now)
-                    );
-            if (updated != 1) {
-                throw new AgentRunSupersededException(conversationId, runVersion);
-            }
-            executionJournal.failRun(conversationId, userId, runVersion, safeError);
-            return eventService.storeForRun(
-                    conversationId, userId, runVersion, "error", safeError, false);
-        });
+        return runLifecycle.fail(conversationId, userId, runVersion, errorMessage);
     }
 
     /** 中断(超过 stale 分钟仍 running)的会话恢复为 failed，保留可重试语义与错误终态。 */
     public AgentConversation resolveStale(AgentConversation conversation, Long userId) {
-        if (!"running".equals(conversation.getStatus()) || conversation.getUpdatedAt() == null) {
-            return conversation;
-        }
-        int staleMinutes = Math.max(1, properties.getStaleConversationMinutes());
-        if (conversation.getUpdatedAt().isAfter(LocalDateTime.now().minusMinutes(staleMinutes))) {
-            return conversation;
-        }
-        transactionTemplate.execute(status -> {
-            String interrupted = "上一轮执行中断，可继续对话";
-            LocalDateTime now = LocalDateTime.now();
-            int changed = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                    .eq(AgentConversation::getId, conversation.getId())
-                    .eq(AgentConversation::getUserId, userId)
-                    .eq(AgentConversation::getStatus, "running")
-                    .eq(AgentConversation::getRunVersion, conversation.getRunVersion())
-                    .le(AgentConversation::getUpdatedAt, LocalDateTime.now().minusMinutes(staleMinutes))
-                    .set(AgentConversation::getStatus, "failed")
-                    .set(AgentConversation::getErrorMessage, interrupted)
-                    // 中断收口也是终态：列表要能从"转圈"切到"有结果待看"，否则会一直转圈。
-                    .set(AgentConversation::getLastCompletedAt, now)
-                    );
-            long runVersion = conversation.getRunVersion() == null ? 0L : conversation.getRunVersion();
-            if (changed == 1) {
-                executionJournal.failRun(conversation.getId(), userId, runVersion, interrupted);
-            }
-            if (changed == 1 && eventService.latestTerminal(conversation.getId(), runVersion) == null) {
-                eventService.storeForRun(
-                        conversation.getId(), userId, runVersion, "error", interrupted, false);
-            }
-            return changed;
-        });
-        // A zero-row stale transition means another worker/request won the race; return current durable state.
+        runLifecycle.recoverStale(conversation, userId);
         return requireOwned(conversation.getId(), userId);
     }
 
