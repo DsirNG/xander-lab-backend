@@ -87,6 +87,29 @@ class AgentExecutionJournalTest {
         assertThat(tool.getId()).isEqualTo(29L);
     }
 
+    @Test
+    void marksInterruptedChildrenWhenTheRunFails() {
+        AgentConversationMapper conversationMapper = mock(AgentConversationMapper.class);
+        AgentRunMapper runMapper = mock(AgentRunMapper.class);
+        AgentStepMapper stepMapper = mock(AgentStepMapper.class);
+        AgentToolInvocationMapper invocationMapper = mock(AgentToolInvocationMapper.class);
+        AgentConversation conversation = runningConversation();
+        AgentRun run = runningRun();
+        when(conversationMapper.selectById(7L)).thenReturn(conversation);
+        when(runMapper.selectOne(any())).thenReturn(run);
+        when(runMapper.update(any(), any())).thenReturn(1);
+        when(stepMapper.update(any(), any())).thenReturn(1);
+        when(invocationMapper.update(any(), any())).thenReturn(1);
+
+        AgentExecutionJournal journal = new AgentExecutionJournal(
+                conversationMapper, runMapper, stepMapper, invocationMapper);
+
+        journal.failRun(7L, 42L, 3L, "worker crashed");
+
+        verify(stepMapper).update(any(), any());
+        verify(invocationMapper).update(any(), any());
+    }
+
     private AgentConversation runningConversation() {
         AgentConversation conversation = new AgentConversation();
         conversation.setId(7L);

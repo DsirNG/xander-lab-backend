@@ -59,7 +59,7 @@ public class AgentRequestAssembler {
         List<String> toolNames = input.allowedTools().stream().sorted().toList();
         String toolDescriptions = toolRegistry.describeTools(input.allowedTools());
         String context = renderContext(recent, input.plan(), input.memoryContext(),
-                input.lastError(), input.critique());
+                input.lastError(), input.critique(), input.skillSelection());
         String schemaHash = sha256(toolDescriptions);
         String modelRoute = "agent-config:" + defaultText(modelProperties.getModel(), "unconfigured");
         List<Long> messageIds = recent.stream().map(AgentMessage::getId)
@@ -71,7 +71,8 @@ public class AgentRequestAssembler {
     }
 
     private String renderContext(List<AgentMessage> recent, List<AgentPlanItem> plan,
-                                 String memoryContext, JsonNode lastError, String critique) {
+                                 String memoryContext, JsonNode lastError, String critique,
+                                 AgentSkillSelection skillSelection) {
         int lastToolResultIndex = lastToolResultIndex(recent);
         StringBuilder builder = new StringBuilder();
         if (StringUtils.hasText(memoryContext)) {
@@ -116,6 +117,10 @@ public class AgentRequestAssembler {
         if (StringUtils.hasText(critique)) {
             builder.append("【自检结果】").append(critique).append("\n\n");
         }
+        if (skillSelection != null && StringUtils.hasText(skillSelection.instructions())) {
+            builder.append("当前激活的 Skill 规则：\n")
+                    .append(skillSelection.instructions()).append("\n\n");
+        }
         builder.append(RESPONSE_LANGUAGE_INSTRUCTION).append("\n");
         builder.append("请根据以上信息决定下一步：需要动手就返回 action，已经真正做完就返回 done=true 的最终回复。");
         return builder.toString();
@@ -135,6 +140,15 @@ public class AgentRequestAssembler {
         snapshot.put("remainingSteps", input.remainingSteps());
         snapshot.put("deepThinking", input.deepThinking());
         snapshot.put("planItemCount", input.plan().size());
+        if (input.skillSelection() != null) {
+            snapshot.put("skillConfidence", input.skillSelection().confidence());
+            snapshot.put("skillReason", input.skillSelection().reason());
+            snapshot.putArray("skillIds").addAll(input.skillSelection().skillIds().stream()
+                    .map(JsonNodeFactory.instance::textNode).toList());
+            snapshot.putArray("skillVersions").addAll(input.skillSelection().skills().stream()
+                    .map(skill -> JsonNodeFactory.instance.textNode(skill.id() + "@" + skill.version()))
+                    .toList());
+        }
         ArrayNode messageNodes = snapshot.putArray("contextMessageIds");
         messageIds.forEach(messageNodes::add);
         ArrayNode toolNodes = snapshot.putArray("toolNames");
@@ -241,11 +255,21 @@ record AgentRequestAssemblyInput(
         String critique,
         Set<String> allowedTools,
         int remainingSteps,
-        boolean deepThinking) {
+        boolean deepThinking,
+        AgentSkillSelection skillSelection) {
 
     AgentRequestAssemblyInput {
         messages = List.copyOf(messages);
         plan = List.copyOf(plan);
         allowedTools = Set.copyOf(allowedTools);
+    }
+
+    /** Compatibility constructor for callers created before skill selection became explicit. */
+    AgentRequestAssemblyInput(Long conversationId, Long userId, long runVersion, int stepNo,
+                              List<AgentMessage> messages, List<AgentPlanItem> plan, String memoryContext,
+                              JsonNode lastError, String critique, Set<String> allowedTools,
+                              int remainingSteps, boolean deepThinking) {
+        this(conversationId, userId, runVersion, stepNo, messages, plan, memoryContext, lastError,
+                critique, allowedTools, remainingSteps, deepThinking, null);
     }
 }

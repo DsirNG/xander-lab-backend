@@ -14,6 +14,11 @@ import java.time.LocalDate;
 @Data
 public class BlogContentPlanCreateRequest {
 
+    /** Optional stable key for a retried create command; unique within one user. */
+    @Size(max = 64, message = "幂等请求标识不能超过 64 个字符")
+    @Pattern(regexp = "[A-Za-z0-9._:-]+", message = "幂等请求标识格式不正确")
+    private String clientRequestId;
+
     @Pattern(regexp = "DAILY|WEEKLY|ONCE", message = "计划类型只支持 DAILY / WEEKLY / ONCE")
     private String scheduleType;
 

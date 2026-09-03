@@ -2,6 +2,8 @@ package com.xander.lab.agent.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import java.util.Optional;
+
 /**
  * A tool an orchestration agent may invoke. Tools are always executed with an
  * explicit user id; they must not rely on request thread context.
@@ -34,6 +36,14 @@ public interface AgentTool {
      */
     default JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         return execute(context.userId(), args, onProgress);
+    }
+
+    /**
+     * Looks up the durable effect of an interrupted invocation without issuing
+     * a second mutation. Tools that cannot prove an outcome leave it unknown.
+     */
+    default Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
+        return Optional.empty();
     }
 
     /** Receives human-readable progress hints during a long-running tool call. */

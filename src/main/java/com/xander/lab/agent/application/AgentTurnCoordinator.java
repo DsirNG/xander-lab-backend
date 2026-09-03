@@ -3,7 +3,6 @@ package com.xander.lab.agent.application;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentStep;
-import com.xander.lab.agent.domain.AgentToolInvocation;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.common.ModelCallResult;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +13,6 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ScheduledFuture;
-import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
@@ -28,6 +26,7 @@ public class AgentTurnCoordinator {
     private final AgentRunLifecycle runLifecycle;
     private final AgentExecutionJournal executionJournal;
     private final AgentStepExecutor stepExecutor;
+    private final AgentToolExecutionPipeline toolExecutionPipeline;
 
     /** Creates and settles one durable model step around the remote model call. */
     ExecutedModelStep executeModelStep(AgentStepRequest request, Consumer<String> onAnswerDelta,
@@ -36,26 +35,14 @@ public class AgentTurnCoordinator {
         return new ExecutedModelStep(step, stepExecutor.execute(step, request, onAnswerDelta, cancellationRequested));
     }
 
-    /** Persists a tool invocation before executing it, then settles that exact durable record. */
+    /** Delegates the model action to the one guarded tool execution boundary. */
     ExecutedToolInvocation executeTool(AgentStep step, Long userId, Long conversationId, long runVersion,
-                                       String toolName, com.fasterxml.jackson.databind.JsonNode args,
-                                       AgentTool tool, AgentTool.ProgressListener progress,
+                                       java.util.Set<String> allowedTools, String toolName,
+                                       com.fasterxml.jackson.databind.JsonNode args,
+                                       AgentTool.ProgressListener progress,
                                        Consumer<String> onStarted) {
-        String invocationId = UUID.randomUUID().toString();
-        AgentToolInvocation invocation = executionJournal.startInvocation(step, invocationId, toolName, args);
-        onStarted.accept(invocationId);
-        try {
-            com.fasterxml.jackson.databind.JsonNode result = tool.execute(
-                    new AgentToolContext(userId, conversationId, runVersion, invocationId), args, progress);
-            executionJournal.completeInvocation(invocation, result);
-            return new ExecutedToolInvocation(invocationId, result);
-        } catch (CancellationException exception) {
-            executionJournal.cancelInvocation(invocation);
-            throw exception;
-        } catch (Exception exception) {
-            executionJournal.failInvocation(invocation, safeMessage(exception));
-            throw exception;
-        }
+        return toolExecutionPipeline.execute(step, userId, conversationId, runVersion, allowedTools,
+                toolName, args, progress, onStarted);
     }
 
     /** Executes work outside transactions while preserving the claimed generation's terminal semantics. */

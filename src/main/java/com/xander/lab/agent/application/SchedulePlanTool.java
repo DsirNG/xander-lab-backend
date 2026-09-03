@@ -12,6 +12,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Creates a recurring content plan (定时发文计划). The plan owns a topic
@@ -84,6 +85,11 @@ public class SchedulePlanTool implements AgentTool {
 
     @Override
     public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+        return execute(AgentToolContext.ofUser(userId), args, onProgress);
+    }
+
+    @Override
+    public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         String topic = args.path("topic").asText("");
         if (!StringUtils.hasText(topic)) {
@@ -108,9 +114,23 @@ public class SchedulePlanTool implements AgentTool {
         if (args.path("syncJuejin").isBoolean()) {
             request.setSyncJuejin(args.path("syncJuejin").asBoolean());
         }
+        request.setClientRequestId(context.invocationId());
         onProgress.onProgress("正在创建定时发文计划…");
-        BlogContentPlanVO plan = planService.create(userId, request);
+        BlogContentPlanVO plan = planService.create(context.userId(), request);
 
+        return toOutcome(plan);
+    }
+
+    @Override
+    public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
+        if (!StringUtils.hasText(context.invocationId())) {
+            return Optional.empty();
+        }
+        BlogContentPlanVO plan = planService.findByClientRequestId(context.userId(), context.invocationId());
+        return plan == null ? Optional.empty() : Optional.of(toOutcome(plan));
+    }
+
+    private ObjectNode toOutcome(BlogContentPlanVO plan) {
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("planId", plan.getId());

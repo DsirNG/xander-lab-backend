@@ -82,6 +82,7 @@ public class AgentConversationService {
     private final AgentRunLifecycle runLifecycle;
     private final AgentEventProjector eventProjector;
     private final AgentTurnCoordinator turnCoordinator;
+    private final AgentSkillRegistry skillRegistry;
 
     @Autowired
     public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
@@ -91,10 +92,10 @@ public class AgentConversationService {
                                     BillingService billingService, ObjectMapper objectMapper,
                                     AgentPlanService planService, AgentMemoryService memoryService,
                                     AgentQuizService quizService,
-                                    AgentExecutionJournal executionJournal,
-                                    AgentRequestAssembler requestAssembler,
-                                    AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector,
-                                    AgentTurnCoordinator turnCoordinator) {
+                                     AgentExecutionJournal executionJournal,
+                                     AgentRequestAssembler requestAssembler,
+                                     AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector,
+                                     AgentTurnCoordinator turnCoordinator, AgentSkillRegistry skillRegistry) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.modelClient = modelClient;
@@ -112,6 +113,7 @@ public class AgentConversationService {
         this.runLifecycle = runLifecycle;
         this.eventProjector = eventProjector;
         this.turnCoordinator = turnCoordinator;
+        this.skillRegistry = skillRegistry;
     }
 
     /** Compatibility constructor retained for focused loop tests and embedded callers. */
@@ -126,13 +128,15 @@ public class AgentConversationService {
                 eventService, billingService, objectMapper, planService, memoryService,
                 quizService, AgentExecutionJournal.disabled(),
                 AgentRequestAssembler.legacy(toolRegistry, properties, planService, quizService, objectMapper),
-                new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
-                        properties, transactionTemplate, agentLeaseRenewer),
-                new AgentEventProjector(conversationMapper, messageMapper, eventService, transactionTemplate),
-                new AgentTurnCoordinator(conversationMapper, eventService,
-                        new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
-                                properties, transactionTemplate, agentLeaseRenewer),
-                        AgentExecutionJournal.disabled(), AgentStepExecutor.legacy(modelClient)));
+                 new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
+                         properties, transactionTemplate, agentLeaseRenewer),
+                 new AgentEventProjector(conversationMapper, messageMapper, eventService, transactionTemplate),
+                 new AgentTurnCoordinator(conversationMapper, eventService,
+                         new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
+                                 properties, transactionTemplate, agentLeaseRenewer),
+                         AgentExecutionJournal.disabled(), AgentStepExecutor.legacy(modelClient),
+                         AgentToolExecutionPipeline.legacy(toolRegistry)),
+                 AgentSkillRegistry.legacy(toolRegistry));
     }
 
     /**
@@ -245,7 +249,9 @@ public class AgentConversationService {
                 ? currentUserMessage : latestUserMessage(conversationId, userId);
         // 工具表不再按关键词预筛：用不用、用哪个由模型自己判断。
         // 旧的关键词门禁会让匹配不上词表的诉求连工具都看不见，只能空口答应，那才是"工作流"。
-        Set<String> allowedTools = toolRegistry.allowedNames();
+        AgentSkillSelection skillSelection = skillRegistry.resolve(latestUserMessage);
+        Set<String> allowedTools = skillSelection.toolNames();
+        executionJournal.recordSkillSelection(conversationId, userId, runVersion, skillSelection);
         String memoryContext = recallMemoryContext(userId, latestUserMessage);
         log.info("agent turn started conversation={} run={} toolCount={} memoryInjected={}",
                 conversationId, runVersion, allowedTools.size(), !memoryContext.isEmpty());
@@ -267,7 +273,7 @@ public class AgentConversationService {
             List<AgentMessage> messages = listMessages(conversationId, userId);
             AgentStepRequest request = requestAssembler.assemble(new AgentRequestAssemblyInput(
                     conversationId, userId, runVersion, step + 1, messages, plan, memoryContext,
-                    lastError, null, allowedTools, maxSteps - step, deepThinking));
+                    lastError, null, allowedTools, maxSteps - step, deepThinking, skillSelection));
             long modelStartedNanos = System.nanoTime();
             AnswerProgress answerProgress = new AnswerProgress(
                     conversationId, userId, runVersion, listener,
@@ -341,7 +347,7 @@ public class AgentConversationService {
             ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, toolName, listener, usage);
             try {
                 ExecutedToolInvocation executedTool = turnCoordinator.executeTool(
-                        journalStep, userId, conversationId, runVersion, toolName, args, tool, progress, invocationId -> {
+                        journalStep, userId, conversationId, runVersion, allowedTools, toolName, args, progress, invocationId -> {
                             ObjectNode call = JsonNodeFactory.instance.objectNode();
                             call.put("tool", toolName);
                             call.put("invocationId", invocationId);

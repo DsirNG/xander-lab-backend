@@ -65,6 +65,31 @@ class SchedulePlanToolTest {
                 .hasMessageContaining("topic");
     }
 
+    @Test
+    void forwardsInvocationIdAsTheCreateIdempotencyKeyAndReconcilesByIt() {
+        BlogContentPlanService service = mock(BlogContentPlanService.class);
+        BlogContentPlanVO plan = BlogContentPlanVO.builder()
+                .id(11L).topic("Weekly report").triggerTimes(List.of("09:00"))
+                .status("ACTIVE").build();
+        when(service.create(eq(42L), any())).thenAnswer(invocation -> {
+            BlogContentPlanCreateRequest request = invocation.getArgument(1);
+            assertThat(request.getClientRequestId()).isEqualTo("invocation-2");
+            return plan;
+        });
+        when(service.findByClientRequestId(42L, "invocation-2")).thenReturn(plan);
+
+        SchedulePlanTool tool = new SchedulePlanTool(service);
+        JsonNode args = JsonNodeFactory.instance.objectNode().put("topic", "Weekly report")
+                .put("triggerTime", "09:00");
+        AgentToolContext context = new AgentToolContext(42L, 3L, 9L, "invocation-2");
+
+        tool.execute(context, args, new RecordingProgress());
+        JsonNode reconciled = tool.reconcile(context, args).orElseThrow();
+
+        assertThat(reconciled.path("planId").asLong()).isEqualTo(11L);
+        verify(service).findByClientRequestId(42L, "invocation-2");
+    }
+
     private static final class RecordingProgress implements AgentTool.ProgressListener {
         @Override
         public void onProgress(String message) {

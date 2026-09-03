@@ -43,13 +43,19 @@ This is intentionally a compatibility-first journal, not the finished core:
 - The Phase 1 request snapshot contains only safe metadata (context length,
   tool-set hash, attachment count and plan count). The durable messages and
   attachments remain the source for user content.
-- The journal does not yet contain an approval record, selected skills, intent
-  output, or a versioned instruction/profile snapshot.
+- The journal now contains deterministic first-party Skill selection: active
+  Skill IDs/versions, confidence, reason and narrowed tool names. It does not
+  yet contain a semantic model classifier, approval record or uploaded Skill
+  package.
 - Existing HTTP, SSE and WebSocket event names and payloads are unchanged.
 
-The next pull request is therefore Phase 2, not Skills. It first separates the
-current loop into testable core components and makes each model request
-reconstructable from durable references without copying raw private prompts.
+The next delivery should add approval and the remaining mutation policies.
+`email_reminder` and `schedule_plan` now use their journal `invocationId` as
+an owning-service create key and reconcile `UNKNOWN` calls with a read-only
+business lookup. External publication, deletion, generation and other
+mutations still stay `UNKNOWN` until their owning modules can prove an outcome.
+The current Skill resolver is a deliberately deterministic first version; it
+narrows the model surface but is not yet an LLM intent classifier.
 
 ## 2. Current DinQorAI Baseline
 
@@ -455,6 +461,17 @@ Exit criterion: process interruption after a remote mutation cannot cause a
 blind duplicate operation; the system either returns a stored result or enters
 a visible reconciliation state.
 
+**Status: partially implemented.** `AgentToolExecutionPipeline` is now the
+single execution boundary for main-loop tools. It rejects tools outside the
+active Skill set and missing required schema fields before it persists a
+durable invocation UUID. Stale failures settle running invocations to
+`UNKNOWN`, which prevents the journal from claiming that the operation never
+started. `email_reminder` and `schedule_plan` now persist the same invocation
+ID as a per-user unique create key, and a scheduled read-only reconciler moves
+only proven effects to `SUCCEEDED`. Approval, timeout classification, external
+publication reconciliation, and policies for the remaining mutations remain
+required before any of them can be retried automatically.
+
 ### Phase 4: Skills and Intent Resolver
 
 - Add first-party skills and map existing tools into them.
@@ -467,6 +484,15 @@ a visible reconciliation state.
 
 Exit criterion: every normal turn has a selected skill profile, and the model
 sees only tools allowed by that profile.
+
+**Status: partially implemented.** Trusted compiled skills currently cover
+general chat, writing, publishing, study, knowledge, personal planning and
+artifact delivery. `AgentSkillRegistry` selects up to two close deterministic
+candidates, stores the selection on `agent_run`, injects Skill instructions and
+exposes only the selected tool union. The next step is a structured semantic
+intent classifier with ambiguity/clarification behavior and an offline labeled
+evaluation corpus. User-uploaded executable skills remain intentionally
+unsupported until signing, tenancy and sandbox rules exist.
 
 ### Phase 5: Durable Subagents and Typed UI Projections
 
@@ -626,15 +652,19 @@ Completed generic self-check retirement:
 
 Next Phase 2 extraction batch:
 
-1. [~] `AgentTurnCoordinator` owns claimed-turn lease start/stop, supersession
+1. [x] `AgentTurnCoordinator` owns claimed-turn lease start/stop, supersession
    handling, terminal failure persistence, live error delivery, and queue-entry
    failure handling. It also owns `agent_step` creation and model-step execution;
-   it now also owns durable tool invocation creation, remote tool execution and
-   invocation settlement. The facade retains only the compatibility projections
-   and tool-path sequencing for the next behavior-preserving move.
-2. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
-   tests for the extracted boundaries.
+    it delegates durable tool invocation creation, validation and settlement to
+    `AgentToolExecutionPipeline`. The facade retains compatibility projections
+    and tool-path sequencing.
+2. [x] Add first-party Skill selection and a narrowed per-run tool surface.
+3. [~] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
+   tests for the extracted boundaries. Stale invocations now settle to
+   `UNKNOWN`; reminder and plan creation prove outcomes through a read-only
+   reconciler, while remote reconciliation and approval-resume scenarios remain.
 
-Do not start a large Skill catalog or intent resolver in Phase 2. First make
-the current request assembly and loop boundaries explainable; then add the
-tool pipeline, approval and idempotency policies on that substrate.
+The next implementation batch is approval and high-impact mutation policy, not
+a larger Skill catalog. The main capability boundary now exists; external
+publication, deletion, charging and generation must use it before the product
+permits automatic retries.

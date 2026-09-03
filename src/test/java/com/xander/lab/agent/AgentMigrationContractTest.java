@@ -144,6 +144,18 @@ class AgentMigrationContractTest {
                 .doesNotContain("SOURCE agent_harness_schema.sql");
     }
 
+    @Test
+    void interruptedInvocationUpgradeDocumentsTheReconciliationState() throws IOException {
+        String baseline = resource("db/agent_harness_schema.sql");
+        String upgrade = resource("db/20260903_agent_harness_invocation_unknown_migration.sql");
+
+        assertThat(baseline).contains("UNKNOWN进程中断后需对账");
+        assertThat(upgrade)
+                .contains("ALTER TABLE `agent_tool_invocation`")
+                .contains("UNKNOWN进程中断后需对账")
+                .contains("20260903_agent_harness_invocation_unknown");
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertThat(input).as("classpath resource %s", path).isNotNull();

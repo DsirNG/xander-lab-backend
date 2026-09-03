@@ -75,6 +75,18 @@ public class BlogContentPlanService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, UNAUTHORIZED_MESSAGE);
         }
 
+        String clientRequestId = normalizeClientRequestId(request.getClientRequestId());
+        if (clientRequestId != null) {
+            BlogContentPlan existing = findPlanByClientRequestId(userId, clientRequestId);
+            if (existing != null) {
+                if (existing.getDeletedAt() != null) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "该幂等请求标识已被删除计划使用，请生成新的标识");
+                }
+                return toVO(existing, userId);
+            }
+        }
+
         String topic = request.getTopic().strip();
         ZoneId zone = EmailReminderScheduleCalculator.resolveZone(request.getTimezone());
         List<LocalTime> times = resolveTriggerTimes(request.getTriggerTimes(), request.getTriggerTime());
@@ -105,6 +117,7 @@ public class BlogContentPlanService {
 
         BlogContentPlan plan = new BlogContentPlan();
         plan.setUserId(userId);
+        plan.setClientRequestId(clientRequestId);
         plan.setTopic(topic);
         plan.setAudience(strip(request.getAudience()));
         plan.setTone(strip(request.getTone()));
@@ -126,6 +139,18 @@ public class BlogContentPlanService {
         plan.setStatus(BlogContentPlan.STATUS_ACTIVE);
         planMapper.insert(plan);
         return toVO(planMapper.selectById(plan.getId()), userId);
+    }
+
+    /** Finds an existing create result by the caller's stable idempotency key. */
+    @Transactional(readOnly = true)
+    public BlogContentPlanVO findByClientRequestId(Long userId, String clientRequestId) {
+        requireUser(userId);
+        String normalized = normalizeClientRequestId(clientRequestId);
+        if (normalized == null) {
+            return null;
+        }
+        BlogContentPlan plan = findPlanByClientRequestId(userId, normalized);
+        return plan == null || plan.getDeletedAt() != null ? null : toVO(plan, userId);
     }
 
     /** AI 生成计划: refines the seed into one topic per day (model call, kept
@@ -483,6 +508,19 @@ public class BlogContentPlanService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "定时发文计划不存在");
         }
         return plan;
+    }
+
+    private BlogContentPlan findPlanByClientRequestId(Long userId, String clientRequestId) {
+        return planMapper.selectOne(new LambdaQueryWrapper<BlogContentPlan>()
+                .eq(BlogContentPlan::getUserId, userId)
+                .eq(BlogContentPlan::getClientRequestId, clientRequestId));
+    }
+
+    private String normalizeClientRequestId(String clientRequestId) {
+        if (clientRequestId == null || clientRequestId.isBlank()) {
+            return null;
+        }
+        return clientRequestId.strip();
     }
 
     private BlogContentPlanVO toVO(BlogContentPlan plan, Long userId) {

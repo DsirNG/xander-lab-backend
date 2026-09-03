@@ -39,6 +39,8 @@ public class BlogContentPlan {
     @TableId(type = IdType.AUTO)
     private Long id;
     private Long userId;
+    /** Stable idempotency key for a create command, unique within the owner. */
+    private String clientRequestId;
     private String topic;
     private String audience;
     private String tone;

@@ -15,6 +15,8 @@ public class AgentToolInvocation {
     public static final String STATUS_SUCCEEDED = "SUCCEEDED";
     public static final String STATUS_FAILED = "FAILED";
     public static final String STATUS_CANCELLED = "CANCELLED";
+    /** The worker ended before the remote side effect could be reconciled. */
+    public static final String STATUS_UNKNOWN = "UNKNOWN";
 
     @TableId(type = IdType.AUTO)
     private Long id;

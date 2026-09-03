@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Writes the execution facts around the existing conversation loop.
@@ -73,6 +74,23 @@ public class AgentExecutionJournal {
         if (runMapper.insert(run) != 1) {
             throw new IllegalStateException("智能体运行日志创建失败");
         }
+    }
+
+    /** Persists the resolved intent and skill capability snapshot for this run. */
+    @Transactional
+    public void recordSkillSelection(Long conversationId, Long userId, long runVersion,
+                                     AgentSkillSelection selection) {
+        if (!enabled || selection == null) return;
+        AgentRun run = findRun(conversationId, runVersion);
+        if (run == null) throw new AgentRunSupersededException(conversationId, runVersion);
+        int changed = runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
+                .eq(AgentRun::getId, run.getId())
+                .eq(AgentRun::getUserId, userId)
+                .eq(AgentRun::getStatus, AgentRun.STATUS_RUNNING)
+                .set(AgentRun::getIntentJson, selection.intentJson())
+                .set(AgentRun::getSkillsJson, selection.skillsJson())
+                .set(AgentRun::getExecutionSnapshotJson, selection.executionSnapshotJson()));
+        if (changed != 1) throw new AgentRunSupersededException(conversationId, runVersion);
     }
 
     /** Writes a model-step intent before the remote model call starts. */
@@ -162,6 +180,29 @@ public class AgentExecutionJournal {
         transitionInvocation(invocation, AgentToolInvocation.STATUS_CANCELLED, null, "用户取消");
     }
 
+    /** Returns a bounded batch of interrupted tool calls for read-only business reconciliation. */
+    @Transactional(readOnly = true)
+    public List<AgentToolInvocation> unknownInvocations(int batchSize) {
+        if (!enabled) return List.of();
+        return invocationMapper.selectList(new LambdaQueryWrapper<AgentToolInvocation>()
+                .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_UNKNOWN)
+                .orderByAsc(AgentToolInvocation::getUpdatedAt)
+                .last("LIMIT " + Math.min(Math.max(batchSize, 1), 100)));
+    }
+
+    /** Marks an interrupted invocation as settled only when its owning tool proved its effect exists. */
+    @Transactional
+    public void reconcileInvocation(AgentToolInvocation invocation, JsonNode result) {
+        if (!enabled || invocation == null || invocation.getId() == null) return;
+        invocationMapper.update(null, new LambdaUpdateWrapper<AgentToolInvocation>()
+                .eq(AgentToolInvocation::getId, invocation.getId())
+                .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_UNKNOWN)
+                .set(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_SUCCEEDED)
+                .set(AgentToolInvocation::getResultJson, result == null ? null : result.toString())
+                .set(AgentToolInvocation::getErrorMessage, null)
+                .set(AgentToolInvocation::getCompletedAt, LocalDateTime.now()));
+    }
+
     /** Closes the run beside the existing conversation terminal transition. */
     @Transactional
     public void completeRun(Long conversationId, Long userId, long runVersion) {
@@ -200,13 +241,29 @@ public class AgentExecutionJournal {
         if (!enabled) return;
         AgentRun run = findRun(conversationId, runVersion);
         if (run == null) return;
-        runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
+        int changed = runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
                 .eq(AgentRun::getId, run.getId())
                 .eq(AgentRun::getUserId, userId)
                 .eq(AgentRun::getStatus, AgentRun.STATUS_RUNNING)
                 .set(AgentRun::getStatus, status)
                 .set(AgentRun::getFailureReason, limit(reason, 1000))
                 .set(AgentRun::getCompletedAt, LocalDateTime.now()));
+        if (changed == 1 && AgentRun.STATUS_FAILED.equals(status)) {
+            // A worker can disappear after a remote side effect starts. Keep the invocation visible
+            // as unknown instead of allowing a later retry to treat it as never executed.
+            stepMapper.update(null, new LambdaUpdateWrapper<AgentStep>()
+                    .eq(AgentStep::getRunId, run.getId())
+                    .eq(AgentStep::getStatus, AgentStep.STATUS_RUNNING)
+                    .set(AgentStep::getStatus, AgentStep.STATUS_FAILED)
+                    .set(AgentStep::getFailureReason, limit(reason, 1000))
+                    .set(AgentStep::getCompletedAt, LocalDateTime.now()));
+            invocationMapper.update(null, new LambdaUpdateWrapper<AgentToolInvocation>()
+                    .eq(AgentToolInvocation::getRunId, run.getId())
+                    .eq(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_RUNNING)
+                    .set(AgentToolInvocation::getStatus, AgentToolInvocation.STATUS_UNKNOWN)
+                    .set(AgentToolInvocation::getErrorMessage, limit(reason, 1000))
+                    .set(AgentToolInvocation::getCompletedAt, LocalDateTime.now()));
+        }
     }
 
     private AgentRun requireRunningRun(Long conversationId, Long userId, long runVersion) {

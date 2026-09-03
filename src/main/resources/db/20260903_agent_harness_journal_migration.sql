@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS `agent_tool_invocation` (
   `invocation_id` CHAR(36) NOT NULL COMMENT '工具调用稳定UUID；未来作为外部副作用的业务幂等键',
   `tool_name` VARCHAR(64) NOT NULL COMMENT '已请求的注册工具名称',
   `arguments_json` LONGTEXT NULL COMMENT '模型提交给工具的结构化参数，仅限私有审计与恢复使用',
-  `status` VARCHAR(24) NOT NULL COMMENT '调用状态：RUNNING执行中/SUCCEEDED已持久化结果/FAILED执行失败/CANCELLED用户取消',
+  `status` VARCHAR(24) NOT NULL COMMENT '调用状态：RUNNING执行中/SUCCEEDED已持久化结果/FAILED执行失败/CANCELLED用户取消/UNKNOWN进程中断后需对账',
   `result_json` LONGTEXT NULL COMMENT '工具返回的标准化结构化结果',
   `error_message` VARCHAR(1000) NULL COMMENT '工具失败或取消的安全摘要，不保存堆栈',
   `started_at` DATETIME NOT NULL COMMENT '工具执行前意图持久化时间',

@@ -64,6 +64,33 @@ class EmailReminderToolTest {
                 .hasMessageContaining("recipientEmail");
     }
 
+    @Test
+    void forwardsInvocationIdAsTheCreateIdempotencyKeyAndReconcilesByIt() {
+        EmailReminderService service = mock(EmailReminderService.class);
+        EmailReminderTaskVO task = EmailReminderTaskVO.builder()
+                .id(7L).recipientEmail("me@example.com").subject("Reminder")
+                .frequency("ONCE").status("PENDING").build();
+        when(service.create(eq(42L), any())).thenAnswer(invocation -> {
+            EmailReminderCreateRequest request = invocation.getArgument(1);
+            assertThat(request.getClientRequestId()).isEqualTo("invocation-1");
+            return task;
+        });
+        when(service.findByClientRequestId(42L, "invocation-1")).thenReturn(task);
+
+        EmailReminderTool tool = new EmailReminderTool(service);
+        JsonNode args = JsonNodeFactory.instance.objectNode()
+                .put("recipientEmail", "me@example.com")
+                .put("subject", "Reminder")
+                .put("message", "Body");
+        AgentToolContext context = new AgentToolContext(42L, 3L, 9L, "invocation-1");
+
+        tool.execute(context, args, new RecordingProgress());
+        JsonNode reconciled = tool.reconcile(context, args).orElseThrow();
+
+        assertThat(reconciled.path("taskId").asLong()).isEqualTo(7L);
+        verify(service).findByClientRequestId(42L, "invocation-1");
+    }
+
     private static final class RecordingProgress implements AgentTool.ProgressListener {
         @Override
         public void onProgress(String message) {

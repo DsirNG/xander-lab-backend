@@ -14,6 +14,7 @@
 CREATE TABLE IF NOT EXISTS `blog_content_plan` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '内容计划主键',
   `user_id` BIGINT NOT NULL COMMENT '所属用户ID，关联 sys_user.id',
+  `client_request_id` VARCHAR(64) NULL COMMENT '创建命令幂等标识，在同一用户内唯一',
   `topic` VARCHAR(500) NOT NULL COMMENT '每日生成文章的主题',
   `audience` VARCHAR(120) NOT NULL DEFAULT '' COMMENT '目标读者（透传给生成 Agent）',
   `tone` VARCHAR(60) NOT NULL DEFAULT '' COMMENT '文风语气（透传给生成 Agent）',
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS `blog_content_plan` (
   `updated_at` TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
     ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
   PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_blog_plan_user_request` (`user_id`, `client_request_id`),
   KEY `idx_blog_plan_user_created` (`user_id`, `created_at`),
   KEY `idx_blog_plan_due` (`status`, `next_run_at`, `id`),
   CONSTRAINT `fk_blog_plan_user`

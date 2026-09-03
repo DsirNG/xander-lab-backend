@@ -37,7 +37,21 @@ state through infrastructure adapters. Scheduling and publishing may invoke the
 blog-agent application API, but the blog agent must not own schedules or
 platform credentials.
 
-`agent` invokes business capabilities only through `AgentTool` adapters. The
+`agent` invokes business capabilities only through `AgentTool` adapters. Each
+turn first resolves trusted, versioned first-party `AgentSkill` beans into a
+bounded capability set; the resolved skill IDs, versions, confidence and tool
+names are stored on `agent_run` and included in the step snapshot. Tools run
+through `AgentToolExecutionPipeline`, which checks active-skill visibility and
+basic required arguments before a durable invocation exists. The pipeline
+records an invocation UUID before execution. `email_reminder` and
+`schedule_plan` pass that UUID into owning-service, database-unique create
+keys; `AgentToolInvocationReconciler` later performs read-only lookups for
+their interrupted calls and settles proven effects. A stale `RUNNING`
+invocation is otherwise marked `UNKNOWN`, never replayed automatically.
+Approval, external-publication reconciliation, and idempotency for other
+mutating tools remain pending. Skills are
+compiled Spring beans in this phase; user-uploaded executable skills are not
+supported. The
 `blog_generate` adapter calls the `blogagent` application service and returns a
 durable blog task ID; ownership of the generated task, sources, versions, and
 publication hand-off remains in `blogagent`. Additional adapters delegate to
@@ -191,10 +205,13 @@ database use this order:
    checks are no-ops after the current fresh baseline.
 6. `20260824_agent_message_attachment_migration.sql`. This adds the nullable
    attachment snapshot used by web and mini-program multimodal turns.
-7. `20260903_agent_harness_journal_migration.sql`. This adds the Phase 1 Harness
-   execution journal. New installs may use `agent_harness_schema.sql`; upgrades
-   must apply the numbered migration, which creates the same three tables and
-   records marker `20260903_agent_harness_journal`.
+7. `20260903_agent_harness_journal_migration.sql`, then
+   `20260903_agent_harness_invocation_unknown_migration.sql`. These create the
+   Harness run/step/invocation journal and document `UNKNOWN` as the required
+   reconciliation state for a side effect interrupted by a worker crash.
+8. `20260903_blog_content_plan_invocation_idempotency_migration.sql`. This
+   adds the per-user create key used by the `schedule_plan` tool; the matching
+   fresh-install column and unique index live in `blog_content_plan_schema.sql`.
 
 The older `blog_agent_*_migration.sql` files are upgrade-only deltas for a
 database that predates the current `blog_agent_schema.sql`; do not apply those

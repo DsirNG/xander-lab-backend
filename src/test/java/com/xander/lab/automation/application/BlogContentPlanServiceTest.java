@@ -1,6 +1,7 @@
 package com.xander.lab.automation.application;
 
 import com.xander.lab.automation.api.BlogContentPlanAiGenerateRequest;
+import com.xander.lab.automation.api.BlogContentPlanCreateRequest;
 import com.xander.lab.automation.api.BlogContentPlanUpdateRequest;
 import com.xander.lab.automation.api.BlogContentPlanVO;
 import com.xander.lab.automation.domain.BlogContentPlan;
@@ -26,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 /** AI 生成计划: one topic per day, one-shot plans starting tomorrow, and quota
  * checks that cover the whole batch up front. */
@@ -84,6 +87,28 @@ class BlogContentPlanServiceTest {
                     assertThat(plan.getTimezone()).isEqualTo("Asia/Shanghai");
                     return true;
                 }));
+    }
+
+    @Test
+    void createReturnsExistingPlanForTheSameIdempotencyKeyWithoutInsertingAgain() {
+        when(planMapper.lockUserForPlanCreation(7L)).thenReturn(7L);
+        BlogContentPlan existing = new BlogContentPlan();
+        existing.setId(18L);
+        existing.setUserId(7L);
+        existing.setClientRequestId("invocation-1");
+        existing.setTopic("Existing plan");
+        existing.setTimezone("Asia/Shanghai");
+        existing.setTriggerTime("09:00");
+        existing.setStatus(BlogContentPlan.STATUS_ACTIVE);
+        when(planMapper.selectOne(any())).thenReturn(existing);
+
+        BlogContentPlanCreateRequest request = new BlogContentPlanCreateRequest();
+        request.setClientRequestId("invocation-1");
+
+        BlogContentPlanVO result = newService().create(7L, request);
+
+        assertThat(result.getId()).isEqualTo(18L);
+        verify(planMapper, never()).insert(any(BlogContentPlan.class));
     }
 
     @Test

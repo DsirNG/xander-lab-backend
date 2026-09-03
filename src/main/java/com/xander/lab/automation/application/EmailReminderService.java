@@ -161,7 +161,7 @@ public class EmailReminderService {
 
         String clientRequestId = normalizeClientRequestId(request.getClientRequestId());
         if (clientRequestId != null) {
-            EmailReminderTask existing = findByClientRequestId(userId, clientRequestId);
+            EmailReminderTask existing = findTaskByClientRequestId(userId, clientRequestId);
             if (existing != null) {
                 if (existing.getDeletedAt() != null) {
                     throw conflict("该幂等请求标识已被删除任务使用，请生成新的标识");
@@ -345,7 +345,19 @@ public class EmailReminderService {
         return task;
     }
 
-    private EmailReminderTask findByClientRequestId(Long userId, String clientRequestId) {
+    /** Finds an existing create result by the caller's stable idempotency key. */
+    @Transactional(readOnly = true)
+    public EmailReminderTaskVO findByClientRequestId(Long userId, String clientRequestId) {
+        requireUser(userId);
+        String normalized = normalizeClientRequestId(clientRequestId);
+        if (normalized == null) {
+            return null;
+        }
+        EmailReminderTask task = findTaskByClientRequestId(userId, normalized);
+        return task == null || task.getDeletedAt() != null ? null : toVO(task);
+    }
+
+    private EmailReminderTask findTaskByClientRequestId(Long userId, String clientRequestId) {
         return taskMapper.selectOne(new LambdaQueryWrapper<EmailReminderTask>()
                 .eq(EmailReminderTask::getUserId, userId)
                 .eq(EmailReminderTask::getClientRequestId, clientRequestId));

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
 
 /**
  * Creates a scheduled email reminder. The service owns recurrence calculation,
@@ -85,6 +86,11 @@ public class EmailReminderTool implements AgentTool {
 
     @Override
     public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+        return execute(AgentToolContext.ofUser(userId), args, onProgress);
+    }
+
+    @Override
+    public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         EmailReminderCreateRequest request = new EmailReminderCreateRequest();
         request.setRecipientEmail(args.path("recipientEmail").asText("").trim());
@@ -114,9 +120,24 @@ public class EmailReminderTool implements AgentTool {
         if (StringUtils.hasText(scheduledAt)) {
             request.setScheduledAt(OffsetDateTime.parse(scheduledAt));
         }
+        request.setClientRequestId(context.invocationId());
         onProgress.onProgress("正在创建定时邮件提醒…");
-        EmailReminderTaskVO task = emailReminderService.create(userId, request);
+        EmailReminderTaskVO task = emailReminderService.create(context.userId(), request);
 
+        return toOutcome(task);
+    }
+
+    @Override
+    public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
+        if (!StringUtils.hasText(context.invocationId())) {
+            return Optional.empty();
+        }
+        EmailReminderTaskVO task = emailReminderService.findByClientRequestId(
+                context.userId(), context.invocationId());
+        return task == null ? Optional.empty() : Optional.of(toOutcome(task));
+    }
+
+    private ObjectNode toOutcome(EmailReminderTaskVO task) {
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("taskId", task.getId());
