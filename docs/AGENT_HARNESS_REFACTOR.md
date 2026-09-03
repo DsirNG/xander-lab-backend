@@ -629,8 +629,9 @@ Next Phase 2 extraction batch:
 1. [~] `AgentTurnCoordinator` owns claimed-turn lease start/stop, supersession
    handling, terminal failure persistence, live error delivery, and queue-entry
    failure handling. It also owns `agent_step` creation and model-step execution;
-   the facade retains only tool-path sequencing for the next behavior-preserving
-   move.
+   it now also owns durable tool invocation creation, remote tool execution and
+   invocation settlement. The facade retains only the compatibility projections
+   and tool-path sequencing for the next behavior-preserving move.
 2. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
    tests for the extracted boundaries.
 

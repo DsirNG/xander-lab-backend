@@ -3,6 +3,7 @@ package com.xander.lab.agent.application;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentStep;
+import com.xander.lab.agent.domain.AgentToolInvocation;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.common.ModelCallResult;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ScheduledFuture;
+import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
@@ -32,6 +34,28 @@ public class AgentTurnCoordinator {
                                        BooleanSupplier cancellationRequested) {
         AgentStep step = executionJournal.startStep(request);
         return new ExecutedModelStep(step, stepExecutor.execute(step, request, onAnswerDelta, cancellationRequested));
+    }
+
+    /** Persists a tool invocation before executing it, then settles that exact durable record. */
+    ExecutedToolInvocation executeTool(AgentStep step, Long userId, Long conversationId, long runVersion,
+                                       String toolName, com.fasterxml.jackson.databind.JsonNode args,
+                                       AgentTool tool, AgentTool.ProgressListener progress,
+                                       Consumer<String> onStarted) {
+        String invocationId = UUID.randomUUID().toString();
+        AgentToolInvocation invocation = executionJournal.startInvocation(step, invocationId, toolName, args);
+        onStarted.accept(invocationId);
+        try {
+            com.fasterxml.jackson.databind.JsonNode result = tool.execute(
+                    new AgentToolContext(userId, conversationId, runVersion, invocationId), args, progress);
+            executionJournal.completeInvocation(invocation, result);
+            return new ExecutedToolInvocation(invocationId, result);
+        } catch (CancellationException exception) {
+            executionJournal.cancelInvocation(invocation);
+            throw exception;
+        } catch (Exception exception) {
+            executionJournal.failInvocation(invocation, safeMessage(exception));
+            throw exception;
+        }
     }
 
     /** Executes work outside transactions while preserving the claimed generation's terminal semantics. */
@@ -93,7 +117,7 @@ public class AgentTurnCoordinator {
         return conversation;
     }
 
-    private String safeMessage(RuntimeException exception) {
+    private String safeMessage(Exception exception) {
         if (exception instanceof ResponseStatusException response && response.getReason() != null) {
             return response.getReason();
         }
@@ -114,4 +138,7 @@ interface ClaimedTurnWork {
 }
 
 record ExecutedModelStep(AgentStep step, ModelCallResult result) {
+}
+
+record ExecutedToolInvocation(String invocationId, com.fasterxml.jackson.databind.JsonNode result) {
 }

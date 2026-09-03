@@ -338,22 +338,20 @@ public class AgentConversationService {
             }
 
             JsonNode args = action.path("args");
-            String invocationId = UUID.randomUUID().toString();
-            AgentToolInvocation invocation = executionJournal.startInvocation(
-                    journalStep, invocationId, toolName, args);
-            AgentToolContext toolContext = new AgentToolContext(userId, conversationId, runVersion, invocationId);
-            ObjectNode call = JsonNodeFactory.instance.objectNode();
-            call.put("tool", toolName);
-            call.put("invocationId", invocationId);
-            call.set("args", args);
-            saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_call", toolName, call.toString());
-            appendActive(conversationId, userId, runVersion, "tool_start", call, listener);
-
             ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, toolName, listener, usage);
             try {
-                JsonNode result = tool.execute(toolContext, args, progress);
+                ExecutedToolInvocation executedTool = turnCoordinator.executeTool(
+                        journalStep, userId, conversationId, runVersion, toolName, args, tool, progress, invocationId -> {
+                            ObjectNode call = JsonNodeFactory.instance.objectNode();
+                            call.put("tool", toolName);
+                            call.put("invocationId", invocationId);
+                            call.set("args", args);
+                            saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_call", toolName,
+                                    call.toString());
+                            appendActive(conversationId, userId, runVersion, "tool_start", call, listener);
+                        });
+                JsonNode result = executedTool.result();
                 progress.flushToolDelta();
-                executionJournal.completeInvocation(invocation, result);
                 saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName, result.toString());
                 appendActive(conversationId, userId, runVersion, "tool_end",
                         JsonNodeFactory.instance.objectNode().put("tool", toolName).set("result", result),
@@ -385,7 +383,6 @@ public class AgentConversationService {
                 lastError = null;
             } catch (CancellationException exception) {
                 progress.flushToolDelta();
-                executionJournal.cancelInvocation(invocation);
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName,
                         JsonNodeFactory.instance.objectNode()
@@ -406,7 +403,6 @@ public class AgentConversationService {
                 log.error("agent tool execution failed conversationId={} userId={} runVersion={} phase=tool.execute tool={} exceptionType={} message={}",
                         conversationId, userId, runVersion, toolName, e.getClass().getName(), e.getMessage(), e);
                 progress.flushToolDelta();
-                executionJournal.failInvocation(invocation, safeMessage(e));
                 failures++;
                 ObjectNode errorNode = JsonNodeFactory.instance.objectNode();
                 errorNode.put("ok", false);
