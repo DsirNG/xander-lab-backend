@@ -126,6 +126,24 @@ class AgentMigrationContractTest {
     }
 
     @Test
+    void compactionCheckpointUpgradeOnlyRestatesTheEnlargedKindVocabulary() throws IOException {
+        String baseline = resource("db/agent_conversation_migration.sql");
+        String upgrade = resource("db/20260903_agent_context_compaction_migration.sql");
+
+        // 检查点是一条普通 agent_message（role=user、kind=compaction），没有新表也没有新列：
+        // 只有 kind 多一种取值，所以新装（baseline）与老库（upgrade）的注释必须同时写上它。
+        // 它不推事件，agent_event 的取值表刻意不动——多写一种前端不认识的事件反而是噪音。
+        assertThat(baseline)
+                .contains("artifact（下发的代码交付卡，正文为JSON）/compaction（上下文压缩检查点")
+                .doesNotContain("tool_error/quiz/artifact/compaction");
+        assertThat(upgrade)
+                .contains("MODIFY COLUMN `kind` VARCHAR(24) NOT NULL")
+                .contains("artifact（下发的代码交付卡，正文为JSON）/compaction（上下文压缩检查点")
+                .doesNotContain("ALTER TABLE `agent_event`")
+                .contains("20260903_agent_context_compaction");
+    }
+
+    @Test
     void harnessJournalBaselineAndUpgradeContainTheSameDurableExecutionTables() throws IOException {
         String baseline = resource("db/agent_harness_schema.sql");
         String upgrade = resource("db/20260903_agent_harness_journal_migration.sql");

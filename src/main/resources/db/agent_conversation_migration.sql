@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `agent_message` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '消息主键',
   `conversation_id` BIGINT NOT NULL COMMENT '所属会话ID，关联 agent_conversation.id',
   `role` VARCHAR(16) NOT NULL COMMENT '消息角色：user/assistant/tool',
-  `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）',
+  `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）/compaction（上下文压缩检查点，正文为摘要文本，是对话记录的地板：它之前的消息不再进入模型上下文，前端不渲染）',
   `tool_name` VARCHAR(64) NULL COMMENT '工具名，仅 kind=tool_call/tool_result 时非空',
   `content` LONGTEXT NOT NULL COMMENT '消息正文；tool 记录为 JSON',
   `attachments_json` LONGTEXT NULL COMMENT '用户消息附件快照JSON，包含URL、原始文件名、MIME类型和字节数',

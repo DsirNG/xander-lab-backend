@@ -139,9 +139,55 @@ class AgentRequestAssemblerTest {
         assertThat(step2).contains("已整理好");
     }
 
+    /**
+     * 压缩检查点是对话记录的地板：它之前的消息不再进入模型上下文。
+     *
+     * <p>装配层每一步都自己按这条地板裁一次，所以重启续跑、审批恢复这些
+     * 不经过压缩调用的路径也照同一条地板走——否则刚换掉的那一段会被重新读回来，
+     * 压缩等于没发生。</p>
+     */
+    @Test
+    void messagesBeforeTheCompactionCheckpointNeverEnterTheContext() {
+        AgentRequestAssembler assembler = assembler("");
+        List<AgentMessage> messages = List.of(
+                message(1L, "user", "message", "很早以前定下的目标", List.of()),
+                message(2L, "assistant", "answer", "很早以前的回复", List.of()),
+                message(3L, "user", AgentCompactionService.CHECKPOINT_KIND, "检查点：目标是整理笔记", List.of()),
+                message(4L, "user", "message", "继续", List.of()));
+
+        AgentStepRequest request = assembler.assemble(input(messages, null, null));
+
+        assertThat(request.context())
+                .contains("检查点：目标是整理笔记")
+                .contains("继续")
+                .doesNotContain("很早以前定下的目标")
+                .doesNotContain("很早以前的回复");
+        assertThat(request.contextMessageIds()).containsExactly(3L, 4L);
+    }
+
+    /** 条数窗口不能把刚花钱换来的检查点挤掉：它固定留在最前面，剩下的额度给最新的几条。 */
+    @Test
+    void theCountWindowPinsTheCheckpointInsteadOfDroppingIt() {
+        AgentRequestAssembler assembler = assembler("", 5);
+        List<AgentMessage> messages = new java.util.ArrayList<>();
+        messages.add(message(1L, "user", AgentCompactionService.CHECKPOINT_KIND, "检查点：目标是整理笔记", List.of()));
+        for (long id = 2L; id <= 9L; id++) {
+            messages.add(message(id, "user", "message", "第" + id + "条", List.of()));
+        }
+
+        AgentStepRequest request = assembler.assemble(input(messages, null, null));
+
+        assertThat(request.contextMessageIds()).containsExactly(1L, 6L, 7L, 8L, 9L);
+        assertThat(request.context()).contains("检查点：目标是整理笔记").doesNotContain("第5条");
+    }
+
     private AgentRequestAssembler assembler(String renderedPlan) {
+        return assembler(renderedPlan, 30);
+    }
+
+    private AgentRequestAssembler assembler(String renderedPlan, int contextMessageLimit) {
         AgentConversationProperties conversationProperties = mock(AgentConversationProperties.class);
-        when(conversationProperties.getContextMessageLimit()).thenReturn(30);
+        when(conversationProperties.getContextMessageLimit()).thenReturn(contextMessageLimit);
         AgentPlanService planService = mock(AgentPlanService.class);
         when(planService.render(org.mockito.ArgumentMatchers.anyList())).thenReturn(renderedPlan);
         return new AgentRequestAssembler(new AgentToolRegistry(List.of(tool("query_posts"))),
