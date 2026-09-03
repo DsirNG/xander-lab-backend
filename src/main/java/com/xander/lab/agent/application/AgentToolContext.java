@@ -10,11 +10,17 @@ package com.xander.lab.agent.application;
  * @param userId         归属用户
  * @param conversationId 所属会话；无会话场景（如单元测试直接调用工具）可为 null
  * @param runVersion     当前执行代次
+ * @param invocationId   当前工具调用的稳定标识；无持久化上下文时为 null
  */
-public record AgentToolContext(Long userId, Long conversationId, long runVersion) {
+public record AgentToolContext(Long userId, Long conversationId, long runVersion, String invocationId) {
+
+    /** Compatibility constructor for tools and tests that do not need invocation identity yet. */
+    public AgentToolContext(Long userId, Long conversationId, long runVersion) {
+        this(userId, conversationId, runVersion, null);
+    }
 
     public static AgentToolContext ofUser(Long userId) {
-        return new AgentToolContext(userId, null, 0L);
+        return new AgentToolContext(userId, null, 0L, null);
     }
 
     public boolean hasConversation() {

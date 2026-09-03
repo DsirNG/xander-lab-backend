@@ -13,6 +13,8 @@ import com.xander.lab.agent.domain.AgentMemory;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.domain.AgentPlanItem;
 import com.xander.lab.agent.domain.AgentAttachment;
+import com.xander.lab.agent.domain.AgentStep;
+import com.xander.lab.agent.domain.AgentToolInvocation;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
@@ -21,8 +23,8 @@ import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.billing.domain.BillingBiz;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,7 +55,6 @@ import java.util.function.Consumer;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AgentConversationService {
     private static final int TOOL_DELTA_FLUSH_CHARS = 256;
     private static final int ANSWER_DELTA_FLUSH_CHARS = 24;
@@ -92,6 +93,46 @@ public class AgentConversationService {
     private final AgentMemoryService memoryService;
     private final AgentTurnEvaluator turnEvaluator;
     private final AgentQuizService quizService;
+    private final AgentExecutionJournal executionJournal;
+
+    @Autowired
+    public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
+                                    AgentModelClient modelClient, AgentToolRegistry toolRegistry,
+                                    AgentConversationProperties properties, TransactionTemplate transactionTemplate,
+                                    AgentEventService eventService, ScheduledExecutorService agentLeaseRenewer,
+                                    BillingService billingService, ObjectMapper objectMapper,
+                                    AgentPlanService planService, AgentMemoryService memoryService,
+                                    AgentTurnEvaluator turnEvaluator, AgentQuizService quizService,
+                                    AgentExecutionJournal executionJournal) {
+        this.conversationMapper = conversationMapper;
+        this.messageMapper = messageMapper;
+        this.modelClient = modelClient;
+        this.toolRegistry = toolRegistry;
+        this.properties = properties;
+        this.transactionTemplate = transactionTemplate;
+        this.eventService = eventService;
+        this.agentLeaseRenewer = agentLeaseRenewer;
+        this.billingService = billingService;
+        this.objectMapper = objectMapper;
+        this.planService = planService;
+        this.memoryService = memoryService;
+        this.turnEvaluator = turnEvaluator;
+        this.quizService = quizService;
+        this.executionJournal = executionJournal;
+    }
+
+    /** Compatibility constructor retained for focused loop tests and embedded callers. */
+    public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
+                                    AgentModelClient modelClient, AgentToolRegistry toolRegistry,
+                                    AgentConversationProperties properties, TransactionTemplate transactionTemplate,
+                                    AgentEventService eventService, ScheduledExecutorService agentLeaseRenewer,
+                                    BillingService billingService, ObjectMapper objectMapper,
+                                    AgentPlanService planService, AgentMemoryService memoryService,
+                                    AgentTurnEvaluator turnEvaluator, AgentQuizService quizService) {
+        this(conversationMapper, messageMapper, modelClient, toolRegistry, properties, transactionTemplate,
+                eventService, agentLeaseRenewer, billingService, objectMapper, planService, memoryService,
+                turnEvaluator, quizService, AgentExecutionJournal.disabled());
+    }
 
     /**
      * 根据首条消息生成标题并创建会话壳（ready、无消息、不启动轮次）。
@@ -135,6 +176,7 @@ public class AgentConversationService {
         String storedKind = answers.isPresent() ? "quiz_answer" : "message";
         return transactionTemplate.execute(status -> {
             long runVersion = claimConversation(conversationId, userId);
+            executionJournal.startRun(conversationId, userId, runVersion);
             // 新一轮诉求开始：上一轮的计划已经收口或作废，留着只会污染这一轮的自检。
             planService.clear(conversationId, userId);
             saveMessage(conversationId, "user", storedKind, null, storedMessage,
@@ -263,7 +305,6 @@ public class AgentConversationService {
         Set<String> allowedTools = toolRegistry.allowedNames();
         String toolDescriptions = toolRegistry.describeTools(allowedTools);
         String memoryContext = recallMemoryContext(userId, latestUserMessage);
-        AgentToolContext toolContext = new AgentToolContext(userId, conversationId, runVersion);
         log.info("agent turn started conversation={} run={} toolCount={} memoryInjected={}",
                 conversationId, runVersion, allowedTools.size(), !memoryContext.isEmpty());
         int maxSteps = Math.max(1, properties.getMaxSteps());
@@ -304,6 +345,9 @@ public class AgentConversationService {
                     step + 1, turnStartedNanos, modelStartedNanos,
                     (!isQuizRequest(latestUserMessage) || quizCardEmitted) && !rejectionLikely);
             JsonNode decision;
+            AgentStep journalStep = executionJournal.startStep(conversationId, userId, runVersion, step + 1,
+                    stepRequestSnapshot(step + 1, context, allowedTools, attachmentsCount(conversationId, userId),
+                            plan.size(), deepThinking));
             try {
                 List<AgentAttachment> attachments = recentAttachments(conversationId, userId);
                 ModelCallResult call = attachments.isEmpty()
@@ -316,14 +360,19 @@ public class AgentConversationService {
                 answerProgress.flush();
                 decision = call.payload();
                 usage.add(call.usage(), call.model());
+                executionJournal.completeStep(journalStep, call);
                 log.info("agent model decision conversation={} run={} step={} durationMs={} done={}",
                         conversationId, runVersion, step + 1,
                         elapsedMillis(modelStartedNanos), decision.path("done").asBoolean(false));
             } catch (CancellationException exception) {
+                executionJournal.cancelStep(journalStep);
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
+            } catch (RuntimeException exception) {
+                executionJournal.failStep(journalStep, safeMessage(exception));
+                throw exception;
             }
             if (isCancelRequested(conversationId, userId, runVersion)) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
@@ -417,8 +466,13 @@ public class AgentConversationService {
             }
 
             JsonNode args = action.path("args");
+            String invocationId = UUID.randomUUID().toString();
+            AgentToolInvocation invocation = executionJournal.startInvocation(
+                    journalStep, invocationId, toolName, args);
+            AgentToolContext toolContext = new AgentToolContext(userId, conversationId, runVersion, invocationId);
             ObjectNode call = JsonNodeFactory.instance.objectNode();
             call.put("tool", toolName);
+            call.put("invocationId", invocationId);
             call.set("args", args);
             saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_call", toolName, call.toString());
             appendActive(conversationId, userId, runVersion, "tool_start", call, listener);
@@ -427,6 +481,7 @@ public class AgentConversationService {
             try {
                 JsonNode result = tool.execute(toolContext, args, progress);
                 progress.flushToolDelta();
+                executionJournal.completeInvocation(invocation, result);
                 saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName, result.toString());
                 appendActive(conversationId, userId, runVersion, "tool_end",
                         JsonNodeFactory.instance.objectNode().put("tool", toolName).set("result", result),
@@ -460,6 +515,7 @@ public class AgentConversationService {
                 lastError = null;
             } catch (CancellationException exception) {
                 progress.flushToolDelta();
+                executionJournal.cancelInvocation(invocation);
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName,
                         JsonNodeFactory.instance.objectNode()
@@ -480,6 +536,7 @@ public class AgentConversationService {
                 log.error("agent tool execution failed conversationId={} userId={} runVersion={} phase=tool.execute tool={} exceptionType={} message={}",
                         conversationId, userId, runVersion, toolName, e.getClass().getName(), e.getMessage(), e);
                 progress.flushToolDelta();
+                executionJournal.failInvocation(invocation, safeMessage(e));
                 failures++;
                 ObjectNode errorNode = JsonNodeFactory.instance.objectNode();
                 errorNode.put("ok", false);
@@ -604,6 +661,7 @@ public class AgentConversationService {
             if (updated != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
             }
+            executionJournal.completeRun(conversationId, userId, runVersion);
             current.setStatus("ready");
             current.setErrorMessage(null);
             current.setCancelRequested(0);
@@ -715,6 +773,7 @@ public class AgentConversationService {
             if (updated != 1) {
                 throw new AgentRunSupersededException(conversationId, runVersion);
             }
+            executionJournal.failRun(conversationId, userId, runVersion, safeError);
             return eventService.storeForRun(
                     conversationId, userId, runVersion, "error", safeError, false);
         });
@@ -744,6 +803,9 @@ public class AgentConversationService {
                     .set(AgentConversation::getLastCompletedAt, now)
                     );
             long runVersion = conversation.getRunVersion() == null ? 0L : conversation.getRunVersion();
+            if (changed == 1) {
+                executionJournal.failRun(conversation.getId(), userId, runVersion, interrupted);
+            }
             if (changed == 1 && eventService.latestTerminal(conversation.getId(), runVersion) == null) {
                 eventService.storeForRun(
                         conversation.getId(), userId, runVersion, "error", interrupted, false);
@@ -999,6 +1061,23 @@ public class AgentConversationService {
         }
         builder.append("请根据以上信息决定下一步：需要动手就返回 action，已经真正做完就返回 done=true 的最终回复。");
         return builder.toString();
+    }
+
+    /** Builds a privacy-preserving request fact before the remote model call begins. */
+    private String stepRequestSnapshot(int stepNo, String context, Set<String> allowedTools,
+                                       int attachmentCount, int planSize, boolean deepThinking) {
+        ObjectNode snapshot = JsonNodeFactory.instance.objectNode();
+        snapshot.put("step", stepNo);
+        snapshot.put("contextChars", context.length());
+        snapshot.put("attachmentCount", attachmentCount);
+        snapshot.put("planItemCount", planSize);
+        snapshot.put("deepThinking", deepThinking);
+        snapshot.put("toolSetHash", Integer.toHexString(new java.util.TreeSet<>(allowedTools).toString().hashCode()));
+        return snapshot.toString();
+    }
+
+    private int attachmentsCount(Long conversationId, Long userId) {
+        return recentAttachments(conversationId, userId).size();
     }
 
     /** 注入模型的历史窗口；文本上下文和附件都取这一段，两者的"可见范围"必须一致。 */

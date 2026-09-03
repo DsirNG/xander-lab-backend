@@ -125,6 +125,25 @@ class AgentMigrationContractTest {
                 .contains("20260902_agent_artifact_card");
     }
 
+    @Test
+    void harnessJournalBaselineAndUpgradeContainTheSameDurableExecutionTables() throws IOException {
+        String baseline = resource("db/agent_harness_schema.sql");
+        String upgrade = resource("db/20260903_agent_harness_journal_migration.sql");
+
+        for (String table : java.util.List.of("agent_run", "agent_step", "agent_tool_invocation")) {
+            assertThat(baseline).contains("CREATE TABLE IF NOT EXISTS `" + table + "`");
+            assertThat(upgrade).contains("CREATE TABLE IF NOT EXISTS `" + table + "`");
+        }
+        assertThat(baseline)
+                .contains("UNIQUE KEY `uk_agent_run_conversation_version`")
+                .contains("UNIQUE KEY `uk_agent_step_run_number`")
+                .contains("UNIQUE KEY `uk_agent_tool_invocation_id`")
+                .contains("invocation_id` CHAR(36) NOT NULL COMMENT");
+        assertThat(upgrade)
+                .contains("20260903_agent_harness_journal")
+                .doesNotContain("SOURCE agent_harness_schema.sql");
+    }
+
     private String resource(String path) throws IOException {
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             assertThat(input).as("classpath resource %s", path).isNotNull();
