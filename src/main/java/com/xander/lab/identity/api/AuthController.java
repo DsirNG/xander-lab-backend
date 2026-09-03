@@ -6,13 +6,14 @@ import com.xander.lab.identity.api.RefreshTokenRequest;
 import com.xander.lab.identity.api.RegisterRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.application.AuthService;
+import com.xander.lab.identity.application.QrLoginService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 认证控制器
@@ -36,10 +37,57 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
+    private final QrLoginService qrLoginService;
+
+    @Autowired
+    public AuthController(AuthService authService, QrLoginService qrLoginService) {
+        this.authService = authService;
+        this.qrLoginService = qrLoginService;
+    }
+
+    /** Compatibility constructor for focused controller tests that do not exercise QR login. */
+    public AuthController(AuthService authService) {
+        this(authService, null);
+    }
+
+    @PostMapping("/qr/create")
+    public ResponseEntity<Result<QrLoginService.CreateResult>> createQrLogin() {
+        try {
+            return ResponseEntity.ok(Result.success(qrLoginService.create()));
+        } catch (IllegalStateException ex) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Result.error(503, ex.getMessage()));
+        }
+    }
+
+    @GetMapping("/qr/status")
+    public Result<QrLoginService.StatusResult> qrStatus(@RequestParam String ticket) {
+        return Result.success(qrLoginService.status(ticket));
+    }
+
+    @PostMapping("/qr/confirm")
+    public ResponseEntity<Result<Void>> confirmQrLogin(
+            @RequestParam String ticket,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        try {
+            qrLoginService.confirm(ticket, authorization);
+            return ResponseEntity.ok(Result.success());
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Result.badRequest(ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/qr/exchange")
+    public ResponseEntity<Result<TokenResponse>> exchangeQrLogin(
+            @RequestParam String ticket, @RequestParam String exchangeCode) {
+        try {
+            return ResponseEntity.ok(Result.success(qrLoginService.exchange(ticket, exchangeCode)));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Result.badRequest(ex.getMessage()));
+        }
+    }
 
     /**
      * 发送登录验证码

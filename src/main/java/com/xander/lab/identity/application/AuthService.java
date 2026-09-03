@@ -568,6 +568,15 @@ public class AuthService {
         return generateTokenResponse(user);
     }
 
+    /** Issues an independent browser session after a verified QR handoff. */
+    public TokenResponse issueTokenForUser(Long userId) {
+        User user = userMapper.selectById(userId);
+        if (user == null || user.getStatus() == 0) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户不存在或已停用");
+        }
+        return generateTokenResponse(user);
+    }
+
     /**
      * 登出当前设备
      * 从 Redis 移除该 accessToken，不影响其它设备的 token

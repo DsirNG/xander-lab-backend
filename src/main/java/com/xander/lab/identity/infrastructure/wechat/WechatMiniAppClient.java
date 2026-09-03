@@ -8,6 +8,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.util.Base64;
+import java.util.Map;
+
 /**
  * 微信小程序 jscode2session 客户端：用登录 code 换取 openid。
  *
@@ -25,6 +28,7 @@ public class WechatMiniAppClient {
     private final WechatMiniAppProperties properties;
     private final WechatCredentialService wechatCredentialService;
     private final RestClient client;
+    private final RestClient apiClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public WechatMiniAppClient(WechatMiniAppProperties properties,
@@ -39,6 +43,39 @@ public class WechatMiniAppClient {
                 .baseUrl(properties.getCode2SessionUrl())
                 .requestFactory(factory)
                 .build();
+        this.apiClient = RestClient.builder().requestFactory(factory).build();
+    }
+
+    /** Generate a real WeChat Mini Program unlimited scene code for PC login. */
+    public String generateLoginCode(String scene) {
+        WechatCredentialService.ResolvedCredential credential = wechatCredentialService.resolve();
+        if (credential == null) {
+            throw new IllegalStateException("微信登录未配置，请联系管理员");
+        }
+        try {
+            JsonNode token = objectMapper.readTree(apiClient.get()
+                    .uri(uriBuilder -> uriBuilder.scheme("https").host("api.weixin.qq.com").path("/cgi-bin/token")
+                            .queryParam("grant_type", "client_credential")
+                            .queryParam("appid", credential.appId())
+                            .queryParam("secret", credential.appSecret()).build())
+                    .retrieve().body(String.class));
+            String accessToken = textOrNull(token, "access_token");
+            if (accessToken == null || accessToken.isBlank()) throw new IllegalStateException("微信二维码服务暂不可用");
+            byte[] image = apiClient.post()
+                    .uri(uriBuilder -> uriBuilder.scheme("https").host("api.weixin.qq.com").path("/wxa/getwxacodeunlimit")
+                            .queryParam("access_token", accessToken).build())
+                    .body(Map.of("scene", scene, "page", properties.getLoginPage(), "check_path", false, "env_version", "release"))
+                    .retrieve().body(byte[].class);
+            if (image == null || image.length < 100 || (image[0] == '{' && image[1] == '"')) {
+                throw new IllegalStateException("微信二维码生成失败，请稍后重试");
+            }
+            return "data:image/png;base64," + Base64.getEncoder().encodeToString(image);
+        } catch (RuntimeException ex) {
+            if (ex instanceof IllegalStateException state) throw state;
+            throw new IllegalStateException("微信二维码服务暂不可用，请稍后重试");
+        } catch (Exception ex) {
+            throw new IllegalStateException("微信二维码服务暂不可用，请稍后重试");
+        }
     }
 
     /**

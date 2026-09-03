@@ -22,6 +22,9 @@ public class WechatMiniAppProperties {
     /** 读取超时（毫秒）；微信接口响应小，5 秒足够 */
     private long readTimeoutMillis = 5000;
 
+    /** 小程序扫码确认页路径。 */
+    private String loginPage = "pages/scan-login/index";
+
     public String getCode2SessionUrl() {
         return code2SessionUrl;
     }
@@ -44,5 +47,13 @@ public class WechatMiniAppProperties {
 
     public void setReadTimeoutMillis(long readTimeoutMillis) {
         this.readTimeoutMillis = readTimeoutMillis;
+    }
+
+    public String getLoginPage() {
+        return loginPage;
+    }
+
+    public void setLoginPage(String loginPage) {
+        this.loginPage = loginPage;
     }
 }
