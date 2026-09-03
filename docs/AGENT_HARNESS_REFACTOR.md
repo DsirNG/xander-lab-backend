@@ -422,10 +422,12 @@ completed `AgentRequestAssembler`, immutable `AgentStepRequest`, and
 come from one message window, and one model call settles its matching step.
 The request now instructs the model to reply in the current user's natural
 language; only linguistically ambiguous requests, including names and
-identifiers without natural-language context, default to Chinese. `AgentRunLifecycle`
-now owns successful, failed and stale-run terminal transitions. Lease renewal,
-claim/cancel commands, tool execution and compatibility event projection remain
-in the facade until their own behavior-preserving extractions are tested.
+identifiers without natural-language context, default to Chinese. The following
+lifecycle extraction moves run claim validation, fenced cancellation,
+cancellation checks, lease renewal, successful/failed transitions, and
+stale-run recovery into `AgentRunLifecycle`. Tool execution and compatibility
+event projection remain in the facade until their own behavior-preserving
+extractions are tested.
 
 ### Phase 3: Tool Pipeline and Idempotency
 
@@ -468,7 +470,7 @@ new card types do not require changes to the turn coordinator.
 - Keep historical message/event reads indefinitely or provide an explicit
   versioned reader for old conversations.
 
-### 6.1 Next Pull Request: Phase 2 Execution Extraction
+### 6.1 Phase 2 Target Components
 
 The next change is a behavior-preserving extraction from
 `AgentConversationService`. It must not enable skill filtering, alter model
@@ -476,11 +478,11 @@ prompt text, add a new public endpoint, or change the SSE/WebSocket vocabulary.
 
 | New component | Owns | Must not own |
 | --- | --- | --- |
-| `AgentTurnCoordinator` | claimed-turn sequencing, lease lifecycle and terminal delegation | prompt rendering, tool-specific UI cards or business operations |
+| `AgentTurnCoordinator` | claimed-turn sequencing and terminal delegation | lifecycle state transitions, prompt rendering, tool-specific UI cards or business operations |
 | `AgentRequestAssembler` | immutable `AgentStepRequest` creation, context message IDs, attachment references, tool-schema-set hash, model route and instruction/profile version IDs | remote model I/O or message/event persistence |
 | `AgentStepExecutor` | one model invocation and normalized decision hand-off | turn claiming, final terminal transition or direct UI presentation |
 | `AgentEventProjector` | deriving current `agent_message` and `agent_event` compatibility records from run/step/invocation facts | model calls, tool execution and business state changes |
-| `AgentRunLifecycle` | fenced journal terminal transitions and stale-run reconciliation | API transport or live event fan-out |
+| `AgentRunLifecycle` | claim validation, fenced cancellation and cancellation checks, lease renewal, journal terminal transitions and stale-run reconciliation | API transport or live event fan-out |
 
 `AgentStepRequest` must persist stable references rather than duplicate user
 content: ordered `agent_message.id` values, attachment snapshots/URLs already
@@ -583,17 +585,22 @@ Completed Phase 2 checkpoint (`419f5dd`):
 2. [x] Extract `AgentStepExecutor` behind the existing
    `AgentConversationService` facade.
 
+Completed Phase 2 lifecycle checkpoint:
+
+1. [x] `AgentRunLifecycle` owns claim-state validation, explicit cancellation,
+   cancellation checks, lease renewal, and successful/failed/stale terminal
+   transitions fenced by `runVersion`. It returns durable outcomes and does not
+   fan out live events or charge billing.
+2. [x] Preserve the existing facade constructor for focused loop tests and
+   embedded callers while moving the lease executor dependency to the lifecycle.
+
 Next Phase 2 extraction batch:
 
-1. [~] `AgentRunLifecycle` now owns successful, failed and stale-run terminal
-   transitions fenced by `runVersion`; it returns durable outcomes and does not
-   fan out live events or charge billing. Claim-state validation, lease renewal
-   and explicit cancellation remain pending.
-2. [ ] Extract `AgentEventProjector` while preserving current event names and
+1. [ ] Extract `AgentEventProjector` while preserving current event names and
    serialized fields.
-3. [ ] Move `runLoop` ownership into `AgentTurnCoordinator`; retain
+2. [ ] Move `runLoop` ownership into `AgentTurnCoordinator`; retain
    `AgentConversationService` as the public compatibility facade.
-4. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
+3. [ ] Add crash/retry, request-reconstruction and SSE/WebSocket compatibility
    tests for the extracted boundaries.
 
 Do not start a large Skill catalog or intent resolver in Phase 2. First make

@@ -5,21 +5,108 @@ import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /** Owns fenced durable terminal transitions for an agent conversation run. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AgentRunLifecycle {
+    private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
+
     private final AgentConversationMapper conversationMapper;
     private final AgentEventService eventService;
     private final AgentExecutionJournal executionJournal;
     private final AgentConversationProperties properties;
     private final TransactionTemplate transactionTemplate;
+    private final ScheduledExecutorService agentLeaseRenewer;
+
+    /** Claims an idle or failed conversation for a new fenced execution generation. */
+    long claim(Long conversationId, Long userId) {
+        int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                .eq(AgentConversation::getId, conversationId)
+                .eq(AgentConversation::getUserId, userId)
+                .and(wrapper -> wrapper.eq(AgentConversation::getStatus, "ready")
+                        .or()
+                        .eq(AgentConversation::getStatus, "failed"))
+                .set(AgentConversation::getStatus, "running")
+                .setSql("run_version = run_version + 1")
+                .set(AgentConversation::getErrorMessage, null)
+                .set(AgentConversation::getCancelRequested, 0));
+        if (updated == 1) {
+            AgentConversation claimed = requireOwned(conversationId, userId);
+            if (claimed.getRunVersion() == null) {
+                throw new IllegalStateException("智能体执行代次缺失");
+            }
+            return claimed.getRunVersion();
+        }
+        AgentConversation conversation = requireOwned(conversationId, userId);
+        if ("running".equals(conversation.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "智能体正在执行中，请稍候");
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "当前会话状态不能继续对话");
+    }
+
+    /** Records a cancellation request only for the currently fenced running generation. */
+    AgentConversation requestCancellation(Long conversationId, Long userId) {
+        AgentConversation current = requireOwned(conversationId, userId);
+        long runVersion = current.getRunVersion() == null ? 0L : current.getRunVersion();
+        transactionTemplate.executeWithoutResult(status -> conversationMapper.update(
+                null, new LambdaUpdateWrapper<AgentConversation>()
+                        .eq(AgentConversation::getId, conversationId)
+                        .eq(AgentConversation::getUserId, userId)
+                        .eq(AgentConversation::getStatus, "running")
+                        .eq(AgentConversation::getRunVersion, runVersion)
+                        .set(AgentConversation::getCancelRequested, 1)));
+        return requireOwned(conversationId, userId);
+    }
+
+    /** Returns the cancellation flag after verifying this worker still owns the running generation. */
+    boolean isCancellationRequested(Long conversationId, Long userId, long runVersion) {
+        AgentConversation conversation = conversationMapper.selectById(conversationId);
+        if (conversation == null || !userId.equals(conversation.getUserId())
+                || !Long.valueOf(runVersion).equals(conversation.getRunVersion())
+                || !"running".equals(conversation.getStatus())) {
+            throw new AgentRunSupersededException(conversationId, runVersion);
+        }
+        return Integer.valueOf(1).equals(conversation.getCancelRequested());
+    }
+
+    /** Keeps a claimed worker recoverable while model or tool calls produce no durable progress. */
+    ScheduledFuture<?> startLeaseRenewal(Long conversationId, Long userId, long runVersion) {
+        long staleSeconds = Math.max(60L, Math.max(1, properties.getStaleConversationMinutes()) * 60L);
+        long intervalSeconds = Math.max(1L, Math.min(MAX_LEASE_RENEW_INTERVAL_SECONDS, staleSeconds / 3L));
+        return agentLeaseRenewer.scheduleAtFixedRate(() -> {
+            try {
+                int renewed = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
+                        .eq(AgentConversation::getId, conversationId)
+                        .eq(AgentConversation::getUserId, userId)
+                        .eq(AgentConversation::getStatus, "running")
+                        .eq(AgentConversation::getRunVersion, runVersion)
+                        .setSql("updated_at = CURRENT_TIMESTAMP"));
+                if (renewed != 1) {
+                    throw new AgentRunSupersededException(conversationId, runVersion);
+                }
+            } catch (AgentRunSupersededException superseded) {
+                log.debug("agent lease renewal stopped for superseded conversation {} and run {}",
+                        conversationId, runVersion);
+                throw superseded;
+            } catch (RuntimeException exception) {
+                log.warn("agent lease renewal failed for conversation {} and run {}: {}",
+                        conversationId, runVersion, exception.getClass().getSimpleName());
+            }
+        }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+    }
 
     /** Moves a running generation to ready and records its durable complete event. */
     TerminalTransition complete(Long conversationId, Long userId, long runVersion) {

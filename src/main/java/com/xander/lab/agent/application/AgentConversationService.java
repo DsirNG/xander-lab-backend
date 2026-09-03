@@ -42,7 +42,6 @@ import java.util.UUID;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -58,7 +57,6 @@ import java.util.function.Consumer;
 public class AgentConversationService {
     private static final int TOOL_DELTA_FLUSH_CHARS = 256;
     private static final int ANSWER_DELTA_FLUSH_CHARS = 24;
-    private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
     private static final String DEFAULT_TITLE = "新对话";
     /** “说交付了代码却什么都没给”的批评意见。做成常量，方便去重后只提一次。 */
     private static final String UNDELIVERED_CODE_CRITIQUE =
@@ -82,7 +80,6 @@ public class AgentConversationService {
     private final AgentConversationProperties properties;
     private final TransactionTemplate transactionTemplate;
     private final AgentEventService eventService;
-    private final ScheduledExecutorService agentLeaseRenewer;
     private final BillingService billingService;
     private final ObjectMapper objectMapper;
     private final AgentPlanService planService;
@@ -98,7 +95,7 @@ public class AgentConversationService {
     public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
                                     AgentModelClient modelClient, AgentToolRegistry toolRegistry,
                                     AgentConversationProperties properties, TransactionTemplate transactionTemplate,
-                                    AgentEventService eventService, ScheduledExecutorService agentLeaseRenewer,
+                                    AgentEventService eventService,
                                     BillingService billingService, ObjectMapper objectMapper,
                                     AgentPlanService planService, AgentMemoryService memoryService,
                                     AgentTurnEvaluator turnEvaluator, AgentQuizService quizService,
@@ -112,7 +109,6 @@ public class AgentConversationService {
         this.properties = properties;
         this.transactionTemplate = transactionTemplate;
         this.eventService = eventService;
-        this.agentLeaseRenewer = agentLeaseRenewer;
         this.billingService = billingService;
         this.objectMapper = objectMapper;
         this.planService = planService;
@@ -134,12 +130,12 @@ public class AgentConversationService {
                                     AgentPlanService planService, AgentMemoryService memoryService,
                                     AgentTurnEvaluator turnEvaluator, AgentQuizService quizService) {
         this(conversationMapper, messageMapper, modelClient, toolRegistry, properties, transactionTemplate,
-                eventService, agentLeaseRenewer, billingService, objectMapper, planService, memoryService,
+                eventService, billingService, objectMapper, planService, memoryService,
                 turnEvaluator, quizService, AgentExecutionJournal.disabled(),
                 AgentRequestAssembler.legacy(toolRegistry, properties, planService, quizService, objectMapper),
                 AgentStepExecutor.legacy(modelClient),
                 new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
-                        properties, transactionTemplate));
+                        properties, transactionTemplate, agentLeaseRenewer));
     }
 
     /**
@@ -183,7 +179,7 @@ public class AgentConversationService {
         String storedMessage = answers.orElse(userMessage);
         String storedKind = answers.isPresent() ? "quiz_answer" : "message";
         return transactionTemplate.execute(status -> {
-            long runVersion = claimConversation(conversationId, userId);
+            long runVersion = runLifecycle.claim(conversationId, userId);
             executionJournal.startRun(conversationId, userId, runVersion);
             // 新一轮诉求开始：上一轮的计划已经收口或作废，留着只会污染这一轮的自检。
             planService.clear(conversationId, userId);
@@ -227,7 +223,7 @@ public class AgentConversationService {
                                                 Consumer<AgentEvent> onEvent) {
         ScheduledFuture<?> leaseRenewal;
         try {
-            leaseRenewal = startLeaseRenewal(conversationId, userId, runVersion);
+            leaseRenewal = runLifecycle.startLeaseRenewal(conversationId, userId, runVersion);
         } catch (RuntimeException exception) {
             failClaimedTurn(conversationId, userId, runVersion,
                     "智能体执行租约服务繁忙，请稍后重试", onEvent);
@@ -331,7 +327,7 @@ public class AgentConversationService {
 
         for (int step = 0; step < maxSteps; step++) {
             // 用户取消请求优先于模型调用，工具执行结束后下一轮即退出。
-            if (isCancelRequested(conversationId, userId, runVersion)) {
+            if (runLifecycle.isCancellationRequested(conversationId, userId, runVersion)) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
@@ -358,7 +354,7 @@ public class AgentConversationService {
             AgentStep journalStep = executionJournal.startStep(request);
             try {
                 ModelCallResult call = stepExecutor.execute(journalStep, request, answerProgress::accept,
-                        () -> isCancelRequested(conversationId, userId, runVersion));
+                        () -> runLifecycle.isCancellationRequested(conversationId, userId, runVersion));
                 answerProgress.flush();
                 decision = call.payload();
                 usage.add(call.usage(), call.model());
@@ -373,7 +369,7 @@ public class AgentConversationService {
             } catch (RuntimeException exception) {
                 throw exception;
             }
-            if (isCancelRequested(conversationId, userId, runVersion)) {
+            if (runLifecycle.isCancellationRequested(conversationId, userId, runVersion)) {
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
@@ -653,81 +649,7 @@ public class AgentConversationService {
 
     /** 请求停止当前正在执行的一轮；会话空闲时幂等返回。 */
     public AgentConversation cancel(Long conversationId, Long userId) {
-        AgentConversation current = requireOwned(conversationId, userId);
-        long runVersion = current.getRunVersion() == null ? 0L : current.getRunVersion();
-        transactionTemplate.executeWithoutResult(status -> conversationMapper.update(
-                null, new LambdaUpdateWrapper<AgentConversation>()
-                        .eq(AgentConversation::getId, conversationId)
-                        .eq(AgentConversation::getUserId, userId)
-                        .eq(AgentConversation::getStatus, "running")
-                        .eq(AgentConversation::getRunVersion, runVersion)
-                        .set(AgentConversation::getCancelRequested, 1)
-                        ));
-        return requireOwned(conversationId, userId);
-    }
-
-    private boolean isCancelRequested(Long conversationId, Long userId, long runVersion) {
-        AgentConversation conversation = conversationMapper.selectById(conversationId);
-        if (conversation == null || !userId.equals(conversation.getUserId())
-                || !Long.valueOf(runVersion).equals(conversation.getRunVersion())
-                || !"running".equals(conversation.getStatus())) {
-            throw new AgentRunSupersededException(conversationId, runVersion);
-        }
-        return Integer.valueOf(1).equals(conversation.getCancelRequested());
-    }
-
-    /** Keeps a claimed worker alive even while a model or tool call emits no durable progress. */
-    private ScheduledFuture<?> startLeaseRenewal(Long conversationId, Long userId, long runVersion) {
-        long staleSeconds = Math.max(60L, Math.max(1, properties.getStaleConversationMinutes()) * 60L);
-        long intervalSeconds = Math.max(1L, Math.min(MAX_LEASE_RENEW_INTERVAL_SECONDS, staleSeconds / 3L));
-        return agentLeaseRenewer.scheduleAtFixedRate(() -> {
-            try {
-                int renewed = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                        .eq(AgentConversation::getId, conversationId)
-                        .eq(AgentConversation::getUserId, userId)
-                        .eq(AgentConversation::getStatus, "running")
-                        .eq(AgentConversation::getRunVersion, runVersion)
-                        .setSql("updated_at = CURRENT_TIMESTAMP")
-                        );
-                if (renewed != 1) {
-                    throw new AgentRunSupersededException(conversationId, runVersion);
-                }
-            } catch (AgentRunSupersededException superseded) {
-                log.debug("agent lease renewal stopped for superseded conversation {} and run {}",
-                        conversationId, runVersion);
-                throw superseded;
-            } catch (RuntimeException exception) {
-                log.warn("agent lease renewal failed for conversation {} and run {}: {}",
-                        conversationId, runVersion, exception.getClass().getSimpleName());
-            }
-        }, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
-    }
-
-    private long claimConversation(Long conversationId, Long userId) {
-        int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                .eq(AgentConversation::getId, conversationId)
-                .eq(AgentConversation::getUserId, userId)
-                // failed 是上一轮模型/工具失败留下的状态，允许用户重试新一轮。
-                .and(wrapper -> wrapper.eq(AgentConversation::getStatus, "ready")
-                        .or()
-                        .eq(AgentConversation::getStatus, "failed"))
-                .set(AgentConversation::getStatus, "running")
-                .setSql("run_version = run_version + 1")
-                .set(AgentConversation::getErrorMessage, null)
-                .set(AgentConversation::getCancelRequested, 0)
-                );
-        if (updated == 1) {
-            AgentConversation claimed = requireOwned(conversationId, userId);
-            if (claimed.getRunVersion() == null) {
-                throw new IllegalStateException("智能体执行代次缺失");
-            }
-            return claimed.getRunVersion();
-        }
-        AgentConversation conversation = requireOwned(conversationId, userId);
-        if ("running".equals(conversation.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "智能体正在执行中，请稍候");
-        }
-        throw new ResponseStatusException(HttpStatus.CONFLICT, "当前会话状态不能继续对话");
+        return runLifecycle.requestCancellation(conversationId, userId);
     }
 
     private AgentEvent markFailed(Long conversationId, Long userId, long runVersion, String errorMessage) {
@@ -1069,7 +991,7 @@ public class AgentConversationService {
 
         @Override
         public boolean isCancellationRequested() {
-            return AgentConversationService.this.isCancelRequested(conversationId, userId, runVersion);
+            return runLifecycle.isCancellationRequested(conversationId, userId, runVersion);
         }
 
         private void flushToolDelta() {
