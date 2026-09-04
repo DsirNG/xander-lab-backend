@@ -37,12 +37,16 @@ state through infrastructure adapters. Scheduling and publishing may invoke the
 blog-agent application API, but the blog agent must not own schedules or
 platform credentials.
 
-`agent` invokes business capabilities only through `AgentTool` adapters. Each
-turn first resolves trusted, versioned first-party `AgentSkill` beans into a
-bounded capability set; the resolved skill IDs, versions, confidence and tool
-names are stored on `agent_run` and included in the step snapshot. Tools run
-through `AgentToolExecutionPipeline`, which checks active-skill visibility and
-basic required arguments before a durable invocation exists. The pipeline
+`agent` invokes business capabilities only through `AgentTool` adapters. Every
+turn exposes the full registered tool set: skills change how the model works,
+never what it can call. A turn renders one thin catalog of skill names and
+when-to-read lines into the tool surface, and the model calls `load_skill` to
+pull back the one body it decides to follow. The offered catalog and the turn's
+tool names are stored on `agent_run`; the step snapshot also records which
+loaded bodies that step is actually following. Tools run through
+`AgentToolExecutionPipeline`, which re-asserts the turn's tool set and checks
+basic required arguments before a durable invocation exists; approval, not tool
+visibility, is the boundary that holds external effects. The pipeline
 records an invocation UUID before execution. `email_reminder` and
 `schedule_plan` pass that UUID into owning-service, database-unique create
 keys; `AgentToolInvocationReconciler` later performs read-only lookups for
@@ -66,9 +70,10 @@ the same invocation UUID on the agent worker, records its result, and resumes
 the next model step; rejection cancels the invocation and closes the run.
 `delegate_subtask` is deliberately read-only because child loops do not yet own
 an independent invocation journal or approval lifecycle, so all mutations stay
-in the parent execution pipeline. Skills are
-compiled Spring beans in this phase; user-uploaded executable skills are not
-supported. The
+in the parent execution pipeline. Built-in skills are
+compiled Spring beans; a user-authored skill is a text body in `agent_skill`
+that the model may load and follow, and it can neither relax approval nor change
+tool rules. Uploaded executable skills are not supported. The
 `blog_generate` adapter calls the `blogagent` application service and returns a
 durable blog task ID; ownership of the generated task, sources, versions, and
 publication hand-off remains in `blogagent`. Additional adapters delegate to

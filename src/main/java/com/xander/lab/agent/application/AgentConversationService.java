@@ -83,7 +83,7 @@ public class AgentConversationService {
     private final AgentRunLifecycle runLifecycle;
     private final AgentEventProjector eventProjector;
     private final AgentTurnCoordinator turnCoordinator;
-    private final AgentSkillRegistry skillRegistry;
+    private final AgentSkillCatalog skillCatalog;
     private final AgentCompactionService compactionService;
 
     @Autowired
@@ -97,7 +97,7 @@ public class AgentConversationService {
                                      AgentExecutionJournal executionJournal,
                                      AgentRequestAssembler requestAssembler,
                                      AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector,
-                                     AgentTurnCoordinator turnCoordinator, AgentSkillRegistry skillRegistry,
+                                     AgentTurnCoordinator turnCoordinator, AgentSkillCatalog skillCatalog,
                                      AgentCompactionService compactionService) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
@@ -116,7 +116,7 @@ public class AgentConversationService {
         this.runLifecycle = runLifecycle;
         this.eventProjector = eventProjector;
         this.turnCoordinator = turnCoordinator;
-        this.skillRegistry = skillRegistry;
+        this.skillCatalog = skillCatalog;
         this.compactionService = compactionService;
     }
 
@@ -140,7 +140,7 @@ public class AgentConversationService {
                                  properties, transactionTemplate, agentLeaseRenewer),
                          AgentExecutionJournal.disabled(), AgentStepExecutor.legacy(modelClient),
                          AgentToolExecutionPipeline.legacy(toolRegistry)),
-                 AgentSkillRegistry.legacy(toolRegistry),
+                 AgentSkillCatalog.empty(),
                  new AgentCompactionService(modelClient, properties,
                          new AgentEventProjector(conversationMapper, messageMapper, eventService,
                                  transactionTemplate)));
@@ -327,15 +327,22 @@ public class AgentConversationService {
         String latestUserMessage = StringUtils.hasText(currentUserMessage)
                 && !quizService.isSubmission(currentUserMessage)
                 ? currentUserMessage : latestUserMessage(conversationId, userId);
-        // 技能只加宽工具面：AgentSkillRegistry.BASELINE_TOOLS 每轮无条件在表里，命中的技能往上加。
-        // 早先是命中的技能整体替换工具表，于是关键词决定了模型有什么能力——一句"给我一个 sse 代码"
-        // 当轮只剩 emit_artifact，除了开交付卡别无选择，而用户要的只是一段片段。
-        AgentSkillSelection skillSelection = skillRegistry.resolve(latestUserMessage);
-        Set<String> allowedTools = skillSelection.toolNames();
-        executionJournal.recordSkillSelection(conversationId, userId, runVersion, skillSelection);
+        // 工具表每轮固定为全表，技能只影响"怎么干"，不再决定"能干什么"。
+        // 早先是关键词命中的技能整体替换工具表，于是关键词决定了模型有什么能力——一句"给我一个 sse 代码"
+        // 当轮只剩 emit_artifact，除了开交付卡别无选择，而用户要的只是一段片段；
+        // 反过来"帮我记住这段话"没命中词表，记忆工具就整轮不在表里，模型只能空口答应。
+        // 带外部副作用的调用由审批策略拦（见 AgentToolExecutionPipeline），而不是靠"看不见就调不动"。
+        Set<String> allowedTools = toolRegistry.allowedNames();
+        AgentSkillOffer skillOffer = skillCatalog.offer(userId, allowedTools);
+        executionJournal.recordSkillOffer(conversationId, userId, runVersion, skillOffer);
         String memoryContext = recallMemoryContext(userId, latestUserMessage);
-        log.info("agent turn started conversation={} run={} toolCount={} memoryInjected={}",
-                conversationId, runVersion, allowedTools.size(), !memoryContext.isEmpty());
+        // 工具面（schema + 工具准则 + 技能目录）整轮只算一次：它不依赖步序也不依赖对话记录，
+        // 压缩调用与主调用必须拿到逐字节相同的那一份，摘要请求才是主请求的真前缀，
+        // 否则上游前缀缓存整段失效。现算两次也能相同，但一次算好就不会被后来的改动改坏。
+        String toolSurface = toolRegistry.describeToolSurface(allowedTools, skillOffer.catalog());
+        log.info("agent turn started conversation={} run={} toolCount={} skillCatalog={} memoryInjected={}",
+                conversationId, runVersion, allowedTools.size(), skillOffer.skills().size(),
+                !memoryContext.isEmpty());
         int maxSteps = Math.max(1, properties.getMaxSteps());
         int nextStepNo = executionJournal.nextStepNo(conversationId, runVersion);
         int failures = 0;
@@ -358,17 +365,18 @@ public class AgentConversationService {
             AgentStep journalStep;
             try {
                 // 压缩排在装配之前：装配吃掉的正是这一步可见的那段对话记录。
-                // 工具面按同一份 allowedTools 现算，与装配层拿到的那份逐字节相同，
-                // 摘要调用因此是主请求的真前缀，不会把上游的前缀缓存打断。
                 // 它自己也烧 token，用量并回本轮账单，否则压缩就成了一条绕过计费的模型调用。
+                List<AgentMessage> history = listMessages(conversationId, userId);
                 AgentCompactionService.Compacted compacted = compactionService.compactIfNeeded(
-                        conversationId, userId, runVersion, listMessages(conversationId, userId),
-                        toolRegistry.describeToolSurface(allowedTools),
+                        conversationId, userId, runVersion, history,
+                        toolSurface,
                         () -> runLifecycle.isCancellationRequested(conversationId, userId, runVersion));
                 usage.add(compacted.usage(), compacted.model());
+                // 未裁剪的整条会话一并交给装配层：压缩换掉的那一段里可能有模型花过一次调用读回来的
+                // 技能正文，它得把那几条接回来，否则模型下一步照着的是一份被摘要过的规则。
                 AgentStepRequest request = requestAssembler.assemble(new AgentRequestAssemblyInput(
                         conversationId, userId, runVersion, step, compacted.messages(), plan, memoryContext,
-                        lastError, null, allowedTools, maxSteps - step + 1, deepThinking, skillSelection));
+                        lastError, null, allowedTools, maxSteps - step + 1, deepThinking, skillOffer, history));
                 long modelStartedNanos = System.nanoTime();
                 AnswerProgress answerProgress = new AnswerProgress(
                         conversationId, userId, runVersion, listener,

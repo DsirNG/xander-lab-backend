@@ -75,6 +75,7 @@ class AgentConversationServiceTest {
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper =
             new com.fasterxml.jackson.databind.ObjectMapper()
                     .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+    private final BillingService billingService = mock(BillingService.class);
     private AgentEventService eventService;
 
     private AgentToolRegistry registry;
@@ -108,7 +109,7 @@ class AgentConversationServiceTest {
         eventService = new AgentEventService(eventMapper, conversationMapper, objectMapper, new AgentEventBus());
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         org.mockito.Mockito.lenient().doReturn(leaseRenewal).when(agentLeaseRenewer)
                 .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
@@ -189,7 +190,7 @@ class AgentConversationServiceTest {
                 List.of(new FailingTool("failing_tool")));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, failingRegistry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
@@ -294,7 +295,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitQuizTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode emit = decisionNode(false, "先把题目发出去", EmitQuizTool.NAME, null);
         ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
@@ -328,7 +329,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitQuizTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode markdownQuestions = decisionNode(true, "1. sin 90° 等于多少？", null, null);
         ObjectNode emit = decisionNode(false, "", EmitQuizTool.NAME, null);
@@ -357,7 +358,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode emit = decisionNode(false, "把文件交出去", EmitArtifactTool.NAME, null);
         ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
@@ -395,7 +396,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode empty = decisionNode(true, "", null, null);
         empty.put("reply", "已完成 Node.js + ws 服务端及浏览器客户端聊天示例。");
@@ -419,7 +420,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode inline = decisionNode(true, "", null, null);
         inline.put("reply", "已完成，代码如下：\n```js\nconsole.log('hi');\n```");
@@ -683,7 +684,7 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient,
                 new AgentToolRegistry(List.of(new FailingTool("failing_tool"))), properties,
-                transactionTemplate, eventService, agentLeaseRenewer, mock(BillingService.class), objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
@@ -969,6 +970,54 @@ class AgentConversationServiceTest {
         assertThat(attachments.getValue()).hasSize(1);
     }
 
+    /**
+     * 压缩接在真实的推理循环里：装配上下文之前先换掉头部，检查点落库成为新的地板。
+     *
+     * <p>回归：压缩服务写好了却没接进 runLoop 就是一段死代码，而且很难被发现——
+     * 条数窗口会先把旧消息静默丢掉，token 压力永远到不了阈值，
+     * 于是"有窗口没压缩"看起来和"压缩没触发"完全一样。</p>
+     */
+    @Test
+    void compactionRunsInsideTheLoopAndShadowsTheEarlyTranscript() {
+        stubTransactions();
+        org.mockito.Mockito.when(properties.isCompactionEnabled()).thenReturn(true);
+        org.mockito.Mockito.when(properties.getContextMessageLimit()).thenReturn(10);
+        org.mockito.Mockito.when(properties.getContextWindowTokens()).thenReturn(128000);
+        org.mockito.Mockito.when(properties.getCompactionThresholdRatio()).thenReturn(0.8D);
+        org.mockito.Mockito.when(properties.getCompactionRetainRatio()).thenReturn(0.16D);
+        List<AgentMessage> history = new ArrayList<>();
+        for (int index = 1; index <= 12; index++) {
+            history.add(userMessage((long) index, "第" + index + "条：" + "记录".repeat(200), null));
+        }
+        when(messageMapper.selectList(any())).thenReturn(history);
+        ObjectNode summary = decisionNode(true, "", null, null);
+        summary.put("reply", "检查点：用户要整理笔记");
+        ObjectNode done = decisionNode(true, "", null, null);
+        done.put("reply", "已整理好");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(summary, new ModelUsage(1200, 800, 60)), call(done));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "继续整理", ignored -> { });
+
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("user", "compaction", null), eq(42L), eq(1L));
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<AgentInputTurn>> turns =
+                org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(modelClient, org.mockito.Mockito.times(2))
+                .decideNextStepStream(turns.capture(), any(), any(), any());
+        String mainRequest = turns.getAllValues().get(1).stream()
+                .map(AgentInputTurn::text).collect(java.util.stream.Collectors.joining("\n"));
+        assertThat(mainRequest).contains("检查点：用户要整理笔记").contains("第8条")
+                .doesNotContain("第1条：").doesNotContain("第7条：");
+        // 摘要是一次真实的模型调用，不报账就等于让压缩绕过计费。
+        org.mockito.ArgumentCaptor<ModelUsage> billed = org.mockito.ArgumentCaptor.forClass(ModelUsage.class);
+        verify(billingService).chargeTokens(eq(42L), any(), any(), any(), billed.capture(), any(), any());
+        assertThat(billed.getValue()).isEqualTo(new ModelUsage(1200, 800, 60));
+    }
+
     private AgentMessage userMessage(Long id, String content, String attachmentsJson) {
         AgentMessage message = new AgentMessage();
         message.setId(id);
@@ -1036,6 +1085,10 @@ class AgentConversationServiceTest {
 
     private ModelCallResult call(ObjectNode decision) {
         return ModelCallResult.of(decision, ModelUsage.NONE);
+    }
+
+    private ModelCallResult call(ObjectNode decision, ModelUsage usage) {
+        return ModelCallResult.of(decision, usage, "agent-test-model");
     }
 
     /** A tool that succeeds and reports one progress event (name: blog_generate). */

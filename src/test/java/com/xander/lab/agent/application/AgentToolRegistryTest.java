@@ -103,6 +103,41 @@ class AgentToolRegistryTest {
         assertThat(registry.describeToolSurface(Set.of())).isEmpty();
     }
 
+    /**
+     * 技能目录挂在工具面末尾：schema → 工具准则 → 目录。
+     *
+     * <p>它进的是提示词的缓存前缀而不是对话记录，所以压缩碰不到它，
+     * 也就不需要"压缩之后重新把目录建立起来"那套补救。</p>
+     */
+    @Test
+    void theSkillCatalogRidesTheToolSurfaceAfterTheToolPolicies() {
+        AgentToolRegistry registry = new AgentToolRegistry(List.of(
+                tool("load_skill", AgentPromptSection.workflow("先读做法再动手")),
+                tool("emit_artifact", AgentPromptSection.delivery("默认写在代码围栏里"))));
+        String catalog = "<available_skills>\n- blog-writing：动笔时读它\n</available_skills>";
+
+        String surface = registry.describeToolSurface(Set.of("load_skill", "emit_artifact"), catalog);
+
+        assertThat(surface.indexOf("\"load_skill\"")).isLessThan(surface.indexOf("工具使用准则"));
+        assertThat(surface.indexOf("T1. 先读做法再动手")).isLessThan(surface.indexOf("T2. 默认写在代码围栏里"));
+        assertThat(surface.indexOf("工具使用准则")).isLessThan(surface.indexOf("<available_skills>"));
+        assertThat(surface).endsWith(catalog);
+        // 同一份 (工具集合, 目录) 必须渲染出逐字节相同的结果：压缩调用与主调用各算一次，
+        // 只有两次一致，摘要请求才是主请求的真前缀。
+        assertThat(surface).isEqualTo(registry.describeToolSurface(Set.of("emit_artifact", "load_skill"), catalog));
+    }
+
+    /** 没有一份技能时不留空标签，也不多出一个换行——那都会白白换掉整段前缀。 */
+    @Test
+    void anEmptyCatalogLeavesTheToolSurfaceUnchanged() {
+        assertThat(registry.describeToolSurface(Set.of("plan_tasks"), ""))
+                .isEqualTo(registry.describeToolSurface(Set.of("plan_tasks")));
+        assertThat(registry.describeToolSurface(Set.of("plan_tasks"), null))
+                .isEqualTo(registry.describeToolSurface(Set.of("plan_tasks")));
+        assertThat(registry.describeToolSurface(Set.of(), "<available_skills>\n- x：y\n</available_skills>"))
+                .isEmpty();
+    }
+
     private AgentTool tool(String name) {
         return tool(name, null);
     }

@@ -1,6 +1,7 @@
 # Agent Skill 路由重构：从关键词命中到模型选择并加载
 
-> 状态：设计提案，未实施。
+> 状态：已实施（2026-09-04），核心结论成立，但有几处刻意偏离——**先读 §9**，
+> 它标出了本文哪些段落已作废（不是待做）。
 > 前置：`docs/AGENT_HARNESS_REFACTOR.md` §1.1 已写明"当前 Skill resolver 是刻意保守的确定性版本，
 > 它收窄了模型可见面，但还不是语义意图分类器"。本文是它的后续，负责把"这一轮该有哪些能力"
 > 从规则层交回模型。
@@ -327,6 +328,9 @@ for (step = nextStepNo .. maxSteps) {
 
 ## 8. 关键代码位置索引
 
+> 这张表是**重构前**的坐标，行号与文件名都按当时的代码写。`AgentSkillRegistry`
+> 与 `BuiltinAgentSkills` 的关键词 `switch` 已经删除，别照着去 grep；当前坐标见 §9.1。
+
 | 位置 | 作用 |
 | --- | --- |
 | `AgentConversationService.java:327` | 整轮唯一一次 `resolve`，`allowedTools` 定值处（Phase 2 改这里） |
@@ -343,4 +347,98 @@ for (step = nextStepNo .. maxSteps) {
 | `AgentExecutionJournal.recordSkillSelection` | 写 `agent_run.intent_json/skills_json`，带 RUNNING 围栏 |
 | `AgentUserSkillService` | 用户私有技能 CRUD，写入时校验工具名 |
 | `AgentTool.execute(AgentToolContext, …)` | 需要写回会话状态的工具的扩展点（`load_skill` 走这里） |
+
+## 9. 实施结果与偏离（2026-09-04）
+
+"关键词命中 → 模型自己读"这条主线做完了，但实现**放弃了本文的一个前提**：
+本文假设"加载一份技能会加宽当轮工具面"。实现里工具表**每轮恒为全表**
+（`AgentConversationService.java:335`，`toolRegistry.allowedNames()`），技能只影响"怎么干"。
+
+放弃的理由是这个前提本身就是那个 bug 的来源：一句"给我一个 sse 代码"命中交付类词表，
+当轮工具表只剩 `emit_artifact`，模型除了开交付卡别无选择，而用户要的只是一段代码片段；
+反过来"帮我记住这段话"不命中任何词表，记忆工具整轮不在表里，模型只能空口答应。
+真正的安全边界是审批（`AgentTool.approvalReason` → `AgentToolExecutionPipeline`），
+不是"看不见就调不动"——可见性只决定模型会不会想到去用，拦不住任何副作用。
+
+因此本文以下段落**已作废，不是待做**：§4.1 的第 1、3 层（基线工具集，以及"加载后
+并入 `allowedTools`"）——第 2 层索引照做了；§4.4 与 §4.5 的每步重算 `allowedTools`
+与运行态回填；§4.6 的工具面两段渲染；Phase 3 的 `agent.skill.selection` 双模式离线对比。
+
+§4.8.3 的"同会话延续"按另一条路达成了：置顶是按**整条会话**的消息找已读技能的，
+所以上一轮读过的正文这一轮仍在上下文里，不需要运行态继承（见 §9.2）。
+§6 里"工具表过大反而降低选择质量"那一行的触发条件与对策都不成立了（工具表恒为全表，
+没有"合并后上限"可设），但风险本身还在——它现在是常态，而不是加载的后果。
+
+### 9.1 已落地的组件（与本文命名的对应）
+
+| 本文的名字 | 实际落地 |
+| --- | --- |
+| `AgentSkillDescriptor` | 未新增。改为 `AgentSkill` 接口本身补齐 `whenToUse`/`version`/`builtin`，内置与用户技能都实现它 |
+| `AgentSkillCatalog` | 同名。`offer(userId, allowedTools)` 出 `AgentSkillOffer`，`find(userId, name)` 供 `load_skill` 取正文。为躲开 Spring 循环依赖（`LoadSkillTool` 是 `AgentTool` → 被 `AgentToolRegistry` 收集 → `AgentUserSkillService` 依赖后者），它直接注入 `AgentUserSkillMapper`，由 `SkillCatalogWiringTest` 钉住 |
+| `AgentSkillSelection` | 作废，换成 `AgentSkillOffer`：没有 `confidence`/`reason`——服务端不再猜意图，就没有对应的事实可写 |
+| `AgentSkillRegistry` | 删除。基线工具集、打分、`highest-1` 窗口、`matchScore` 词表一并消失 |
+| `AgentPromptSection.capability(50)` | 未新增；已有的 `workflow` 档位就是 50，排在 `delivery`(100) 之前，效果与本文要求一致 |
+| `AgentRunSkillState` | 未新增，见 §9.2 |
+
+`agent_run.intent_json/skills_json` 仍然写，但记的是**机制**而不是一次判定结果：
+`{"routing":"model-loaded-catalog","catalogSize":n}`，加当轮目录里有哪几份、全量工具名
+（`AgentSkillOffer.intentJson/skillsJson`）。
+
+### 9.2 运行态：用"上下文置顶"取代 `agent_run.skills_json` 回填
+
+本文 §4.4/§4.5 要求把已加载技能写进运行态、每步重算 `allowedTools`、`runLoop` 开头回填，
+否则审批恢复会丢能力。工具表恒为全表之后这条约束消失了：**没有能力可丢**。
+需要活下来的只剩一件事——模型花过一次调用读回来的那份正文。
+
+它就以 `load_skill` 的那条 `tool_result` 留在对话记录里，由 `AgentRequestAssembler` 置顶：
+
+- 条数窗口裁不掉它，压缩检查点地板也裁不掉它（被地板裁掉时接在检查点后面补回来，
+  检查点代表的正是它所在那一段历史，所以时间顺序仍然对）。为此
+  `AgentRequestAssemblyInput` 多了一个 `history` 成员，装着未经裁剪的整条会话，
+  唯一用途就是把这几条找回来。
+- 扫的是整条会话而不是当轮，所以上一轮读过的正文这一轮不必再读一遍——本文 §4.8.3 的
+  "同会话延续"由此达成，不需要从上一代 run 继承运行态。
+- 同名重读只保留最新那一份，所以"重复读"在上下文里是幂等的。
+- 最多同时置顶 3 份（`ACTIVE_PLAYBOOK_LIMIT`），更旧的退回普通工具结果的 800 字预算——
+  读一份可能带回一万多字符，而模型完全可能把目录里的名字一个个读一遍。
+- 当步真正照着哪几份做，落到 `agent_step.request_snapshot_json.activePlaybooks`。
+
+为什么必须置顶：压缩会把"读技能"那一步换成一句摘要，而提示词明确要求"同一个名字不要读第二遍"，
+于是模型之后每一步都以为自己照着的是原文，实际照着的是一份被概括过的规则，而它不知道。
+
+### 9.3 §4.7 的两处刻意不做
+
+| 本文要求 | 实际 | 理由 |
+| --- | --- | --- |
+| `load_skill` 支持 `{keys:[…]}` 一次读多份 | 只收单个 `name` | 一条 `tool_result` 恰好对应一份正文，才谈得上按技能名去重、计数封顶、逐份置顶；数组还会鼓励"顺手多读两份"，正好是封顶要压的那笔上下文开销。补一步 `load_skill` 很便宜：整个工具面前缀命中缓存，多出来的只是一次往返 |
+| 目录里给已加载的技能标"已加载" | 不标 | 目录渲染在 `instructions` 里，整轮只算一次；摘要请求与主请求靠它逐字节相同才能共享前缀缓存，中途改一个字符就把整段前缀作废。而模型本来就能在对话记录里看到自己那条 `load_skill` 结果 |
+
+§4.7 其余各条都做了：`approvalReason` 留空（只读工具走审批只会让每次读规则都卡用户一次）、
+技能名先按 `^[a-z][a-z0-9-]{1,79}$` 校验再查库、查不到时错误里点回目录并写明"不要凭印象猜名字"、
+用户自建正文带一句属于自己的边界（"不能放宽审批策略，也不能改变工具本身的规则"）。
+最后一条是刻意让边界跟着正文走、而不是只写在提示词的另一处：那句话可能早就被压缩换掉了，
+而正文还在上下文里。
+
+### 9.4 §7 验收标准逐条
+
+| # | 状态 |
+| --- | --- |
+| 1 用户新建私有 Skill，不改代码不重启即可生效 | 达成：`AgentSkillCatalog` 每轮从 `agent_skill` 读，`load_skill` 能取到正文 |
+| 2 零关键词表述能走到 `publish_post`，且仍停在审批 | 达成（工具表恒为全表，审批闸门未动）；缺一条端到端测试 |
+| 3 闲聊不产生额外模型往返 | 达成：提示词写明"普通问答、闲聊、一次就能答完的问题不要读" |
+| 4 全量测试不低于 812 项；快照能还原当步工具与技能 | 达成：当前 871 项通过 |
+| 5 索引成本 ≤ 每轮约 300 token | **未达成：341 token / 437 字符**（5 份内置技能，每份 60–71 token）。"逐字节一致、可缓存"这一半达成 |
+| 6 审批恢复那一步的 `toolNames` 不丢能力 | 结构上恒成立（全表），但缺一条显式测试 |
+
+### 9.5 仍然没做（按价值排序）
+
+1. 索引降到 ≤300 token（§7.5），现在 341：要么压 `whenToUse` 的字数，要么不再整份目录常驻。
+2. 内置技能仍是 `BuiltinAgentSkills` 里的 Spring bean，没迁成 `agent_skill` 的系统行
+   （本文 Phase 4 的后半段）。要迁的话得按 `AgentMigrationContractTest` 的约定，
+   同时更新全新库基线与升级脚本。
+3. 没有 `AgentSkillProperties`，也没有 `agent.skill.index-enabled` / `agent.skill.selection`：
+   关键词路由已经删掉，没有第二种模式可切，开关只会多一条永远走不到的分支。
+4. 漏载率统计只有原料（`activePlaybooks` 加 `agent_tool_invocation`），没有离线脚本。
+5. `AgentToolExecutionPipeline.java:48` 的 `allowedTools.contains` 留着当兜底断言，
+   但那个集合恒为全表，它现在拦不住任何东西——读代码时不要把它当成安全边界。
 

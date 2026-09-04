@@ -43,10 +43,10 @@ This is intentionally a compatibility-first journal, not the finished core:
 - The Phase 1 request snapshot contains only safe metadata (context length,
   tool-set hash, attachment count and plan count). The durable messages and
   attachments remain the source for user content.
-- The journal now contains deterministic first-party Skill selection: active
-  Skill IDs/versions, confidence, reason and narrowed tool names. It does not
-  yet contain a semantic model classifier, approval record or uploaded Skill
-  package.
+- The journal records the skill catalog offered to the model and the turn's
+  tool names. Deterministic keyword selection — its confidence, reason and
+  narrowed tool set — has since been removed; the model loads a skill body
+  itself. Uploaded executable Skill packages remain unsupported.
 - Existing HTTP, SSE and WebSocket event names and payloads are unchanged.
 
 The next delivery should add the remaining mutation policies.
@@ -61,8 +61,13 @@ durable `ready` task; it never restarts model work to discover an outcome.
 Recognized remote timeouts, connection-access failures and HTTP 5xx responses
 now become `UNKNOWN` for read-only reconciliation rather than being reported
 as a proven failure.
-The current Skill resolver is a deliberately deterministic first version; it
-narrows the model surface but is not yet an LLM intent classifier.
+The keyword Skill resolver is gone (2026-09-04). Every turn now exposes the full
+registered tool set, and skills reach the model as a thin loadable catalog
+instead of a narrowed capability set: skills decide how the model works, not what
+it may call, and approval remains the boundary for external effects. See
+`docs/AGENT_SKILL_ROUTING_REFACTOR.md` §9 for what shipped and where it deviates
+from that proposal; the sections below still describe the pre-`load_skill`
+design and are kept as the record of how the harness got here.
 
 ## 2. Current DinQorAI Baseline
 
@@ -77,7 +82,7 @@ prototype to discard.
 | Replay | `agent_event.id` is the SSE/WS resume cursor | Keep |
 | Business integration | `AgentTool` adapters call owning application services | Keep |
 | Model routing and billing | `AgentModelClient` and `ModelGateway`; usage charged at terminal result | Keep |
-| Tool discovery | Every registered tool is visible by default | Replace with skill-driven capability selection |
+| Tool discovery | Every registered tool is visible by default | Keep: the full table every turn; skills only change how, and approval gates effects |
 | Main loop | One service combines lifecycle, context, prompt, model call, tool execution and UI cards | Split into Harness Core components; do not retain a generic self-check retry loop |
 | Decision evidence | Messages/events retain outcomes, but not the complete model request policy and capability snapshot | Add durable step snapshots |
 | Side-effect replay | Tool result persistence failure after a remote mutation can require reconciliation | Add invocation identity and idempotency policy |
@@ -107,7 +112,7 @@ composable capabilities.
 | Agent capability is composed by plugins | Spring beans implementing `AgentSkill`, policies, presenters and model adapters |
 | Append-only session records drive context and replay | Existing messages/events remain compatible; a new run/step journal becomes the execution fact source |
 | Prompt and tools are assembled per step | `AgentRequestAssembler` produces an immutable request snapshot |
-| Tools pass one guarded pipeline | `ToolExecutionPipeline` enforces visibility, authorization, approval, timeout, cancellation, idempotency and result normalization |
+| Tools pass one guarded pipeline | `ToolExecutionPipeline` enforces the turn tool set, authorization, approval, timeout, cancellation, idempotency and result normalization |
 | Host, agent and preset scopes are separate | Spring host owns infrastructure; conversation/run owns state; skill/profile owns capability configuration |
 | Subagents are constrained agents, not unrestricted recursion | Durable child invocation with parent link, budget, skill set and summarized hand-back |
 | UI presentation is a projection | Quiz, artifact, plan and progress cards are projections of durable execution facts |
@@ -127,12 +132,12 @@ The following must **not** be copied mechanically:
 
 ```mermaid
 flowchart LR
-    U[User message and attachments] --> R[Intent and Skill Resolver]
-    R --> P[Skill Profile Resolver]
-    P --> C[Turn Coordinator]
-    C --> A[Request Assembler]
+    U[User message and attachments] --> C[Turn Coordinator]
+    C --> K[Skill Catalog: names and when to read]
+    K --> A[Request Assembler]
     A --> M[Model Adapter]
     M --> T[Tool Execution Pipeline]
+    T -->|load_skill| K
     T --> B[Business Application Services]
     C --> J[Run and Step Journal]
     J --> E[Event and Message Projections]
@@ -167,11 +172,9 @@ agent
       AgentEventProjector
     skill
       AgentSkill
-      AgentSkillRegistry
-      IntentSkillResolver
-      AgentProfileResolver
+      AgentSkillCatalog
+      LoadSkillTool
     policy
-      ToolVisibilityPolicy
       ToolAuthorizationPolicy
       ToolApprovalPolicy
       ToolIdempotencyPolicy
@@ -181,8 +184,6 @@ agent
       AgentRun
       AgentStep
       AgentToolInvocation
-      AgentIntent
-      AgentSkillSelection
       AgentProfile
   infrastructure
     harness
@@ -194,6 +195,17 @@ CRUD, turn claim and public API behavior. It delegates execution to
 `AgentTurnCoordinator` instead of containing the loop itself.
 
 ### 4.2 Skills Are the Product-Level Capability Unit
+
+> Superseded as written (2026-09-04). The interface below assumed a skill both
+> matches an intent and contributes a permitted tool set. Neither survived: the
+> tool table is the full registered set every turn and the model picks a skill
+> itself. The shipped shape is `id / version / description ("when to read this") /
+> toolNames (advisory) / instructions / builtin`, plus `AgentSkillCatalog` and
+> `load_skill`. The roster is five — `blog-writing`, `content-publishing`,
+> `knowledge-curation`, `study-coach`, `personal-planning`; `general-chat` and
+> `artifact-delivery` are gone, since delivery rules now ride with
+> `EmitArtifactTool.promptSection` and plain chat needs no skill at all.
+> The paragraphs below stay as the original reasoning.
 
 An `AgentTool` remains one atomic action. An `AgentSkill` is a product-level
 capability composed from instructions, allowed tools, policies, state and UI
@@ -494,6 +506,9 @@ its tool-specific reconciliation policy before automatic recovery is enabled.
 
 ### Phase 4: Skills and Intent Resolver
 
+The bullets below are the original plan; the resolver half of it was dropped.
+Read the status note after them for what exists.
+
 - Add first-party skills and map existing tools into them.
 - Add structured intent classification with deterministic validation and a
   clarification path.
@@ -505,14 +520,24 @@ its tool-specific reconciliation policy before automatic recovery is enabled.
 Exit criterion: every normal turn has a selected skill profile, and the model
 sees only tools allowed by that profile.
 
-**Status: partially implemented.** Trusted compiled skills currently cover
-general chat, writing, publishing, study, knowledge, personal planning and
-artifact delivery. `AgentSkillRegistry` selects up to two close deterministic
-candidates, stores the selection on `agent_run`, injects Skill instructions and
-exposes only the selected tool union. The next step is a structured semantic
-intent classifier with ambiguity/clarification behavior and an offline labeled
-evaluation corpus. User-uploaded executable skills remain intentionally
-unsupported until signing, tenancy and sandbox rules exist.
+**Status: superseded (2026-09-04).** The exit criterion above was abandoned on
+purpose, because narrowing the model surface was itself the defect: a request
+for a plain SSE snippet matched the delivery keyword list, the turn kept only
+`emit_artifact`, and the model had no way to answer with a code fence. What
+shipped instead: the tool table is the full registered set every turn,
+`AgentSkillCatalog` renders one thin catalog of skill names plus when-to-read
+lines, and `load_skill` pulls back a single body once the model decides the turn
+belongs to it. A loaded body is pinned in context (it survives the count window
+and the compaction floor, deduped per skill, capped at the three newest) so the
+model keeps following the original text rather than a summary of it. Trusted
+compiled skills cover writing, publishing, study, knowledge curation and
+personal planning; user-authored skills are `agent_skill` rows that now take
+effect with no code change or restart. Approval, not visibility, holds external
+effects. No semantic intent classifier is needed on this path, and no labeled
+corpus is required to evaluate one. User-uploaded *executable* skills remain
+intentionally unsupported until signing, tenancy and sandbox rules exist. Full
+detail and the deliberate deviations are in
+`docs/AGENT_SKILL_ROUTING_REFACTOR.md` §9.
 
 ### Phase 5: Durable Subagents and Typed UI Projections
 
@@ -577,7 +602,7 @@ principles, not as a TypeScript or Cordis port.
 | Turn and step driver has explicit pre-step/request/step-end extension points | Extract coordinator, assembler and executor before adding policies, so later skills and intent handling do not reopen the monolithic loop | Phase 2 |
 | One guarded `pre-execute` / `execute` / `post-execute` tool pipeline | Introduce `ToolExecutionPipeline` around the already durable invocation ID; perform visibility, authorization, approval, cancellation, idempotency and result normalization there | Phase 3 |
 | Approval writes an asked/decided durable pair inside the owning turn and fails closed without an answerer | Add `agent_approval` and an approval-resume path tied to the exact invocation fingerprint; no mutation may wait only in memory | Phase 3 |
-| Skills are provider-merged, scoped catalogs with explicit model/user invocation policy | Initial DinQorAI skills stay trusted compiled Spring beans. `AgentSkillRegistry` supplies deterministic selection and tool narrowing; no external marketplace or user-supplied executable skill is introduced | Phase 4 |
+| Skills are provider-merged, scoped catalogs with explicit model/user invocation policy | Built-in DinQorAI skills stay trusted compiled Spring beans and user skills stay text bodies in `agent_skill`. `AgentSkillCatalog` merges both into one thin per-turn catalog and `load_skill` fetches a body on the model's own decision; no tool narrowing, no external marketplace, no user-supplied executable skill | Phase 4 |
 | Client cards are pure projections of durable tool facts | Move quiz, plan and artifact branches out of the coordinator into registered result presenters after the tool pipeline is stable | Phase 5 |
 | Child agents carry explicit parent links, isolation and settlement | Replace the current bounded `SubAgentRunner` execution with child run/invocation records only after parent journal and policy boundaries are stable | Phase 5 |
 

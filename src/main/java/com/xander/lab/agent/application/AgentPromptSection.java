@@ -16,6 +16,13 @@ package com.xander.lab.agent.application;
  */
 public record AgentPromptSection(int order, String text) {
 
+    /**
+     * 动手之前该先做的事，排在所有"怎么做"的准则之前。
+     *
+     * <p>目前只有一条：{@link LoadSkillTool} 说明那份技能目录是什么、什么时候该去读一份。
+     * 它必须在交付类准则前面——先认清这一轮属于哪类活，再谈这类活的交付形式。</p>
+     */
+    public static final int ORDER_WORKFLOW = 50;
     /** 会话内交付类：答题卡、交付卡这些"这一轮答案长什么样"的规定。 */
     public static final int ORDER_DELIVERY = 100;
     /** 判分与评估类：依赖用户在对话里的作答。 */
@@ -25,6 +32,10 @@ public record AgentPromptSection(int order, String text) {
 
     public AgentPromptSection {
         text = text == null ? "" : text.trim();
+    }
+
+    public static AgentPromptSection workflow(String text) {
+        return new AgentPromptSection(ORDER_WORKFLOW, text);
     }
 
     public static AgentPromptSection delivery(String text) {

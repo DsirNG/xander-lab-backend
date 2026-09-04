@@ -3,7 +3,6 @@ package com.xander.lab.agent.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.agent.api.AgentSkillRequest;
 import com.xander.lab.agent.domain.AgentUserSkill;
@@ -14,15 +13,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Set;
 
-/** Owns user-private, versioned Skill instructions and their registered-tool capability limits. */
+/** Owns user-private, versioned Skill instructions; reads go through {@link AgentSkillCatalog}. */
 @Service
 public class AgentUserSkillService {
     private final AgentUserSkillMapper mapper;
     private final AgentToolRegistry toolRegistry;
+    private final AgentSkillCatalog catalog;
     private final ObjectMapper objectMapper;
 
-    public AgentUserSkillService(AgentUserSkillMapper mapper, AgentToolRegistry toolRegistry, ObjectMapper objectMapper) {
-        this.mapper = mapper; this.toolRegistry = toolRegistry; this.objectMapper = objectMapper;
+    public AgentUserSkillService(AgentUserSkillMapper mapper, AgentToolRegistry toolRegistry,
+                                AgentSkillCatalog catalog, ObjectMapper objectMapper) {
+        this.mapper = mapper; this.toolRegistry = toolRegistry;
+        this.catalog = catalog; this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -42,20 +44,16 @@ public class AgentUserSkillService {
         return skill;
     }
 
+    /** 管理界面用的全部 ACTIVE 版本，含历史版本；模型看到的是每个 key 最新的那一条。 */
     @Transactional(readOnly = true)
     public List<AgentUserSkill> listActive(Long userId) {
-        return mapper.selectList(new LambdaQueryWrapper<AgentUserSkill>().eq(AgentUserSkill::getUserId, userId)
-                .eq(AgentUserSkill::getStatus, AgentUserSkill.STATUS_ACTIVE).orderByAsc(AgentUserSkill::getSkillKey)
-                .orderByDesc(AgentUserSkill::getVersion));
+        return catalog.allActiveUserSkills(userId);
     }
 
     @Transactional(readOnly = true)
     public AgentUserSkill load(Long userId, String skillKey) {
-        AgentUserSkill skill = mapper.selectOne(new LambdaQueryWrapper<AgentUserSkill>().eq(AgentUserSkill::getUserId, userId)
-                .eq(AgentUserSkill::getSkillKey, skillKey).eq(AgentUserSkill::getStatus, AgentUserSkill.STATUS_ACTIVE)
-                .orderByDesc(AgentUserSkill::getVersion).last("LIMIT 1"));
-        if (skill == null) throw new IllegalArgumentException("Skill不存在或不可用");
-        return skill;
+        return catalog.activeUserSkill(userId, skillKey)
+                .orElseThrow(() -> new IllegalArgumentException("Skill不存在或不可用"));
     }
 
     @Transactional

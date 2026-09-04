@@ -127,7 +127,17 @@ public class AgentCompactionService {
             return unchanged(current);
         }
         ModelUsage spent = call.usage() == null ? ModelUsage.NONE : call.usage();
-        String checkpoint = frame(summaryOf(call.payload()));
+        String checkpoint;
+        try {
+            checkpoint = frame(summaryOf(call.payload()));
+        } catch (RuntimeException unusable) {
+            // 摘要没成形：模型返回了 action、或者 reply 是空的。
+            // 这一次调用的 token 已经真的花掉了，必须报账；但换不出检查点就保持原样，
+            // 别让"压缩自己出问题"变成"用户这一轮失败"。
+            log.warn("agent compaction summary unusable conversation={} reason={}",
+                    conversationId, unusable.getMessage());
+            return new Compacted(current, spent, call.model());
+        }
         int checkpointTokens = AgentTokenEstimator.estimateTurn(checkpoint);
         if (checkpointTokens >= headTokens) {
             // 换上去反而更大：这次压缩没有意义，保持原样，下一步再按同样的条件重试。

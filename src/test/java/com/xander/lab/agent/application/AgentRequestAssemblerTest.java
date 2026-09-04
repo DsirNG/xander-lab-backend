@@ -181,6 +181,120 @@ class AgentRequestAssemblerTest {
         assertThat(request.context()).contains("检查点：目标是整理笔记").doesNotContain("第5条");
     }
 
+    /**
+     * 一份读回来的技能正文不能被历史截断切掉。
+     *
+     * <p>工具结果按"最新一条给足、更早的截到 800 字"渲染，因为观察会过期。
+     * {@code load_skill} 取回的是这一轮要照着做的规则，不会过期；
+     * 按 800 字截掉它，模型下一步读到的就是半份规则，而它已经为此花过一次调用了。</p>
+     */
+    @Test
+    void aLoadedSkillBodySurvivesTheToolResultHistoryBudget() {
+        AgentRequestAssembler assembler = assembler("");
+        String body = "先看上周计划，再看实际完成。" + "细".repeat(3000);
+        AgentMessage loaded = message(1L, "tool", "tool_result",
+                "{\"ok\":true,\"name\":\"weekly-review\",\"instructions\":\"" + body + "\"}", List.of());
+        loaded.setToolName("load_skill");
+        AgentMessage laterCall = message(2L, "tool", "tool_result",
+                "{\"ok\":true,\"posts\":[]}", List.of());
+        laterCall.setToolName("query_posts");
+
+        String context = assembler.assemble(input(List.of(loaded, laterCall), null, null)).context();
+
+        assertThat(context).contains(body);
+    }
+
+    /** 普通工具结果仍然按历史预算截短：观察会过期，全都给足只是把上下文烧掉。 */
+    @Test
+    void anOlderOrdinaryToolResultIsStillTruncated() {
+        AgentRequestAssembler assembler = assembler("");
+        String haystack = "旧".repeat(2000);
+        AgentMessage older = message(1L, "tool", "tool_result", haystack, List.of());
+        older.setToolName("query_posts");
+        AgentMessage latest = message(2L, "tool", "tool_result", "{\"ok\":true}", List.of());
+        latest.setToolName("query_posts");
+
+        String context = assembler.assemble(input(List.of(older, latest), null, null)).context();
+
+        assertThat(context).doesNotContain(haystack).contains("旧".repeat(800) + "…");
+    }
+
+    /**
+     * 压缩换掉了读技能那一步，正文照样要在这一步的上下文里。
+     *
+     * <p>这是分级披露的兜底：模型花过一次调用把规则读回来，之后每一步都以为自己照着的是原文。
+     * 如果压缩把那段历史换成一句摘要，它照着的就是一份被概括过的规则，而它并不知道——
+     * {@code load_skill} 也不会再读第二遍，因为提示词告诉过它同一个名字不要重复读。</p>
+     */
+    @Test
+    void aLoadedPlaybookSurvivesTheCompactionThatShadowedTheStepWhichReadIt() {
+        AgentRequestAssembler assembler = assembler("");
+        String body = "先看上周计划，再看实际完成。" + "细".repeat(3000);
+        AgentMessage loaded = loadedSkill(1L, "weekly-review", body);
+        AgentMessage checkpoint = message(9L, "user", AgentCompactionService.CHECKPOINT_KIND,
+                "检查点：目标是复盘上周", List.of());
+        AgentMessage latest = message(10L, "user", "message", "继续", List.of());
+
+        AgentStepRequest request = assembler.assemble(new AgentRequestAssemblyInput(
+                7L, 42L, 3L, 2, List.of(checkpoint, latest), List.of(), "", null, null,
+                Set.of("query_posts"), 4, false, null, List.of(loaded, checkpoint, latest)));
+
+        assertThat(request.context()).contains(body).contains("检查点：目标是复盘上周");
+        // 正文接在检查点后面：检查点代表的正是它所在的那一段历史，所以时间顺序仍然对。
+        assertThat(request.contextMessageIds()).containsExactly(9L, 1L, 10L);
+        assertThat(request.journalSnapshotJson()).contains("\"activePlaybooks\":[\"weekly-review\"]");
+    }
+
+    /** 同一份技能读第二遍时只留最新那一条正文：重复读在上下文里因此是幂等的。 */
+    @Test
+    void rereadingTheSameSkillKeepsOnlyTheNewestBodyInFull() {
+        AgentRequestAssembler assembler = assembler("");
+        String firstBody = "第一版做法。" + "旧".repeat(2000);
+        String secondBody = "第二版做法。" + "新".repeat(2000);
+
+        String context = assembler.assemble(input(List.of(
+                loadedSkill(1L, "weekly-review", firstBody),
+                loadedSkill(2L, "weekly-review", secondBody)), null, null)).context();
+
+        assertThat(context).contains(secondBody).doesNotContain(firstBody);
+    }
+
+    /** 正文免于截断的是"正在照着做的那几份"，不是读过的每一份：把目录读一遍不该占满上下文。 */
+    @Test
+    void onlyTheThreeNewestPlaybooksKeepTheirWholeBody() {
+        AgentRequestAssembler assembler = assembler("");
+        String oldest = "最早读的那份做法。" + "远".repeat(2000);
+        List<AgentMessage> messages = List.of(
+                loadedSkill(1L, "blog-writing", oldest),
+                loadedSkill(2L, "content-publishing", "发布做法。" + "发".repeat(2000)),
+                loadedSkill(3L, "study-coach", "辅导做法。" + "学".repeat(2000)),
+                loadedSkill(4L, "personal-planning", "计划做法。" + "计".repeat(2000)));
+
+        AgentStepRequest request = assembler.assemble(input(messages, null, null));
+
+        assertThat(request.context()).doesNotContain(oldest).contains("计划做法。");
+        assertThat(request.journalSnapshotJson())
+                .contains("\"activePlaybooks\":[\"content-publishing\",\"study-coach\",\"personal-planning\"]");
+    }
+
+    /** 技能目录进的是工具面（提示词缓存前缀），不是这一步的对话记录。 */
+    @Test
+    void theSkillCatalogIsRenderedIntoTheToolSurfaceAndNotIntoTheTranscript() {
+        AgentRequestAssembler assembler = assembler("");
+        AgentSkillOffer offer = new AgentSkillOffer(List.of(), Set.of("query_posts"),
+                "<available_skills>\n- blog-writing：动笔时读它\n</available_skills>");
+
+        AgentStepRequest request = assembler.assemble(new AgentRequestAssemblyInput(
+                7L, 42L, 3L, 2, List.of(message(1L, "user", "message", "帮我写一篇博客", List.of())),
+                List.of(), "", null, null, Set.of("query_posts"), 4, false, offer));
+
+        assertThat(request.toolDescriptions()).contains("<available_skills>").contains("blog-writing");
+        assertThat(request.context()).doesNotContain("<available_skills>");
+        // 服务端不再把猜出来的技能正文注进每一轮：正文只在模型自己 load_skill 读过之后才存在。
+        assertThat(request.context()).doesNotContain("当前激活的 Skill 规则");
+        assertThat(request.journalSnapshotJson()).contains("model-loaded-catalog");
+    }
+
     private AgentRequestAssembler assembler(String renderedPlan) {
         return assembler(renderedPlan, 30);
     }
@@ -210,6 +324,14 @@ class AgentRequestAssemblerTest {
         message.setKind(kind);
         message.setContent(content);
         message.setAttachments(attachments);
+        return message;
+    }
+
+    /** 一条"成功读回一份技能正文"的工具结果，形状与 LoadSkillTool 真正落库的那一条一致。 */
+    private AgentMessage loadedSkill(Long id, String name, String body) {
+        AgentMessage message = message(id, "tool", "tool_result",
+                "{\"ok\":true,\"name\":\"" + name + "\",\"instructions\":\"" + body + "\"}", List.of());
+        message.setToolName("load_skill");
         return message;
     }
 

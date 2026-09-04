@@ -197,7 +197,16 @@ agent:
     max-steps: ${AGENT_CONVERSATION_MAX_STEPS:20}
     max-tool-failures: ${AGENT_CONVERSATION_MAX_TOOL_FAILURES:2}
     stale-conversation-minutes: ${AGENT_CONVERSATION_STALE_MINUTES:30}
-    context-message-limit: ${AGENT_CONVERSATION_CONTEXT_MESSAGE_LIMIT:30}
+    # 只是一道兜底闸门，不再决定"模型记得什么"——那件事归压缩。
+    # 早先是 30 且没有压缩：第 31 条一到前面的消息就无声无息地没了，
+    # 而 30 条又几乎撑不到 token 阈值，压缩即使写好了也永远不会触发。
+    context-message-limit: ${AGENT_CONVERSATION_CONTEXT_MESSAGE_LIMIT:120}
+    compaction-enabled: ${AGENT_CONVERSATION_COMPACTION_ENABLED:true}
+    # 模型服务是管理员配置的第三方端点，拿不到它的真实窗口，只能由部署方声明。
+    # 换成更小窗口的模型时必须调小它，否则压缩会来得太晚。
+    context-window-tokens: ${AGENT_CONVERSATION_CONTEXT_WINDOW_TOKENS:128000}
+    compaction-threshold-ratio: ${AGENT_CONVERSATION_COMPACTION_THRESHOLD_RATIO:0.8}
+    compaction-retain-ratio: ${AGENT_CONVERSATION_COMPACTION_RETAIN_RATIO:0.16}
   model:
     # Dedicated variables take precedence; blog-agent variables remain a deployment-compatible fallback.
     base-url: ${AGENT_MODEL_BASE_URL:${BLOG_AGENT_BASE_URL:https://api.openai.com/v1}}

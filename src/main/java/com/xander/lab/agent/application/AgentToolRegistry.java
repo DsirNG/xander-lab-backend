@@ -16,10 +16,11 @@ import java.util.TreeMap;
 /**
  * 智能体已注册的全部工具。
  *
- * <p>这里只做登记，不做"这一轮该给哪些"的判断——那是 {@link AgentSkillRegistry} 的事，
- * 而它的规则是：{@link AgentSkillRegistry#BASELINE_TOOLS} 每轮无条件在表里，命中的技能只往上加。
- * 反过来的做法（关键词没命中就连工具都看不到）会把决策提前到规则层：一句"帮我记住这段话"
- * 若没命中词表，模型就只能空口答应，于是像工作流而不像智能体。</p>
+ * <p>这里只做登记。"这一轮该给哪些"曾经是一个真问题——早先由一张关键词表挑技能、
+ * 技能再决定工具表，于是一句"帮我记住这段话"没命中词表，模型就只能空口答应；
+ * 一句"给我一个 sse 代码"只命中交付类技能，当轮只剩 emit_artifact，除了开交付卡别无选择。
+ * 现在工具表每轮固定（{@link #allowedNames()}），要不要用、怎么用由模型自己判断，
+ * 带外部副作用的调用由审批策略拦，而不是靠"看不见就调不动"。</p>
  *
  * <p>按名字排序输出，保证同一套工具每轮渲染出的前缀完全一致，便于上游做 prompt 缓存。</p>
  */
@@ -76,10 +77,26 @@ public class AgentToolRegistry {
      * <p>整块只取决于工具集合，与用户说了什么无关，因此可以整段进上游 prompt 缓存。</p>
      */
     public String describeToolSurface(Set<String> selectedNames) {
+        return describeToolSurface(selectedNames, "");
+    }
+
+    /**
+     * 工具面再加一份技能目录（{@link AgentSkillCatalog}）。
+     *
+     * <p>目录跟着工具面走而不是进对话记录：这里渲染出的整块字符串落在提示词的
+     * {@code instructions} 前缀里，压缩碰不到它，也不需要"压缩后重新建立目录"那套补救。</p>
+     *
+     * <p>同一份 {@code (selectedNames, catalog)} 必须渲染出逐字节相同的结果：
+     * 摘要调用与主调用各自算一次，只有两次结果一致，摘要请求才是主请求的真前缀。</p>
+     */
+    public String describeToolSurface(Set<String> selectedNames, String catalog) {
         String descriptions = describeTools(selectedNames);
         if (descriptions.isEmpty()) return "";
+        StringBuilder surface = new StringBuilder(descriptions);
         String policies = renderPolicies(selectedNames);
-        return policies.isEmpty() ? descriptions : descriptions + "\n" + policies;
+        if (!policies.isEmpty()) surface.append('\n').append(policies);
+        if (catalog != null && !catalog.isEmpty()) surface.append('\n').append(catalog);
+        return surface.toString();
     }
 
     /** 按 (order, 工具名) 排序编号；顺序固定，提示词前缀才不会每轮变化。 */

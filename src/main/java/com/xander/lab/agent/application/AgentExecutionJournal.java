@@ -77,20 +77,26 @@ public class AgentExecutionJournal {
         }
     }
 
-    /** Persists the resolved intent and skill capability snapshot for this run. */
+    /**
+     * 记下这一轮给模型的技能供给：目录里有什么、工具表是什么。
+     *
+     * <p>写的是供给而不是判定。早先这里落的是关键词路由的结果（命中了谁、置信度多少），
+     * 而现在服务端不猜意图了——实际读了哪份技能只有模型知道，它体现为一条 {@code load_skill}
+     * 工具调用，已经由步骤日志各自记下。这里能负责的事只剩"当时它能读到哪些"。</p>
+     */
     @Transactional
-    public void recordSkillSelection(Long conversationId, Long userId, long runVersion,
-                                     AgentSkillSelection selection) {
-        if (!enabled || selection == null) return;
+    public void recordSkillOffer(Long conversationId, Long userId, long runVersion,
+                                 AgentSkillOffer offer) {
+        if (!enabled || offer == null) return;
         AgentRun run = findRun(conversationId, runVersion);
         if (run == null) throw new AgentRunSupersededException(conversationId, runVersion);
         int changed = runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
                 .eq(AgentRun::getId, run.getId())
                 .eq(AgentRun::getUserId, userId)
                 .eq(AgentRun::getStatus, AgentRun.STATUS_RUNNING)
-                .set(AgentRun::getIntentJson, selection.intentJson())
-                .set(AgentRun::getSkillsJson, selection.skillsJson())
-                .set(AgentRun::getExecutionSnapshotJson, selection.executionSnapshotJson()));
+                .set(AgentRun::getIntentJson, offer.intentJson())
+                .set(AgentRun::getSkillsJson, offer.skillsJson())
+                .set(AgentRun::getExecutionSnapshotJson, offer.executionSnapshotJson()));
         if (changed != 1) throw new AgentRunSupersededException(conversationId, runVersion);
     }
 
