@@ -4,6 +4,8 @@ import com.xander.lab.common.Result;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -97,6 +100,28 @@ public class GlobalExceptionHandler {
     public Result<Void> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
         log.warn("[Upload] 文件大小超限：{}", ex.getMessage());
         return Result.error(413, "文件大小超过服务器限制");
+    }
+
+    /**
+     * Redis 不可用或 Redis 命令执行失败时返回 503，明确表示依赖服务故障，
+     * 避免前端把它误判成普通服务器 500；完整原因只记录在服务端日志中。
+     */
+    @ExceptionHandler({RedisConnectionFailureException.class, RedisSystemException.class})
+    public ResponseEntity<Result<Void>> handleRedisException(org.springframework.dao.DataAccessException ex) {
+        log.error("[Redis] Redis 操作失败：{}", ex.getMostSpecificCause().getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Result.error(503, "缓存服务暂不可用，请稍后重试"));
+    }
+
+    /**
+     * Spring 静态资源处理器找不到资源时是正常的 404，不应被通用异常处理器记成 500。
+     * 这也会降低互联网扫描请求对错误日志的污染。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Result<Void> handleNoResourceFound(NoResourceFoundException ex) {
+        log.debug("[HTTP] 资源不存在：{} {}", ex.getHttpMethod(), ex.getResourcePath());
+        return Result.notFound("资源不存在");
     }
 
     /**

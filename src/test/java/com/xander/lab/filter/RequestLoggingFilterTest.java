@@ -47,5 +47,8 @@ class RequestLoggingFilterTest {
                 .first()
                 .asString()
                 .doesNotContain("access_token", "must-not-be-logged");
+        assertThat(appender.list)
+                .extracting(ILoggingEvent::getFormattedMessage)
+                .anyMatch(message -> message.contains("query=[PRESENT]"));
     }
 }

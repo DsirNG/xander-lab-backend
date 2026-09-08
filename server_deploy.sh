@@ -33,6 +33,16 @@ docker run -d \
   -e SPRING_DATASOURCE_URL="jdbc:mysql://您的数据库地址:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&connectionTimeZone=Asia%2FShanghai&forceConnectionTimeZoneToSession=true" \
   -e SPRING_DATASOURCE_USERNAME="root" \
   -e SPRING_DATASOURCE_PASSWORD="您的密码" \
+  -e SPRING_REDIS_HOST="您的Redis地址" \
+  -e SPRING_REDIS_PORT="6379" \
+  -e SPRING_REDIS_PASSWORD="您的Redis密码" \
+  -e SPRING_REDIS_DATABASE="0" \
+  -e REDIS_MONITOR_ENABLED=true \
+  -e REDIS_MONITOR_RECIPIENT="您的告警邮箱" \
+  -e REDIS_MONITOR_POLL_INTERVAL_MS=30000 \
+  -e REDIS_MONITOR_FAILURE_THRESHOLD=2 \
+  -e REDIS_MONITOR_NOTIFY_RECOVERY=true \
+  -e REDIS_MONITOR_ALERT_RETRY_INTERVAL_MS=300000 \
   -e RESEND_API_KEY="您的 Resend API Key" \
   -e MAIL_FROM="noreply@mail.dsircity.top" \
   -e EMAIL_REMINDER_ENABLED=true \

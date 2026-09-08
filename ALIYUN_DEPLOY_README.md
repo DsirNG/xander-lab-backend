@@ -25,6 +25,24 @@ cp .env.production.example .env.production
 | `ALIYUN_REGISTRY_URL` | 阿里云镜像仓库地址 | `registry.cn-hangzhou.aliyuncs.com` |
 | `ALIYUN_REGISTRY_NAMESPACE` | 您的命名空间 | (必填) |
 | `SPRING_DATASOURCE_PASSWORD` | 数据库密码 | (必填) |
+| `SPRING_REDIS_HOST` | Redis 主机（从后端容器可访问） | (必填) |
+| `SPRING_REDIS_PORT` | Redis 端口 | `6379` |
+| `SPRING_REDIS_PASSWORD` | Redis 密码 | (可选) |
+
+### 3. Redis 邮件告警
+
+后端启动后会定时探测 Redis。连续探测失败达到阈值时发送一次告警邮件，Redis 恢复后可再发送恢复邮件：
+
+```dotenv
+REDIS_MONITOR_ENABLED=true
+REDIS_MONITOR_RECIPIENT=your-alert-email@example.com
+REDIS_MONITOR_POLL_INTERVAL_MS=30000
+REDIS_MONITOR_FAILURE_THRESHOLD=2
+REDIS_MONITOR_NOTIFY_RECOVERY=true
+REDIS_MONITOR_ALERT_RETRY_INTERVAL_MS=300000
+```
+
+告警复用项目已有 SMTP 配置；如果后端进程本身也停止，应用内监控无法发邮件，需要额外的外部监控服务。
 
 ## 🚀 使用方法
 
@@ -59,6 +77,8 @@ deploy-aliyun.bat -n your-namespace -s deploy
    - 自动停止并删除同名容器。
    - 拉取最新镜像。
    - **核心点**：通过 `docker run -e` 将 `.env.production` 中的敏感配置注入到 Spring Boot 容器中，从而实现代码中无明文密码。
+
+> Redis 地址必须填写容器可达的地址。容器内的 `localhost` 只指向后端容器本身，不能用来访问宿主机上的 Redis；脚本在缺少 `SPRING_REDIS_HOST` 时会拒绝部署。
 
 ## 📝 常用命令
 
