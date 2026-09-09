@@ -51,19 +51,24 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 
     private void logRequestMetadata(HttpServletRequest request, HttpServletResponse response, long duration) {
         String headers = collectHeaders(request);
-        String queryString = request.getQueryString();
+        String queryString = safeQueryPresence(request.getQueryString());
 
         if (response.getStatus() >= 400) {
             log.warn("\nRequest: {} {} query={} status={} time={}ms headers={}",
                     request.getMethod(), request.getRequestURI(),
-                    queryString == null ? "-" : queryString,
+                    queryString,
                     response.getStatus(), duration, headers);
         } else {
             log.info("\nRequest: {} {} query={} status={} time={}ms headers={}",
                     request.getMethod(), request.getRequestURI(),
-                    queryString == null ? "-" : queryString,
+                    queryString,
                     response.getStatus(), duration, headers);
         }
+    }
+
+    /** Query values may contain exchange codes, tokens, email addresses, or other secrets. */
+    private String safeQueryPresence(String queryString) {
+        return queryString == null || queryString.isBlank() ? "-" : "[PRESENT]";
     }
 
     /**

@@ -60,6 +60,16 @@ spring:
     deserialization:
       fail-on-unknown-properties: false
 
+# Redis 可用性告警：默认关闭，生产环境显式配置收件人后开启。
+redis-monitor:
+  enabled: ${REDIS_MONITOR_ENABLED:false}
+  recipient: ${REDIS_MONITOR_RECIPIENT:}
+  poll-interval-ms: ${REDIS_MONITOR_POLL_INTERVAL_MS:30000}
+  initial-delay-ms: ${REDIS_MONITOR_INITIAL_DELAY_MS:30000}
+  failure-threshold: ${REDIS_MONITOR_FAILURE_THRESHOLD:2}
+  notify-recovery: ${REDIS_MONITOR_NOTIFY_RECOVERY:true}
+  alert-retry-interval-ms: ${REDIS_MONITOR_ALERT_RETRY_INTERVAL_MS:300000}
+
 mail:
   from: ${MAIL_FROM:noreply@mail.dsircity.top}
 

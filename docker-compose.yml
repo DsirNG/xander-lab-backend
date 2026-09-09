@@ -3,7 +3,9 @@ version: '3.8'
 services:
   xander-lab-backend:
     env_file:
-      - .env.local
+      # Production deployments use .env.production; override with
+      # BACKEND_ENV_FILE=.env.local for local experiments.
+      - ${BACKEND_ENV_FILE:-.env.production}
     build:
       context: .
       dockerfile: Dockerfile
@@ -24,11 +26,6 @@ services:
       - SPRING_DATASOURCE_URL=${SPRING_DATASOURCE_URL}
       - SPRING_DATASOURCE_USERNAME=${SPRING_DATASOURCE_USERNAME}
       - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD}
-      # Redis 配置
-      - SPRING_REDIS_HOST=${SPRING_REDIS_HOST}
-      - SPRING_REDIS_PORT=${SPRING_REDIS_PORT:-6379}
-      - SPRING_REDIS_PASSWORD=${SPRING_REDIS_PASSWORD:-}
-      - SPRING_REDIS_DATABASE=${SPRING_REDIS_DATABASE:-0}
       # 邮件配置
       - RESEND_API_KEY=${RESEND_API_KEY}
       - MAIL_FROM=${MAIL_FROM}
