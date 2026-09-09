@@ -26,7 +26,7 @@ public class BuiltinAgentSkills {
         return skill("blog-writing",
                 "写文章或草稿的做法：主题、受众、交付形式怎么定，草稿与发布的界线在哪，资料多时怎么取证。"
                         + "准备动笔写博客、文章、大纲、草稿时读它。",
-                Set.of("blog_generate", "image_generate", "query_knowledge", "create_knowledge",
+                Set.of("blog_generate", "image_generate", "image_resend", "query_knowledge", "create_knowledge",
                         "recall_memory", "remember", "emit_artifact", "delegate_subtask"),
                 "当前是内容创作任务：先理解主题、受众和交付形式；生成草稿不等于发布，发布必须由独立发布能力处理。"
                         + "需要翻查大量资料才能动笔时，把取证交给 delegate_subtask，主线只接收结论。");

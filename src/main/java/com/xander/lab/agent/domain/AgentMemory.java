@@ -24,6 +24,8 @@ public class AgentMemory {
     /** 记忆类型：PROFILE 用户画像 / PREFERENCE 偏好 / FACT 长期事实 / PROJECT 在办事项。 */
     private String kind;
     private String content;
+    /** Optional user-owned media asset referenced by this memory. */
+    private Long mediaAssetId;
     /** 首次写入该记忆的会话ID，便于追溯来源。 */
     private Long sourceConversationId;
     /** 被召回次数，用于优先注入高频记忆。 */

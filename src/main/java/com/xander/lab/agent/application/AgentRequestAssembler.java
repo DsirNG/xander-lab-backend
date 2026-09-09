@@ -147,7 +147,10 @@ public class AgentRequestAssembler {
 
     private String renderAttachmentNames(AgentMessage message) {
         if (message.getAttachments() == null || message.getAttachments().isEmpty()) return "";
-        return "【附件】" + message.getAttachments().stream().map(AgentAttachment::name).toList();
+        return "【附件】" + message.getAttachments().stream()
+                .map(attachment -> attachment.name()
+                        + (attachment.mediaAssetId() == null ? "" : " (mediaAssetId=" + attachment.mediaAssetId() + ")"))
+                .toList();
     }
 
     /**

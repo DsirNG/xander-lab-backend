@@ -95,12 +95,41 @@ public class BlogMediaService {
         return asset;
     }
 
+    /** Persists an already-uploaded agent image as a reusable user-owned media asset. */
+    public BlogMediaAsset saveAgentUploadedImage(Long userId, UploadResponse uploaded) {
+        requireUser(userId);
+        if (uploaded == null || uploaded.getUrl() == null || uploaded.getContentType() == null
+                || !uploaded.getContentType().startsWith("image/")) {
+            throw new IllegalArgumentException("无效的智能体图片上传结果");
+        }
+        BlogMediaAsset asset = new BlogMediaAsset();
+        asset.setUserId(userId);
+        asset.setSourceType("user_upload");
+        asset.setUrl(uploaded.getUrl());
+        asset.setOriginalName(uploaded.getOriginalName());
+        asset.setStoredName(uploaded.getStoredName());
+        asset.setSize(uploaded.getSize());
+        asset.setContentType(uploaded.getContentType());
+        assetMapper.insert(asset);
+        return asset;
+    }
+
     public List<BlogMediaAsset> getTaskImages(Long userId, Long taskId) {
         requireUser(userId);
         return assetMapper.selectList(new LambdaQueryWrapper<BlogMediaAsset>()
                 .eq(BlogMediaAsset::getUserId, userId)
                 .eq(BlogMediaAsset::getAgentTaskId, taskId)
                 .orderByAsc(BlogMediaAsset::getId));
+    }
+
+    /** Returns one agent-generated asset only when it belongs to the requesting user. */
+    public BlogMediaAsset getOwnedImage(Long userId, Long assetId) {
+        requireUser(userId);
+        if (assetId == null) return null;
+        return assetMapper.selectOne(new LambdaQueryWrapper<BlogMediaAsset>()
+                .eq(BlogMediaAsset::getId, assetId)
+                .eq(BlogMediaAsset::getUserId, userId)
+                .last("LIMIT 1"));
     }
 
     /** Returns the most recent agent-generated image of this user whose

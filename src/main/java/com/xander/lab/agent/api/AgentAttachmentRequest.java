@@ -21,9 +21,14 @@ public record AgentAttachmentRequest(
         String contentType,
         @PositiveOrZero(message = "附件大小无效")
         @Max(value = 20971520, message = "单个附件不能超过20MB")
-        long size) {
+        long size,
+        Long mediaAssetId) {
+
+    public AgentAttachmentRequest(String url, String name, String contentType, long size) {
+        this(url, name, contentType, size, null);
+    }
 
     public AgentAttachment toDomain() {
-        return new AgentAttachment(url.trim(), name.trim(), contentType.trim(), size);
+        return new AgentAttachment(url.trim(), name.trim(), contentType.trim(), size, mediaAssetId);
     }
 }

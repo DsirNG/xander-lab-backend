@@ -3,6 +3,7 @@ package com.xander.lab.agent.application;
 import com.xander.lab.agent.domain.AgentAttachment;
 import com.xander.lab.integration.oss.OssService;
 import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.publishing.application.BlogMediaService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,9 +21,16 @@ public class AgentAttachmentService {
             "ppt", "pptx", "csv", "xls", "xlsx", "tsv", "java", "js", "jsx", "ts", "tsx", "py", "css");
 
     private final OssService ossService;
+    private final BlogMediaService mediaService;
 
-    public AgentAttachmentService(OssService ossService) {
+    public AgentAttachmentService(OssService ossService, BlogMediaService mediaService) {
         this.ossService = ossService;
+        this.mediaService = mediaService;
+    }
+
+    /** Compatibility constructor for focused tests that upload documents only. */
+    public AgentAttachmentService(OssService ossService) {
+        this(ossService, null);
     }
 
     /** Uploads one bounded, model-supported attachment outside any database transaction. */
@@ -38,6 +46,10 @@ public class AgentAttachmentService {
         String contentType = StringUtils.hasText(file.getContentType())
                 ? file.getContentType().trim() : "application/octet-stream";
         UploadResponse uploaded = ossService.upload(file, "agent/" + userId + "/");
+        if (mediaService != null && contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+            var asset = mediaService.saveAgentUploadedImage(userId, uploaded);
+            return new AgentAttachment(uploaded.getUrl(), name, contentType, uploaded.getSize(), asset.getId());
+        }
         return new AgentAttachment(uploaded.getUrl(), name, contentType, uploaded.getSize());
     }
 

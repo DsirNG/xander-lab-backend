@@ -41,6 +41,13 @@ public class AgentMemoryService {
     @Transactional
     public AgentMemory remember(Long userId, String memoryKey, String kind, String content,
                                Long sourceConversationId) {
+        return remember(userId, memoryKey, kind, content, sourceConversationId, null);
+    }
+
+    /** Writes a memory and optionally binds it to one user-owned image asset. */
+    @Transactional
+    public AgentMemory remember(Long userId, String memoryKey, String kind, String content,
+                               Long sourceConversationId, Long mediaAssetId) {
         requireUser(userId);
         String key = normalizeKey(memoryKey);
         String body = content == null ? "" : content.trim();
@@ -61,6 +68,13 @@ public class AgentMemoryService {
                     );
             existing.setKind(normalizedKind);
             existing.setContent(body);
+            if (mediaAssetId != null) {
+                memoryMapper.update(null, new LambdaUpdateWrapper<AgentMemory>()
+                        .eq(AgentMemory::getId, existing.getId())
+                        .eq(AgentMemory::getUserId, userId)
+                        .set(AgentMemory::getMediaAssetId, mediaAssetId));
+                existing.setMediaAssetId(mediaAssetId);
+            }
             return existing;
         }
 
@@ -70,6 +84,7 @@ public class AgentMemoryService {
         memory.setMemoryKey(key);
         memory.setKind(normalizedKind);
         memory.setContent(body);
+        memory.setMediaAssetId(mediaAssetId);
         memory.setSourceConversationId(sourceConversationId);
         memory.setHitCount(0);
         memoryMapper.insert(memory);
@@ -152,6 +167,9 @@ public class AgentMemoryService {
             AgentMemory memory = memories.get(index);
             builder.append("- [").append(memory.getKind()).append(' ').append(memory.getMemoryKey())
                     .append("] ").append(memory.getContent());
+            if (memory.getMediaAssetId() != null) {
+                builder.append(" [mediaAssetId=").append(memory.getMediaAssetId()).append(']');
+            }
             if (index < memories.size() - 1) builder.append('\n');
         }
         return builder.toString();

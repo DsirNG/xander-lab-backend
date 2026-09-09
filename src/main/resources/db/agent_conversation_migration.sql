@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS `agent_memory` (
   `memory_key` VARCHAR(120) NOT NULL COMMENT '记忆稳定标识，同一用户内唯一，便于更新而非重复写入',
   `kind` VARCHAR(24) NOT NULL DEFAULT 'FACT' COMMENT '记忆类型：PROFILE用户画像/PREFERENCE偏好/FACT长期事实/PROJECT在办事项',
   `content` VARCHAR(2000) NOT NULL COMMENT '记忆正文，只描述一件长期有效的事',
+  `media_asset_id` BIGINT NULL COMMENT '关联用户私有图片素材ID，记忆图片时使用',
   `source_conversation_id` BIGINT NULL COMMENT '首次写入该记忆的会话ID，便于追溯来源',
   `hit_count` INT NOT NULL DEFAULT 0 COMMENT '被召回次数，用于优先注入高频记忆',
   `last_used_at` DATETIME NULL COMMENT '最近一次被召回的时间',
