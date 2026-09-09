@@ -10,6 +10,7 @@ import com.xander.lab.agent.domain.AgentMemory;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
 import com.xander.lab.publishing.application.BlogMediaService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -27,6 +28,7 @@ public class RememberTool implements AgentTool {
     private final ObjectMapper objectMapper;
     private final BlogMediaService mediaService;
 
+    @Autowired
     public RememberTool(AgentMemoryService memoryService, AgentMessageMapper messageMapper,
                         ObjectMapper objectMapper, BlogMediaService mediaService) {
         this.memoryService = memoryService;
