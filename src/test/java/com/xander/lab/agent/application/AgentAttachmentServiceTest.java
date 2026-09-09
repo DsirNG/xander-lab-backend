@@ -23,7 +23,7 @@ class AgentAttachmentServiceTest {
                 .url("https://cdn.example.com/agent/42/notes.pdf")
                 .originalName("notes.pdf").size(3).contentType("application/pdf").build());
 
-        AgentAttachment result = new AgentAttachmentService(oss).upload(42L, file);
+        AgentAttachment result = new AgentAttachmentService(oss, null).upload(42L, file);
 
         assertThat(result.name()).isEqualTo("notes.pdf");
         assertThat(result.url()).startsWith("https://cdn.example.com/agent/42/");
@@ -36,7 +36,7 @@ class AgentAttachmentServiceTest {
         MockMultipartFile file = new MockMultipartFile(
                 "file", "unsafe.exe", "application/octet-stream", new byte[]{1});
 
-        assertThatThrownBy(() -> new AgentAttachmentService(oss).upload(42L, file))
+        assertThatThrownBy(() -> new AgentAttachmentService(oss, null).upload(42L, file))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("暂不支持该附件格式");
     }

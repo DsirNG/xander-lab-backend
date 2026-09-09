@@ -28,11 +28,6 @@ public class AgentAttachmentService {
         this.mediaService = mediaService;
     }
 
-    /** Compatibility constructor for focused tests that upload documents only. */
-    public AgentAttachmentService(OssService ossService) {
-        this(ossService, null);
-    }
-
     /** Uploads one bounded, model-supported attachment outside any database transaction. */
     public AgentAttachment upload(Long userId, MultipartFile file) {
         if (userId == null) throw new IllegalArgumentException("未登录或登录已过期");
