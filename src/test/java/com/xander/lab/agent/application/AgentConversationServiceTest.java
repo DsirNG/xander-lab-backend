@@ -785,6 +785,40 @@ class AgentConversationServiceTest {
         assertThat(deltas).containsExactly("第一", "二三四五六七八九十十一十二十三十四");
     }
 
+    /**
+     * 回归：合并时间窗内的连续增量只能产生一条 answer_delta 事件。
+     *
+     * <p>这条断言守的是"响应慢"的根因——早先每 24 字符就落库并推送一次，
+     * 一次回答里会插入上百次数据库往返。上游在一瞬间吐出 40 个分片时，
+     * 现在必须合并成「首片 + 至多一次窗口 flush」，而不是 40 条事件。</p>
+     */
+    @Test
+    void coalescesBurstOfAnswerDeltasIntoOneEventPerWindow() {
+        stubTransactions();
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "长回答".repeat(20));
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenAnswer(invocation -> {
+            java.util.function.Consumer<String> deltas = invocation.getArgument(2);
+            deltas.accept("首");
+            for (int index = 0; index < 40; index++) {
+                deltas.accept("片" + index);
+            }
+            return call(decision);
+        });
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        List<String> deltas = new java.util.ArrayList<>();
+
+        service.executeTurn(7L, 42L, "你好", event -> {
+            if ("answer_delta".equals(event.getEventType())) deltas.add(event.getDataContent());
+        });
+
+        // 41 个上游分片压缩成 2 条事件（首片 + 一次窗口合并），文本不丢不重。
+        assertThat(deltas).hasSizeLessThanOrEqualTo(2);
+        assertThat(String.join("", deltas)).isEqualTo("首" + java.util.stream.IntStream.range(0, 40)
+                .mapToObj(index -> "片" + index).collect(java.util.stream.Collectors.joining()));
+    }
+
     @Test
     void escapedBackticksInReplyAreNormalizedForMarkdownRendering() {
         stubTransactions();

@@ -55,7 +55,12 @@ import java.util.function.Consumer;
 @Service
 public class AgentConversationService {
     private static final int TOOL_DELTA_FLUSH_CHARS = 256;
-    private static final int ANSWER_DELTA_FLUSH_CHARS = 24;
+    /**
+     * 流式回答的合并时间窗（毫秒）。约束的是"用户多久看到下一段文字"，
+     * 也同时决定了数据库写入频率；100ms 约等于长文阅读能感知顺滑的帧率，
+     * 同时把 token 级事件量压到十分之一以下。
+     */
+    private static final long ANSWER_DELTA_BROADCAST_MILLIS = 100;
     private static final String DEFAULT_TITLE = "新对话";
     /**
      * 模型常把 Markdown 反引号转义成 \`；CommonMark 会把 \` 渲染成裸反引号。
@@ -347,6 +352,10 @@ public class AgentConversationService {
         int nextStepNo = executionJournal.nextStepNo(conversationId, runVersion);
         int failures = 0;
         JsonNode lastError = null;
+        // 会话行在一步之内不会被别人改写；只有本轮的 plan_tasks 工具会动它，
+        // 所以缓存它、并用 planDirty 标记"计划刚被改写、下一步要重新读"，避免每步重复查库。
+        com.xander.lab.agent.domain.AgentConversation ownedConversation = null;
+        boolean planDirty = true;
         UsageAccumulator usage = new UsageAccumulator();
         executionJournal.usageBeforeStep(conversationId, runVersion, nextStepNo)
                 .ifPresent(carried -> usage.addPersisted(carried.usage(), carried.model()));
@@ -360,7 +369,13 @@ public class AgentConversationService {
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
             // 每一步重新读计划：智能体上一步可能刚改写过它，这是会话状态而不是一次性输入。
-            List<AgentPlanItem> plan = planService.load(requireOwned(conversationId, userId));
+            // 但只有会写计划的工具改动过它才需要重新查库——否则整个 runLoop 每步都在
+            // 重复读取同一行会话（一次 selectById + 一次全量消息查询），步数越多越拖。
+            if (planDirty || ownedConversation == null) {
+                ownedConversation = requireOwned(conversationId, userId);
+                planDirty = false;
+            }
+            List<AgentPlanItem> plan = planService.load(ownedConversation);
             JsonNode decision;
             AgentStep journalStep;
             try {
@@ -472,6 +487,8 @@ public class AgentConversationService {
                     appendActive(conversationId, userId, runVersion, "plan",
                             JsonNodeFactory.instance.objectNode().set("items", result.path("items")),
                             listener);
+                    // 计划已改写：下一步必须重新读取会话行，否则注释里承诺的"每步重新读计划"就失效了。
+                    planDirty = true;
                 }
                 // 答题卡要落成一条消息而不只是一个事件：它是用户接下来要操作的界面，
                 // 刷新页面后必须还在，而事件只在本轮的流里活着。
@@ -868,7 +885,22 @@ public class AgentConversationService {
         }
     }
 
-    /** Pushes the first reply delta immediately, then batches tiny token deltas to reduce database round trips. */
+    /**
+     * 流式回复的推送策略：先立刻推第一个增量，之后按时间窗合并推送。
+     *
+     * <p>这里的核心是"按时间合并"而不是"按字符数合并"。早先是每攒够 24 个
+     * 字符就同步落库一次并推送，于是</p>
+     * <ul>
+     *   <li>一次回答里几十次数据库往返被串行插在用户眼前，这是"响应很慢"的直接来源；</li>
+     *   <li>而按字符合并对快模型形同虚设——上游一秒能吐几百字，24 字符阈值
+     *       意味着仍然每几十毫秒写一次库，没有真正减少次数。</li>
+     * </ul>
+     *
+     * <p>改成按 {@link #ANSWER_DELTA_BROADCAST_MILLIS} 的时间窗合并后，
+     * 数据库写入次数只与"回答持续了多久"有关，与 token 密度无关；
+     * 一次 10 秒的回答从上百次写库降到约 100 次以内，且用户看到的文字
+     * 仍然以固定帧率平滑出现。第一个增量依旧立刻推送，保证首字延迟不受影响。</p>
+     */
     private final class AnswerProgress {
         private final Long conversationId;
         private final Long userId;
@@ -879,6 +911,8 @@ public class AgentConversationService {
         private final long modelStartedNanos;
         private final boolean deliverDeltas;
         private final StringBuilder deltaBuffer = new StringBuilder();
+        /** 上次合并推送的时间点；用它把 token 级洪峰压成固定帧率。 */
+        private long lastFlushNanos;
         private boolean firstDeltaDelivered;
 
         private AnswerProgress(Long conversationId, Long userId, long runVersion,
@@ -899,7 +933,9 @@ public class AgentConversationService {
             if (!deliverDeltas) return;
             String normalized = normalizeAnswer(delta);
             if (!firstDeltaDelivered) {
+                // 第一个增量立刻推送：首字延迟由上游模型决定，不被缓冲拖慢。
                 firstDeltaDelivered = true;
+                lastFlushNanos = System.nanoTime();
                 appendActive(conversationId, userId, runVersion, "answer_delta",
                         normalized, listener);
                 log.info("agent first visible delta conversation={} run={} step={} modelMs={} turnMs={}",
@@ -908,14 +944,16 @@ public class AgentConversationService {
                 return;
             }
             deltaBuffer.append(normalized);
-            if (deltaBuffer.length() >= ANSWER_DELTA_FLUSH_CHARS) flush();
+            if (elapsedMillis(lastFlushNanos) >= ANSWER_DELTA_BROADCAST_MILLIS) flush();
         }
 
+        /** 窗口到期或整轮结束时把缓冲区合并成一条事件；落库与推送是同一条事件，不会重复。 */
         private void flush() {
             if (deltaBuffer.isEmpty()) return;
-            appendActive(conversationId, userId, runVersion, "answer_delta",
-                    deltaBuffer.toString(), listener);
+            String payload = deltaBuffer.toString();
             deltaBuffer.setLength(0);
+            lastFlushNanos = System.nanoTime();
+            appendActive(conversationId, userId, runVersion, "answer_delta", payload, listener);
         }
     }
 
