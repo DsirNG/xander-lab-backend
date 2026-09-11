@@ -315,6 +315,10 @@ public class BlogAgentModelClient {
     }
 
     private ModelCallResult streamOnce(ModelEndpoint endpoint, Map<String, Object> payload, Consumer<String> onDelta) {
+        boolean chatCompletions = ModelGateway.API_STYLE_CHAT_COMPLETIONS.equals(endpoint.apiStyle());
+        if (chatCompletions) {
+            return streamOnceChatCompletions(endpoint, chatCompletionsPayload(payload), onDelta);
+        }
         HttpURLConnection connection = null;
         StringBuilder output = new StringBuilder();
         ModelUsage usage = ModelUsage.NONE;
@@ -392,12 +396,116 @@ public class BlogAgentModelClient {
         }
     }
 
+    /**
+     * Chat Completions 的流式调用。
+     *
+     * <p>与 /responses 分支是两套事件格式：这里没有 {@code type}，增量在
+     * {@code choices[0].delta.content}，以 {@code finish_reason} 表示收束。
+     * 语义与重试策略和 Responses 分支保持一致——产出过可见 delta 就不再重试。</p>
+     */
+    private ModelCallResult streamOnceChatCompletions(ModelEndpoint endpoint, Map<String, Object> payload,
+                                                      Consumer<String> onDelta) {
+        HttpURLConnection connection = null;
+        StringBuilder output = new StringBuilder();
+        ModelUsage usage = ModelUsage.NONE;
+        try {
+            connection = (HttpURLConnection) URI.create(
+                    trimTrailingSlash(endpoint.baseUrl()) + "/chat/completions").toURL().openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Authorization", "Bearer " + endpoint.apiKey());
+            connection.setRequestProperty("Content-Type", MediaType.APPLICATION_JSON_VALUE);
+            connection.setRequestProperty("Accept", MediaType.TEXT_EVENT_STREAM_VALUE);
+            connection.setDoOutput(true);
+            connection.setConnectTimeout(Math.max(1, properties.getConnectTimeoutMillis()));
+            connection.setReadTimeout(Math.max(1, properties.getReadTimeoutMillis()));
+            connection.getOutputStream().write(objectMapper.writeValueAsBytes(payload));
+
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) {
+                throw new ModelGatewayException(status, "模型服务请求失败（HTTP " + status + "）");
+            }
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("data:")) continue;
+                    String data = line.substring(5).trim();
+                    if (data.isEmpty() || "[DONE]".equals(data)) continue;
+                    JsonNode event = objectMapper.readTree(data);
+                    if (event.has("error")) {
+                        throw new ModelGatewayException(502, "模型服务暂时不可用，请稍后再试");
+                    }
+                    JsonNode choice = event.path("choices").path(0);
+                    String delta = choice.path("delta").path("content").asText("");
+                    if (StringUtils.hasText(delta)) {
+                        output.append(delta);
+                        onDelta.accept(delta);
+                    }
+                    JsonNode chatUsage = event.path("usage");
+                    if (chatUsage.isObject()) usage = ModelUsage.fromJson(chatUsage);
+                    if (StringUtils.hasText(choice.path("finish_reason").asText(""))) break;
+                }
+            }
+            if (!StringUtils.hasText(output)) throw new IllegalStateException("模型没有返回可读取的文章结果");
+            return ModelCallResult.of(objectMapper.readTree(stripCodeFence(output.toString())), usage,
+                    endpoint.model());
+        } catch (IOException e) {
+            if (output.isEmpty()) {
+                throw new ModelGatewayException(503, "模型服务连接中断，请稍后再试");
+            }
+            throw new IllegalStateException("读取模型流式结果失败：" + e.getMessage(), e);
+        } catch (CancellationException e) {
+            throw e;
+        } catch (IllegalStateException | ModelGatewayException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("读取模型流式结果失败：" + e.getMessage(), e);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    /**
+     * 把内部统一的 Responses 形态 payload 翻译成 Chat Completions 形态。
+     *
+     * <p>上游 builder 一律按 Responses 语义拼 {@code instructions}/{@code input}，
+     * 在这里集中翻译，而不是让五六个 builder 各判断一次协议——协议是端点属性，
+     * 与"这段提示词想说什么"无关，混在一起会让每个 builder 都要记住两套字段名。</p>
+     */
+    private Map<String, Object> chatCompletionsPayload(Map<String, Object> responsesPayload) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : responsesPayload.entrySet()) {
+            String key = entry.getKey();
+            // store/instructions/input/tools 都是 Responses 专有键名，逐一转换后不再透传。
+            if ("store".equals(key) || "instructions".equals(key) || "input".equals(key)) continue;
+            payload.put(key, entry.getValue());
+        }
+        List<Map<String, Object>> messages = new java.util.ArrayList<>();
+        Object instructions = responsesPayload.get("instructions");
+        if (instructions instanceof String text && StringUtils.hasText(text)) {
+            messages.add(Map.of("role", "system", "content", text));
+        }
+        Object input = responsesPayload.get("input");
+        if (input instanceof List<?> turns) {
+            for (Object turn : turns) {
+                if (turn instanceof Map<?, ?> map && map.get("role") instanceof String role) {
+                    messages.add(Map.of("role", role, "content", String.valueOf(map.get("content"))));
+                }
+            }
+        } else if (input instanceof String text) {
+            messages.add(Map.of("role", "user", "content", text));
+        }
+        payload.put("messages", List.copyOf(messages));
+        return payload;
+    }
+
     private JsonNode postJson(ModelEndpoint endpoint, Map<String, Object> payload) {
+        boolean chatCompletions = ModelGateway.API_STYLE_CHAT_COMPLETIONS.equals(endpoint.apiStyle());
         try {
             return restClientFor(endpoint).post()
-                    .uri("/responses")
+                    .uri(chatCompletions ? "/chat/completions" : "/responses")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(payload)
+                    .body(chatCompletions ? chatCompletionsPayload(payload) : payload)
                     .retrieve()
                     .body(JsonNode.class);
         } catch (RestClientResponseException e) {

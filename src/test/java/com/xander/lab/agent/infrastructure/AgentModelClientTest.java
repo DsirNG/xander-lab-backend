@@ -2,6 +2,8 @@ package com.xander.lab.agent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.agent.application.AgentToolRegistry;
 import com.xander.lab.agent.application.EmitArtifactTool;
@@ -227,6 +229,22 @@ class AgentModelClientTest {
         assertThat(requestPayload.path("reasoning").path("effort").asText()).isEqualTo("low");
     }
 
+    /**
+     * grok 族群必须也收到 effort。
+     *
+     * <p>生产主供应商就是 grok-4.5。原先只认 gpt-5 / o 系，grok 被判成"不支持"而漏传，
+     * 端点于是退回自己的默认 {@code high}：实测同一句 "hi" 的 reasoning_tokens 从 566
+     * 掉到 180 只靠这一个参数。漏传时是静默的——请求照样成功，只是每次都贵且重。</p>
+     */
+    @Test
+    void requestsLowReasoningEffortForGrokAgentTurns() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"你好\",\"thought\":\"\",\"action\":null}"));
+
+        client(false, "grok-4.5").decideNextStep("context", "tools");
+
+        assertThat(requestPayload.path("reasoning").path("effort").asText()).isEqualTo("low");
+    }
+
     @Test
     void omitsReasoningEffortForNonReasoningCompatibilityModels() throws Exception {
         startServer(List.of("{\"done\":true,\"reply\":\"你好\",\"thought\":\"\",\"action\":null}"));
@@ -425,6 +443,44 @@ class AgentModelClientTest {
         assertThat(requestPayload.path("instructions").asText()).contains("当前未启用");
     }
 
+    /**
+     * 管理台把接口风格配成 CHAT_COMPLETIONS 时，请求必须真的打到 /chat/completions。
+     *
+     * <p>此前这个字段完全不被读取：无论配成什么，请求都发往 /responses。配置看似生效
+     * 实则被忽略，比没有这个配置更糟——运维改完以为切了协议，实际毫无变化。</p>
+     */
+    @Test
+    void usesChatCompletionsWhenTheEndpointSaysSo() throws Exception {
+        List<String> paths = new ArrayList<>();
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/", exchange -> {
+            paths.add(exchange.getRequestURI().getPath());
+            requestPayload = objectMapper.readTree(exchange.getRequestBody());
+            exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, 0);
+            // Chat Completions 的帧没有 type，增量在 choices[0].delta.content。
+            var chunk = objectMapper.createObjectNode();
+            chunk.putArray("choices").addObject().putObject("delta")
+                    .put("content", "{\"done\":true,\"reply\":\"走了聊天协议\",\"thought\":\"\",\"action\":null}");
+            writeEvent(exchange, chunk);
+            var last = objectMapper.createObjectNode();
+            last.putArray("choices").addObject().put("finish_reason", "stop");
+            last.putObject("usage").put("prompt_tokens", 11).put("completion_tokens", 7);
+            writeEvent(exchange, last);
+            exchange.close();
+        });
+        server.start();
+
+        JsonNode decision = chatCompletionsClient().decideNextStep("你好", "tools").payload();
+
+        assertThat(paths).containsExactly("/chat/completions");
+        assertThat(decision.path("reply").asText()).isEqualTo("走了聊天协议");
+        // 协议换了，body 形态也得换：system 消息 + messages 数组，而不是 instructions/input。
+        assertThat(requestPayload.path("messages").path(0).path("role").asText()).isEqualTo("system");
+        assertThat(requestPayload.has("instructions")).isFalse();
+        assertThat(requestPayload.has("input")).isFalse();
+    }
+
     private void startServer(List<String> outputDeltas) throws IOException {
         server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/responses", exchange -> {
@@ -464,6 +520,15 @@ class AgentModelClientTest {
         properties.setModel(model);
         properties.setWebSearchEnabled(webSearchEnabled);
         return new AgentModelClient(properties, objectMapper);
+    }
+
+    /** 网关把接口风格指到 CHAT_COMPLETIONS 的客户端：验证协议分流真的生效。 */
+    private AgentModelClient chatCompletionsClient() {
+        AgentModelProperties properties = new AgentModelProperties();
+        properties.setWebSearchEnabled(false);
+        ModelEndpoint endpoint = new ModelEndpoint(6L, "http://127.0.0.1:" + server.getAddress().getPort(),
+                "test-key", "grok-4.5", ModelGateway.API_STYLE_CHAT_COMPLETIONS);
+        return new AgentModelClient(properties, objectMapper, featureKey -> List.of(endpoint));
     }
 
     /**

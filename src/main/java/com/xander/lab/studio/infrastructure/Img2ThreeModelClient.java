@@ -227,6 +227,7 @@ public class Img2ThreeModelClient {
         requestFactory.setConnectTimeout(Duration.ofSeconds(20));
         // ObjectSculptSpec responses can take minutes; this bound still guarantees durable failure recovery.
         requestFactory.setReadTimeout(Duration.ofMinutes(4));
+        boolean chatCompletions = ModelGateway.API_STYLE_CHAT_COMPLETIONS.equals(endpoint.apiStyle());
         try {
             JsonNode body = RestClient.builder()
                     .baseUrl(trimTrailingSlash(endpoint.baseUrl()))
@@ -234,18 +235,69 @@ public class Img2ThreeModelClient {
                     .defaultHeader("Authorization", "Bearer " + endpoint.apiKey())
                     .build()
                     .post()
-                    .uri("/responses")
+                    .uri(chatCompletions ? "/chat/completions" : "/responses")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(payload)
+                    .body(chatCompletions ? chatCompletionsPayload(payload) : payload)
                     .retrieve()
                     .body(JsonNode.class);
             return ModelCallResult.of(body, ModelUsage.fromJson(body == null ? null : body.path("usage")),
                     endpoint.model());
         } catch (Exception e) {
             String reason = describeFailure(e);
-            log.warn("img2three Responses API request failed: {}", reason, e);
+            log.warn("img2three MODEL API request failed: {}", reason, e);
             throw new IllegalStateException("Image-to-3D model request failed or timed out: " + reason, e);
         }
+    }
+
+    /**
+     * 把 Responses 形态 payload 翻成 Chat Completions 形态。
+     *
+     * <p>{@code instructions} 降级为一条 system 消息；{@code input} 的
+     * {@code input_text}/{@code input_image} 内容块换成 {@code text}/{@code image_url}
+     * （data URL 从字符串挪进 {@code image_url.url}）；{@code max_output_tokens}
+     * 换成该协议的 {@code max_tokens}。这几个键名不对，供应商会直接 400。</p>
+     */
+    private Map<String, Object> chatCompletionsPayload(Map<String, Object> responsesPayload) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : responsesPayload.entrySet()) {
+            String key = entry.getKey();
+            if ("store".equals(key) || "instructions".equals(key) || "input".equals(key)) continue;
+            payload.put("max_output_tokens".equals(key) ? "max_tokens" : key, entry.getValue());
+        }
+        List<Map<String, Object>> messages = new java.util.ArrayList<>();
+        Object instructions = responsesPayload.get("instructions");
+        if (instructions instanceof String text && StringUtils.hasText(text)) {
+            messages.add(Map.of("role", "system", "content", text));
+        }
+        Object input = responsesPayload.get("input");
+        if (input instanceof List<?> turns) {
+            for (Object turn : turns) {
+                if (turn instanceof Map<?, ?> map && map.get("role") instanceof String role) {
+                    messages.add(Map.of("role", role, "content", chatCompletionsContent(map.get("content"))));
+                }
+            }
+        } else if (input instanceof String text) {
+            messages.add(Map.of("role", "user", "content", text));
+        }
+        payload.put("messages", List.copyOf(messages));
+        return payload;
+    }
+
+    /** Content blocks keep their text but must be renamed to the Chat Completions vocabulary. */
+    private Object chatCompletionsContent(Object responsesContent) {
+        if (!(responsesContent instanceof List<?> blocks)) return responsesContent;
+        List<Map<String, Object>> converted = new java.util.ArrayList<>();
+        for (Object block : blocks) {
+            if (!(block instanceof Map<?, ?> map)) continue;
+            String type = String.valueOf(map.get("type"));
+            if ("input_text".equals(type)) {
+                converted.add(Map.of("type", "text", "text", String.valueOf(map.get("text"))));
+            } else if ("input_image".equals(type)) {
+                converted.add(Map.of("type", "image_url",
+                        "image_url", Map.of("url", String.valueOf(map.get("image_url")))));
+            }
+        }
+        return List.copyOf(converted);
     }
 
     private String describeFailure(Exception error) {

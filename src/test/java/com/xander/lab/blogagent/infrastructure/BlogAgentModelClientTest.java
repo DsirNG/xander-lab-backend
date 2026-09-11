@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -206,5 +208,51 @@ class BlogAgentModelClientTest {
 
         assertEquals(1, delivered.get());
         assertEquals(1, requests.get());
+    }
+
+    /**
+     * 配成 CHAT_COMPLETIONS 时，流式请求要打到 /chat/completions 并解析该协议的事件。
+     *
+     * <p>此前该字段不被读取，请求永远发往 /responses：运维把它改成聊天协议后，
+     * 实际协议没有任何变化，只在日志里留下一条看起来"已生效"的配置。</p>
+     */
+    @Test
+    void streamsThroughChatCompletionsWhenTheEndpointSaysSo() throws Exception {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        java.util.List<String> paths = new java.util.ArrayList<>();
+        StringBuilder body = new StringBuilder();
+        server.createContext("/", exchange -> {
+            paths.add(exchange.getRequestURI().getPath());
+            body.append(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            // Chat Completions 的帧没有 type：增量在 choices[0].delta.content。
+            byte[] bytes = ("data: {\"choices\":[{\"delta\":{\"content\":\"{\\\"angle\\\":\"}}]}\n\n"
+                    + "data: {\"choices\":[{\"delta\":{\"content\":\"\\\"深度优先\\\"}\"}}]}\n\n"
+                    + "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],"
+                    + "\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7}}\n\n")
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+            exchange.sendResponseHeaders(200, bytes.length);
+            try (OutputStream out = exchange.getResponseBody()) {
+                out.write(bytes);
+            }
+        });
+        server.start();
+
+        BlogAgentProperties properties = new BlogAgentProperties();
+        properties.setWebSearchEnabled(false);
+        ModelEndpoint endpoint = new ModelEndpoint(6L, "http://127.0.0.1:" + server.getAddress().getPort(),
+                "test-key", "grok-4.5", ModelGateway.API_STYLE_CHAT_COMPLETIONS);
+        BlogAgentModelClient chatClient = new BlogAgentModelClient(properties, objectMapper,
+                featureKey -> List.of(endpoint));
+
+        StringBuilder deltas = new StringBuilder();
+        JsonNode result = chatClient.createArticleStream("测试主题", deltas::append).payload();
+
+        assertEquals("{\"angle\":\"深度优先\"}", result.toString());
+        assertEquals("{\"angle\":\"深度优先\"}", deltas.toString());
+        assertEquals(List.of("/chat/completions"), paths);
+        // body 也必须是聊天协议形态：messages 里有 system 消息，不再有 instructions/input。
+        assertTrue(body.toString().contains("\"messages\""));
+        assertTrue(!body.toString().contains("\"instructions\""));
     }
 }

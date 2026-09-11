@@ -32,7 +32,9 @@ import java.util.function.Consumer;
 import java.util.function.BooleanSupplier;
 
 /**
- * Calls an OpenAI-compatible Responses endpoint to drive the agent loop.
+ * Calls an OpenAI-compatible model endpoint to drive the agent loop.
+ * The endpoint's {@code apiStyle} picks the protocol: {@code RESPONSES} (default)
+ * posts to {@code /responses}, {@code CHAT_COMPLETIONS} to {@code /chat/completions}.
  * Configuration belongs to the agent module; deployment defaults may reuse
  * the blog model environment variables without coupling Java modules.
  * When the admin model gateway returns candidates for the agent feature they
@@ -164,7 +166,12 @@ public class AgentModelClient {
                                                 Consumer<String> onAnswerDelta,
                                                 BooleanSupplier cancellationRequested) {
         long requestStartedNanos = System.nanoTime();
-        Map<String, Object> payload = requestPayload(endpoint.model(), turns, toolDescriptions, attachments);
+        // 接口风格由配置决定：管理台把某个功能指到 CHAT_COMPLETIONS 时就走 /chat/completions，
+        // 否则维持原先的 /responses。两种协议的 payload 与事件流都不一样，见下面两个分支。
+        boolean chatCompletions = ModelGateway.API_STYLE_CHAT_COMPLETIONS.equals(endpoint.apiStyle());
+        Map<String, Object> payload = chatCompletions
+                ? chatCompletionsPayload(endpoint.model(), turns, toolDescriptions, attachments)
+                : requestPayload(endpoint.model(), turns, toolDescriptions, attachments);
         payload.put("stream", true);
         boolean directConversation = !StringUtils.hasText(toolDescriptions);
 
@@ -174,7 +181,8 @@ public class AgentModelClient {
         DecisionReplyDecoder replyDecoder = new DecisionReplyDecoder(onAnswerDelta);
         try {
             connection = (HttpURLConnection) URI.create(
-                    trimTrailingSlash(endpoint.baseUrl()) + "/responses")
+                    trimTrailingSlash(endpoint.baseUrl())
+                            + (chatCompletions ? "/chat/completions" : "/responses"))
                     .toURL().openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Authorization", "Bearer " + endpoint.apiKey());
@@ -203,6 +211,36 @@ public class AgentModelClient {
                     if (data.isEmpty() || "[DONE]".equals(data)) continue;
                     JsonNode event = objectMapper.readTree(data);
                     String type = event.path("type").asText();
+                    if (chatCompletions) {
+                        // Chat Completions 流没有 type 字段，增量挂在 choices[0].delta.content 上，
+                        // 以 data: [DONE] 收尾（上面已跳过）。用法统计只在末包出现。
+                        if (event.has("error")) {
+                            // 与 /responses 一样，上游可能先以 200 建流再用 error 包报错。
+                            // 文案保持笼统（原文可能含账号/配额），原文只进日志。
+                            log.warn("agent model upstream error event provider={} model={} detail={}",
+                                    endpoint.providerId(), endpoint.model(), errorEventDetail(event));
+                            throw new ModelGatewayException(502, "模型服务暂时不可用，请稍后重试");
+                        }
+                        String delta = event.path("choices").path(0).path("delta").path("content").asText("");
+                        if (StringUtils.hasLength(delta)) {
+                            if (!firstOutputLogged) {
+                                firstOutputLogged = true;
+                                log.info("agent model first output provider={} model={} headersMs={} firstOutputMs={}",
+                                        endpoint.providerId(), endpoint.model(), headersMillis,
+                                        elapsedMillis(requestStartedNanos));
+                            }
+                            appendOutputDelta(output, replyDecoder, delta, directConversation, onAnswerDelta);
+                        }
+                        JsonNode chatUsage = event.path("usage");
+                        if (chatUsage.isObject()) usage = ModelUsage.fromJson(chatUsage);
+                        String finish = event.path("choices").path(0).path("finish_reason").asText("");
+                        if (StringUtils.hasText(finish)) {
+                            log.info("agent model completed provider={} model={} totalMs={}",
+                                    endpoint.providerId(), endpoint.model(), elapsedMillis(requestStartedNanos));
+                            break;
+                        }
+                        continue;
+                    }
                     if ("response.output_text.delta".equals(type)) {
                         if (!firstOutputLogged) {
                             firstOutputLogged = true;
@@ -238,6 +276,13 @@ public class AgentModelClient {
                                 endpoint.providerId(), endpoint.model(), elapsedMillis(requestStartedNanos));
                         break;
                     } else if ("error".equals(type)) {
+                        // 上游以 200 建立流、再用 error 事件报错。
+                        // 用户可见的文案必须保持笼统（供应商的原始描述可能含账号、
+                        // 配额等内部信息，由 mapsUpstreamSseErrorsToASafeMessage 钉死），
+                        // 但**日志里**必须留下原文，否则线上只能看到"暂时不可用"，
+                        // 真实原因（配额、审核、上游超时）永远无从查起。
+                        log.warn("agent model upstream error event provider={} model={} detail={}",
+                                endpoint.providerId(), endpoint.model(), errorEventDetail(event));
                         throw new ModelGatewayException(502, "模型服务暂时不可用，请稍后重试");
                     }
                 }
@@ -319,6 +364,78 @@ public class AgentModelClient {
             payload.put("tools", List.of(Map.of("type", "web_search")));
         }
         return payload;
+    }
+
+    /**
+     * Chat Completions 形态的请求体。
+     *
+     * <p>与 Responses 的差别不是改个字段名：system 指令要降级成一条 {@code role=system}
+     * 消息；{@code input} 要变成 {@code messages}；附件不是 input_image/input_file，
+     * 而是 image_url 内容块；结构化输出走 {@code response_format.json_schema}。
+     * 图片以外的文档在 Chat Completions 里没有对应块，直接丢弃——宁可少给一份材料，
+     * 也不能拼出一个供应商会 400 的 body。</p>
+     */
+    private Map<String, Object> chatCompletionsPayload(String model, List<AgentInputTurn> turns,
+                                                       String toolDescriptions, List<AgentAttachment> attachments) {
+        boolean webSearchEnabled = properties.isWebSearchEnabled();
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("model", model);
+
+        List<Map<String, Object>> messages = new java.util.ArrayList<>();
+        messages.add(Map.of("role", "system",
+                "content", instructions(toolDescriptions, webSearchEnabled)));
+        List<AgentInputTurn> effective = turns == null || turns.isEmpty()
+                ? List.of(AgentInputTurn.user("")) : turns;
+        int attachmentTurn = hasAttachments(attachments) ? lastUserTurnIndex(effective) : -1;
+        for (int index = 0; index < effective.size(); index++) {
+            AgentInputTurn turn = effective.get(index);
+            Object content = index == attachmentTurn
+                    ? chatCompletionsContent(turn.text(), attachments) : turn.text();
+            messages.add(Map.of("role", turn.role(), "content", content));
+        }
+        if (hasAttachments(attachments) && attachmentTurn < 0) {
+            messages.add(Map.of("role", AgentInputTurn.USER,
+                    "content", chatCompletionsContent("", attachments)));
+        }
+        payload.put("messages", List.copyOf(messages));
+
+        if (StringUtils.hasText(toolDescriptions)) {
+            payload.put("response_format", chatCompletionsDecisionFormat());
+        }
+        String reasoningEffort = normalizedReasoningEffort(model);
+        if (reasoningEffort != null) {
+            payload.put("reasoning_effort", reasoningEffort);
+        }
+        if (webSearchEnabled) {
+            payload.put("tools", List.of(Map.of("type", "web_search")));
+        }
+        return payload;
+    }
+
+    /** Chat Completions 的多模态内容块：文本 + 图片（文档形态在此协议下没有对应块，跳过）。 */
+    private Object chatCompletionsContent(String text, List<AgentAttachment> attachments) {
+        java.util.ArrayList<Map<String, Object>> content = new java.util.ArrayList<>();
+        content.add(Map.of("type", "text", "text", text));
+        for (AgentAttachment attachment : attachments) {
+            if (attachment.image()) {
+                content.add(Map.of(
+                        "type", "image_url",
+                        "image_url", Map.of("url", attachment.url())));
+            }
+        }
+        return content.size() == 1 ? text : List.copyOf(content);
+    }
+
+    /** Chat Completions 的结构化输出：同一套 schema，换成 {@code response_format} 外壳。 */
+    private Map<String, Object> chatCompletionsDecisionFormat() {
+        JsonNode text = structuredDecisionText();
+        Map<String, Object> format = new LinkedHashMap<>();
+        format.put("type", "json_schema");
+        format.put("json_schema", Map.of(
+                "name", text.path("format").path("name").asText("agent_decision"),
+                "strict", text.path("format").path("strict").asBoolean(true),
+                "schema", objectMapper.convertValue(text.path("format").path("schema"), Map.class)));
+        return format;
     }
 
     /**
@@ -425,11 +542,20 @@ public class AgentModelClient {
         return normalized;
     }
 
+    /**
+     * 该模型族是否接受 Responses 的 {@code reasoning.effort} 参数。
+     *
+     * <p>漏判的代价不是"少传一个可选字段"：不传时端点会用自己的默认档位，而中转上
+     * 实测 grok-4.5 的默认是 {@code high}。那意味着每次对话都按高推理跑——实测同样
+     * 一个"hi"，不传时 reasoning_tokens=566，传 {@code low} 时 180，成本同步降到约
+     * 三分之一。上游负载因此显著抬高，而高负载正是 524 的温床。grok 族必须一起纳入。
+     */
     private boolean supportsReasoningEffort(String model) {
         if (!StringUtils.hasText(model)) return false;
         String normalized = model.trim().toLowerCase(Locale.ROOT);
         if (normalized.contains("pro")) return false;
         return normalized.startsWith("gpt-5")
+                || normalized.startsWith("grok")
                 || normalized.matches("o[134](?:-|$).*");
     }
 
@@ -560,6 +686,24 @@ public class AgentModelClient {
             if (StringUtils.hasText(text)) return text;
         }
         return defaultText(item.path("text").asText(null));
+    }
+
+    /**
+     * 从上游 {@code error} 事件里取出人能看懂的一句描述。
+     *
+     * <p>Responses 与 Chat Completions 两种形态都认：前者的错误挂在 {@code error}
+     * 对象上，后者在 {@code error} 里给 {@code message}。取不到就返回 null，由调用方
+     * 退回通用文案。
+     */
+    private String errorEventDetail(JsonNode event) {
+        JsonNode error = event.path("error");
+        if (error.isMissingNode() || error.isNull()) return null;
+        if (error.isTextual()) return defaultText(error.asText(null));
+        for (String field : List.of("message", "detail", "type", "code")) {
+            String value = error.path(field).asText();
+            if (StringUtils.hasText(value)) return defaultText(value);
+        }
+        return null;
     }
 
     /** Accepts compatible gateways that wrap an otherwise valid decision with prose or tags. */
