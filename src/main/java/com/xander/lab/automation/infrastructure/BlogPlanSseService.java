@@ -110,13 +110,22 @@ public class BlogPlanSseService {
         }
     }
 
+    /**
+     * Unregisters one connection. Idempotent.
+     *
+     * <p>每个 emitter 的 onCompletion / onTimeout / onError 都会走到这里，心跳线程在
+     * 发送失败时也会调一次，所以同一个 emitter 天然会被通知多次。早先没有幂等判断，
+     * 结果一次断连会打出 2~6 行 "已断开"（多 tab 时更明显），日志里全是噪声，
+     * 也让人误以为连接在反复抖动。这里以"是否真的从列表里摘掉了它"为准：
+     * 摘不到的调用是重复通知，直接返回。
+     */
     private void remove(Long userId, SseEmitter emitter) {
         List<SseEmitter> userEmitters = subscribers.get(userId);
-        if (userEmitters != null) {
-            userEmitters.remove(emitter);
-            if (userEmitters.isEmpty()) {
-                subscribers.remove(userId, userEmitters);
-            }
+        if (userEmitters == null || !userEmitters.remove(emitter)) {
+            return;
+        }
+        if (userEmitters.isEmpty()) {
+            subscribers.remove(userId, userEmitters);
         }
         try {
             emitter.complete();

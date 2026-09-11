@@ -225,7 +225,9 @@ agent:
     web-search-enabled: ${AGENT_MODEL_WEB_SEARCH_ENABLED:${BLOG_AGENT_WEB_SEARCH_ENABLED:true}}
     reasoning-effort: ${AGENT_MODEL_REASONING_EFFORT:low}
     connect-timeout-millis: ${AGENT_MODEL_CONNECT_TIMEOUT_MILLIS:15000}
-    read-timeout-millis: ${AGENT_MODEL_READ_TIMEOUT_MILLIS:300000}
+    # 流式读取的"两次数据之间"上限，非整轮上限。上游卡死时靠它尽早换供应商，
+    # 而不是等到网关层 25 秒后吐 524。原先 300000 会让单端点最长静默 5 分钟。
+    read-timeout-millis: ${AGENT_MODEL_READ_TIMEOUT_MILLIS:60000}
 
 blog:
   agent:

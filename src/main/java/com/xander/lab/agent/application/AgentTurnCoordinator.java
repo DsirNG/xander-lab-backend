@@ -120,8 +120,7 @@ public class AgentTurnCoordinator {
         if (exception instanceof IllegalArgumentException || exception instanceof CancellationException) {
             return StringUtils.hasText(exception.getMessage()) ? exception.getMessage() : "请求未完成";
         }
-        if (exception instanceof IllegalStateException && StringUtils.hasText(exception.getMessage())
-                && !exception.getMessage().contains("http") && !exception.getMessage().contains("HTTP")) {
+        if (exception instanceof IllegalStateException && StringUtils.hasText(exception.getMessage())) {
             return exception.getMessage();
         }
         return "智能体任务失败，请稍后重试";
