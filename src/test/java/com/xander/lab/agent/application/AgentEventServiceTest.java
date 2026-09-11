@@ -78,6 +78,52 @@ class AgentEventServiceTest {
                 .isInstanceOf(AgentRunSupersededException.class);
     }
 
+    /**
+     * 回归：静默落库绝不能广播。
+     *
+     * <p>"先推送、再落库"的路径已经用内存事件把增量送到了订阅端；如果这次落库再广播一遍，
+     * 订阅端的 id 单调去重挡不住那条无 id 的内存事件，用户就会看到同一段文字重复出现。</p>
+     */
+    @Test
+    void silentPersistWritesReplayCopyWithoutBroadcastingTwice() {
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(eventMapper.insertForRun(any(), eq(42L), eq(true))).thenAnswer(invocation -> {
+            AgentEvent event = invocation.getArgument(0);
+            event.setId(11L);
+            return 1;
+        });
+        AgentEventBus bus = new AgentEventBus();
+        AgentEventService silentService = new AgentEventService(eventMapper, conversationMapper, new ObjectMapper(), bus);
+        java.util.List<AgentEvent> published = new java.util.ArrayList<>();
+        bus.subscribe(7L, published::add);
+
+        AgentEvent stored = silentService.persistActiveSilently(7L, 42L, 3L, "answer_delta", "文本");
+
+        assertThat(stored.getId()).isEqualTo(11L);
+        verify(eventMapper).insertForRun(any(), eq(42L), eq(true));
+        assertThat(published).isEmpty();
+    }
+
+    @Test
+    void broadcastStoringStillNotifiesLiveSubscribers() {
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(eventMapper.insertForRun(any(), eq(42L), eq(true))).thenAnswer(invocation -> {
+            AgentEvent event = invocation.getArgument(0);
+            event.setId(12L);
+            return 1;
+        });
+        AgentEventBus bus = new AgentEventBus();
+        AgentEventService broadcastingService =
+                new AgentEventService(eventMapper, conversationMapper, new ObjectMapper(), bus);
+        java.util.List<AgentEvent> published = new java.util.ArrayList<>();
+        bus.subscribe(7L, published::add);
+
+        broadcastingService.storeActive(7L, 42L, 3L, "answer", "完成");
+
+        assertThat(published).hasSize(1);
+        assertThat(published.get(0).getId()).isEqualTo(12L);
+    }
+
     @Test
     void replayAndTerminalQueriesAreScopedToRunVersion() {
         AgentEvent error = new AgentEvent();

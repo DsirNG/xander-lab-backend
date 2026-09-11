@@ -10,12 +10,14 @@ import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.function.Consumer;
 
 /** Projects active-run messages and legacy replay events from execution facts. */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AgentEventProjector {
@@ -71,6 +73,43 @@ public class AgentEventProjector {
         AgentEvent event = eventService.storeActive(conversationId, userId, runVersion, eventType, data);
         eventService.deliver(event, listener);
         return event;
+    }
+
+    /**
+     * 流式增量的专用路径：<b>先推送，再落库</b>。
+     *
+     * <p>为什么不能沿用 {@link #appendActive} 的"先落库再推送"：那条路径把一次数据库往返
+     * 串在用户看到文字之前，落库慢或卡住时，用户就迟迟收不到（甚至永远收不到）已经生成好的正文。
+     * 这恰恰是流式回答最不该发生的事——正文其实早就在内存里了。</p>
+     *
+     * <p>这样做的前提是"增量不必逐条持久化"：收口时的 answer 事件带完整正文，
+     * 并且还会落成一条持久化消息（见 AgentConversationService 的收口分支）。
+     * 所以中间某几个增量没来得及落库，断线重连读到的文本依然完整，不会缺内容。</p>
+     *
+     * <p>落库必须走 {@code persistActiveSilently} 而不是 {@code storeActive}：后者落库成功后会
+     * 再广播一次，而订阅端的"按 id 单调去重"挡不住本条无 id 的内存事件，同一条增量会渲染两遍。
+     * 本方法的推送就是唯一的送达路径，落库只为断线重放留副本。</p>
+     *
+     * <p>落库失败只降级为"这段增量没有可重放副本"，不影响本轮已经送达的正文；
+     * 抛出去会打断整轮执行，反而把已经生成的内容也一并废掉，所以这里吞掉并记一条日志。
+     * 被新代次取代（{@link AgentRunSupersededException}）不走这里——那不是"落库故障"，
+     * 而是本轮已经作废，必须照常向上抛出让执行停止。</p>
+     */
+    void appendLive(Long conversationId, Long userId, long runVersion,
+                    String eventType, Object data, Consumer<AgentEvent> listener) {
+        AgentEvent event = eventService.liveEvent(conversationId, runVersion, eventType, data);
+        // 第一步：先让用户看到。这一步不依赖任何数据库往返，落库卡死也挡不住它。
+        eventService.deliver(event, listener);
+        // 第二步：再落库留副本，供断线重放补齐；静默落库，避免同一条增量被推送两次。
+        try {
+            AgentEvent stored = eventService.persistActiveSilently(conversationId, userId, runVersion, eventType, data);
+            event.setId(stored.getId());
+        } catch (AgentRunSupersededException superseded) {
+            throw superseded;
+        } catch (RuntimeException persistenceFailure) {
+            log.warn("agent live delta not persisted conversation={} run={} event={} exceptionType={}",
+                    conversationId, runVersion, eventType, persistenceFailure.getClass().getSimpleName());
+        }
     }
 
     JsonNode progressPayload(String tool, String message) {

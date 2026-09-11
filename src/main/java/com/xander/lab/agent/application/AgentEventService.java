@@ -32,19 +32,33 @@ public class AgentEventService {
     @Transactional
     public AgentEvent storeActive(Long conversationId, Long userId, long runVersion,
                                   String eventType, Object data) {
-        int touched = conversationMapper.update(null, new LambdaUpdateWrapper<com.xander.lab.agent.domain.AgentConversation>()
-                .eq(com.xander.lab.agent.domain.AgentConversation::getId, conversationId)
-                .eq(com.xander.lab.agent.domain.AgentConversation::getUserId, userId)
-                .eq(com.xander.lab.agent.domain.AgentConversation::getStatus, "running")
-                .eq(com.xander.lab.agent.domain.AgentConversation::getRunVersion, runVersion)
-                .setSql("updated_at = CURRENT_TIMESTAMP"));
-        if (touched != 1) throw new AgentRunSupersededException(conversationId, runVersion);
+        renewActiveLease(conversationId, userId, runVersion);
         return storeForRun(conversationId, userId, runVersion, eventType, data, true);
     }
 
-    /** Stores an event for a generation; terminal callers may already have moved it out of running. */
+    /**
+     * 与 {@link #storeActive} 落库内容完全一致，但<b>不广播</b>。
+     *
+     * <p>供 {@link AgentEventProjector#appendLive} 的"先推送、再落库"路径使用：那条路径已经
+     * 用内存事件把内容推给订阅者了，如果这里再广播一次，同一条增量会因为「无 id 的那份不被
+     * 客户端去重丢弃」而渲染两遍。事件落库只为断线重放留一份可读副本。</p>
+     */
+    @Transactional
+    public AgentEvent persistActiveSilently(Long conversationId, Long userId, long runVersion,
+                                            String eventType, Object data) {
+        renewActiveLease(conversationId, userId, runVersion);
+        return storeForRun(conversationId, userId, runVersion, eventType, data, true, false);
+    }
+
+    /** Stores an event for a generation and broadcasts it to this instance's live subscribers. */
     public AgentEvent storeForRun(Long conversationId, Long userId, long runVersion,
                                   String eventType, Object data, boolean requireRunning) {
+        return storeForRun(conversationId, userId, runVersion, eventType, data, requireRunning, true);
+    }
+
+    private AgentEvent storeForRun(Long conversationId, Long userId, long runVersion,
+                                   String eventType, Object data, boolean requireRunning,
+                                   boolean broadcast) {
         AgentEvent event = new AgentEvent();
         event.setConversationId(conversationId);
         event.setRunVersion(runVersion);
@@ -55,9 +69,24 @@ public class AgentEventService {
             if (inserted == 0) throw new AgentRunSupersededException(conversationId, runVersion);
             throw new IllegalStateException("智能体事件持久化后未返回事件游标");
         }
-        // 落库成功即广播：在线订阅者（WS）即时收到，与持久化并行而非事后查库。
-        eventBus.publish(conversationId, event);
+        // 落库成功即广播：在线订阅者（WS）即时收到，无需自己去查库。
+        // 注意这里是"先落库、后广播"，且整个方法在事务内——订阅者收到的事件可能与最终提交
+        // 状态不一致（脏读），并且推送会被这次数据库往返阻塞。对延迟敏感、且可由完整正文
+        // 兜底的流式增量，应走 AgentEventProjector#appendLive 的"先推送、再落库"路径
+        // （它落库时走 broadcast = false，避免同一条增量被推送两次）。
+        if (broadcast) eventBus.publish(conversationId, event);
         return event;
+    }
+
+    /** 续租当前执行的 running 租约；touched 不为 1 说明本轮已被新代次取代。 */
+    private void renewActiveLease(Long conversationId, Long userId, long runVersion) {
+        int touched = conversationMapper.update(null, new LambdaUpdateWrapper<com.xander.lab.agent.domain.AgentConversation>()
+                .eq(com.xander.lab.agent.domain.AgentConversation::getId, conversationId)
+                .eq(com.xander.lab.agent.domain.AgentConversation::getUserId, userId)
+                .eq(com.xander.lab.agent.domain.AgentConversation::getStatus, "running")
+                .eq(com.xander.lab.agent.domain.AgentConversation::getRunVersion, runVersion)
+                .setSql("updated_at = CURRENT_TIMESTAMP"));
+        if (touched != 1) throw new AgentRunSupersededException(conversationId, runVersion);
     }
 
     /** Delivers an already-stored event; subscriber disconnects never affect durable execution. */
@@ -68,6 +97,22 @@ public class AgentEventService {
             log.debug("agent live event delivery failed for conversation {} and event {}",
                     event.getConversationId(), event.getEventType());
         }
+    }
+
+    /**
+     * 组装一条尚未落库的内存事件，供流式增量"先推送"使用。
+     *
+     * <p>它的 id 为空：订阅端的 id 单调去重会跳过它（见 AgentStreamWebSocketHandler 的推送出口），
+     * 因此它不占用游标、也不会把随后落库的那条挤掉。相应地，落库那一份<b>必须静默</b>
+     * （见 {@link #persistActiveSilently}），否则同一条增量会因为无 id 副本不被去重而被送达两次。</p>
+     */
+    public AgentEvent liveEvent(Long conversationId, long runVersion, String eventType, Object data) {
+        AgentEvent event = new AgentEvent();
+        event.setConversationId(conversationId);
+        event.setRunVersion(runVersion);
+        event.setEventType(eventType);
+        event.setDataContent(serialize(data));
+        return event;
     }
 
     public List<AgentEvent> listAfter(Long conversationId, long runVersion, long afterEventId) {

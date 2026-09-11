@@ -103,6 +103,75 @@ class AgentEventProjectorTest {
         verify(eventService).deliver(event, listener);
     }
 
+    /**
+     * 回归：流式增量必须"先推送、再落库"。
+     *
+     * <p>用户看到首字不应该被一次数据库往返拖住——正文在上游吐出时就已经在内存里了。
+     * 这里用调用顺序断言把方向钉死：deliver 必须先于 persistActiveSilently。</p>
+     */
+    @Test
+    void liveDeltaIsDeliveredBeforeItIsPersisted() {
+        AgentEvent live = new AgentEvent();
+        live.setRunVersion(3L);
+        live.setEventType("answer_delta");
+        live.setDataContent("正文");
+        when(eventService.liveEvent(7L, 3L, "answer_delta", "正文")).thenReturn(live);
+        java.util.List<String> order = new java.util.ArrayList<>();
+        // deliver 是"推送"这一步：这里按真实语义回调监听器，用于记录相对落库的先后。
+        org.mockito.Mockito.doAnswer(invocation -> {
+            order.add("deliver");
+            invocation.getArgument(1, Consumer.class).accept(live);
+            return null;
+        }).when(eventService).deliver(eq(live), any());
+        org.mockito.Mockito.doAnswer(invocation -> {
+            order.add("persist");
+            return null;
+        }).when(eventService).persistActiveSilently(7L, 42L, 3L, "answer_delta", "正文");
+
+        projector.appendLive(7L, 42L, 3L, "answer_delta", "正文", event -> { });
+
+        assertThat(order).containsExactly("deliver", "persist");
+    }
+
+    /**
+     * 回归：落库卡死/失败也不能让用户收不到已经生成好的正文。
+     *
+     * <p>这是用户明确指出的场景："如果落库卡死，用户永远收不到信息"。推送在落库之前已经完成，
+     * 落库抛异常只降级为"这段增量没有可重放副本"，不能把整轮执行和已送达的正文一起废掉。</p>
+     */
+    @Test
+    void liveDeltaSurvivesPersistenceFailureWithoutLosingDelivery() {
+        AgentEvent live = new AgentEvent();
+        live.setRunVersion(3L);
+        live.setEventType("answer_delta");
+        live.setDataContent("正文");
+        when(eventService.liveEvent(7L, 3L, "answer_delta", "正文")).thenReturn(live);
+        when(eventService.persistActiveSilently(7L, 42L, 3L, "answer_delta", "正文"))
+                .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("db hung"));
+        org.mockito.Mockito.doAnswer(invocation -> {
+            invocation.getArgument(1, Consumer.class).accept(live);
+            return null;
+        }).when(eventService).deliver(eq(live), any());
+        AtomicReference<AgentEvent> received = new AtomicReference<>();
+
+        projector.appendLive(7L, 42L, 3L, "answer_delta", "正文", received::set);
+
+        assertThat(received.get()).isSameAs(live);
+    }
+
+    /** 被新代次取代不是"落库故障"：本轮已作废，必须照常抛出让执行停止。 */
+    @Test
+    void liveDeltaStillPropagatesSupersededRuns() {
+        AgentEvent live = new AgentEvent();
+        when(eventService.liveEvent(7L, 3L, "answer_delta", "正文")).thenReturn(live);
+        when(eventService.persistActiveSilently(7L, 42L, 3L, "answer_delta", "正文"))
+                .thenThrow(new AgentRunSupersededException(7L, 3L));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                        projector.appendLive(7L, 42L, 3L, "answer_delta", "正文", event -> { }))
+                .isInstanceOf(AgentRunSupersededException.class);
+    }
+
     @Test
     void toolProgressPayloadKeepsTheOptionalStageDelimiterContract() {
         JsonNode payload = projector.progressPayload("blog_generate", "draft|正在生成");

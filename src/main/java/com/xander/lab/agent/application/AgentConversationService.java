@@ -933,10 +933,10 @@ public class AgentConversationService {
             if (!deliverDeltas) return;
             String normalized = normalizeAnswer(delta);
             if (!firstDeltaDelivered) {
-                // 第一个增量立刻推送：首字延迟由上游模型决定，不被缓冲拖慢。
+                // 第一个增量立刻推送：首字延迟由上游模型决定，不应再被一次数据库往返拖慢。
                 firstDeltaDelivered = true;
                 lastFlushNanos = System.nanoTime();
-                appendActive(conversationId, userId, runVersion, "answer_delta",
+                eventProjector.appendLive(conversationId, userId, runVersion, "answer_delta",
                         normalized, listener);
                 log.info("agent first visible delta conversation={} run={} step={} modelMs={} turnMs={}",
                         conversationId, runVersion, step,
@@ -947,13 +947,18 @@ public class AgentConversationService {
             if (elapsedMillis(lastFlushNanos) >= ANSWER_DELTA_BROADCAST_MILLIS) flush();
         }
 
-        /** 窗口到期或整轮结束时把缓冲区合并成一条事件；落库与推送是同一条事件，不会重复。 */
+        /**
+         * 窗口到期或整轮结束时，把缓冲区合并成一条事件推给用户。
+         *
+         * <p>走 {@code appendLive}（先推送、再落库）而不是 {@code appendActive}（先落库、再推送）：
+         * 正文已经在内存里，没有理由让用户等一次数据库往返才看到它。</p>
+         */
         private void flush() {
             if (deltaBuffer.isEmpty()) return;
             String payload = deltaBuffer.toString();
             deltaBuffer.setLength(0);
             lastFlushNanos = System.nanoTime();
-            appendActive(conversationId, userId, runVersion, "answer_delta", payload, listener);
+            eventProjector.appendLive(conversationId, userId, runVersion, "answer_delta", payload, listener);
         }
     }
 
