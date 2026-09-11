@@ -70,7 +70,16 @@ public class AgentTurnCoordinator {
                 log.info("agent failure ignored for superseded conversation {} and run {}", conversationId, runVersion);
                 return requireOwned(conversationId, userId);
             } catch (RuntimeException persistenceFailure) {
-                exception.addSuppressed(persistenceFailure);
+                // 数据库整体不可用时，这一步失败会抛出与当前正在传播的那个异常**同一个实例**
+                // （同一条 INSERT 链路），addSuppressed 自己吞自己会抛
+                // "IllegalArgumentException: Self-suppression not permitted"，
+                // 把真正的失败原因替换成一个毫无信息量的参数错误。这里先判同一性再挂抑制异常。
+                if (persistenceFailure != exception) {
+                    exception.addSuppressed(persistenceFailure);
+                } else {
+                    log.warn("agent terminal failure persistence failed with the same error that caused it "
+                            + "conversationId={} userId={} runVersion={}", conversationId, userId, runVersion);
+                }
                 log.error("agent terminal failure could not be persisted conversationId={} userId={} runVersion={} exceptionType={} message={}",
                         conversationId, userId, runVersion, persistenceFailure.getClass().getName(),
                         persistenceFailure.getMessage(), persistenceFailure);
