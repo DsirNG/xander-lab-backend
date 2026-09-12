@@ -96,10 +96,11 @@ aliyun:
         allowedTypes: mp4,avi,mov
         pathPrefix: videos/
 
-# CORS 允许的前端来源（逗号分隔），生产环境必须注入实际域名（含 nginx 反代时的浏览器 Origin）
+# CORS 允许的前端来源（逗号分隔）；未配置时使用 * 放行所有来源。
+# 配置具体域名后按白名单放行（含 nginx 反代时的浏览器 Origin）。
 app:
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://dinqor.cn,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000}
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
 
 mybatis-plus:
   configuration:

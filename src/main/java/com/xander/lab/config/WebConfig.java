@@ -2,10 +2,13 @@ package com.xander.lab.config;
 
 import com.xander.lab.identity.security.AuthInterceptor;
 
+import java.util.Arrays;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.CorsRegistration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -21,7 +24,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     /**
      * 允许跨域的前端来源，由环境变量 CORS_ALLOWED_ORIGINS 注入（逗号分隔）
-     * 禁止通配 + 携带凭据的组合；未显式配置时仅放行本地开发来源
+     * 未显式配置时使用 * 放行所有来源；配置具体来源时按白名单放行
      * 注意：nginx 反代 /api 时会保留浏览器 Origin 头，白名单必须包含实际页面 Origin
      */
     @Value("${app.cors.allowed-origins:*}")
@@ -40,12 +43,27 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        // 配置全局 CORS，确保前端 axios 跨域请求正常
-        registry.addMapping("/**")
-                .allowedOrigins(allowedOrigins)
+        // 配置全局 CORS，确保前端 axios 跨域请求正常。
+        // Spring 不允许 allowedOrigins("*") 与 allowCredentials(true) 组合，
+        // 因此通配模式下关闭凭据；具体白名单下保留凭据支持。
+        String[] configuredOrigins = Arrays.stream(allowedOrigins)
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toArray(String[]::new);
+        boolean allowAllOrigins = Arrays.stream(configuredOrigins)
+                .anyMatch("*"::equals);
+
+        CorsRegistration registration = registry.addMapping("/**")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")
                 .allowedHeaders("*")
-                .allowCredentials(true)
                 .maxAge(3600);
+
+        if (allowAllOrigins) {
+            registration.allowedOriginPatterns("*")
+                    .allowCredentials(false);
+        } else {
+            registration.allowedOrigins(configuredOrigins)
+                    .allowCredentials(true);
+        }
     }
 }
