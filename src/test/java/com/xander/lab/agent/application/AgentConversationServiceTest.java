@@ -44,6 +44,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -543,6 +544,55 @@ class AgentConversationServiceTest {
         assertThat(delivered.get().getId()).isPositive();
         assertThat(delivered.get().getEventType()).isEqualTo("error");
         assertThat(delivered.get().getDataContent()).contains("model down");
+    }
+
+    /**
+     * 回归：计费失败不能把一轮已经答完的对话变成"被新一轮取代"。
+     *
+     * <p>{@code finalizeReady} 先 {@code complete()} 把状态推到 ready、再计费。计费抛异常时，
+     * 异常会一路冒到 {@link AgentTurnCoordinator}，那里再调 {@code fail()}——但 fail 的
+     * {@code WHERE status='running'} 此时命中 0 行，于是抛 {@code AgentRunSupersededException}，
+     * 被当成并发取代静默吞掉：终态事件不投递、日志写着 superseded，真正的账务故障一点痕迹都没有。</p>
+     *
+     * <p>这里把 {@code conversationMapper.update} 换成一个按状态走的真状态机，让
+     * {@code fail()} 像生产一样落空——否则单测里 update 永远返回 1，fail 会"成功"，
+     * 就把这条真实链路遮掉了。</p>
+     */
+    @Test
+    void aBillingFailureDoesNotSwallowTheTerminalEvent() {
+        stubTransactions();
+        ObjectNode decision = decisionNode(true, "", null, null);
+        decision.put("reply", "已经答完了");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(decision));
+        AtomicReference<String> status = new AtomicReference<>("ready");
+        when(conversationMapper.update(any(), any())).thenAnswer(invocation -> {
+            String current = status.get();
+            if ("ready".equals(current)) {
+                status.set("running");
+                return 1;
+            }
+            if ("running".equals(current)) {
+                status.set("ready");
+                return 1;
+            }
+            return 0;
+        });
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+        doThrow(new IllegalStateException("积分账户不存在"))
+                .when(billingService)
+                .chargeTokens(any(), any(), any(), any(), any(), any(), any());
+        List<String> eventTypes = new ArrayList<>();
+
+        AgentConversation result = service.executeTurn(7L, 42L, "你好",
+                event -> eventTypes.add(event.getEventType()));
+
+        // 账务失败归账务，用户该拿到的东西一样不少。
+        assertThat(eventTypes).containsSubsequence("answer", "complete");
+        assertThat(result.getStatus()).isEqualTo("ready");
+        verify(eventMapper, org.mockito.Mockito.never()).insertForRun(
+                org.mockito.ArgumentMatchers.argThat(event -> "error".equals(event.getEventType())),
+                eq(42L), eq(false));
     }
 
     @Test

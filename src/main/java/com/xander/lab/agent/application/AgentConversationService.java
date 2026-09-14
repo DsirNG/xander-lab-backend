@@ -567,11 +567,34 @@ public class AgentConversationService {
     private AgentConversation finalizeReady(Long conversationId, Long userId, long runVersion,
                                             UsageAccumulator usage, Consumer<AgentEvent> onEvent) {
         TerminalTransition terminal = runLifecycle.complete(conversationId, userId, runVersion);
-        billingService.chargeTokens(userId, BillingBiz.AGENT_TURN,
-                "conv:" + conversationId + ":run:" + runVersion, "conv:" + conversationId,
-                usage.sum(), usage.model(), "智能体会话单轮执行");
+        chargeTurnQuietly(conversationId, userId, runVersion, usage);
         eventService.deliver(terminal.event(), onEvent);
         return terminal.conversation();
+    }
+
+    /**
+     * 这一轮的计费。
+     *
+     * <p>计费是"成功哨点"上的动作，不是成功的前提：模型已经答完、消息也已经落库，
+     * 此时账务失败再去 {@code fail()} 会走进一条死路——{@link AgentRunLifecycle#complete}
+     * 已经把状态推到 {@code ready}，{@code fail()} 只认 {@code running}，于是抛
+     * {@link AgentRunSupersededException}，被 {@link AgentTurnCoordinator} 当成"被新一轮顶掉"
+     * 静默吞掉：终态事件不投递、日志写着 superseded，真正的账务故障一点痕迹都没有。</p>
+     *
+     * <p>所以这里自己兜住异常并打成 error 日志：会话照常 ready，事件照常投递，
+     * 丢掉的账在日志里看得见，不会被伪装成一次正常的并发取代。</p>
+     */
+    private void chargeTurnQuietly(Long conversationId, Long userId, long runVersion, UsageAccumulator usage) {
+        try {
+            billingService.chargeTokens(userId, BillingBiz.AGENT_TURN,
+                    "conv:" + conversationId + ":run:" + runVersion, "conv:" + conversationId,
+                    usage.sum(), usage.model(), "智能体会话单轮执行");
+        } catch (RuntimeException exception) {
+            log.error("agent turn billing failed conversationId={} userId={} runVersion={} phase=billing"
+                            + " exceptionType={} message={}",
+                    conversationId, userId, runVersion, exception.getClass().getName(),
+                    exception.getMessage(), exception);
+        }
     }
 
     /** 请求停止当前正在执行的一轮；会话空闲时幂等返回。 */
