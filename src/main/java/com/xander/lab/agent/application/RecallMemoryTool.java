@@ -29,6 +29,12 @@ public class RecallMemoryTool implements AgentTool {
         return "recall_memory";
     }
 
+    /** 纯查询：不写任何状态，可与同批其它只读工具并发执行。 */
+    @Override
+    public boolean readOnly() {
+        return true;
+    }
+
     @Override
     public String description() {
         return "按关键词翻查你自己的长期记忆。"

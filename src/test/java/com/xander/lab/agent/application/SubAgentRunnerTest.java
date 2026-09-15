@@ -136,7 +136,9 @@ class SubAgentRunnerTest {
 
         assertThat(result.completed()).isTrue();
         assertThat(result.toolCalls()).isEmpty();
-        assertThat(model.contexts.get(1)).contains("尝试调用 publish_post 被拒绝").contains("query_knowledge");
+        // 拒绝文案与主循环同源（都来自 AgentActionPlan），所以模型在两处看到的纠正说法一致。
+        assertThat(model.contexts.get(1))
+                .contains("这一步的调用被拒绝").contains("publish_post").contains("query_knowledge");
     }
 
     @Test
@@ -152,7 +154,7 @@ class SubAgentRunnerTest {
         assertThat(result.completed()).isFalse();
         assertThat(result.steps()).isEqualTo(2);
         assertThat(result.toolCalls()).isEmpty();
-        assertThat(result.findings()).contains("尝试调用 publish_post 被拒绝");
+        assertThat(result.findings()).contains("这一步的调用被拒绝").contains("publish_post");
     }
 
     @Test
@@ -308,10 +310,43 @@ class SubAgentRunnerTest {
         }
     }
 
+    /**
+     * 回归：子智能体与主循环共用同一份 strict schema，而那份 schema 会邀请模型用 {@code actions}
+     * 一次报多个调用。只读 {@code action} 的话，整批会被当成"（空工具名）"拒掉，
+     * 子智能体交回主智能体的就只剩一串"被拒绝"的观察——模型明明按协议写对了。
+     */
+    @Test
+    void consumesABatchOfCallsInOneStepInsteadOfRefusingThemAsABlankToolName() {
+        RecordingTool knowledge = new RecordingTool("query_knowledge", "{}");
+        RecordingTool posts = new RecordingTool("query_posts", "{}");
+        ScriptedModel model = new ScriptedModel(decideBatch("query_knowledge", "query_posts"),
+                done("两处都查到了"));
+        SubAgentRunner runner = runner(model, 6, knowledge, posts);
+
+        SubAgentRunner.SubAgentResult result = runner.run(context, "盘点笔记和文章", "", Set.of(),
+                new CapturingProgress());
+
+        assertThat(result.completed()).isTrue();
+        assertThat(result.steps()).isEqualTo(2);
+        assertThat(result.toolCalls()).containsExactly("query_knowledge", "query_posts");
+        assertThat(knowledge.calls).isEqualTo(1);
+        assertThat(posts.calls).isEqualTo(1);
+    }
+
     private static ModelCallResult decideTool(String toolName) {
         return ModelCallResult.of(
                 json("{\"done\":false,\"action\":{\"tool\":\"" + toolName + "\",\"args\":{}}}"),
                 ModelUsage.NONE);
+    }
+
+    private static ModelCallResult decideBatch(String... toolNames) {
+        StringBuilder raw = new StringBuilder("{\"done\":false,\"action\":null,\"actions\":[");
+        for (int index = 0; index < toolNames.length; index++) {
+            if (index > 0) raw.append(',');
+            raw.append("{\"tool\":\"").append(toolNames[index]).append("\",\"args\":{}}");
+        }
+        raw.append("]}");
+        return ModelCallResult.of(json(raw.toString()), ModelUsage.NONE);
     }
 
     private static ModelCallResult done(String reply) {

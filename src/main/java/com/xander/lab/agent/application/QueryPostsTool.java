@@ -34,6 +34,12 @@ public class QueryPostsTool implements AgentTool {
         return "query_posts";
     }
 
+    /** 纯查询：不写任何状态，可与同批其它只读工具并发执行。 */
+    @Override
+    public boolean readOnly() {
+        return true;
+    }
+
     @Override
     public String description() {
         return "查询当前用户自己的博客文章列表（草稿 / 已发布 / 回收站），筛选条件可自由组合："

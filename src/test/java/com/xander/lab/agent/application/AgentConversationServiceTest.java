@@ -7,10 +7,12 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.domain.AgentConversation;
+import com.xander.lab.agent.domain.AgentApproval;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.domain.AgentInputTurn;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.domain.AgentPlanItem;
+import com.xander.lab.agent.domain.AgentToolInvocation;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentEventMapper;
@@ -116,6 +118,7 @@ class AgentConversationServiceTest {
                 .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
         org.mockito.Mockito.lenient().when(properties.getMaxSteps()).thenReturn(10);
         org.mockito.Mockito.lenient().when(properties.getMaxToolFailures()).thenReturn(2);
+        org.mockito.Mockito.lenient().when(properties.getMaxParallelTools()).thenReturn(4);
         org.mockito.Mockito.lenient().when(properties.getContextMessageLimit()).thenReturn(30);
         org.mockito.Mockito.lenient().when(properties.getStaleConversationMinutes()).thenReturn(30);
     }
@@ -218,6 +221,277 @@ class AgentConversationServiceTest {
         assertThat(result.getStatus()).isEqualTo("ready");
         verify(messageMapper).insertForActiveRun(
                 argThatMessage("assistant", "answer", null), eq(42L), eq(1L));
+    }
+
+    /**
+     * 一步多个互不依赖的查询：模型一次报出来，服务端一次全执行完，
+     * 而不是让它分三步、每次只问一件事——那会把 {@code maxSteps} 白白烧在往返上。
+     */
+    @Test
+    void aBatchOfIndependentQueriesIsExecutedInASingleStep() {
+        stubTransactions();
+        ReadOnlyStubTool first = new ReadOnlyStubTool("read_a");
+        ReadOnlyStubTool second = new ReadOnlyStubTool("read_b");
+        service = serviceWith(first, second);
+        ObjectNode batch = batchDecision("同时查知识点和文章", "read_a", "read_b");
+        ObjectNode done = decisionNode(true, "", null, null);
+        done.put("reply", "两件都查完了");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(batch), call(done));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        AgentConversation result = service.executeTurn(7L, 42L, "帮我看看我的知识点和文章", ignored -> { });
+
+        assertThat(result.getStatus()).isEqualTo("ready");
+        assertThat(first.executions.get()).isEqualTo(1);
+        assertThat(second.executions.get()).isEqualTo(1);
+        // 一次决策报两个调用 → 整轮只需两次模型往返（这一次 + 收口），不是三次
+        verify(modelClient, org.mockito.Mockito.times(2)).decideNextStepStream(any(), any(), any(), any());
+        verify(messageMapper).insertForActiveRun(argThatMessage("tool", "tool_call", "read_a"), eq(42L), eq(1L));
+        verify(messageMapper).insertForActiveRun(argThatMessage("tool", "tool_call", "read_b"), eq(42L), eq(1L));
+        verify(messageMapper).insertForActiveRun(argThatMessage("tool", "tool_result", "read_a"), eq(42L), eq(1L));
+        verify(messageMapper).insertForActiveRun(argThatMessage("tool", "tool_result", "read_b"), eq(42L), eq(1L));
+    }
+
+    /**
+     * 同名但参数不同的两次调用是合法用法（一次查两个主题的知识点），而且必须真的跑两次。
+     *
+     * <p>这条守着并行批次的收益：早先按工具名配对时同名会被整批拒掉，模型只能一步步来。
+     * 现在每次调用各有 invocationId，两张卡不会串。</p>
+     */
+    @Test
+    void theSameToolWithDifferentArgumentsRunsTwiceInOneStep() {
+        stubTransactions();
+        ReadOnlyStubTool repeated = new ReadOnlyStubTool("read_a");
+        service = serviceWith(repeated);
+        ObjectNode batch = batchDecisionWithTopics("查两个主题", "read_a", "主题一", "主题二");
+        ObjectNode done = decisionNode(true, "", null, null);
+        done.put("reply", "两个都查完了");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(batch), call(done));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "查两个主题", ignored -> { });
+
+        assertThat(repeated.executions.get()).isEqualTo(2);
+        List<AgentMessage> messages = capturedMessages();
+        // 两次调用两个身份：这是前端把两张卡分开的唯一依据。
+        assertThat(invocationIdsOf(messages, "tool_call", "read_a"))
+                .hasSize(2)
+                .doesNotContainNull()
+                .doesNotHaveDuplicates();
+        assertThat(invocationIdsOf(messages, "tool_result", "read_a"))
+                .isEqualTo(invocationIdsOf(messages, "tool_call", "read_a"));
+    }
+
+    /**
+     * 同名**且**同参数是笔误（写操作还会被执行两次），整批退回并回灌纠正，
+     * 而不是"跑一半"——跑一半模型分不清哪一半生效。
+     */
+    @Test
+    void aBatchThatRepeatsTheExactSameCallIsRejectedWithoutRunningAnything() {
+        stubTransactions();
+        ReadOnlyStubTool repeated = new ReadOnlyStubTool("read_a");
+        service = serviceWith(repeated);
+        ObjectNode batch = batchDecisionWithTopics("查两次", "read_a", "同一个", "同一个");
+        ObjectNode done = decisionNode(true, "", null, null);
+        done.put("reply", "换个方式再来");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(batch), call(done));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "查两次", ignored -> { });
+
+        assertThat(repeated.executions.get()).isZero();
+        verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
+                argThatMessage("tool", "tool_call", "read_a"), eq(42L), eq(1L));
+    }
+
+    /**
+     * 超出单步上限的调用必须留下"未执行"的记录。静默丢弃的后果不是少一次调用，
+     * 而是模型以为自己问过、只是没收到答案，于是拿着残缺信息收口。
+     */
+    @Test
+    void callsBeyondThePerStepCapAreReportedAsNotExecutedRatherThanDropped() {
+        stubTransactions();
+        when(properties.getMaxParallelTools()).thenReturn(1);
+        ReadOnlyStubTool first = new ReadOnlyStubTool("read_a");
+        ReadOnlyStubTool second = new ReadOnlyStubTool("read_b");
+        service = serviceWith(first, second);
+        ObjectNode batch = batchDecision("一次问两件事", "read_a", "read_b");
+        ObjectNode done = decisionNode(true, "", null, null);
+        done.put("reply", "先看到第一件的结果");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(batch), call(done));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "一次问两件事", ignored -> { });
+
+        assertThat(first.executions.get()).isEqualTo(1);
+        assertThat(second.executions.get()).isZero();
+        verify(messageMapper).insertForActiveRun(argThatMessage("tool", "tool_result", "read_b"), eq(42L), eq(1L));
+    }
+
+    /**
+     * 一次调用的入参和结果必须带上**同一个** invocationId，不同调用必须不同。
+     *
+     * <p>前端就是靠这两条性质把卡片合对的（见 agentTrace.js 的 mergeToolTraces）：
+     * 同值才能认出"这两条消息是同一次调用"，不同值才能把两个同名工具分开。少任何一条，
+     * 并行批次里同名的两次调用就会串成一张卡。</p>
+     */
+    @Test
+    void eachToolMessageCarriesTheInvocationIdThatPairsItsCallWithItsResult() {
+        stubTransactions();
+        ReadOnlyStubTool first = new ReadOnlyStubTool("read_a");
+        ReadOnlyStubTool second = new ReadOnlyStubTool("read_b");
+        service = serviceWith(first, second);
+        ObjectNode batch = batchDecision("同时查两件事", "read_a", "read_b");
+        ObjectNode done = decisionNode(true, "", null, null);
+        done.put("reply", "两件都查完了");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(batch), call(done));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "同时查两件事", ignored -> { });
+
+        List<AgentMessage> messages = capturedMessages();
+        List<String> callA = invocationIdsOf(messages, "tool_call", "read_a");
+        List<String> resultA = invocationIdsOf(messages, "tool_result", "read_a");
+        List<String> callB = invocationIdsOf(messages, "tool_call", "read_b");
+        List<String> resultB = invocationIdsOf(messages, "tool_result", "read_b");
+
+        assertThat(callA).hasSize(1).doesNotContainNull();
+        assertThat(resultA).isEqualTo(callA);
+        assertThat(resultB).isEqualTo(callB);
+        assertThat(callA).doesNotContainAnyElementsOf(callB);
+    }
+
+    /**
+     * 工具事件带身份，落库正文**不带**。
+     *
+     * <p>两半都是要点，而且是相反的：事件少了身份，前端只能回退到按工具名配对，同名工具就串卡；
+     * 正文里多了身份，它会被原样渲染进提示词（「（调用了工具）」「【工具结果】」），
+     * 让模型每一步都多看一个它用不上的 UUID。身份只住在 {@code agent_message.invocation_id} 这一列上。</p>
+     */
+    @Test
+    void toolEventsCarryTheInvocationIdWhileThePersistedContentStaysClean() throws Exception {
+        stubTransactions();
+        ObjectNode first = decisionNode(false, "需要调用博客生成工具", "blog_generate", "帮我写博客");
+        ObjectNode second = decisionNode(true, "", null, null);
+        second.put("reply", "已完成");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(first), call(second));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        List<String> eventTypes = new ArrayList<>();
+        java.util.Map<String, String> payloadByEvent = new java.util.LinkedHashMap<>();
+        service.executeTurn(7L, 42L, "帮我写一篇博客", event -> {
+            if (!event.getEventType().startsWith("tool_")) return;
+            eventTypes.add(event.getEventType());
+            payloadByEvent.put(event.getEventType(), event.getDataContent());
+        });
+
+        assertThat(eventTypes).containsExactly("tool_start", "tool_progress", "tool_delta", "tool_end");
+        java.util.Set<String> ids = new java.util.LinkedHashSet<>();
+        for (String payload : payloadByEvent.values()) {
+            String id = objectMapper.readTree(payload).path("invocationId").asText("");
+            assertThat(id).as("每个 tool_* 事件都要带身份：%s", payload).isNotBlank();
+            ids.add(id);
+        }
+        // 四个阶段是同一个身份：前端靠它把四条事件合成一张卡。
+        assertThat(ids).hasSize(1);
+
+        String invocationId = ids.iterator().next();
+        for (AgentMessage message : capturedMessages()) {
+            if (!"tool_call".equals(message.getKind()) && !"tool_result".equals(message.getKind())) continue;
+            assertThat(message.getInvocationId()).isEqualTo(invocationId);
+            assertThat(message.getContent()).doesNotContain(invocationId);
+        }
+    }
+
+    /**
+     * 回归：主循环必须真的能把"需要审批的调用"路由到审批挂起。
+     *
+     * <p>这条守着一个真实的自伤。批次化改造后编排循环只走 {@code executeBatch}，而它当时对
+     * 需要审批的调用**一律**抛 {@code IllegalStateException}；单调用路径
+     * （{@code executeTool → execute}）虽然还留着审批逻辑，却已经没有调用点了。结果是
+     * {@code AgentApprovalRequiredException} 在生产代码里永远抛不出来——审批功能整个失效，
+     * 用户看到的是一句"连续多次尝试后仍然失败：需要审批的工具必须逐个串行执行"。</p>
+     *
+     * <p>既有的单测抓不到它：那条路径自己的测试还在跑、还是绿的，只是没人调用它。
+     * 所以要在这里用**完整**执行链跑一遍，而不是用简化构造器。</p>
+     */
+    @Test
+    void anApprovalRequiredToolPausesTheTurnInsteadOfFailing() {
+        stubTransactions();
+        ApprovalStubTool gated = new ApprovalStubTool("publish_post");
+        service = serviceWithApproval(gated);
+        ObjectNode decision = decisionNode(false, "要发布文章", "publish_post", "内容");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any())).thenReturn(call(decision));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        List<String> events = new ArrayList<>();
+        service.executeTurn(7L, 42L, "帮我发布", event -> events.add(event.getEventType()));
+
+        // 用户看到的信号是"需要你批准"，而不是"失败了"。
+        assertThat(events).contains("approval_required").doesNotContain("error");
+        assertThat(gated.executions.get()).isZero();
+        // 挂起前 tool_call 必须已经落库：批准后恢复的就是这条 invocation，界面上也要看得到在等什么。
+        verify(messageMapper).insertForActiveRun(
+                argThatMessage("tool", "tool_call", "publish_post"), eq(42L), eq(1L));
+        // 挂起不是失败：不能顺手写一条 tool_result，否则刷新后这张卡看起来像"已经跑完了"。
+        verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
+                argThatMessage("tool", "tool_result", "publish_post"), eq(42L), eq(1L));
+    }
+
+    /**
+     * 多调用批次里混进需要审批的调用：整批退回，一个都不执行，并且把原因回灌给模型。
+     *
+     * <p>不能"跑一半再等审批"——批准之后没法表达"只执行那一半"，整批重来又会让前一半重复执行
+     * （写操作重复就是事故）。所以让模型把那一个单独发起；提示词本来就要求写操作一次只做一件。</p>
+     */
+    @Test
+    void aBatchMixingAnApprovalRequiredCallIsRejectedWithoutRunningAnything() {
+        stubTransactions();
+        ApprovalStubTool gated = new ApprovalStubTool("publish_post");
+        ReadOnlyStubTool readOnly = new ReadOnlyStubTool("read_a");
+        service = serviceWithApproval(gated, readOnly);
+        ObjectNode batch = batchDecision("顺手一起做了", "read_a", "publish_post");
+        ObjectNode done = decisionNode(true, "", null, null);
+        done.put("reply", "分开来做");
+        when(modelClient.decideNextStepStream(any(), any(), any(), any()))
+                .thenReturn(call(batch), call(done));
+        when(conversationMapper.update(any(), any())).thenReturn(1);
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
+
+        service.executeTurn(7L, 42L, "顺手一起做了", ignored -> { });
+
+        assertThat(readOnly.executions.get()).isZero();
+        assertThat(gated.executions.get()).isZero();
+        // 整批在开单之前就被拒，所以连只读那条也不该留下 tool_call。
+        verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
+                argThatMessage("tool", "tool_call", "read_a"), eq(42L), eq(1L));
+        // 拒绝必须说清怎么办，否则模型只会原样重试同一批，把失败预算烧完。
+        assertThat(secondRequestText()).contains("审批").contains("单独调用");
+    }
+
+    /** 第二次模型请求的提示词正文，用来断言"回灌给模型的纠正说明"。 */
+    private String secondRequestText() {
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<AgentInputTurn>> turns =
+                org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(modelClient, org.mockito.Mockito.times(2))
+                .decideNextStepStream(turns.capture(), any(), any(), any());
+        return turns.getAllValues().get(1).stream()
+                .map(AgentInputTurn::text)
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     @Test
@@ -1121,6 +1395,22 @@ class AgentConversationServiceTest {
                         && java.util.Objects.equals(toolName, message.getToolName()));
     }
 
+    /** 这一轮真正落库的消息，按写入顺序。 */
+    private List<AgentMessage> capturedMessages() {
+        org.mockito.ArgumentCaptor<AgentMessage> captured =
+                org.mockito.ArgumentCaptor.forClass(AgentMessage.class);
+        verify(messageMapper, org.mockito.Mockito.atLeastOnce())
+                .insertForActiveRun(captured.capture(), eq(42L), eq(1L));
+        return captured.getAllValues();
+    }
+
+    private List<String> invocationIdsOf(List<AgentMessage> messages, String kind, String toolName) {
+        return messages.stream()
+                .filter(message -> kind.equals(message.getKind()) && toolName.equals(message.getToolName()))
+                .map(AgentMessage::getInvocationId)
+                .toList();
+    }
+
     private void stubTransactions() {
         org.mockito.Mockito.lenient().doAnswer(invocation -> {
             java.util.function.Consumer<TransactionStatus> callback = invocation.getArgument(0);
@@ -1151,6 +1441,91 @@ class AgentConversationServiceTest {
         message.setKind(kind);
         message.setContent(content);
         return message;
+    }
+
+    /** 一步多个调用：action 置空，改由 actions 数组承载。 */
+    private ObjectNode batchDecision(String thought, String... toolNames) {
+        ObjectNode decision = JsonNodeFactory.instance.objectNode();
+        decision.put("done", false);
+        decision.put("thought", thought);
+        decision.putNull("action");
+        var actions = decision.putArray("actions");
+        for (String toolName : toolNames) {
+            ObjectNode action = actions.addObject();
+            action.put("tool", toolName);
+            action.putObject("args");
+        }
+        return decision;
+    }
+
+    /**
+     * 同一个工具、每个调用带一个不同的 topic。
+     *
+     * <p>同名工具是否被允许，取决于参数是否相同——所以验证"允许"时参数必须真的不同，
+     * 而验证"拒绝"时把 topic 传成同一个值即可。用同一个构造器产出两种输入，
+     * 免得两个用例的差异藏在手写的 JSON 里。</p>
+     */
+    private ObjectNode batchDecisionWithTopics(String thought, String tool, String... topics) {
+        ObjectNode decision = JsonNodeFactory.instance.objectNode();
+        decision.put("done", false);
+        decision.put("thought", thought);
+        decision.putNull("action");
+        var actions = decision.putArray("actions");
+        for (String topic : topics) {
+            ObjectNode action = actions.addObject();
+            action.put("tool", tool);
+            action.putObject("args").put("topic", topic);
+        }
+        return decision;
+    }
+
+    /** 换一张工具表重建服务，用来验证"哪几个工具在表里"对编排行为的影响。 */
+    private AgentConversationService serviceWith(AgentTool... tools) {
+        return new AgentConversationService(
+                conversationMapper, messageMapper, modelClient, new AgentToolRegistry(List.of(tools)),
+                properties, transactionTemplate, eventService, agentLeaseRenewer, billingService,
+                objectMapper, planService, memoryService, new AgentQuizService(objectMapper));
+    }
+
+    /**
+     * 用**完整**构造器装一条带审批服务的执行链。
+     *
+     * <p>审批挂起只在"执行管道拿得到审批服务"时才可能发生，而 {@link #serviceWith} 装的简化链
+     * 用的是 {@code AgentToolExecutionPipeline.legacy(...)}（审批服务为 null，遇到需要审批的调用
+     * 只会抛"未配置工具审批服务"）。所以验证审批的用例必须自己把这条链接起来——
+     * 这也正是审批路由坏掉却没人发现的原因：简化链根本走不到那段代码。</p>
+     */
+    private AgentConversationService serviceWithApproval(AgentTool... tools) {
+        AgentToolRegistry approvalRegistry = new AgentToolRegistry(List.of(tools));
+        AgentExecutionJournal journal = AgentExecutionJournal.disabled();
+        AgentApprovalService approvalService = mock(AgentApprovalService.class);
+        org.mockito.Mockito.lenient()
+                .when(approvalService.request(any(), any(), any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    // 四个字段都不能为 null：AgentRunLifecycle.waitForApproval 用 Map.of 拼载荷，
+                    // 而 Map.of 遇到 null 值直接 NPE。
+                    AgentApproval approval = new AgentApproval();
+                    approval.setId(11L);
+                    approval.setInvocationId("inv-approved");
+                    approval.setToolName(invocation.getArgument(1, AgentToolInvocation.class).getToolName());
+                    approval.setSummaryJson("{\"summary\":\"会对外发布内容\"}");
+                    return approval;
+                });
+        AgentRunLifecycle lifecycle = new AgentRunLifecycle(conversationMapper, eventService, journal,
+                properties, transactionTemplate, agentLeaseRenewer);
+        AgentEventProjector projector = new AgentEventProjector(conversationMapper, messageMapper,
+                eventService, transactionTemplate);
+        AgentQuizService quizService = new AgentQuizService(objectMapper);
+        AgentTurnCoordinator coordinator = new AgentTurnCoordinator(conversationMapper, eventService,
+                lifecycle, journal, AgentStepExecutor.legacy(modelClient),
+                new AgentToolExecutionPipeline(approvalRegistry, journal, approvalService));
+        return new AgentConversationService(
+                conversationMapper, messageMapper, modelClient, approvalRegistry, properties,
+                transactionTemplate, eventService, billingService, objectMapper, planService,
+                memoryService, quizService, journal,
+                AgentRequestAssembler.legacy(approvalRegistry, properties, planService, quizService, objectMapper),
+                lifecycle, projector, coordinator, AgentSkillCatalog.empty(),
+                new AgentCompactionService(modelClient, properties, projector));
     }
 
     private ObjectNode decisionNode(boolean done, String thought, String tool, String input) {
@@ -1194,6 +1569,72 @@ class AgentConversationServiceTest {
                                                                ProgressListener onProgress) {
             onProgress.onProgress("开始生成");
             onProgress.onToolDelta("draft-tail");
+            return JsonNodeFactory.instance.objectNode().put("ok", true);
+        }
+    }
+
+    /** 只读桩工具：记下自己被跑过几次，供并发批次与单步上限的用例断言。 */
+    static class ReadOnlyStubTool implements AgentTool {
+        private final String nameValue;
+        final AtomicInteger executions = new AtomicInteger();
+
+        ReadOnlyStubTool(String nameValue) {
+            this.nameValue = nameValue;
+        }
+
+        @Override
+        public String name() { return nameValue; }
+
+        @Override
+        public String description() { return "只读查询 " + nameValue; }
+
+        @Override
+        public boolean readOnly() { return true; }
+
+        @Override
+        public com.fasterxml.jackson.databind.JsonNode parametersSchema() {
+            return JsonNodeFactory.instance.objectNode();
+        }
+
+        @Override
+        public com.fasterxml.jackson.databind.JsonNode execute(Long userId,
+                                                               com.fasterxml.jackson.databind.JsonNode args,
+                                                               ProgressListener onProgress) {
+            executions.incrementAndGet();
+            return JsonNodeFactory.instance.objectNode().put("ok", true).put("tool", nameValue);
+        }
+    }
+
+    /** 需要审批的桩工具：记下自己有没有被真的执行过——审批挂起时它一次都不该跑。 */
+    static class ApprovalStubTool implements AgentTool {
+        private final String nameValue;
+        final AtomicInteger executions = new AtomicInteger();
+
+        ApprovalStubTool(String nameValue) {
+            this.nameValue = nameValue;
+        }
+
+        @Override
+        public String name() { return nameValue; }
+
+        @Override
+        public String description() { return "会对外发布 " + nameValue; }
+
+        @Override
+        public com.fasterxml.jackson.databind.JsonNode parametersSchema() {
+            return JsonNodeFactory.instance.objectNode();
+        }
+
+        @Override
+        public java.util.Optional<String> approvalReason(com.fasterxml.jackson.databind.JsonNode args) {
+            return java.util.Optional.of("会对外发布内容，需要用户确认");
+        }
+
+        @Override
+        public com.fasterxml.jackson.databind.JsonNode execute(Long userId,
+                                                               com.fasterxml.jackson.databind.JsonNode args,
+                                                               ProgressListener onProgress) {
+            executions.incrementAndGet();
             return JsonNodeFactory.instance.objectNode().put("ok", true);
         }
     }

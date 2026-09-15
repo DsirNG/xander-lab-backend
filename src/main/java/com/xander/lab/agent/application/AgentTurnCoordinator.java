@@ -11,8 +11,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ScheduledFuture;
+import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
@@ -35,14 +37,19 @@ public class AgentTurnCoordinator {
         return new ExecutedModelStep(step, stepExecutor.execute(step, request, onAnswerDelta, cancellationRequested));
     }
 
-    /** Delegates the model action to the one guarded tool execution boundary. */
-    ExecutedToolInvocation executeTool(AgentStep step, Long userId, Long conversationId, long runVersion,
-                                       java.util.Set<String> allowedTools, String toolName,
-                                       com.fasterxml.jackson.databind.JsonNode args,
-                                       AgentTool.ProgressListener progress,
-                                       Consumer<String> onStarted) {
-        return toolExecutionPipeline.execute(step, userId, conversationId, runVersion, allowedTools,
-                toolName, args, progress, onStarted);
+    /**
+     * Delegates one step's whole tool batch to the one guarded tool execution boundary, keeping request order.
+     *
+     * <p>只有这一个入口是刻意的。早先还留着一个"单调用"版本，编排循环改成走批次之后就没人调用它了，
+     * 而它自己的测试还全绿——审批路由坏掉时就是这样：那段代码被测试覆盖，却不被生产代码执行。
+     * 边界只有一个方法，这种"覆盖到了但没跑"的漏洞就没有藏身处。</p>
+     */
+    List<ExecutedToolCall> executeTools(AgentStep step, Long userId, Long conversationId, long runVersion,
+                                        java.util.Set<String> allowedTools, List<AgentToolCall> calls,
+                                        List<AgentTool.ProgressListener> progressListeners,
+                                        BiConsumer<AgentToolCall, String> onStarted, boolean concurrent) {
+        return toolExecutionPipeline.executeBatch(step, userId, conversationId, runVersion, allowedTools,
+                calls, progressListeners, onStarted, concurrent);
     }
 
     /** Executes work outside transactions while preserving the claimed generation's terminal semantics. */
@@ -133,7 +140,4 @@ interface ClaimedTurnWork {
 }
 
 record ExecutedModelStep(AgentStep step, ModelCallResult result) {
-}
-
-record ExecutedToolInvocation(String invocationId, com.fasterxml.jackson.databind.JsonNode result) {
 }

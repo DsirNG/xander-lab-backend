@@ -34,6 +34,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -263,7 +264,7 @@ public class AgentConversationService {
         }
         UsageAccumulator approvalUsage = new UsageAccumulator();
         ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, invocation.getToolName(),
-                ignored -> { }, approvalUsage);
+                invocation.getInvocationId(), ignored -> { }, approvalUsage);
         try {
             JsonNode arguments = objectMapper.readTree(invocation.getArgumentsJson());
             progress.checkCancellation();
@@ -271,10 +272,13 @@ public class AgentConversationService {
                     invocation.getInvocationId()), arguments, progress);
             progress.flushToolDelta();
             executionJournal.completeInvocation(invocation, result);
-            saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", invocation.getToolName(),
-                    result.toString());
+            saveActiveToolMessage(conversationId, userId, runVersion, "tool_result", invocation.getToolName(),
+                    invocation.getInvocationId(), result.toString());
             appendActive(conversationId, userId, runVersion, "tool_end",
-                    JsonNodeFactory.instance.objectNode().put("tool", invocation.getToolName()).set("result", result),
+                    JsonNodeFactory.instance.objectNode()
+                            .put("tool", invocation.getToolName())
+                            .put("invocationId", invocation.getInvocationId())
+                            .set("result", result),
                     ignored -> { });
             appendActive(conversationId, userId, runVersion, "approval_executed",
                     java.util.Map.of("approvalId", approval.getId(), "invocationId", invocation.getInvocationId(),
@@ -337,7 +341,7 @@ public class AgentConversationService {
         // 当轮只剩 emit_artifact，除了开交付卡别无选择，而用户要的只是一段片段；
         // 反过来"帮我记住这段话"没命中词表，记忆工具就整轮不在表里，模型只能空口答应。
         // 带外部副作用的调用由审批策略拦（见 AgentToolExecutionPipeline），而不是靠"看不见就调不动"。
-        Set<String> allowedTools = toolRegistry.allowedNames();
+        Set<String> allowedTools = toolRegistry.allowedNames(userId);
         AgentSkillOffer skillOffer = skillCatalog.offer(userId, allowedTools);
         executionJournal.recordSkillOffer(conversationId, userId, runVersion, skillOffer);
         String memoryContext = recallMemoryContext(userId, latestUserMessage);
@@ -438,21 +442,20 @@ public class AgentConversationService {
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             }
 
-            JsonNode action = decision.path("action");
-            String toolName = action.path("tool").asText("");
-            AgentTool tool = StringUtils.hasText(toolName) && allowedTools.contains(toolName)
-                    ? toolRegistry.get(toolName) : null;
-            if (tool == null) {
-                // 点名一个不存在的工具是协议错误，但同样要计入失败预算。
-                // 不计数的话，模型可以一直点名错工具：每一步都被静默跳过，整轮步数烧完，
-                // 用户等了很久却只收到一句"步数已达上限"，看不出到底发生了什么。
+            AgentActionPlan actionPlan = AgentActionPlan.from(
+                    decision, allowedTools, properties.getMaxParallelTools());
+            if (actionPlan.rejected()) {
+                // 整批拒绝而不是执行一半：半批跑完、半批被拒，模型分不清哪一半生效，
+                // 只会把已经成功的那部分重复调一遍。整批退回时它至少知道什么都没发生。
                 failures++;
                 lastError = JsonNodeFactory.instance.objectNode()
                         .put("ok", false)
-                        .put("error", "未知工具 " + describeTool(toolName) + "，请从可用工具中选择")
+                        .put("error", actionPlan.rejection())
                         .put("availableTools", String.join(", ", allowedTools));
                 if (failures >= Math.max(1, properties.getMaxToolFailures())) {
-                    String reply = "很抱歉，我连续几次都没选对可用的工具（" + describeTool(toolName)
+                    String rejected = String.join("、",
+                            actionPlan.rejectedTools().stream().map(this::describeTool).toList());
+                    String reply = "很抱歉，我连续几次都没选对可用的工具（" + rejected
                             + " 不存在），这一轮先停在这里。请把需求说得更具体一些，或换个说法再试。";
                     saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
                     appendActive(conversationId, userId, runVersion, "answer", reply, listener);
@@ -461,87 +464,142 @@ public class AgentConversationService {
                 continue;
             }
 
-            JsonNode args = action.path("args");
-            ToolProgress progress = new ToolProgress(conversationId, userId, runVersion, toolName, listener, usage);
+            List<AgentToolCall> calls = actionPlan.calls();
+            List<ToolProgress> progresses = new ArrayList<>(calls.size());
+            for (AgentToolCall call : calls) {
+                progresses.add(new ToolProgress(conversationId, userId, runVersion, call.toolName(), listener, usage));
+            }
+            // 执行管道要的是接口列表，收口时又要调 ToolProgress 自己的 flushToolDelta，
+            // 所以这里留两份视图而不是来回强转。
+            List<ProgressListener> progressListeners = new ArrayList<>(progresses);
             try {
-                ExecutedToolInvocation executedTool = turnCoordinator.executeTool(
-                        journalStep, userId, conversationId, runVersion, allowedTools, toolName, args, progress, invocationId -> {
-                            ObjectNode call = JsonNodeFactory.instance.objectNode();
-                            call.put("tool", toolName);
-                            call.put("invocationId", invocationId);
-                            call.set("args", args);
-                            saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_call", toolName,
-                                    call.toString());
-                            appendActive(conversationId, userId, runVersion, "tool_start", call, listener);
-                        });
-                JsonNode result = executedTool.result();
-                progress.flushToolDelta();
-                saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName, result.toString());
-                appendActive(conversationId, userId, runVersion, "tool_end",
-                        JsonNodeFactory.instance.objectNode().put("tool", toolName).set("result", result),
-                        listener);
-                // 计划变更单独发一个事件：前端要能把它当成"智能体的待办清单"渲染，而不是一段工具输出。
-                if (PlanTasksTool.NAME.equals(toolName) && result.has("items")) {
-                    saveOrUpdateActivePlanMessage(conversationId, userId, runVersion,
-                            result.path("items").toString());
-                    appendActive(conversationId, userId, runVersion, "plan",
-                            JsonNodeFactory.instance.objectNode().set("items", result.path("items")),
+                List<ExecutedToolCall> executed = turnCoordinator.executeTools(
+                        journalStep, userId, conversationId, runVersion, allowedTools, calls, progressListeners,
+                        (call, invocationId) -> {
+                            ObjectNode callNode = JsonNodeFactory.instance.objectNode();
+                            callNode.put("tool", call.toolName());
+                            callNode.set("args", call.args());
+                            // 身份落在列上（tool_call 与 tool_result 都能读到），正文里不再留一份：
+                            // 正文会被渲染进提示词（见 AgentRequestAssembler 的「（调用了工具）」），
+                            // 多一个模型用不上的 UUID 是纯浪费；两份身份也迟早会漂移。
+                            saveActiveToolMessage(conversationId, userId, runVersion, "tool_call",
+                                    call.toolName(), invocationId, callNode.toString());
+                            appendActive(conversationId, userId, runVersion, "tool_start",
+                                    withInvocationId(callNode, invocationId), listener);
+                        },
+                        calls.size() > 1 && calls.stream().allMatch(call -> concurrencySafe(call, allowedTools)));
+
+                Exception lastFailure = null;
+                for (int index = 0; index < executed.size(); index++) {
+                    ExecutedToolCall outcome = executed.get(index);
+                    AgentToolCall call = outcome.call();
+                    ToolProgress progress = progresses.get(index);
+                    progress.flushToolDelta();
+                    if (outcome.failed()) {
+                        failures++;
+                        lastFailure = outcome.failure();
+                        ObjectNode errorNode = JsonNodeFactory.instance.objectNode();
+                        errorNode.put("ok", false);
+                        errorNode.put("tool", call.toolName());
+                        errorNode.put("error", safeMessage(outcome.failure()));
+                        saveActiveToolMessage(conversationId, userId, runVersion, "tool_result",
+                                call.toolName(), outcome.invocationId(), errorNode.toString());
+                        appendActive(conversationId, userId, runVersion, "tool_error",
+                                withInvocationId(errorNode, outcome.invocationId()), listener);
+                        lastError = errorNode;
+                        continue;
+                    }
+                    JsonNode result = outcome.result();
+                    saveActiveToolMessage(conversationId, userId, runVersion, "tool_result",
+                            call.toolName(), outcome.invocationId(), result.toString());
+                    appendActive(conversationId, userId, runVersion, "tool_end",
+                            withInvocationId(JsonNodeFactory.instance.objectNode()
+                                    .put("tool", call.toolName()).set("result", result), outcome.invocationId()),
                             listener);
-                    // 计划已改写：下一步必须重新读取会话行，否则注释里承诺的"每步重新读计划"就失效了。
-                    planDirty = true;
+                    planDirty = persistToolSideEffects(conversationId, userId, runVersion,
+                            call.toolName(), result, listener) || planDirty;
+                    failures = 0;
+                    lastError = null;
                 }
-                // 答题卡要落成一条消息而不只是一个事件：它是用户接下来要操作的界面，
-                // 刷新页面后必须还在，而事件只在本轮的流里活着。
-                if (EmitQuizTool.NAME.equals(toolName) && result.has(EmitQuizTool.QUIZ_FIELD)) {
-                    JsonNode quiz = result.path(EmitQuizTool.QUIZ_FIELD);
-                    saveActiveMessage(conversationId, userId, runVersion,
-                            "assistant", "quiz", null, quiz.toString());
-                    appendActive(conversationId, userId, runVersion, "quiz", quiz, listener);
+                // 被单步上限截掉的调用必须留下"未执行"的记录。静默丢弃的后果不是少一次调用，
+                // 而是模型以为自己问过、只是没收到答案，于是拿着不完整的信息收口。
+                // 这些调用从未开单，所以没有 invocationId——前端回退到按工具名配对，
+                // 而它们本来也没有对应的 tool_call，会各自单独成卡。
+                for (AgentToolCall skippedCall : actionPlan.skipped()) {
+                    ObjectNode skippedNode = JsonNodeFactory.instance.objectNode();
+                    skippedNode.put("ok", false);
+                    skippedNode.put("tool", skippedCall.toolName());
+                    skippedNode.put("error", "本步一次最多执行 " + Math.max(1, properties.getMaxParallelTools())
+                            + " 个工具调用，该调用未执行，请在下一步重新发起");
+                    saveActiveToolMessage(conversationId, userId, runVersion, "tool_result",
+                            skippedCall.toolName(), null, skippedNode.toString());
+                    appendActive(conversationId, userId, runVersion, "tool_error", skippedNode, listener);
                 }
-                // 交付卡同理：代码是这一轮真正的产出，必须落成消息，刷新页面后还能拿到源码。
-                if (EmitArtifactTool.NAME.equals(toolName) && result.has(EmitArtifactTool.ARTIFACT_FIELD)) {
-                    JsonNode artifact = result.path(EmitArtifactTool.ARTIFACT_FIELD);
-                    saveActiveMessage(conversationId, userId, runVersion,
-                            "assistant", "artifact", null, artifact.toString());
-                    appendActive(conversationId, userId, runVersion, "artifact", artifact, listener);
+                if (failures >= Math.max(1, properties.getMaxToolFailures())) {
+                    String reply = "很抱歉，连续多次尝试后仍然失败：" + safeMessage(lastFailure)
+                            + "。请换个说法重试，或调整你的需求。";
+                    saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, reply);
+                    appendActive(conversationId, userId, runVersion, "answer", reply, listener);
+                    return finalizeReady(conversationId, userId, runVersion, usage, listener);
                 }
-                failures = 0;
-                lastError = null;
             } catch (AgentApprovalRequiredException exception) {
-                progress.flushToolDelta();
+                for (ToolProgress progress : progresses) {
+                    progress.flushToolDelta();
+                }
                 AgentEvent approvalEvent = runLifecycle.waitForApproval(conversationId, userId, runVersion,
                         exception.approval());
                 eventService.deliver(approvalEvent, listener);
                 return requireOwned(conversationId, userId);
             } catch (CancellationException exception) {
-                progress.flushToolDelta();
                 String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
-                saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName,
-                        JsonNodeFactory.instance.objectNode()
-                                .put("tool", toolName)
-                                .put("cancelled", true)
-                                .put("error", "已停止")
-                                .toString());
-                appendActive(conversationId, userId, runVersion, "tool_error",
-                        JsonNodeFactory.instance.objectNode()
-                                .put("tool", toolName)
-                                .put("cancelled", true)
-                                .put("error", "已停止"),
-                        listener);
+                for (int index = 0; index < calls.size(); index++) {
+                    AgentToolCall call = calls.get(index);
+                    ToolProgress progress = progresses.get(index);
+                    progress.flushToolDelta();
+                    // 身份从这里取而不是从结果对象取：executeBatch 抛异常时结果列表不会返回，
+                    // 而监听器在开单那一刻就已经拿到了自己那次调用的身份。
+                    String invocationId = progress.invocationId();
+                    saveActiveToolMessage(conversationId, userId, runVersion, "tool_result",
+                            call.toolName(), invocationId,
+                            JsonNodeFactory.instance.objectNode()
+                                    .put("tool", call.toolName())
+                                    .put("cancelled", true)
+                                    .put("error", "已停止")
+                                    .toString());
+                    appendActive(conversationId, userId, runVersion, "tool_error",
+                            withInvocationId(JsonNodeFactory.instance.objectNode()
+                                    .put("tool", call.toolName())
+                                    .put("cancelled", true)
+                                    .put("error", "已停止"), invocationId),
+                            listener);
+                }
                 saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
                 appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
                 return finalizeReady(conversationId, userId, runVersion, usage, listener);
             } catch (Exception e) {
-                log.error("agent tool execution failed conversationId={} userId={} runVersion={} phase=tool.execute tool={} exceptionType={} message={}",
-                        conversationId, userId, runVersion, toolName, e.getClass().getName(), e.getMessage(), e);
-                progress.flushToolDelta();
+                log.error("agent tool execution failed conversationId={} userId={} runVersion={} phase=tool.execute tools={} exceptionType={} message={}",
+                        conversationId, userId, runVersion,
+                        calls.stream().map(AgentToolCall::toolName).toList(),
+                        e.getClass().getName(), e.getMessage(), e);
+                // 走到这里说明是批次级的失败（整批校验没过、或执行池本身出问题），
+                // 不是某个工具自己报错——那种情况在 executeBatch 里已经被收敛成结果了。
+                // 但每个调用都已经落过 tool_call，所以逐个补一条结果，界面上不留悬空的调用。
+                ObjectNode errorNode = null;
+                for (int index = 0; index < calls.size(); index++) {
+                    AgentToolCall call = calls.get(index);
+                    ToolProgress progress = progresses.get(index);
+                    progress.flushToolDelta();
+                    String invocationId = progress.invocationId();
+                    errorNode = JsonNodeFactory.instance.objectNode();
+                    errorNode.put("ok", false);
+                    errorNode.put("tool", call.toolName());
+                    errorNode.put("error", safeMessage(e));
+                    saveActiveToolMessage(conversationId, userId, runVersion, "tool_result",
+                            call.toolName(), invocationId, errorNode.toString());
+                    appendActive(conversationId, userId, runVersion, "tool_error",
+                            withInvocationId(errorNode, invocationId), listener);
+                }
                 failures++;
-                ObjectNode errorNode = JsonNodeFactory.instance.objectNode();
-                errorNode.put("ok", false);
-                errorNode.put("tool", toolName);
-                errorNode.put("error", safeMessage(e));
-                saveActiveMessage(conversationId, userId, runVersion, "tool", "tool_result", toolName, errorNode.toString());
-                appendActive(conversationId, userId, runVersion, "tool_error", errorNode, listener);
                 if (failures >= Math.max(1, properties.getMaxToolFailures())) {
                     String reply = "很抱歉，连续多次尝试后仍然失败：" + safeMessage(e)
                             + "。请换个说法重试，或调整你的需求。";
@@ -560,8 +618,28 @@ public class AgentConversationService {
         return finalizeReady(conversationId, userId, runVersion, usage, listener);
     }
 
-    private JsonNode progressPayload(String tool, String message) {
-        return eventProjector.progressPayload(tool, message);
+    private JsonNode progressPayload(String tool, String invocationId, String message) {
+        return eventProjector.progressPayload(tool, invocationId, message);
+    }
+
+    /**
+     * 给工具事件的载荷补上 {@code invocationId}，**返回副本、不改原对象**。
+     *
+     * <p>为什么必须是副本：失败分支里的同一个 {@code errorNode} 还有别的去处——它会被存成
+     * {@code lastError} 并渲染进下一轮提示词。就地加上身份，模型就会收到一个 UUID 观察值，
+     * 既白烧 token 又可能被它当成需要维护的字段。副本让"给人看的事件"和"给模型看的内容"
+     * 各自干净。</p>
+     *
+     * <p>单独抽一个方法是为了让补身份这件事在所有事件出口上长得一样。漏掉一处不会报错，
+     * 只会让那一条事件回退到按工具名配对，而回退在同名工具上恰好是错的——这种只错一部分的
+     * 漏洞最难发现。</p>
+     */
+    private static ObjectNode withInvocationId(ObjectNode payload, String invocationId) {
+        ObjectNode copy = payload.deepCopy();
+        if (invocationId != null) {
+            copy.put("invocationId", invocationId);
+        }
+        return copy;
     }
 
     private AgentConversation finalizeReady(Long conversationId, Long userId, long runVersion,
@@ -742,6 +820,20 @@ public class AgentConversationService {
         eventProjector.saveActiveMessage(conversationId, userId, runVersion, role, kind, toolName, content);
     }
 
+    /**
+     * 工具消息：除了工具名还要给出这次调用的持久化身份。
+     *
+     * <p>单开一个入口而不是给 {@link #saveActiveMessage} 加参数，是因为那个方法已经有七个
+     * String 参数，再插一个同类型参数，调用点写反了编译器不会响。工具消息必须显式回答
+     * "这是哪一次调用"，漏了是编译不过的。身份可为 null——从未开单的调用（被单步上限截掉的）
+     * 本来就没有身份，前端会回退到按工具名配对。</p>
+     */
+    private void saveActiveToolMessage(Long conversationId, Long userId, long runVersion, String kind,
+                                       String toolName, String invocationId, String content) {
+        eventProjector.saveActiveToolMessage(conversationId, userId, runVersion, kind,
+                toolName, invocationId, content);
+    }
+
     /** One user turn owns one plan card; subsequent plan_tasks calls update that card's contents. */
     private void saveOrUpdateActivePlanMessage(Long conversationId, Long userId, long runVersion,
                                                String content) {
@@ -778,6 +870,57 @@ public class AgentConversationService {
 
     private String describeTool(String toolName) {
         return StringUtils.hasText(toolName) ? toolName : "（空工具名）";
+    }
+
+    /**
+     * 并发准入判定：只有**显式声明只读**、且这次调用不触发审批的工具，才允许与同批其它调用同时跑。
+     *
+     * <p>两条都是必要条件，缺一不可。只读解决"两个写操作同时改同一行"；
+     * 无审批解决"审批是整轮级暂停，混在批次里会在半途挂起"。
+     * {@code readOnly()} 默认 false，所以没声明过的工具一律退化成串行——慢一点，但不会写坏数据。</p>
+     *
+     * <p>{@code approvalReason} 在这里和 {@code AgentToolExecutionPipeline} 里各被调用一次。
+     * 它按约定必须是纯函数（只看参数、无副作用），重复调用才是安全的。</p>
+     */
+    private boolean concurrencySafe(AgentToolCall call, Set<String> allowedTools) {
+        if (!allowedTools.contains(call.toolName())) return false;
+        AgentTool tool = toolRegistry.get(call.toolName());
+        if (tool == null || !tool.readOnly()) return false;
+        return tool.approvalReason(call.args()).isEmpty();
+    }
+
+    /**
+     * 工具结果落库之后的会话级副作用。
+     *
+     * <p>这三种卡片各自要留一条**消息**而不只是一个事件：它们是用户接下来要操作的界面
+     * （待办清单、答题卡、交付卡），刷新页面后必须还在，而事件只在本轮的流里活着。</p>
+     *
+     * @return 任务计划是否被改写。改写后下一步必须重新读会话行，
+     *         否则上面注释里承诺的"每步重新读计划"就失效了
+     */
+    private boolean persistToolSideEffects(Long conversationId, Long userId, long runVersion,
+                                          String toolName, JsonNode result, Consumer<AgentEvent> listener) {
+        // 计划变更单独发一个事件：前端要能把它当成"智能体的待办清单"渲染，而不是一段工具输出。
+        if (PlanTasksTool.NAME.equals(toolName) && result.has("items")) {
+            saveOrUpdateActivePlanMessage(conversationId, userId, runVersion, result.path("items").toString());
+            appendActive(conversationId, userId, runVersion, "plan",
+                    JsonNodeFactory.instance.objectNode().set("items", result.path("items")), listener);
+            return true;
+        }
+        // 答题卡要落成一条消息而不只是一个事件：它是用户接下来要操作的界面，
+        // 刷新页面后必须还在，而事件只在本轮的流里活着。
+        if (EmitQuizTool.NAME.equals(toolName) && result.has(EmitQuizTool.QUIZ_FIELD)) {
+            JsonNode quiz = result.path(EmitQuizTool.QUIZ_FIELD);
+            saveActiveMessage(conversationId, userId, runVersion, "assistant", "quiz", null, quiz.toString());
+            appendActive(conversationId, userId, runVersion, "quiz", quiz, listener);
+        }
+        // 交付卡同理：代码是这一轮真正的产出，必须落成消息，刷新页面后还能拿到源码。
+        if (EmitArtifactTool.NAME.equals(toolName) && result.has(EmitArtifactTool.ARTIFACT_FIELD)) {
+            JsonNode artifact = result.path(EmitArtifactTool.ARTIFACT_FIELD);
+            saveActiveMessage(conversationId, userId, runVersion, "assistant", "artifact", null, artifact.toString());
+            appendActive(conversationId, userId, runVersion, "artifact", artifact, listener);
+        }
+        return false;
     }
 
     private String serializeAttachments(List<AgentAttachment> attachments) {
@@ -860,22 +1003,49 @@ public class AgentConversationService {
         private final Consumer<AgentEvent> listener;
         private final UsageAccumulator usage;
         private final StringBuilder deltaBuffer = new StringBuilder();
+        /**
+         * 这次调用的持久化身份。审批恢复那条路径在构造时就知道；编排循环里身份是执行管道
+         * 开单时才生成的，所以先为 null，等 {@link #bindInvocationId} 补上。
+         *
+         * <p>写成可变字段而不是 final：唯一的赋值点（bindInvocationId）严格早于任何执行，
+         * 之后的读取都在同一线程的 happens-before 边之内（管道开单 → 提交任务），不需要 volatile。</p>
+         */
+        private String invocationId;
 
         private ToolProgress(Long conversationId, Long userId, long runVersion,
                              String toolName, Consumer<AgentEvent> listener, UsageAccumulator usage) {
+            this(conversationId, userId, runVersion, toolName, null, listener, usage);
+        }
+
+        private ToolProgress(Long conversationId, Long userId, long runVersion, String toolName,
+                             String invocationId, Consumer<AgentEvent> listener, UsageAccumulator usage) {
             this.conversationId = conversationId;
             this.userId = userId;
             this.runVersion = runVersion;
             this.toolName = toolName;
+            this.invocationId = invocationId;
             this.listener = listener;
             this.usage = usage;
+        }
+
+        @Override
+        public void bindInvocationId(String invocationId) {
+            this.invocationId = invocationId;
+        }
+
+        /**
+         * 这次调用的身份，供收口路径（取消、批次级失败）在 {@code executeBatch} 已经抛出、
+         * 拿不到结果对象时回填工具结果消息。从未开单时为 null。
+         */
+        private String invocationId() {
+            return invocationId;
         }
 
         @Override
         public void onProgress(String message) {
             flushToolDelta();
             appendActive(conversationId, userId, runVersion, "tool_progress",
-                    progressPayload(toolName, message), listener);
+                    progressPayload(toolName, invocationId, message), listener);
         }
 
         @Override
@@ -902,6 +1072,9 @@ public class AgentConversationService {
             if (deltaBuffer.isEmpty()) return;
             ObjectNode payload = JsonNodeFactory.instance.objectNode();
             payload.put("tool", toolName);
+            if (invocationId != null) {
+                payload.put("invocationId", invocationId);
+            }
             payload.put("delta", deltaBuffer.toString());
             deltaBuffer.setLength(0);
             appendActive(conversationId, userId, runVersion, "tool_delta", payload, listener);
@@ -996,7 +1169,11 @@ public class AgentConversationService {
         private String model;
         private boolean mixedModels;
 
-        void add(ModelUsage usage, String usedModel) {
+        /**
+         * 并发批次里的工具可能从不同线程回报用量（子智能体这类工具会自己调模型），
+         * 累加必须原子，否则 token 计数会丢更新、账单少算。
+         */
+        synchronized void add(ModelUsage usage, String usedModel) {
             if (usage == null) return;
             input += Math.max(0L, usage.inputTokens());
             cached += Math.max(0L, usage.cachedTokens());
@@ -1007,7 +1184,7 @@ public class AgentConversationService {
             }
         }
 
-        void addPersisted(ModelUsage usage, String usedModel) {
+        synchronized void addPersisted(ModelUsage usage, String usedModel) {
             add(usage, usedModel);
             if (usage != null && usedModel == null
                     && (usage.inputTokens() > 0 || usage.cachedTokens() > 0 || usage.outputTokens() > 0)) {

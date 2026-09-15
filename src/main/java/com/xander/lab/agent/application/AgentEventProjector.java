@@ -28,12 +28,30 @@ public class AgentEventProjector {
 
     void saveActiveMessage(Long conversationId, Long userId, long runVersion,
                            String role, String kind, String toolName, String content) {
+        insertActiveMessage(conversationId, userId, runVersion, role, kind, toolName, null, content);
+    }
+
+    /**
+     * 工具消息多一个字段：这次调用的持久化身份。
+     *
+     * <p>刻意不并进 {@link #saveActiveMessage}：那个方法已经有七个 String 参数，再插一个
+     * 同类型参数，调用点写反了编译器也不会响。工具消息必须显式回答"这是哪一次调用"，
+     * 所以给它一条自己的入口——身份漏了是编译不过的，而不是悄悄少一个字段。</p>
+     */
+    void saveActiveToolMessage(Long conversationId, Long userId, long runVersion,
+                               String kind, String toolName, String invocationId, String content) {
+        insertActiveMessage(conversationId, userId, runVersion, "tool", kind, toolName, invocationId, content);
+    }
+
+    private void insertActiveMessage(Long conversationId, Long userId, long runVersion, String role,
+                                     String kind, String toolName, String invocationId, String content) {
         AgentMessage message = new AgentMessage();
         message.setConversationId(conversationId);
         message.setRunVersion(runVersion);
         message.setRole(role);
         message.setKind(kind);
         message.setToolName(toolName);
+        message.setInvocationId(invocationId);
         message.setContent(content);
         transactionTemplate.executeWithoutResult(status -> {
             int touched = renewActiveRun(conversationId, userId, runVersion);
@@ -112,8 +130,17 @@ public class AgentEventProjector {
         }
     }
 
-    JsonNode progressPayload(String tool, String message) {
+    /**
+     * 工具进度事件的载荷。
+     *
+     * <p>{@code invocationId} 可能为空（审批恢复等没有持久化身份的路径），此时前端按工具名
+     * 配对——与改动前逐字节一致。非空时它是唯一的配对键，同名工具也不会串卡。</p>
+     */
+    JsonNode progressPayload(String tool, String invocationId, String message) {
         ObjectNode payload = JsonNodeFactory.instance.objectNode().put("tool", tool);
+        if (invocationId != null) {
+            payload.put("invocationId", invocationId);
+        }
         String raw = message == null ? "" : message;
         int separator = raw.indexOf('|');
         if (separator > 0) {

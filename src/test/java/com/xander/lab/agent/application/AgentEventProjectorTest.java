@@ -174,10 +174,23 @@ class AgentEventProjectorTest {
 
     @Test
     void toolProgressPayloadKeepsTheOptionalStageDelimiterContract() {
-        JsonNode payload = projector.progressPayload("blog_generate", "draft|正在生成");
+        JsonNode payload = projector.progressPayload("blog_generate", null, "draft|正在生成");
 
         assertThat(payload.path("tool").asText()).isEqualTo("blog_generate");
         assertThat(payload.path("stage").asText()).isEqualTo("draft");
         assertThat(payload.path("message").asText()).isEqualTo("正在生成");
+        // 身份为空时**不写这个键**，而不是写成 null：前端用 `?? 工具名` 回退，
+        // 一个显式的 null 会让 `payload.invocationId ?? tool` 仍然回退（null 触发 ??），
+        // 但多一个空键会让"这条事件没有身份"与"身份是空字符串"在日志里分不清。
+        assertThat(payload.has("invocationId")).isFalse();
+    }
+
+    @Test
+    void toolProgressPayloadCarriesTheInvocationIdWhenKnown() {
+        JsonNode payload = projector.progressPayload("query_knowledge", "inv-1", "正在检索");
+
+        assertThat(payload.path("invocationId").asText()).isEqualTo("inv-1");
+        assertThat(payload.path("message").asText()).isEqualTo("正在检索");
+        assertThat(payload.has("stage")).isFalse();
     }
 }

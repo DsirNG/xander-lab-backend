@@ -30,6 +30,12 @@ public class QueryEmailRemindersTool implements AgentTool {
         return "query_email_reminders";
     }
 
+    /** 纯查询：不写任何状态，可与同批其它只读工具并发执行。 */
+    @Override
+    public boolean readOnly() {
+        return true;
+    }
+
     @Override
     public String description() {
         return "查询当前用户的所有定时邮件提醒任务，一次调用返回全部（不分页），可按状态或关键词筛选。"

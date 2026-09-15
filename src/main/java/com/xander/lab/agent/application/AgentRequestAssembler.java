@@ -127,6 +127,10 @@ public class AgentRequestAssembler {
      *
      * <p>工具结果没有原生 tool role 可用，作为观察挂在 user 轮里；
      * 智能体自己的思考、工具调用、回复、卡片都归 assistant，模型因此能认出哪些是它自己干的。</p>
+     *
+     * <p>三种卡片（计划、答题卡、交付卡）都要带前缀。漏掉前缀时正文照样进提示词，所以不会有
+     * 任何报错——只是模型看到一段光秃秃的 JSON，分不清那是它自己下发的哪张卡。
+     * {@code plan} 曾经就是这样：它是最后加进来的一张卡，switch 没跟上。</p>
      */
     private AgentInputTurn renderMessage(AgentMessage message, boolean latestToolResult, boolean playbook) {
         String content = switch (message.getKind()) {
@@ -135,6 +139,7 @@ public class AgentRequestAssembler {
             case "tool_call" -> "（调用了工具）" + message.getContent();
             case "tool_result" -> "【工具结果】" + compactJson(message.getContent(),
                     toolResultBudget(latestToolResult, playbook));
+            case "plan" -> "（已更新任务计划：）" + message.getContent();
             case "quiz" -> "（已用答题卡出题：）" + quizService.renderQuiz(message.getContent());
             case "quiz_answer" -> "（在答题卡上作答：）" + message.getContent();
             case "artifact" -> "（已用交付卡把代码交给用户：）" + renderArtifact(message.getContent());

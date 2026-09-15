@@ -167,3 +167,17 @@ ALTER TABLE `blog_notification`
   MODIFY COLUMN `type` VARCHAR(48) NOT NULL COMMENT '通知类型：REVIEW_REJECTED/CSDN_FAILED/JUEJIN_FAILED/RUN_FAILED/PLAN_STALLED/KNOWLEDGE_STRUCTURE_PENDING',
   ADD COLUMN `resource_type` VARCHAR(32) NULL COMMENT '通用关联资源类型，如 KNOWLEDGE_FILE；与 plan_id/run_id 互斥使用，供非计划类通知回跳' AFTER `run_id`,
   ADD COLUMN `resource_id` BIGINT NULL COMMENT '通用关联资源主键，配合 resource_type 解释；为空表示该通知没有可回跳的资源' AFTER `resource_type`;
+
+-- ── 审计标记 ─────────────────────────────────────────────────────
+-- 文件头声明的「迁移标记键：20260901_knowledge_base_file_center」此前只写在注释里、
+-- 没有真正落库，于是 xander_schema_migration 里查不到这次迁移。
+-- 标记只是审计记录、不驱动执行（本迁移的幂等性由上面的建表/加列语句自身决定），
+-- 补上它让台账与文件头一致。
+CREATE TABLE IF NOT EXISTS `xander_schema_migration` (
+  `migration_key` VARCHAR(128) NOT NULL COMMENT '迁移标识键',
+  `applied_at` TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '迁移应用时间',
+  PRIMARY KEY (`migration_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据库迁移执行标记';
+
+INSERT IGNORE INTO `xander_schema_migration` (`migration_key`)
+VALUES ('20260901_knowledge_base_file_center');

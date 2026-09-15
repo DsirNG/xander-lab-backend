@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.agent.api.AgentSkillRequest;
+import com.xander.lab.agent.api.AgentToolOption;
 import com.xander.lab.agent.domain.AgentUserSkill;
 import com.xander.lab.agent.infrastructure.AgentUserSkillMapper;
 import org.springframework.stereotype.Service;
@@ -30,7 +31,7 @@ public class AgentUserSkillService {
     @Transactional
     public AgentUserSkill create(Long userId, AgentSkillRequest request) {
         Set<String> allowed = Set.copyOf(request.getToolNames());
-        if (!toolRegistry.names().containsAll(allowed)) throw new IllegalArgumentException("Skill包含未注册工具");
+        if (!toolRegistry.allowedNames(userId).containsAll(allowed)) throw new IllegalArgumentException("Skill包含未注册工具");
         int version = mapper.selectList(new LambdaQueryWrapper<AgentUserSkill>()
                 .eq(AgentUserSkill::getUserId, userId).eq(AgentUserSkill::getSkillKey, request.getSkillKey()))
                 .stream().map(AgentUserSkill::getVersion).filter(java.util.Objects::nonNull)
@@ -48,6 +49,24 @@ public class AgentUserSkillService {
     @Transactional(readOnly = true)
     public List<AgentUserSkill> listActive(Long userId) {
         return catalog.allActiveUserSkills(userId);
+    }
+
+    /**
+     * 可写进技能的已注册工具，供技能编排界面提供选择。
+     *
+     * <p>没有这个入口，用户只能凭记忆手写工具名，而 {@link #create} 会拿
+     * {@link AgentToolRegistry#allowedNames(Long)} 严格求交——拼错一个字母就是一记 400，
+     * 且没有任何地方能查到合法取值。名字按注册表顺序（字典序）返回，与提示词里的
+     * 工具表一致。</p>
+     *
+     * <p>清单按用户收窄：用户自己配的远端 MCP 工具只出现在他自己这里，
+     * 否则界面会给出一个他写了也调不动的工具名。</p>
+     */
+    @Transactional(readOnly = true)
+    public List<AgentToolOption> listToolOptions(Long userId) {
+        return toolRegistry.tools(userId).stream()
+                .map(tool -> new AgentToolOption(tool.name(), tool.description()))
+                .toList();
     }
 
     @Transactional(readOnly = true)

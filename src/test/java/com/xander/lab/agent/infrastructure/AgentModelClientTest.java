@@ -127,7 +127,7 @@ class AgentModelClientTest {
 
         String instructions = requestPayload.path("instructions").asText();
         assertThat(instructions)
-                .contains("字段顺序必须严格为 done、reply、thought、action")
+                .contains("字段顺序必须严格为 done、reply、thought、action、actions")
                 .contains("thought 必须为空")
                 .contains("不要在 reply 之前生成用户不可见的思考内容");
         assertThat(requestPayload.path("text").path("format").path("type").asText())
@@ -138,7 +138,7 @@ class AgentModelClientTest {
                 .isTrue();
         assertThat(requestPayload.path("text").path("format").path("schema")
                 .path("required").toString())
-                .isEqualTo("[\"done\",\"reply\",\"thought\",\"action\"]");
+                .isEqualTo("[\"done\",\"reply\",\"thought\",\"action\",\"actions\"]");
     }
 
     /**
@@ -298,6 +298,49 @@ class AgentModelClientTest {
 
         assertThat(decision.path("done").asBoolean()).isFalse();
         assertThat(decision.path("action").path("tool").asText()).isEmpty();
+    }
+
+    /**
+     * 回归：{@code done=false} + 只有 {@code actions} 时，那个"没工具可调就按收口处理"的兜底
+     * 会把整批调用悄悄丢掉——模型报了三件事，用户只收到一句"已完成"。
+     */
+    @Test
+    void doesNotHandBackAToolStepThatCarriedABatchOfActions() throws Exception {
+        startServer(List.of(
+                "{\"done\":false,\"reply\":\"我同时查一下你的知识点、文章和计划\",\"thought\":\"并行查询\",",
+                "\"action\":null,\"actions\":[",
+                "{\"tool\":\"query_knowledge\",\"args\":\"{}\"},",
+                "{\"tool\":\"query_posts\",\"args\":\"{}\"}]}"
+        ));
+
+        JsonNode decision = client().decideNextStep("context", "tools").payload();
+
+        assertThat(decision.path("done").asBoolean()).isFalse();
+        assertThat(decision.path("actions")).hasSize(2);
+        assertThat(decision.path("actions").get(0).path("tool").asText()).isEqualTo("query_knowledge");
+        // 数组里的 args 也要被解码成对象：漏掉它，执行管道会以"参数必须是 JSON 对象"整批拒绝，
+        // 而模型按协议写得完全正确。
+        assertThat(decision.path("actions").get(0).path("args").isObject()).isTrue();
+        assertThat(decision.path("actions").get(1).path("args").isObject()).isTrue();
+    }
+
+    /**
+     * {@code action} 与 {@code actions[]} 的元素必须是逐字段相同的定义。
+     * 两边各写一遍迟早漂移，而漂移的表现是模型按 A 形状发、服务端按 B 形状解。
+     */
+    @Test
+    void declaresActionsInTheStrictSchemaWithTheSameElementShapeAsAction() throws Exception {
+        startServer(List.of("{\"done\":true,\"reply\":\"你好\",\"thought\":\"\",\"action\":null,\"actions\":null}"));
+
+        client().decideNextStep("context", "tools");
+
+        JsonNode schema = requestPayload.path("text").path("format").path("schema");
+        JsonNode single = schema.path("properties").path("action").path("anyOf").get(0);
+        JsonNode element = schema.path("properties").path("actions").path("anyOf").get(0).path("items");
+
+        assertThat(element).isEqualTo(single);
+        assertThat(schema.path("properties").path("actions").path("anyOf").get(1).path("type").asText())
+                .isEqualTo("null");
     }
 
     @Test

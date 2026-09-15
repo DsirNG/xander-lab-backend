@@ -215,26 +215,6 @@ public class AgentRunLifecycle {
         });
     }
 
-    /** Closes an approval-paused run as failed when the approved action cannot be completed. */
-    AgentEvent failAfterApproval(Long conversationId, Long userId, long runVersion, Long runId,
-                                 String reason, Object payload) {
-        return transactionTemplate.execute(status -> {
-            LocalDateTime now = LocalDateTime.now();
-            int updated = conversationMapper.update(null, new LambdaUpdateWrapper<AgentConversation>()
-                    .eq(AgentConversation::getId, conversationId)
-                    .eq(AgentConversation::getUserId, userId)
-                    .eq(AgentConversation::getStatus, "awaiting_approval")
-                    .eq(AgentConversation::getRunVersion, runVersion)
-                    .set(AgentConversation::getStatus, "failed")
-                    .set(AgentConversation::getErrorMessage, limit(reason, 1000))
-                    .set(AgentConversation::getLastCompletedAt, now));
-            if (updated != 1) throw new AgentRunSupersededException(conversationId, runVersion);
-            executionJournal.failWaitingRun(runId, userId, reason);
-            eventService.storeForRun(conversationId, userId, runVersion, "tool_error", payload, false);
-            return eventService.storeForRun(conversationId, userId, runVersion, "error", reason, false);
-        });
-    }
-
     /** Recovers an expired running generation without overwriting a newer owner or generation. */
     void recoverStale(AgentConversation conversation, Long userId) {
         if (!"running".equals(conversation.getStatus()) || conversation.getUpdatedAt() == null) return;

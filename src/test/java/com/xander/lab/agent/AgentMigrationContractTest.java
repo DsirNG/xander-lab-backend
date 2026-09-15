@@ -96,8 +96,10 @@ class AgentMigrationContractTest {
         // 答题卡只是多了两种取值，两列都是无约束的 VARCHAR(24)：
         // 新装和老库都不需要改类型，但注释里的取值表必须一致，否则线上字典对不上代码。
         // 事件取值表后来还会继续加（artifact 就插在 quiz 之后），所以这里只钉住 quiz 自己那一段。
+        // 同理不假设 quiz 紧跟 answer：baseline 里 plan 排在两者之间（计划卡片先于答题卡落地），
+        // 那个邻接关系只属于 20260831 那一刻的 upgrade 文件。
         assertThat(baseline)
-                .contains("answer/quiz（下发的答题卡，正文为JSON）/quiz_answer")
+                .contains("quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）")
                 .contains("tool_error/quiz/");
         assertThat(upgrade)
                 .contains("MODIFY COLUMN `kind` VARCHAR(24) NOT NULL")
@@ -203,6 +205,56 @@ class AgentMigrationContractTest {
                 .contains("ALTER TABLE `blog_agent_task`")
                 .contains("ADD COLUMN `client_request_id` VARCHAR(64) NULL COMMENT")
                 .contains("ADD UNIQUE KEY `uk_blog_agent_task_user_request`");
+    }
+
+    @Test
+    void messageInvocationIdIsPresentForFreshAndExistingDatabases() throws IOException {
+        String baseline = resource("db/agent_conversation_migration.sql");
+        String upgrade = resource("db/20260914_agent_message_invocation_id_migration.sql");
+
+        // 新装走 baseline、老库走 upgrade：两条路径都必须落下同一列，否则新库上
+        // 前端拿不到配对键、老库上拿得到，同一个页面在两种部署上行为不同。
+        assertThat(baseline)
+                .contains("`invocation_id` VARCHAR(64) NULL COMMENT")
+                .contains("关联agent_tool_invocation.invocation_id");
+        assertThat(upgrade)
+                .contains("information_schema.COLUMNS")
+                .contains("COLUMN_NAME = 'invocation_id'")
+                .contains("ADD COLUMN `invocation_id` VARCHAR(64) NULL COMMENT")
+                .contains("AFTER `tool_name`")
+                .contains("20260914_agent_message_invocation_id");
+    }
+
+    @Test
+    void planMessageUpgradeMatchesTheFreshBaselineForItsColumnAndDictionary() throws IOException {
+        String baseline = resource("db/agent_conversation_migration.sql");
+        String upgrade = resource("db/20260901_agent_plan_message_migration.sql");
+        String artifactWriter = resource("db/20260902_agent_artifact_card_migration.sql");
+        String lastKindWriter = resource("db/20260903_agent_context_compaction_migration.sql");
+
+        // 计划卡片不是新增一张卡，而是就地更新同一张：定位条件是
+        // (conversation_id, run_version, kind)。所以新装 baseline 必须同时带上列与索引——
+        // 少了列，insertForActiveRun 这条固定列名的 INSERT 在新库上直接失败；
+        // 少了索引，upgrade 的守卫检查会在新库上真的执行一次 ALTER。
+        assertThat(baseline)
+                .contains("`run_version` BIGINT NULL COMMENT '创建该消息的会话执行代次")
+                .contains("idx_agent_message_conversation_run_kind` (`conversation_id`, `run_version`, `kind`)");
+        assertThat(upgrade)
+                .contains("information_schema.COLUMNS")
+                .contains("COLUMN_NAME = 'run_version'")
+                .contains("ADD COLUMN `run_version` BIGINT NULL COMMENT")
+                .contains("AFTER `conversation_id`")
+                .contains("ADD KEY `idx_agent_message_conversation_run_kind`")
+                .contains("20260901_agent_plan_message");
+
+        // plan 是真实取值（AgentEventProjector 会写入并查询 kind=plan），kind 又无枚举约束，
+        // 所以漏掉它不会有任何报错——只会让线上字典少一种取值，运维按注释排查时对不上代码。
+        // 三处都要钉住：baseline（新装）、20260902（曾把 plan 从取值表里抹掉的那次重述）、
+        // 20260903（kind 注释的最后一个写入者，它的文本才是升级后真正生效的那份）。
+        for (String sql : java.util.List.of(baseline, artifactWriter, lastKindWriter)) {
+            assertThat(sql).contains("plan（任务计划卡片，正文为JSON数组）");
+        }
+        assertThat(lastKindWriter).contains("20260903_agent_context_compaction");
     }
 
     private String resource(String path) throws IOException {

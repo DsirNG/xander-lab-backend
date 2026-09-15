@@ -155,6 +155,18 @@ mcp:
       connect-timeout-millis: ${JUEJIN_CONNECT_TIMEOUT_MILLIS:10000}
       read-timeout-millis: ${JUEJIN_READ_TIMEOUT_MILLIS:30000}
       catalog-freshness-hours: ${JUEJIN_CATALOG_FRESHNESS_HOURS:24}
+  # 出站 MCP 客户端：让智能体连接第三方 MCP 服务器，把对方的工具并进工具面。
+  # 与服务端那套（mcp.oauth / mcp.blog / mcp.csdn …）是彼此独立的两套开关，互不影响。
+  # 开启前必须先应用 db/20260914_agent_mcp_client_migration.sql。
+  client:
+    enabled: ${MCP_CLIENT_ENABLED:false}
+    # Base64 编码的 32 字节 AES 密钥，用于加密远端服务器的请求头凭据。启用时必填。
+    credential-encryption-key: ${MCP_CLIENT_CREDENTIAL_ENCRYPTION_KEY:}
+    connect-timeout-seconds: ${MCP_CLIENT_CONNECT_TIMEOUT_SECONDS:10}
+    request-timeout-seconds: ${MCP_CLIENT_REQUEST_TIMEOUT_SECONDS:30}
+    max-tools-per-server: ${MCP_CLIENT_MAX_TOOLS_PER_SERVER:50}
+    max-description-length: ${MCP_CLIENT_MAX_DESCRIPTION_LENGTH:400}
+    max-result-length: ${MCP_CLIENT_MAX_RESULT_LENGTH:8000}
 
 # Blog HTML preview sandbox. The page is hosted on its own origin (production:
 # per-session subdomain of the preview domain) and embedded via iframe src;
@@ -218,6 +230,10 @@ agent:
     context-window-tokens: ${AGENT_CONVERSATION_CONTEXT_WINDOW_TOKENS:128000}
     compaction-threshold-ratio: ${AGENT_CONVERSATION_COMPACTION_THRESHOLD_RATIO:0.8}
     compaction-retain-ratio: ${AGENT_CONVERSATION_COMPACTION_RETAIN_RATIO:0.16}
+    # 一步里最多执行几个工具调用。模型可以一次报出多个互不依赖的查询，一步全做完，省掉往返步数。
+    # 上限是资源闸门：一次报二十个查询会把步数预算一步烧光。超出的调用会以"未执行"写回历史，
+    # 模型下一步可以重新发起——不会被静默丢掉。
+    max-parallel-tools: ${AGENT_CONVERSATION_MAX_PARALLEL_TOOLS:4}
   model:
     # Dedicated variables take precedence; blog-agent variables remain a deployment-compatible fallback.
     base-url: ${AGENT_MODEL_BASE_URL:${BLOG_AGENT_BASE_URL:https://api.openai.com/v1}}

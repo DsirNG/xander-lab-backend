@@ -33,6 +33,17 @@ public class AgentMessage {
     private String kind;
     /** 工具名，仅 kind=tool_call/tool_result 时非空 */
     private String toolName;
+    /**
+     * 这次工具调用的持久化身份，仅 kind=tool_call/tool_result 时非空。
+     *
+     * <p>它是"入参与结果属于同一次调用"的凭据。只有工具名的时候，一步里出现两个同名工具
+     * （并行批次里查两个主题的知识点）就无法区分，前端只能把第二个的结果挂到第一张卡上。
+     * 历史消息没有这个字段，消费方必须容忍空值并回退到按工具名配对。</p>
+     *
+     * <p>刻意放在列上而不是 {@code content} 里：{@code content} 会被渲染进提示词
+     * （见 AgentRequestAssembler 的「【工具结果】」），身份是给人看的，不该占模型的 token。</p>
+     */
+    private String invocationId;
     private String content;
     /** 持久化的附件快照 JSON；API 仅返回解析后的 attachments。 */
     @JsonIgnore

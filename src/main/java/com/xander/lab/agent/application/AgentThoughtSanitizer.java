@@ -26,6 +26,7 @@ final class AgentThoughtSanitizer {
     static final int MAX_STATUS_CHARS = 60;
 
     /** 内部协议词：出现在进度里说明模型在复述协议而不是在说人话。 */
+    // 注意 "action" 一条已经把 "actions" 覆盖掉了（contains 是子串匹配），不必再列一次。
     private static final Set<String> PROTOCOL_TOKENS = Set.of(
             "工具", "参数", "字段", "调用", "协议", "准则", "json", "schema",
             "done=", "done 为", "action", "args", "reply", "thought", "tool_call");

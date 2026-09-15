@@ -3,6 +3,7 @@ package com.xander.lab.agent.infrastructure;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.admin.application.ModelGateway;
 import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
 import com.xander.lab.common.ModelCallResult;
@@ -512,19 +513,40 @@ public class AgentModelClient {
         properties.putObject("thought").put("type", "string");
         var action = properties.putObject("action");
         var actionVariants = action.putArray("anyOf");
-        var actionObject = actionVariants.addObject();
-        actionObject.put("type", "object");
-        var actionProperties = actionObject.putObject("properties");
-        actionProperties.putObject("tool").put("type", "string");
-        actionProperties.putObject("args")
-                .put("type", "string")
-                .put("description", "工具参数对象序列化后的单行 JSON 字符串");
-        actionObject.putArray("required").add("tool").add("args");
-        actionObject.put("additionalProperties", false);
+        actionVariants.add(toolCallSchema());
         actionVariants.addObject().put("type", "null");
-        schema.putArray("required").add("done").add("reply").add("thought").add("action");
+        // 一步多个调用：与 action 共用同一套元素形状（见 toolCallSchema），二选一使用。
+        // 它同样进 required，是为了满足 strict 模式"属性必须全部声明"的要求；
+        // 不认这个字段的中转网关不发它，编排层按缺失回落到 action，行为不变。
+        var actions = properties.putObject("actions");
+        var actionsVariants = actions.putArray("anyOf");
+        var actionsArray = actionsVariants.addObject();
+        actionsArray.put("type", "array");
+        actionsArray.set("items", toolCallSchema());
+        actionsVariants.addObject().put("type", "null");
+        schema.putArray("required").add("done").add("reply").add("thought").add("action").add("actions");
         schema.put("additionalProperties", false);
         return text;
+    }
+
+    /**
+     * 一次工具调用的 schema 形状。
+     *
+     * <p>{@code action} 与 {@code actions[]} 的元素必须是**逐字段相同**的一份定义：
+     * 两边各写一遍迟早会漂移（改了一处忘了另一处），而漂移的表现是模型按 A 形状发、
+     * 服务端按 B 形状解，只在特定分支上出错。所以只在这里定义一次。</p>
+     */
+    private ObjectNode toolCallSchema() {
+        var call = objectMapper.createObjectNode();
+        call.put("type", "object");
+        var callProperties = call.putObject("properties");
+        callProperties.putObject("tool").put("type", "string");
+        callProperties.putObject("args")
+                .put("type", "string")
+                .put("description", "工具参数对象序列化后的单行 JSON 字符串");
+        call.putArray("required").add("tool").add("args");
+        call.put("additionalProperties", false);
+        return call;
     }
 
     private long elapsedMillis(long startedNanos) {
@@ -576,6 +598,8 @@ public class AgentModelClient {
      *
      * <p>reply 也是空的才算真的什么都没决定：这里不抛断整轮，交给编排循环按一次工具失败
      * 回灌纠正，模型还有重新选工具的机会。</p>
+     *
+     * <p>{@code actions} 非空时不做这个改写：那一批调用就是它的决定，改成收口等于把整批丢掉。</p>
      */
     private JsonNode validateDecision(JsonNode decision) {
         if (decision == null || !decision.isObject() || !decision.has("done")) {
@@ -587,17 +611,30 @@ public class AgentModelClient {
             }
             return decision;
         }
-        if (StringUtils.hasText(decision.path("action").path("tool").asText())
+        // actions 非空同样算"已经决定了要干什么"。漏判的后果很严重：下面那段会把决策改写成
+        // done=true 并把 action 置空——模型报的一整批调用被静默丢掉，用户只收到一句"已完成"。
+        if (hasBatch(decision)
+                || StringUtils.hasText(decision.path("action").path("tool").asText())
                 || !StringUtils.hasText(decision.path("reply").asText())) {
             return decision;
         }
-        com.fasterxml.jackson.databind.node.ObjectNode handBack =
-                ((com.fasterxml.jackson.databind.node.ObjectNode) decision).deepCopy();
+        ObjectNode handBack = ((ObjectNode) decision).deepCopy();
         handBack.put("done", true);
         handBack.put("thought", "");
         handBack.putNull("action");
+        handBack.putNull("actions");
         log.info("agent decision without a tool name carried a reply, handing the turn back to the user");
         return handBack;
+    }
+
+    /** {@code actions} 里是否至少有一个对象元素（元素工具名是否为空交给编排层判定并回灌纠正）。 */
+    private boolean hasBatch(JsonNode decision) {
+        JsonNode actions = decision.path("actions");
+        if (!actions.isArray()) return false;
+        for (JsonNode entry : actions) {
+            if (entry != null && entry.isObject()) return true;
+        }
+        return false;
     }
 
     /**
@@ -648,9 +685,9 @@ public class AgentModelClient {
                 + "reply 内容允许使用 Markdown 排版（加粗、有序/无序列表、标题、引用、表格等），"
                 + "JSON 字符串内的换行必须转义为 \\n；代码片段必须使用带语言标记的围栏"
                 + "（如 ```html、```css、```js），以便前端提供代码复制与 HTML 预览。"
-                + "字段顺序必须严格为 done、reply、thought、action；把 reply 提前，便于尽早安全流式展示。JSON 结构：\n"
+                + "字段顺序必须严格为 done、reply、thought、action、actions；把 reply 提前，便于尽早安全流式展示。JSON 结构：\n"
                 + "{\"done\":false,\"reply\":\"最终回复，done 为 true 时必须填写\",\"thought\":\"给用户看的一句进度\","
-                + "\"action\":{\"tool\":\"工具名\",\"args\":\"{\\\"工具参数名\\\":\\\"值\\\"}\"}}。\n"
+                + "\"action\":{\"tool\":\"工具名\",\"args\":\"{\\\"工具参数名\\\":\\\"值\\\"}\"},\"actions\":null}。\n"
                 + "thought 是直接显示给用户的一句进度说明，不是你的内部推理："
                 + "写你正在为他做什么，一句话，不超过 30 字，用他的话讲（“先查一下你的知识库”“在整理成草稿”）。"
                 + "不要写工具名、参数、字段名，不要复述上面的准则条款，也不要写“必须调用 xx 工具”这类内部理由——"
@@ -659,7 +696,14 @@ public class AgentModelClient {
                 + "当需要调用工具时 done 为 false 且 action 指向要调用的工具；"
                 + "当准备向用户输出最终结果时 done 为 true、reply 填写最终回复且 thought 必须为空，"
                 + "不要在 reply 之前生成用户不可见的思考内容。\n"
-                 + "done=true 的含义是把这一轮交还给用户，而不只是整件事都做完了："
+                + "一步里要做几件互不依赖的事时，用 actions 数组一次报出，服务端会在**同一步**里全部执行完，"
+                + "不必为了问三件事而分三步。actions 里每一项的形状与 action 完全相同；"
+                + "用 actions 时把 action 设为 null，用 action 时把 actions 设为 null，两者只填一个。\n"
+                + "只有**互不依赖、且都不改变任何状态**的查询才适合放进同一批（例如同时查知识点、查文章、查计划）。"
+                + "有先后依赖的（后一步要用前一步的结果）必须分步；会写数据的（发布、同步、创建、修改、删除、发信、派发子任务）"
+                + "一次只做一件，用 action 逐个来。同一个工具可以在一批里出现多次——参数不同就是不同的事"
+                + "（例如一次查两个主题的知识点）；但不要把**完全相同的调用**写两遍，那是笔误，服务端会整批退回。\n"
+                + "done=true 的含义是把这一轮交还给用户，而不只是整件事都做完了："
                  + "凡是要等用户回答之后才能继续的步骤（等用户作答、向用户确认取舍、请用户补信息），"
                  + "同样用 done=true 收口，等用户的下一条消息到达后再继续调工具。"
                  + "任何情况下都不要返回 done=false 而 action 为空：没有工具要调，就说明该收口了。";
@@ -727,17 +771,34 @@ public class AgentModelClient {
         }
     }
 
+    /**
+     * 把协议里的 {@code args}（单行 JSON 字符串）解码成对象。
+     *
+     * <p>{@code action} 与 {@code actions[]} 的每一项都要过这里。漏掉数组那一半的后果不是"参数没解析"，
+     * 而是执行管道拿到的 {@code args} 是个字符串、直接以"工具参数必须是 JSON 对象"整批失败——
+     * 模型每一步都被拒，而它按协议写得完全正确。</p>
+     */
     private JsonNode normalizeDecisionArgs(JsonNode decision) {
         JsonNode action = decision.path("action");
-        JsonNode args = action.path("args");
-        if (!action.isObject() || !args.isTextual()) return decision;
+        if (action.isObject()) decodeArgs((ObjectNode) action);
+        JsonNode actions = decision.path("actions");
+        if (actions.isArray()) {
+            for (JsonNode entry : actions) {
+                if (entry != null && entry.isObject()) decodeArgs((ObjectNode) entry);
+            }
+        }
+        return decision;
+    }
+
+    private void decodeArgs(ObjectNode call) {
+        JsonNode args = call.path("args");
+        if (!args.isTextual()) return;
         try {
             JsonNode decoded = objectMapper.readTree(args.asText());
             if (decoded == null || !decoded.isObject()) {
                 throw new IllegalStateException("模型工具参数不是有效的 JSON 对象，请重试");
             }
-            ((com.fasterxml.jackson.databind.node.ObjectNode) action).set("args", decoded);
-            return decision;
+            call.set("args", decoded);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("模型工具参数不是有效的 JSON 对象，请重试", exception);
         }

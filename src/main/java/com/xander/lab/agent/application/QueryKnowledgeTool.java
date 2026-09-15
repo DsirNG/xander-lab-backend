@@ -43,6 +43,12 @@ public class QueryKnowledgeTool implements AgentTool {
         return "query_knowledge";
     }
 
+    /** 纯查询：不写任何状态，可与同批其它只读工具并发执行。 */
+    @Override
+    public boolean readOnly() {
+        return true;
+    }
+
     @Override
     public String description() {
         return "查询当前用户个人知识库中的知识点、真实掌握画像和知识正文。"

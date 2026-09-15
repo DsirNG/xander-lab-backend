@@ -23,8 +23,11 @@ CREATE TABLE IF NOT EXISTS `xander_schema_migration` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据库迁移执行标记';
 
 -- 消息类型：在交付卡之后补上 compaction。
+-- 同样地，重述整条取值表时必须保留全部历史取值；plan 由 20260901 引入，
+-- 本迁移是 kind 注释的**最后一个写入者**，这里漏掉它，两条路径（新装 baseline / 老库升级）
+-- 的字典都会少一种真实取值。
 ALTER TABLE `agent_message`
-  MODIFY COLUMN `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）/compaction（上下文压缩检查点，正文为摘要文本，是对话记录的地板：它之前的消息不再进入模型上下文，前端不渲染）';
+  MODIFY COLUMN `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer/plan（任务计划卡片，正文为JSON数组）/quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）/compaction（上下文压缩检查点，正文为摘要文本，是对话记录的地板：它之前的消息不再进入模型上下文，前端不渲染）';
 
 INSERT IGNORE INTO `xander_schema_migration` (`migration_key`)
 VALUES ('20260903_agent_context_compaction');

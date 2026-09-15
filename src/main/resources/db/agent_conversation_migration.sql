@@ -31,14 +31,17 @@ CREATE TABLE IF NOT EXISTS `agent_conversation` (
 CREATE TABLE IF NOT EXISTS `agent_message` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '消息主键',
   `conversation_id` BIGINT NOT NULL COMMENT '所属会话ID，关联 agent_conversation.id',
+  `run_version` BIGINT NULL COMMENT '创建该消息的会话执行代次；同一代次的计划更新同一张计划卡片',
   `role` VARCHAR(16) NOT NULL COMMENT '消息角色：user/assistant/tool',
-  `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）/compaction（上下文压缩检查点，正文为摘要文本，是对话记录的地板：它之前的消息不再进入模型上下文，前端不渲染）',
+  `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer/plan（任务计划卡片，正文为JSON数组）/quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）/compaction（上下文压缩检查点，正文为摘要文本，是对话记录的地板：它之前的消息不再进入模型上下文，前端不渲染）',
   `tool_name` VARCHAR(64) NULL COMMENT '工具名，仅 kind=tool_call/tool_result 时非空',
+  `invocation_id` VARCHAR(64) NULL COMMENT '这次工具调用的持久化身份，关联agent_tool_invocation.invocation_id；仅kind=tool_call/tool_result时非空，用于把一次调用的入参与结果配对',
   `content` LONGTEXT NOT NULL COMMENT '消息正文；tool 记录为 JSON',
   `attachments_json` LONGTEXT NULL COMMENT '用户消息附件快照JSON，包含URL、原始文件名、MIME类型和字节数',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_agent_message_conversation_created` (`conversation_id`, `created_at`),
+  KEY `idx_agent_message_conversation_run_kind` (`conversation_id`, `run_version`, `kind`),
   CONSTRAINT `fk_agent_message_conversation`
     FOREIGN KEY (`conversation_id`) REFERENCES `agent_conversation` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='智能体对话消息';

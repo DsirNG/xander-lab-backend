@@ -32,3 +32,8 @@ SET @agent_message_plan_run_index_sql = IF(
 PREPARE stmt_agent_message_plan_run_index FROM @agent_message_plan_run_index_sql;
 EXECUTE stmt_agent_message_plan_run_index;
 DEALLOCATE PREPARE stmt_agent_message_plan_run_index;
+
+-- 审计标记：本文件此前漏了这一步，导致 xander_schema_migration 里查不到"计划卡片已迁移"。
+-- 迁移靠上面的 information_schema 守卫保证可重复执行，标记只是审计记录（见 docs/ARCHITECTURE.md）。
+INSERT IGNORE INTO `xander_schema_migration` (`migration_key`)
+VALUES ('20260901_agent_plan_message');

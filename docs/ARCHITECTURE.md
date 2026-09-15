@@ -247,6 +247,25 @@ column-add migrations after the current fresh baseline. Migration markers are
 audit records, while the guarded column check is the source of truth for the
 cancel-request and execution-generation upgrades.
 
+The list above is the fresh-install path: the baseline files already contain
+every current column, so the remaining migrations are no-ops on a new database.
+An **upgrade** of an existing database must additionally replay the card and
+dictionary migrations — `20260825_agent_autonomy`, `20260827_agent_conversation_pin_unread`,
+`20260831_agent_quiz_card`, `20260901_agent_plan_message`, `20260902_agent_artifact_card`,
+`20260903_agent_context_compaction`, `20260909_agent_memory_media_asset`, and the
+`20260914_*` pair — **in date order**. Two reasons that order is not optional:
+
+- `20260901_agent_plan_message` is the only migration that adds
+  `agent_message.run_version` and `idx_agent_message_conversation_run_kind`. The
+  plan card upserts by `(conversation_id, run_version, kind)` and
+  `AgentMessageMapper.insertForActiveRun` lists `run_version` in its column list,
+  so a database that skips this migration fails the first time the agent updates
+  its plan.
+- The `kind` / `event_type` column comments are rewritten by several migrations,
+  each restating the whole vocabulary. **The last writer wins**, so applying them
+  out of order silently drops values from the operator-facing dictionary — which
+  is exactly how `plan` went missing once.
+
 ## Blog HTML Preview Deployment
 
 Production serves preview pages on a dedicated wildcard domain so every session

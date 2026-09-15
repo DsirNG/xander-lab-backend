@@ -32,6 +32,12 @@ public class QueryUnsyncedPostsTool implements AgentTool {
         return "query_unsynced_posts";
     }
 
+    /** 纯查询：不写任何状态，可与同批其它只读工具并发执行。 */
+    @Override
+    public boolean readOnly() {
+        return true;
+    }
+
     @Override
     public String description() {
         return "查询当前用户所有未成功同步到指定平台的博客文章（默认掘金 juejin，也可选 csdn），"

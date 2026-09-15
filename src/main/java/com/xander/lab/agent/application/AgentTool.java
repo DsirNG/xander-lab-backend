@@ -60,14 +60,49 @@ public interface AgentTool {
         return Optional.empty();
     }
 
-    /** Returns why this exact call needs user approval, or empty when pre-approved. */
+    /**
+     * Returns why this exact call needs user approval, or empty when pre-approved.
+     *
+     * <p>实现必须是**纯函数**：只看 {@code args}，不改任何状态。编排层会在真正执行之前先调它
+     * 判断这一批能不能并发（命中审批就得退回串行逐个执行），执行管道里还会再调一次。
+     * 有副作用的实现（比如顺手记一次调用次数）会被调用两次，计数直接翻倍。</p>
+     */
     default Optional<String> approvalReason(JsonNode args) {
         return Optional.empty();
+    }
+
+    /**
+     * 这个工具是否只读取状态、不产生任何副作用（不改库、不写文件、不发外部写请求）。
+     *
+     * <p>它是**并发执行**的准入条件，不是文档性标注：编排循环只在一步里的每个调用都
+     * 返回 {@code true} 时才把它们放到线程池上同时跑，否则一律串行。默认 {@code false}
+     * 是刻意的——新增工具忘了声明只会退化成串行（慢一点），而反过来误标成只读会让两个
+     * 写操作真正并发起来（写坏数据）。拿不准就别覆写。</p>
+     *
+     * <p>这个标记只说明"并发安全"，不说明"要审批"：只读工具照样可以覆写
+     * {@link #approvalReason(JsonNode)} 要求审批。</p>
+     */
+    default boolean readOnly() {
+        return false;
     }
 
     /** Receives human-readable progress hints during a long-running tool call. */
     interface ProgressListener {
         void onProgress(String message);
+
+        /**
+         * 把这次调用的持久化身份交给监听器，让它之后推的每条进度/增量都带上同一个
+         * {@code invocationId}。
+         *
+         * <p>为什么不能构造时就给：身份是执行管道在开单那一刻生成的，而监听器必须**先于**
+         * 开单交给管道（管道要在开单前用它做取消检查）。所以只能"先交监听器、后补身份"。
+         * 补的时机严格早于任何执行，因此监听器一旦开始推送，身份必定已经就位。</p>
+         *
+         * <p>默认空实现：不对外暴露调用身份的实现（比如子智能体的 QuietProgress）无需关心。
+         * 那类实现不转发也不丢信息——子智能体的进度本来就归它自己那次调用所有。</p>
+         */
+        default void bindInvocationId(String invocationId) {
+        }
 
         /** Streams tool-owned draft/output text without pretending it is the agent's final answer. */
         default void onToolDelta(String delta) {

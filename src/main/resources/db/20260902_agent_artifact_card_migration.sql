@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS `xander_schema_migration` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='数据库迁移执行标记';
 
 -- 1. 消息类型：在答题卡之后补上 artifact。
+-- 注意：重述整条取值表时，**早于本迁移落地的取值必须原样保留**。plan（任务计划卡片）
+-- 是 20260901 引入的，它的正文是 JSON 数组；漏掉它线上字典就少一种真实取值，
+-- 而 kind 无枚举约束，谁也不会因此报错——只会让运维按注释排查时对不上代码。
 ALTER TABLE `agent_message`
-  MODIFY COLUMN `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer/quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）';
+  MODIFY COLUMN `kind` VARCHAR(24) NOT NULL COMMENT '消息类型：message/thought/reflection/tool_call/tool_result/answer/plan（任务计划卡片，正文为JSON数组）/quiz（下发的答题卡，正文为JSON）/quiz_answer（用户在答题卡上的作答）/artifact（下发的代码交付卡，正文为JSON）';
 
 -- 2. 事件类型：在答题卡之后补上 artifact；它不是终态事件，续传时和 quiz 一样只做回放。
 ALTER TABLE `agent_event`

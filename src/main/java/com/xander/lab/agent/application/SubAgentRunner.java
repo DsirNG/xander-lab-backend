@@ -117,32 +117,53 @@ public class SubAgentRunner {
                 break;
             }
 
-            String toolName = decision.path("action").path("tool").asText("");
-            AgentTool tool = allowed.contains(toolName) ? registry.get(toolName) : null;
-            if (tool == null) {
-                // 点名不存在的工具也计入失败预算：否则子智能体可以一直点名错工具，
-                // 把步数预算烧完，交回主智能体的却只是一串"被拒绝"的观察。
+            // 子智能体拿到的工具表与主循环共用同一份 strict schema，而那份 schema 会邀请模型
+            // 用 actions 一次报多个调用。这里必须照样认它——只读 action 的话，子智能体报出的整批
+            // 调用会被当成"（空工具名）"拒掉，它交回主智能体的就只剩一串"被拒绝"的观察。
+            AgentActionPlan plan = AgentActionPlan.from(
+                    decision, allowed, properties.getMaxParallelTools());
+            if (plan.rejected()) {
+                // 与主循环同一条约定：整批要么全执行、要么全拒绝，不跑一半。
+                // 点名错工具也计入失败预算：否则子智能体可以一直点名错工具把步数烧完，
+                // 交回主智能体的却只是一串"被拒绝"的观察。
                 failures++;
-                observations.add("尝试调用 " + describeUnknown(toolName) + " 被拒绝：不在本子任务的可用工具内（"
-                        + String.join(", ", allowed) + "）");
+                observations.add("这一步的调用被拒绝：" + plan.rejection()
+                        + "（本子任务可用工具：" + String.join(", ", allowed) + "）");
                 if (failures >= MAX_FAILURES) break;
                 continue;
             }
-
-            toolCalls.add(toolName);
-            onProgress.onProgress("子任务|" + goal + " · " + toolName);
-            try {
-                JsonNode result = tool.execute(context, decision.path("action").path("args"),
-                        new QuietProgress(onProgress));
-                observations.add("调用 " + toolName + " 得到：" + limit(result.toString(), OBSERVATION_CHARS));
-                failures = 0;
-            } catch (CancellationException cancellation) {
-                throw cancellation;
-            } catch (Exception error) {
-                failures++;
-                observations.add("调用 " + toolName + " 失败：" + safeMessage(error));
-                if (failures >= MAX_FAILURES) break;
+            // 刻意**串行**：子循环没有独立的调用日志与审批生命周期（见 READ_ONLY_TOOLS 的注释），
+            // 而它的工具面按构造就是只读白名单，为它再开一条并发执行路径的收益抵不上这份复杂度。
+            for (AgentToolCall toolCall : plan.calls()) {
+                onProgress.checkCancellation();
+                AgentTool tool = registry.get(toolCall.toolName());
+                if (tool == null) {
+                    // 计划层已经校验过名字，这里只是兜底：注册表在两次读之间理论上不会变，
+                    // 但真变了也不该把子任务崩掉。
+                    observations.add("尝试调用 " + describeUnknown(toolCall.toolName()) + " 被拒绝：不在本子任务的可用工具内");
+                    continue;
+                }
+                toolCalls.add(toolCall.toolName());
+                onProgress.onProgress("子任务|" + goal + " · " + toolCall.toolName());
+                try {
+                    JsonNode result = tool.execute(context, toolCall.args(), new QuietProgress(onProgress));
+                    observations.add("调用 " + toolCall.toolName() + " 得到："
+                            + limit(result.toString(), OBSERVATION_CHARS));
+                    failures = 0;
+                } catch (CancellationException cancellation) {
+                    throw cancellation;
+                } catch (Exception error) {
+                    failures++;
+                    observations.add("调用 " + toolCall.toolName() + " 失败：" + safeMessage(error));
+                    if (failures >= MAX_FAILURES) break;
+                }
             }
+            // 被单步上限截掉的调用要留话：否则子智能体以为自己问过、只是没收到答案。
+            for (AgentToolCall skipped : plan.skipped()) {
+                observations.add("本步一次最多执行 " + Math.max(1, properties.getMaxParallelTools())
+                        + " 个调用，" + skipped.toolName() + " 未执行，可在下一步重新发起");
+            }
+            if (failures >= MAX_FAILURES) break;
         }
 
         if (!completed && !StringUtils.hasText(findings)) {
@@ -216,6 +237,19 @@ public class SubAgentRunner {
         @Override
         public void onProgress(String message) {
             delegate.onProgress(message);
+        }
+
+        /**
+         * 刻意**不转发**身份，与 {@link #onToolDelta} 的抑制同理。
+         *
+         * <p>这个监听器代表的是子智能体那一次**外层**调用（{@code delegate} 是外层工具的
+         * ToolProgress，身份已经绑好）。内部每个小工具各有自己的身份，转发过来只会把外层
+         * 卡片的配对键覆盖成内层的，让子任务的进度挂到一张不存在的卡上。留空是正确语义：
+         * 子任务的全部进度都归它那一次外层调用所有。</p>
+         */
+        @Override
+        public void bindInvocationId(String invocationId) {
+            // 有意留空，见方法注释。
         }
 
         @Override

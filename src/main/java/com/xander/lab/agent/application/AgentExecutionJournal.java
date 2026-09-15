@@ -254,20 +254,6 @@ public class AgentExecutionJournal {
         if (changed != 1) throw new IllegalStateException("智能体审批运行状态已变化");
     }
 
-    /** Fails a run that was paused for approval after its approved tool failed. */
-    @Transactional
-    public void failWaitingRun(Long runId, Long userId, String reason) {
-        if (!enabled) return;
-        int changed = runMapper.update(null, new LambdaUpdateWrapper<AgentRun>()
-                .eq(AgentRun::getId, runId)
-                .eq(AgentRun::getUserId, userId)
-                .eq(AgentRun::getStatus, AgentRun.STATUS_WAITING_APPROVAL)
-                .set(AgentRun::getStatus, AgentRun.STATUS_FAILED)
-                .set(AgentRun::getFailureReason, limit(reason, 1000))
-                .set(AgentRun::getCompletedAt, LocalDateTime.now()));
-        if (changed != 1) throw new IllegalStateException("智能体审批运行状态已变化");
-    }
-
     /** Returns a bounded batch of interrupted tool calls for read-only business reconciliation. */
     @Transactional(readOnly = true)
     public List<AgentToolInvocation> unknownInvocations(int batchSize) {

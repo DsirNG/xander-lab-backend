@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -136,6 +137,76 @@ class AgentToolRegistryTest {
                 .isEqualTo(registry.describeToolSurface(Set.of("plan_tasks")));
         assertThat(registry.describeToolSurface(Set.of(), "<available_skills>\n- x：y\n</available_skills>"))
                 .isEmpty();
+    }
+
+    /**
+     * 动态工具按归属收窄：平台级人人可见，用户自己配的只对自己可见。
+     *
+     * <p>这是「甲的远端服务器不能出现在乙的工具面里」的唯一实现点。收窄之后
+     * {@link AgentToolExecutionPipeline} 拿这份集合比对工具名，越权调用就被挡住了。</p>
+     */
+    @Test
+    void dynamicToolsJoinTheTableScopedToTheirOwner() {
+        AgentToolRegistry scoped = new AgentToolRegistry(List.of(tool("remember")));
+        // 动态来源的契约是「这个用户能看到什么」：平台级那条对谁都算上，个人那条只对本人算上。
+        scoped.setDynamicToolSources(List.of(userId -> {
+            List<AgentTool> visible = new ArrayList<>();
+            visible.add(tool("mcp__platform__ping"));
+            if (userId == null || userId == 7L) visible.add(tool("mcp__mine__do"));
+            return visible;
+        }));
+
+        assertThat(scoped.allowedNames(7L))
+                .contains("remember", "mcp__mine__do", "mcp__platform__ping");
+        assertThat(scoped.allowedNames(9L))
+                .contains("remember", "mcp__platform__ping")
+                .doesNotContain("mcp__mine__do");
+        assertThat(scoped.allowedNames()).contains("mcp__mine__do", "mcp__platform__ping");
+    }
+
+    /** 内置工具的名字是既有行为的一部分，被远端服务器顶掉会让老会话的能力无声改变。 */
+    @Test
+    void aDynamicToolCannotShadowABuiltinTool() {
+        AgentToolRegistry scoped = new AgentToolRegistry(List.of(tool("publish_post")));
+        scoped.setDynamicToolSources(List.of(userId -> List.of(tool("publish_post"))));
+
+        assertThat(scoped.get("publish_post").description()).isEqualTo("publish_post description");
+        assertThat(scoped.names()).containsExactly("publish_post");
+    }
+
+    /** 动态来源取不到工具不该让整轮对话失败：少几个工具，对话照常。 */
+    @Test
+    void aFailingDynamicSourceLeavesTheBuiltinTableIntact() {
+        AgentToolRegistry scoped = new AgentToolRegistry(List.of(tool("remember")));
+        scoped.setDynamicToolSources(List.of(userId -> {
+            throw new IllegalStateException("远端不可达");
+        }));
+
+        assertThat(scoped.allowedNames(7L)).containsExactly("remember");
+        assertThat(scoped.allowedNames()).containsExactly("remember");
+    }
+
+    /**
+     * 合并结果被缓存，直到显式失效。
+     *
+     * <p>缓存不是优化而是正确性前提：同一轮里渲染工具面会被调用多次（主调用与压缩调用各一次），
+     * 只有它们读到同一份 map，{@code describeToolSurface} 才可能逐字节一致。</p>
+     */
+    @Test
+    void invalidateDropsTheCachedDynamicMerge() {
+        AgentToolRegistry scoped = new AgentToolRegistry(List.of(tool("remember")));
+        List<AgentTool> supplied = new ArrayList<>();
+        scoped.setDynamicToolSources(List.of(userId -> List.copyOf(supplied)));
+
+        assertThat(scoped.allowedNames(7L)).containsExactly("remember");
+
+        supplied.add(tool("mcp__new__thing"));
+        assertThat(scoped.allowedNames(7L)).containsExactly("remember");
+
+        scoped.invalidate();
+        // allowedNames 返回的是 Set，顺序不保证；要顺序得用 names(userId)。
+        assertThat(scoped.allowedNames(7L)).containsExactlyInAnyOrder("mcp__new__thing", "remember");
+        assertThat(scoped.names(7L)).containsExactly("mcp__new__thing", "remember");
     }
 
     private AgentTool tool(String name) {

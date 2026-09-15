@@ -295,6 +295,31 @@ class AgentRequestAssemblerTest {
         assertThat(request.journalSnapshotJson()).contains("model-loaded-catalog");
     }
 
+    /**
+     * 计划卡片要和另外两种卡片一样带前缀。
+     *
+     * <p>漏掉前缀不会有任何报错——计划项的 JSON 照样进提示词——所以这处遗漏只能靠测试钉住：
+     * 模型得能一眼认出"这是我自己下发的计划卡"，而不是一段来路不明的 JSON。
+     * {@code plan} 是最后加进来的一张卡，渲染 switch 当时没跟上。</p>
+     */
+    @Test
+    void thePlanCardIsRenderedWithItsOwnPrefixLikeTheOtherCards() {
+        AgentRequestAssembler assembler = assembler("");
+        String items = "[{\"title\":\"收集资料\",\"status\":\"DONE\"}]";
+        List<AgentMessage> messages = List.of(
+                message(1L, "user", "message", "帮我整理这批笔记", List.of()),
+                message(2L, "assistant", "plan", items, List.of()),
+                message(3L, "assistant", "artifact", "{\"files\":[]}", List.of()));
+
+        String context = assembler.assemble(input(messages, null, null)).context();
+
+        assertThat(context).contains("（已更新任务计划：）" + items);
+        // 计划项本身仍要进提示词：模型靠它认出自己早先定下的计划，只是不再是一段裸 JSON。
+        assertThat(context).contains("收集资料");
+        // 交付卡同样带前缀——三种卡片一视同仁，别只给其中一种加。
+        assertThat(context).contains("（已用交付卡把代码交给用户：）");
+    }
+
     private AgentRequestAssembler assembler(String renderedPlan) {
         return assembler(renderedPlan, 30);
     }
