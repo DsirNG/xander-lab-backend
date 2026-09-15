@@ -202,10 +202,22 @@ def is_class_level(content: str, annotation_end: int) -> bool:
     return re.search(r"\bclass\b", segment) is not None
 
 
+# ``@Foo`` / ``@Foo(...)`` / ``@com.example.Foo(...)`` -- used to strip sibling
+# annotations when locating a method declaration.
+ANNOTATION_STRIP_RE = re.compile(r"@[\w.]+\s*(?:\([^)]*\))?")
+
+
 def method_signature(content: str, annotation_end: int) -> str:
     tail = content[annotation_end:annotation_end + 1500]
     boundary = re.search(r"\{", tail)
-    return tail[:boundary.start()] if boundary else tail
+    signature = tail[:boundary.start()] if boundary else tail
+    # Drop any further annotations sitting between the one we started from and the
+    # declaration. ``@Scheduled`` is routinely accompanied by a sibling annotation
+    # (``@SchedulerLock``, ``@Async``, ``@Transactional``); without this the first
+    # ``word(`` in the text is that annotation, so every caller silently gets
+    # ``SchedulerLock`` as the *method name* -- and for a class with several entry
+    # points that wrong name also becomes part of the id.
+    return ANNOTATION_STRIP_RE.sub("", signature)
 
 
 def slugify(text: str) -> str:

@@ -12,8 +12,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 227
-  service_private: 187
+  total: 228
+  service_private: 188
   secret: 34
   shared: 6
 config:
@@ -1152,3 +1152,8 @@ config:
     classification: service_private
     owner: studio
     nacos_group: DINQOR-CORE
+  - key: shedlock.enabled
+    source: application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON

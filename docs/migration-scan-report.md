@@ -67,9 +67,10 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
 ## Config keys
 
-- total keys: **310** (leaf: 227)
-- unassigned leaves: **0**
+- total keys: **312** (leaf: 228)
+- unassigned leaves: **1**
 
+  - `shedlock.enabled` (application.yml)
 
 ## Cross-domain implementation imports
 

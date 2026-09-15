@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,7 @@ public class BlogContentPlanScheduler {
             fixedDelayString = "${blog-content-plan.poll-interval-ms:15000}",
             initialDelayString = "${blog-content-plan.initial-delay-ms:15000}"
     )
+    @SchedulerLock(name = "blog-content-plan-scheduler", lockAtMostFor = "PT2M")
     public void dispatchDuePlans() {
         try {
             recoverStaleClaims();

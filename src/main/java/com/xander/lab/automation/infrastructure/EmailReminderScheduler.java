@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -51,6 +52,7 @@ public class EmailReminderScheduler {
             fixedDelayString = "${email-reminder.poll-interval-ms:10000}",
             initialDelayString = "${email-reminder.initial-delay-ms:15000}"
     )
+    @SchedulerLock(name = "email-reminder-scheduler", lockAtMostFor = "PT2M")
     public void dispatchDueReminders() {
         try {
             int recovered = taskMapper.failStaleClaims(

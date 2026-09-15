@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.agent.domain.AgentRun;
 import com.xander.lab.agent.domain.AgentToolInvocation;
 import com.xander.lab.agent.infrastructure.AgentRunMapper;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -40,8 +41,14 @@ public class AgentToolInvocationReconciler {
         this.objectMapper = objectMapper;
     }
 
-    /** Periodically settles only effects that can be proven through an owning service lookup. */
+    /**
+     * Periodically settles only effects that can be proven through an owning service lookup.
+     *
+     * <p>{@code execution_scope = global_once}（V9 §68）：操作的是 DB 行，
+     * 多实例下必须互斥。锁名与 {@code docs/scheduled-ownership.yaml} 的 id 一致。</p>
+     */
     @Scheduled(fixedDelayString = "${agent-harness.reconciliation-delay-ms:60000}")
+    @SchedulerLock(name = "agent-tool-invocation-reconciler", lockAtMostFor = "PT5M")
     public void reconcileUnknownInvocations() {
         recoverExpiredApprovedExecutions();
         for (AgentToolInvocation invocation : executionJournal.unknownInvocations(BATCH_SIZE)) {

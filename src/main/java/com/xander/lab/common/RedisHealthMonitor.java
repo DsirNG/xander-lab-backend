@@ -4,6 +4,7 @@ import com.xander.lab.integration.mail.MailService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -45,6 +46,7 @@ public class RedisHealthMonitor {
             fixedDelayString = "${redis-monitor.poll-interval-ms:30000}",
             initialDelayString = "${redis-monitor.initial-delay-ms:30000}"
     )
+    @SchedulerLock(name = "redis-health-monitor", lockAtMostFor = "PT1M")
     public synchronized void checkRedis() {
         try {
             redisHealthProbe.ping();

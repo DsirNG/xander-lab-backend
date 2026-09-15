@@ -110,6 +110,23 @@
             <artifactId>aliyun-sdk-oss</artifactId>
             <version>3.17.4</version>
         </dependency>
+        <!--
+            ShedLock：多实例定时任务互斥（V9 §67 / §69）。
+            后端刻意选 MySQL 而不是 Redis —— 定时任务本身不该依赖 Redis，
+            否则 Redis 故障会连带停掉所有后台任务。
+            默认关闭（shedlock.enabled），见 config/ShedLockConfiguration：
+            Wave 0A 是单实例，靠 DB 原子领取已能保证恰好一次；锁是扩到多实例时才需要的能力。
+        -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>5.13.0</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+            <version>5.13.0</version>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

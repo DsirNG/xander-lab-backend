@@ -558,6 +558,104 @@ def gate_stream_ban_boundary_coverage() -> None:
            + (f", {len(unregistered)} explicitly unregistered" if unregistered else ""))
 
 
+# ``@SchedulerLock`` and ``@net.javacrumbs...SchedulerLock`` must both be caught:
+# a fully-qualified annotation is legal Java, and a gate that only matches the short
+# form would let a per_instance task carry a global lock straight through (§69).
+SCHEDULER_LOCK_RE = re.compile(r'@(?:[\w.]+\.)?SchedulerLock\s*\(\s*name\s*=\s*"([^"]+)"')
+
+
+def scheduler_lock_at(path: Path, scheduled_line: int) -> str | None:
+    """Return the ``@SchedulerLock`` name declared for a ``@Scheduled`` method.
+
+    ``scheduled_line`` is the 1-based line of the ``@Scheduled`` annotation, which
+    the scanner records. The annotation block may span several lines (the
+    cron/fixedDelay arguments), so the argument list is skipped by balancing
+    parentheses before looking for sibling annotations.
+
+    Returns ``None`` both when there is no lock and when the recorded line does not
+    hold ``@Scheduled`` (a stale inventory); the caller distinguishes the two.
+    """
+    lines = path.read_text(encoding="utf-8").splitlines()
+    index = max(0, scheduled_line - 1)
+    if index >= len(lines) or not lines[index].strip().startswith("@Scheduled"):
+        return None
+    depth = 0
+    for offset in range(index, min(len(lines), index + 60)):
+        line = lines[offset]
+        if offset == index or depth > 0:
+            depth += line.count("(") - line.count(")")
+            continue
+        match = SCHEDULER_LOCK_RE.search(line)
+        if match:
+            return match.group(1)
+        if not line.strip().startswith("@"):
+            # Annotation block ended without a lock annotation.
+            return None
+    return None
+
+
+def gate_scheduler_lock_scope_consistency() -> None:
+    """Enforce V9 §68/§69: a global lock belongs to ``global_once`` and ONLY there.
+
+    Putting a global lock on a ``per_instance`` task makes N-1 instances stop
+    refreshing their local state while the acceptance criterion ("did not run
+    twice") still passes -- a failure that cannot fail. The reverse mistake is
+    equally real: a ``global_once`` task with no lock runs on every instance.
+    """
+    gate = "scheduler-lock-scope-consistency"
+    inventory = load("scheduled-inventory.yaml")["scheduled"]
+    ownership = {entry["id"]: entry for entry in load("scheduled-ownership.yaml")["scheduled"]}
+
+    problems: list[str] = []
+    stale: list[str] = []
+    checked = 0
+    for item in inventory:
+        entry = ownership.get(item["id"])
+        if entry is None:
+            continue  # covered by scheduled-ownership-coverage
+        scope = entry.get("execution_scope")
+        if scope not in ("global_once", "per_instance"):
+            continue  # covered by execution-scope-validation
+
+        path = REPO / item["file"]
+        if not path.exists():
+            problems.append(f"{item['id']}: {item['file']} missing")
+            continue
+
+        # The recorded line must actually hold @Scheduled. If it does not, the
+        # inventory predates a source edit and every conclusion below is unreliable
+        # -- so say that instead of blaming the annotation.
+        lines = path.read_text(encoding="utf-8").splitlines()
+        index = item["line"] - 1
+        if index >= len(lines) or not lines[index].strip().startswith("@Scheduled"):
+            stale.append(item["id"])
+            continue
+
+        checked += 1
+        lock = scheduler_lock_at(path, item["line"])
+
+        if scope == "global_once" and lock is None:
+            problems.append(
+                f"{item['id']}: global_once without @SchedulerLock "
+                "(every instance would execute it)")
+        if scope == "per_instance" and lock is not None:
+            problems.append(
+                f"{item['id']}: per_instance WITH @SchedulerLock "
+                "(N-1 instances would stop refreshing -- §69)")
+        if lock is not None and lock != item["id"]:
+            problems.append(
+                f"{item['id']}: @SchedulerLock(name={lock!r}) must equal the ownership id")
+
+    if stale:
+        problems.append(
+            f"stale scheduled-inventory.yaml for {stale} -- re-run "
+            "scripts/migration/scan.py (the recorded @Scheduled line no longer matches)")
+    if problems:
+        report(gate, False, "; ".join(problems[:8]))
+        return
+    report(gate, True, f"{checked} scheduled entries match their execution_scope")
+
+
 # Every inventory that is keyed by an identifier, plus the `counts` entry that is
 # supposed to equal its length. The §13 methodology only works if the machine-owned
 # key set is actually a *set*: a duplicate key means two entities share one key, so
@@ -625,6 +723,7 @@ GATES = {
     "auth-policy-token-location": gate_auth_policy_token_location,
     "scheduled-ownership-coverage": gate_scheduled_ownership_coverage,
     "execution-scope-validation": gate_execution_scope_validation,
+    "scheduler-lock-scope-consistency": gate_scheduler_lock_scope_consistency,
     "table-ownership-drift": gate_table_ownership_drift,
     "config-ownership-drift": gate_config_ownership_drift,
     "shared-kernel-reverse-dependency": gate_shared_kernel_reverse_dependency,

@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
@@ -87,6 +88,7 @@ public class Img2ThreeService {
 
     /** A process restart cannot resume an in-memory worker, so stale records must not poll forever. */
     @Scheduled(fixedDelay = 60_000)
+    @SchedulerLock(name = "img2three-service", lockAtMostFor = "PT5M")
     public void failAbandonedRunningTasks() {
         LocalDateTime cutoff = LocalDateTime.now().minusMinutes(20);
         List<Img2ThreeTask> abandonedTasks = taskMapper.selectList(new LambdaQueryWrapper<Img2ThreeTask>()

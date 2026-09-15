@@ -8,6 +8,7 @@ import com.xander.lab.knowledgebase.domain.UploadSessionStatus;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -39,6 +40,7 @@ public class KnowledgeUploadSessionReaper {
             fixedDelayString = "${knowledge-base.reaper-interval-ms:3600000}",
             initialDelayString = "${knowledge-base.reaper-initial-delay-ms:60000}"
     )
+    @SchedulerLock(name = "knowledge-upload-session-reaper", lockAtMostFor = "PT10M")
     public void reapExpiredSessions() {
         try {
             List<KnowledgeUploadSession> expired = sessionMapper.selectList(

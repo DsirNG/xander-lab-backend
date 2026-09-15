@@ -11,6 +11,7 @@ import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import com.xander.lab.recitation.infrastructure.RecitationProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -36,6 +37,7 @@ public class RecitationWorker {
 
     /** 每轮有界处理待提交和待查询任务；单条失败不会中断整个批次。 */
     @Scheduled(fixedDelayString = "${recitation.worker-poll-interval-ms:2000}")
+    @SchedulerLock(name = "recitation-worker", lockAtMostFor = "PT1M")
     public void process() {
         if (!properties.isEnabled()) return;
         recoverStaleClaims();

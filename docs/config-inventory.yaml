@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml."
 counts:
-  total: 310
-  leaves: 227
+  total: 312
+  leaves: 228
 config:
   - key: server
     source: application.yml
@@ -1370,6 +1370,16 @@ config:
     value: "${KNOWLEDGE_BASE_REAPER_INITIAL_DELAY_MS:60000}"
     leaf: true
     logical_owner: knowledge
+  - key: shedlock
+    source: application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: shedlock.enabled
+    source: application.yml
+    value: "${SHEDLOCK_ENABLED:false}"
+    leaf: true
+    logical_owner: unassigned
   - key: spring
     source: application-local.yml
     value: ""

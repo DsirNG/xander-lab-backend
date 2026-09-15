@@ -350,3 +350,14 @@ knowledge-base:
   reaper-batch-size: ${KNOWLEDGE_BASE_REAPER_BATCH_SIZE:50}
   reaper-interval-ms: ${KNOWLEDGE_BASE_REAPER_INTERVAL_MS:3600000}
   reaper-initial-delay-ms: ${KNOWLEDGE_BASE_REAPER_INITIAL_DELAY_MS:60000}
+
+
+# 多实例定时任务互斥（V9 §67 / §68 / §69）。
+# 默认关闭：Wave 0A 是单实例部署，现有 DB 原子领取已保证"恰好一次"，
+# 加锁只会多一个失败点（锁表缺失 / 锁未释放）。扩到多实例时再打开，
+# 打开前必须确认 shedlock 表已由 migration 账号建好，且每个 @SchedulerLock
+# 的 lockAtMostFor 大于该任务的最坏运行时长。
+# 只有 execution_scope = global_once 的任务允许加锁；给 per_instance 任务加全局锁
+# 会让 N-1 个实例的本地状态永不刷新（门禁 scheduler-lock-scope-consistency 强制）。
+shedlock:
+  enabled: ${SHEDLOCK_ENABLED:false}
