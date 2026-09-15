@@ -158,10 +158,17 @@ capabilities:
 
   - id: bounded-replay-history
     since: V7
-    ref: V9 §33 / §40
+    ref: V9 §33 / §40 / §42 / §43
     status: planned
-    notes: "retention = 24h，每 sid 最多最近 48 代。retained_until 在写 history 行时写入 now()+24h，不得留空、不得依赖后续任务回填。容量上界 ≈ 10,000 × 48 = 480,000 行（30m Access）。"
+    evidence: >-
+      四个实现点均已落地（但整个新 Token 模型在 auth.refresh.enabled=false 下未生效，故仍为 planned）：
+      ① §40.2 写入规则 —— RefreshTokenService 轮换成功写 history 行时显式写 retained_until = now()+24h；
+      ② §40.3 条数上界 —— AuthRefreshTokenHistoryMapper.pruneGenerationsBeyondBound（48 代）；
+      ③ §42 时间清理 —— AuthRefreshHistoryCleanup + AuthRefreshRetentionService.deleteExpiredHistory；
+      ④ §43 密文清空 —— AuthRefreshCiphertextCleanup + AuthRefreshRetentionService.clearExpiredCiphertext。
+    notes: "retention = 24h，每 sid 最多最近 48 代。retained_until 在写 history 行时写入 now()+24h，不得留空、不得依赖后续任务回填。容量上界 ≈ 10,000 × 48 = 480,000 行（30m Access）。时间上界与条数上界必须同时生效 —— 只保留 grace 会让 25 秒之后的真实盗用无法被识别。"
     acceptance: "history 行数不超过容量上界；retained_until 无 NULL"
+    verified_by: "AuthRefreshHistoryCleanupTest / AuthRefreshCiphertextCleanupTest / RetentionBatchLoopTest（批数上界、整轮时间边界一致、中断恢复、慢批退让）+ scheduler-lock-scope-consistency"
 
   - id: logout-revokes-refresh-session
     since: V7

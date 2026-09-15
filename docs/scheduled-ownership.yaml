@@ -13,12 +13,13 @@
 
 generated_from: docs/scheduled-inventory.yaml
 
-# Wave 0A 扫描结果（12 项）+ 新增项（3 项），共 15 项。
+# Wave 0A 扫描结果（14 项）+ 新增项（1 项：Gateway 的 denylist reconciler，Wave 1），共 15 项。
 # 注意 `scanned` 必须等于 docs/scheduled-inventory.yaml 的 counts.total，
 # 由门禁 `inventory-integrity` 校验。
+# 两个 auth 清理任务在上一轮以 status: planned 登记；本轮实现后改为 active（不是新增条目）。
 counts:
-  scanned: 12
-  planned: 3
+  scanned: 14
+  planned: 1
   total: 15
 
 scheduled:
@@ -129,8 +130,20 @@ scheduled:
     execution_mode: scheduled
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
-    status: planned
-    notes: "V9 §41 / §42。DELETE ... WHERE retained_until < NOW() ORDER BY retained_until LIMIT ?。batch 500~1000，每批独立事务，批间 sleep 100~500ms，依赖 idx_refresh_history_retained_until。MySQL-backed ShedLock，避免清理任务本身依赖 Redis。"
+    status: active
+    scan_ref: src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java:74
+    notes: >-
+      V9 §41 / §42。DELETE FROM auth_refresh_token_history WHERE retained_until < now
+      ORDER BY retained_until LIMIT ?。删的是**共享**表行 → global_once（多实例同时删同一段
+      范围只会互相锁等待，换不来任何吞吐）。必须慢、必须小批：DELETE 持有索引范围锁，
+      而该表同时被轮换写入，一次 10,000 行的集中 DELETE 会让正常的 refresh 请求排队等锁。
+      依赖 idx_refresh_history_retained_until；缺了它这个 DELETE 会全表扫描。
+      每批独立事务由 AuthRefreshRetentionService 提供 —— 循环里刻意不加 @Transactional，
+      否则 20 批会合成一个长事务、且批间 sleep 期间一直持锁（4~8 秒），
+      而这一点没有任何功能性症状，只在生产高峰暴露。
+      §42 要求 DELETE 必须走 Primary：将来读写分离时本任务必须显式绑定主库数据源，
+      不得跟随只读路由。MySQL-backed ShedLock，避免清理任务本身依赖 Redis。
+      lockAtMostFor 暂定 PT5M（启发式，未按实测校准）。
 
   - id: auth-refresh-ciphertext-cleanup
     logical_owner: identity
@@ -138,8 +151,19 @@ scheduled:
     execution_mode: scheduled
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
-    status: planned
-    notes: "V9 §43。UPDATE ... SET successor_token_ciphertext = NULL WHERE successor_ciphertext_expires_at < NOW()。30~60 秒一次。安全语义依赖时间判断，不依赖清理任务准点运行。"
+    status: active
+    scan_ref: src/main/java/com/xander/lab/identity/application/AuthRefreshCiphertextCleanup.java:70
+    notes: >-
+      V9 §41 / §43。UPDATE auth_refresh_token_history SET successor_token_ciphertext = NULL
+      WHERE successor_ciphertext_expires_at < now AND successor_token_ciphertext IS NOT NULL。
+      只清空字节、不删行 —— 密文窗口（秒级）远短于 Reuse 判定窗口（retained_until，24h），
+      删行会让这段时间里的真实盗用无法被识别（§39 分支 3 依赖行还在）。
+      **本任务不承担任何安全语义**：§43 明确「即使物理字段晚几十秒清空，业务代码也必须在
+      grace 到期后拒绝返回」。代码侧已按此实现（重放路径解密前先问 isCiphertextReadable），
+      所以本任务停摆、甚至被误删，都不会让过期密文重新可用。
+      这条区分必须保留：一旦有人把它"优化"成安全边界（改成"密文为空即当作已过期"），
+      任务停摆就变成了一个可利用的窗口。依赖 idx_refresh_history_ciphertext_expires。
+      lockAtMostFor 暂定 PT2M（启发式，未按实测校准）。
 
   - id: security-denylist-reconciler-gateway
     logical_owner: identity

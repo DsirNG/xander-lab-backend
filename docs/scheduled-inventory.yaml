@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 12
+  total: 14
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -37,6 +37,20 @@ scheduled:
     logical_owner: unassigned
     file: src/main/java/com/xander/lab/common/RedisHealthMonitor.java
     line: 45
+  - id: auth-refresh-ciphertext-cleanup
+    class: com.xander.lab.identity.application.AuthRefreshCiphertextCleanup
+    method: clearExpiredCiphertext
+    trigger: "fixedDelayString = \"${auth.refresh.ciphertext-cleanup-interval-ms:30000}\""
+    logical_owner: identity
+    file: src/main/java/com/xander/lab/identity/application/AuthRefreshCiphertextCleanup.java
+    line: 70
+  - id: auth-refresh-history-cleanup
+    class: com.xander.lab.identity.application.AuthRefreshHistoryCleanup
+    method: cleanupExpiredHistory
+    trigger: "fixedDelayString = \"${auth.refresh.history-cleanup-interval-ms:300000}\""
+    logical_owner: identity
+    file: src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java
+    line: 74
   - id: security-event-outbox-publisher
     class: com.xander.lab.identity.application.SecurityEventOutboxPublisher
     method: publishDueEvents

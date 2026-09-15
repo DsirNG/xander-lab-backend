@@ -71,7 +71,13 @@ public class RefreshTokenProperties {
     /** §42 历史清理单批行数。建议 500~1000。 */
     private int historyCleanupBatchSize = 500;
 
-    /** §42 批间 sleep 毫秒数（100~500），避免长时间占用主库。 */
+    /**
+     * §42 批间 sleep 毫秒数（100~500），避免长时间占用主库。
+     *
+     * <p>实际停顿是 {@code sleepMs + [0, sleepMs]} 的随机值（jitter）。
+     * 两个清理任务共用它：批间节奏是同一个问题，分成两个键只会让其中一个
+     * 在有人调优时被漏掉。</p>
+     */
     private long historyCleanupSleepMs = 200;
 
     /** §42 单次调度最多执行的批数，防止一次跑太久。 */
@@ -79,6 +85,28 @@ public class RefreshTokenProperties {
 
     /** §43 密文清理单批行数。 */
     private int ciphertextCleanupBatchSize = 500;
+
+    /**
+     * §43 单次调度最多执行的批数。
+     *
+     * <p>密文到期是<b>连续</b>发生的（每次 grace 到期就多一批），所以这里也需要
+     * 上界：一轮最多清 20 × 500 = 10,000 行，积压则留到 30 秒后的下一轮，
+     * 而不是让一次调度长时间占着主库。</p>
+     */
+    private int ciphertextCleanupMaxBatches = 20;
+
+    /**
+     * 单批耗时阈值（毫秒），超过即主动暂停本轮。
+     *
+     * <p>§42 要求「数据库负载高时自动暂停」。这里用的是<b>启发式代理信号</b>：
+     * 单批 DELETE/UPDATE 变慢通常意味着主库在争用（锁等待、IO 饱和），
+     * 继续跑完剩下的批次只会加剧它，而保留策略没有任何时效性。</p>
+     *
+     * <p><b>已知局限</b>：这不是真正的负载检测（读不到 {@code Threads_running}
+     * 之类的指标），也看不到"慢是因为本任务自己"还是"因为别的高峰流量"。
+     * 真正的负载感知暂停属于 Wave 2 的可观测性工作。</p>
+     */
+    private long cleanupSlowBatchMs = 2_000;
 
     /** §43 密文清理调度间隔（毫秒），建议 30~60 秒。 */
     private long ciphertextCleanupIntervalMs = 30_000;
