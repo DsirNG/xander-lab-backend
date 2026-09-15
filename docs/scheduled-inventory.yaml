@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 11
+  total: 12
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -37,20 +37,27 @@ scheduled:
     logical_owner: unassigned
     file: src/main/java/com/xander/lab/common/RedisHealthMonitor.java
     line: 45
+  - id: security-event-outbox-publisher
+    class: com.xander.lab.identity.application.SecurityEventOutboxPublisher
+    method: publishDueEvents
+    trigger: "fixedDelayString = \"${auth.refresh.security-outbox-publish-interval-ms:1000}\""
+    logical_owner: identity
+    file: src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java
+    line: 99
   - id: security-state-reconciler-reconcile
     class: com.xander.lab.identity.application.SecurityStateReconciler
     method: reconcile
     trigger: "fixedDelayString = \"${auth.refresh.security-reconcile-interval-ms:1500}\""
     logical_owner: identity
     file: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java
-    line: 75
+    line: 78
   - id: security-state-reconciler-full-reconcile
     class: com.xander.lab.identity.application.SecurityStateReconciler
     method: fullReconcile
     trigger: "fixedDelayString = \"${auth.refresh.security-full-reconcile-interval-ms:300000}\""
     logical_owner: identity
     file: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java
-    line: 132
+    line: 126
   - id: csdn-authorization-service
     class: com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService
     method: cleanupExpiredSessions

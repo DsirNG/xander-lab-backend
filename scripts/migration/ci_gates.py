@@ -656,6 +656,53 @@ def gate_scheduler_lock_scope_consistency() -> None:
     report(gate, True, f"{checked} scheduled entries match their execution_scope")
 
 
+def gate_scheduled_scan_ref_freshness() -> None:
+    """Keep the human-facing ``scan_ref`` pointers honest (V9 §13).
+
+    ``scan_ref`` is the only pointer a reader follows to find where a task is
+    declared, and its line number is machine output rather than human judgement.
+    It therefore rots on edits that change nothing about the task: adding one
+    import above a scheduled method shifted **seven of twelve** pointers by
+    exactly one line, and nothing noticed because no gate read them.
+
+    A stale pointer is worse than no pointer -- it sends the reader to an
+    unrelated line, where they conclude the annotation was deleted. That is the
+    §12 "补了又丢" cycle expressed as a broken hyperlink, so it gets a gate.
+
+    The parser is imported from ``scan`` rather than duplicated: the writer and
+    the verifier must agree on the line format, or the gate starts failing for
+    reasons that have nothing to do with the data.
+    """
+    gate = "scheduled-scan-ref-freshness"
+    inventory = {item["id"]: item for item in load("scheduled-inventory.yaml")["scheduled"]}
+    path = DOCS / "scheduled-ownership.yaml"
+
+    problems: list[str] = []
+    checked = 0
+    current = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        id_match = scan.OWNERSHIP_ID_RE.match(line)
+        if id_match:
+            current = id_match.group(1)
+            continue
+        ref_match = scan.OWNERSHIP_SCAN_REF_RE.match(line)
+        if not ref_match or current is None:
+            continue
+        item = inventory.get(current)
+        if item is None:
+            continue  # a planned task has no source yet; covered by ownership-coverage
+        checked += 1
+        expected = f"{item['file']}:{item['line']}"
+        if ref_match.group(2) != expected:
+            problems.append(f"{current}: scan_ref says {ref_match.group(2)}, source says {expected}")
+
+    if problems:
+        report(gate, False, "; ".join(problems[:6])
+               + " -- re-run scripts/migration/scan.py to refresh")
+        return
+    report(gate, True, f"{checked} scan_ref pointers point at their @Scheduled line")
+
+
 # Every inventory that is keyed by an identifier, plus the `counts` entry that is
 # supposed to equal its length. The §13 methodology only works if the machine-owned
 # key set is actually a *set*: a duplicate key means two entities share one key, so
@@ -724,6 +771,7 @@ GATES = {
     "scheduled-ownership-coverage": gate_scheduled_ownership_coverage,
     "execution-scope-validation": gate_execution_scope_validation,
     "scheduler-lock-scope-consistency": gate_scheduler_lock_scope_consistency,
+    "scheduled-scan-ref-freshness": gate_scheduled_scan_ref_freshness,
     "table-ownership-drift": gate_table_ownership_drift,
     "config-ownership-drift": gate_config_ownership_drift,
     "shared-kernel-reverse-dependency": gate_shared_kernel_reverse_dependency,

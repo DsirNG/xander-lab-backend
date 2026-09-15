@@ -25,7 +25,7 @@
                                         ▼
         ┌───────────────────────────────────────────────────────────┐
         │ 传播（事务外，跨进程，两条路径）                             │
-        │  A. 快路径：outbox publisher 投递事件   ← ⚠ 尚未实现        │
+        │  A. 快路径：outbox publisher 投递事件   ← 已实现（见 §3.5）  │
         │  B. 兜底：每个宿主按 change_seq 增量对账 ← 已实现            │
         └───────────────────────────────────────────────────────────┘
                                         │
@@ -107,6 +107,74 @@
 
 ---
 
+## 3.5 快路径：`SecurityEventOutboxPublisher`（§27）
+
+`identity/application/SecurityEventOutboxPublisher`，`global_once` +
+`@SchedulerLock(name = "security-event-outbox-publisher")`，1 秒一轮，
+领取 `status IN ('PENDING','FAILED') AND next_attempt_at <= NOW(3)` 的行。
+
+### 为什么是 `global_once` 而不是 `per_instance`
+
+本任务领取的是**共享的**发件箱行，投递成功后要把行标成 `PUBLISHED` ——
+领取/标记状态是所有实例共用的，所以执行体只能有一个。否则 N 个实例各自领取同一批行、
+各自标记，「已投递」变成 N 份互相矛盾的判断。
+
+跨实例传播因此**不是调度器的事，而是投递目标的事**：Wave 0A 的投递目标是本实例的
+安全平面，Wave 1 换成 Redis PubSub 广播，届时只换投递那一行，
+领取/标记/退避的生命周期不变。
+
+### ⚠️ Wave 0A 的能力边界（不得误报）
+
+因为投递目标是「本实例」，所以**快路径目前只对抢到锁的那个实例生效**，
+其余实例仍只靠各自的 reconciler 在 1.5 秒内收敛。这仍在 5 秒预算内，
+**SLO 没有被违反**，但「快路径」这个词在多实例下暂时名不副实 ——
+真正的多实例快路径要等 Wave 1 的 Redis PubSub。
+
+本任务当前还承担另一个不可省略的职责：**让 `security_event_outbox` 有界**。
+没有消费者时该表会无界增长。
+
+### ⚠️ 两个「看起来更合理」的错误改法
+
+**一、投递成功就推进 reconciler 的游标。** 这会制造一个永久漏封禁：
+`change_seq` 在事务内分配，而发件箱行的可见性取决于**提交顺序** ——
+两个并发封禁可能让 `change_seq=6` 先提交、`change_seq=5` 后提交。
+此时 publisher 只看得见 6，若把游标推到 6，则 5 提交后会被
+`pullChangesAfter` 永久跳过，那个账号的封禁**永远不会**到达本实例。
+
+所以**游标只有一个所有者：`SecurityStateReconciler`**。
+`SecurityEventOutboxPublisherTest#neverAdvancesTheReconcilerCursor` 守住这条。
+
+**二、顺手刷新 `markSynced`。** §87 的 `securityStateAge` 可能被用于
+fail-closed 判定，把它刷成「刚刚同步过」会**掩盖一个已经停摆的 reconciler**。
+由 `#neverFakesTheSyncTimestamp` 守住。
+
+### 失败处理与 `DEAD`
+
+| 情形 | 处理 |
+|---|---|
+| 单条事件失败 | 记 `FAILED` + 指数退避（1s → 2s → … 封顶 60s），**不中断整批** |
+| 第 8 次仍失败 | 记 `DEAD`，退出领取集合，不再自动重试 |
+| 记录失败时数据库又失败 | 吞掉并继续下一批，否则一条事件的失败会推迟整批 |
+| `markPublished` 失败 | 行留在 `PENDING`，下轮重复投递 → 投递端**必须幂等** |
+
+**判死是安全的**，这正是 §27 选择事务性发件箱的原因：发件箱只负责**通知**，
+不负责**状态**。`account_security_state` 才是 SOT，兜底路径仍会收敛 ——
+一条 `DEAD` 事件不会让封禁失效，只会让快路径晚 1.5 秒。
+
+⚠️ 但这条推理依赖「兜底路径同时存在」。一旦有人因为「快路径已经覆盖了」
+而删掉 reconciler，`DEAD` 就从「无害的降级」变成「封禁被永久静默丢弃」，
+而所有现有验收指标仍然通过。该风险登记在 `capability-baseline.yaml` 的
+`admin-ban-outbox-is-optimization-not-guarantee`。
+
+### 唯一的关闭路径
+
+「标记本地缓存 + `closeAll`」抽成了 `SecurityStateApplier.apply`，
+被 reconciler 与 publisher **共用**。两边各写一遍的话，Wave 1 换投递时
+就会有人只改一边：结果是快路径能标记但不断连、或兜底路径能断连但漏标记 ——
+两条路径都「看起来在工作」，缺陷只在多实例 + 已建立连接时暴露。
+
+---
+
 ## 4. 长连接封禁边界：8 条流
 
 词汇唯一来源是共享内核的 `com.xander.lab.common.security.ConnectionRegistry`：
@@ -149,7 +217,9 @@ WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| **outbox publisher 未实现** | §27 的「快路径」不存在，封禁只靠 reconcile 兜底（延迟仍是 1.5 秒，未超 5 秒预算）；`security_event_outbox` 会无界增长 | 待做 |
+| **快路径只对抢到锁的实例生效** | Wave 0A 的投递目标是本实例，其余实例靠 reconciler 兜底（延迟 1.5 秒，未超 5 秒预算）。多实例快路径要等 Wave 1 的 Redis PubSub | 已知，Wave 1 |
+| `shedlock.enabled` 默认 `false` | 单实例下无影响；**多实例前必须置 true 并校准 `lockAtMostFor`**（当前 7+1 个任务的取值是按任务间隔启发式给的，未按实测运行时长校准） | 切流前 |
+| `next_attempt_at` 写端用 JVM 时钟 | `applyState` 插入时用 `LocalDateTime.now(clock)`，而领取条件用 `NOW(3)`（DB 时钟）。退避路径已改为 DB 时钟（`NOW(3) + INTERVAL ? MICROSECOND`），只有**首次**插入仍用 JVM 时钟；时钟偏差只会让事件早投或略晚投，不影响正确性 | 已知，低风险 |
 | `SecurityStateCache` 无持久化 | 实例重启后靠 `fullReconcile`（5 分钟）重新收敛，重启后最坏 5 分钟窗口 | 设计取舍 |
 | `contract-changes.yaml` 的 `security-plane-fail-closed` | §28.2 的 stale fail-closed 与 §103 互相否定（security plane 与 refresh 表同库），Wave 2 放行评审前必须二选一 | 待对齐 |
 
@@ -164,6 +234,12 @@ java ... -Dtest=AccountSecurityStateServiceTest test
 # 管理台封禁写路径（SOT + 能力守恒：遗留 Redis 撤销仍在）
 java ... -Dtest=UserAdminServiceTest test
 
+# 本地安全平面应用逻辑（标记 + 断连的组合顺序与幂等性）
+java ... -Dtest=SecurityStateApplierTest test
+
+# 快路径投递器（含 neverAdvancesTheReconcilerCursor / 判死边界 / 单条失败不阻塞整批）
+java ... -Dtest=SecurityEventOutboxPublisherTest test
+
 # 长连接封禁边界（入口拒绝 / 中途封禁 / reconciler 主动断开 / 注销）
 java ... -Dtest=AgentStreamWebSocketHandlerTest test
 
@@ -171,5 +247,8 @@ java ... -Dtest=AgentStreamWebSocketHandlerTest test
 python scripts/migration/ci_gates.py
 ```
 
-`AccountSecurityStateServiceTest#applyStateIsTransactional` 用注解反射守住
-`@Transactional` —— 这个注解被删掉时，除了这条测试没有任何其它症状。
+两个注解守卫，删掉注解时除它们之外**没有任何其它症状**：
+
+- `AccountSecurityStateServiceTest#applyStateIsTransactional` 守 `@Transactional`（§26 的原子性）。
+- `SecurityEventOutboxPublisherTest#publishDueEventsIsGloballyLocked` 守 `@Scheduled` +
+  `@SchedulerLock`，并断言锁名等于 `scheduled-ownership.yaml` 里的 id（§68 的 `global_once`）。

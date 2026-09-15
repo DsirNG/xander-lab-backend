@@ -1,6 +1,5 @@
 package com.xander.lab.identity.application;
 
-import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.identity.domain.AccountSecurityState;
 import com.xander.lab.identity.infrastructure.AccountSecurityStateMapper;
@@ -24,6 +23,20 @@ import java.util.Map;
  *
  * <p><b>禁止使用全局 ShedLock。</b>原因（V9 §69）：全局锁会让 N-1 个实例的本地缓存
  * 永不刷新，而验收指标（"不重复执行"）<b>仍然通过</b> —— 这是一个不会失败的失败。</p>
+ *
+ * <h3>本类是兜底路径，不是快路径</h3>
+ * <p>V9 §27 的封禁传播有两条路径：</p>
+ * <ul>
+ *   <li><b>快路径</b> —— {@link SecurityEventOutboxPublisher} 消费
+ *       {@code security_event_outbox}（{@code execution_scope = global_once}）</li>
+ *   <li><b>兜底路径</b> —— 本类，按 {@code change_seq} 增量拉取，每实例独立游标</li>
+ * </ul>
+ * <p>本类<b>必须保留</b>，不能因为快路径存在就删掉：快路径是"至少一次"投递，事件可能
+ * 永久投递失败（进 DEAD）、可能在实例重启窗口内丢失、也可能在 Wave 0A 的单实例
+ * 快路径下压根没轮到本实例。兜底路径是"最终收敛"的唯一保证 —— 它同时也是本实例
+ * <b>游标的唯一所有者</b>：快路径刻意不推进游标（见
+ * {@link SecurityEventOutboxPublisher} 的说明），否则会把游标推过一条尚未投递的变更，
+ * 让那条变更被永久跳过。</p>
  *
  * <p>本组件同时是 §52 判定规则的落地：<b>任一当前部署单元，凡其承载的业务域中存在
  * SSE/WS，都必须维护 Security Local Cache 并在 Wave 2 Staging 中验证封禁生效。</b>
@@ -52,19 +65,9 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SecurityStateReconciler {
 
-    /**
-     * 关闭长连接时给客户端的关闭原因。
-     *
-     * <p>是 {@link ConnectionRegistry#REASON_ACCOUNT_DISABLED} 的别名：
-     * 词汇由共享内核拥有，这样 automation / studio 的 SSE 宿主不必为了一个字符串
-     * 常量反向依赖 identity（§21 共享内核边界）。</p>
-     */
-    public static final String CLOSE_REASON_ACCOUNT_DISABLED =
-            ConnectionRegistry.REASON_ACCOUNT_DISABLED;
-
     private final AccountSecurityStateMapper securityStateMapper;
     private final SecurityStateCache securityStateCache;
-    private final ConnectionRegistry connectionRegistry;
+    private final SecurityStateApplier securityStateApplier;
     private final RefreshTokenProperties properties;
 
     /**
@@ -87,24 +90,15 @@ public class SecurityStateReconciler {
             int newlyEnabled = 0;
             long maxSeq = cursor;
             for (AccountSecurityState state : changes) {
-                Long accountId = state.getAccountId();
                 long version = state.getSecurityVersion() == null ? 0L : state.getSecurityVersion();
-                boolean wasDisabled = securityStateCache.isDisabled(accountId);
-                if (state.isDisabled()) {
-                    securityStateCache.markDisabled(accountId, version);
-                    if (!wasDisabled) {
-                        newlyDisabled++;
-                        // V9 §28.2 手段 A（主要手段）：主动断开已建立的长连接。
-                        // 手段 B（每次发送前 O(1) 校验）是兜底，见 SSE / WS 的发送边界。
-                        int closed = connectionRegistry.closeAll(
-                                accountId, CLOSE_REASON_ACCOUNT_DISABLED);
-                        if (closed > 0) {
-                            log.warn("[Security] 封禁生效，关闭已建立连接 account={} closed={}",
-                                    accountId, closed);
-                        }
-                    }
-                } else if (wasDisabled) {
-                    securityStateCache.markEnabled(accountId);
+                // 应用动作（标记 + 断连）由 SecurityStateApplier 独占实现：
+                // 快路径的 SecurityEventOutboxPublisher 走的是同一个方法。
+                SecurityStateApplier.Outcome outcome =
+                        securityStateApplier.apply(state.getAccountId(), state.isDisabled(), version);
+                if (outcome.newlyDisabled()) {
+                    newlyDisabled++;
+                }
+                if (outcome.newlyEnabled()) {
                     newlyEnabled++;
                 }
                 if (state.getChangeSeq() != null) {

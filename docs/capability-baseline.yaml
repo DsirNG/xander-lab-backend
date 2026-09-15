@@ -17,9 +17,9 @@
 #   planned   V9 引入的新能力，Wave 2 前必须落地
 
 counts:
-  total: 27
+  total: 28
   planned: 15
-  active: 10
+  active: 11
   changed: 2
   retired: 0
 
@@ -69,6 +69,26 @@ capabilities:
       并且封禁后不再回客户端 ping 的 pong（否则客户端会误判链路健康并继续重连）。
     acceptance: "同 admin-ban-established-sse"
     verified_by: "AgentStreamWebSocketHandlerTest（5 个封禁用例）+ stream-ban-boundary-coverage"
+
+  - id: admin-ban-outbox-is-optimization-not-guarantee
+    since: V9
+    ref: V9 §26 / §27 / §28.3
+    status: active
+    evidence: >-
+      identity/application/AccountSecurityStateService.applyState 在事务内写 security_event_outbox；
+      identity/application/SecurityEventOutboxPublisher（global_once + mysql_shedlock）消费；
+      identity/application/SecurityStateReconciler（per_instance）按 change_seq 兜底。
+    notes: >-
+      发件箱是**延迟优化**，不是投递保证 —— 这个区分必须显式写下来，因为它极易被下一次修订抹掉。
+      投递保证来自 account_security_state（SOT）+ 每实例 reconciler：发件箱事件即使永久投递失败
+      （超过重试上界被记 DEAD），封禁仍会在 1.5 秒内由兜底路径到达每个宿主。
+      ⚠️ 因此这条能力的失效方式是：**有人因为"快路径已经覆盖了"而删掉/停用 reconciler**。
+      那一刻 DEAD 从"无害的降级"变成"封禁被永久静默丢弃"，而所有现有验收指标仍然通过。
+      与 admin-ban-new-request 的 P95/P99 不同，本条目守的是「两条路径必须同时存在」。
+    acceptance: >-
+      DEAD 事件可查（status 字段 + log.error）且封禁仍在 §28.3 的 5 秒预算内收敛；
+      per_instance 的 reconciler 与 global_once 的 publisher 同时存在，缺一即失败。
+    verified_by: "SecurityEventOutboxPublisherTest（含 neverAdvancesTheReconcilerCursor / 判死边界）+ scheduler-lock-scope-consistency"
 
   - id: public-endpoint-with-token-personalization
     since: V7

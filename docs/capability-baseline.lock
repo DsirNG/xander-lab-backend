@@ -2,6 +2,7 @@ account-merge-atomicity
 admin-ban-established-sse
 admin-ban-established-ws
 admin-ban-new-request
+admin-ban-outbox-is-optimization-not-guarantee
 agent-event-bus-cross-instance-fanout
 bounded-replay-history
 cross-tab-refresh-coordination

@@ -7,6 +7,15 @@ how it migrates"). This script produces the key sets only. Curated files such
 as ``docs/table-ownership.yaml`` are never overwritten by this script; they are
 validated against the key sets by ``ci_gates.py``.
 
+One deliberate exception, and it is a *field*-level exception rather than a
+file-level one: ``docs/scheduled-ownership.yaml`` is curated, but the
+``scan_ref`` pointer inside each entry is pure machine output (the file and line
+of that ``@Scheduled`` annotation). It is regenerated here because it rots
+silently: adding a single import above a scheduled method shifts every line
+below it, and nothing about the task's *semantics* changes. Seven of twelve
+pointers had already drifted by exactly one line before this was added.
+``ci_gates.py``'s ``scheduled-scan-ref-freshness`` verifies the result.
+
 Usage:
     python scripts/migration/scan.py            # regenerate machine inventories
     python scripts/migration/scan.py --stdout   # print instead of write
@@ -601,6 +610,47 @@ def build_scheduled_inventory() -> dict:
     }
 
 
+OWNERSHIP_SCHEDULED = OUT_DIR / "scheduled-ownership.yaml"
+
+# The only field scan.py is allowed to rewrite inside a curated file, and only
+# because it is machine output rather than human judgement. See the module
+# docstring for why it cannot be left to hand-maintenance.
+# Public because ci_gates.py reuses them: the writer and the verifier must agree
+# on how a scan_ref line is parsed, and two copies would eventually diverge.
+OWNERSHIP_SCAN_REF_RE = re.compile(r"^(\s*)scan_ref:\s*(\S+)\s*$")
+OWNERSHIP_ID_RE = re.compile(r"^  - id:\s*(\S+)\s*$")
+
+
+def refresh_scheduled_scan_refs(inventory: dict) -> int:
+    """Point every ``scan_ref`` in scheduled-ownership.yaml at the current line.
+
+    Everything else in that file -- owner, scope, notes -- is human semantics and
+    is left byte-for-byte alone. Only the ``file:line`` pointer is rewritten.
+    """
+    if not OWNERSHIP_SCHEDULED.exists():
+        return 0
+    truth = {item["id"]: f"{item['file']}:{item['line']}" for item in inventory["scheduled"]}
+    lines = OWNERSHIP_SCHEDULED.read_text(encoding="utf-8").split("\n")
+    current: str | None = None
+    refreshed = 0
+    for index, line in enumerate(lines):
+        id_match = OWNERSHIP_ID_RE.match(line)
+        if id_match:
+            current = id_match.group(1)
+            continue
+        ref_match = OWNERSHIP_SCAN_REF_RE.match(line)
+        if not ref_match or current not in truth:
+            continue
+        if ref_match.group(2) != truth[current]:
+            lines[index] = f"{ref_match.group(1)}scan_ref: {truth[current]}"
+            refreshed += 1
+    if refreshed:
+        # newline="\n" matters: the repo is LF, and letting Python translate
+        # would silently convert the whole file to CRLF.
+        OWNERSHIP_SCHEDULED.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    return refreshed
+
+
 def build_table_inventory() -> dict:
     tables = scan_tables()
     return {
@@ -864,6 +914,9 @@ def main() -> int:
     if not args.stdout and not args.no_derived:
         write_api_migration(artifacts["route-inventory.yaml"]["routes"])
         write_config_ownership(artifacts["config-inventory.yaml"]["config"])
+        refreshed = refresh_scheduled_scan_refs(artifacts["scheduled-inventory.yaml"])
+        print(f"refreshed {refreshed} scan_ref pointer(s) in "
+              f"{OWNERSHIP_SCHEDULED.relative_to(REPO)}")
 
     if not args.stdout:
         report = build_report(artifacts)

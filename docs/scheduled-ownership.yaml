@@ -13,13 +13,13 @@
 
 generated_from: docs/scheduled-inventory.yaml
 
-# Wave 0A 扫描结果（11 项）+ 新增项（3 项），共 14 项。
+# Wave 0A 扫描结果（12 项）+ 新增项（3 项），共 15 项。
 # 注意 `scanned` 必须等于 docs/scheduled-inventory.yaml 的 counts.total，
 # 由门禁 `inventory-integrity` 校验。
 counts:
-  scanned: 11
+  scanned: 12
   planned: 3
-  total: 14
+  total: 15
 
 scheduled:
   # ===================== Wave 0A 实际扫描到的 9 项 =====================
@@ -31,7 +31,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/agent/application/AgentToolInvocationReconciler.java:44
+    scan_ref: src/main/java/com/xander/lab/agent/application/AgentToolInvocationReconciler.java:50
     notes: "工具轨迹按身份配对键的未知调用回收。现网已有 DB 原子领取 + 陈旧领取回收，换 ShedLock 时必须保留原语义。"
 
   - id: blog-content-plan-scheduler
@@ -41,7 +41,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java:39
+    scan_ref: src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java:40
     notes: "现网为单实例，靠 DB 原子领取保证恰好一次。多实例前必须补齐互斥。"
 
   - id: email-reminder-scheduler
@@ -51,7 +51,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java:50
+    scan_ref: src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java:51
 
   - id: csdn-authorization-service
     logical_owner: integration
@@ -85,7 +85,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java:38
+    scan_ref: src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java:39
 
   - id: recitation-worker
     logical_owner: recitation
@@ -94,7 +94,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/recitation/application/RecitationWorker.java:38
+    scan_ref: src/main/java/com/xander/lab/recitation/application/RecitationWorker.java:39
 
   - id: img2three-service
     logical_owner: studio
@@ -103,7 +103,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/studio/application/Img2ThreeService.java:89
+    scan_ref: src/main/java/com/xander/lab/studio/application/Img2ThreeService.java:90
     notes: "failAbandonedRunningTasks：回收超时未结束的 Img2Three 任务，操作的是 DB 行。"
 
   - id: redis-health-monitor
@@ -113,7 +113,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/common/RedisHealthMonitor.java:44
+    scan_ref: src/main/java/com/xander/lab/common/RedisHealthMonitor.java:45
     notes: >-
       V9 §73：必须移出 common。当前用 synchronized + 实例字段（consecutiveFailures /
       outageNotified / lastAlertAttemptAt）做"每次故障只发一封邮件"的去重。
@@ -157,7 +157,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:75
+    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:78
     deployment_hosts:
       - host: dinqor-core-host
         effective_from: wave0a
@@ -182,11 +182,32 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:132
+    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:126
     notes: >-
       低频全量对账兜底（5 分钟）。实例长时间离线后，本地游标可能落后于已被清理的历史区间，
       此时增量拉取会永久漏掉那一段 —— 全量刷新（listDisabled + replaceAll）保证最终收敛。
       与增量同为一个类，因此同为 per_instance。
+
+  - id: security-event-outbox-publisher
+    logical_owner: identity
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: active
+    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java:99
+    notes: >-
+      V9 §27 的快路径：消费 security_event_outbox 并投递。
+      **为什么是 global_once 而不是 per_instance**：本任务领取的是共享的发件箱行，
+      投递成功后要把行标成 PUBLISHED —— 领取/标记状态是所有实例共用的，
+      执行体只能有一个，否则 N 个实例各自领取同一批行、各自标记，
+      "已投递"变成 N 份互相矛盾的判断。跨实例传播是"投递目标"的事（Wave 1 换 Redis PubSub），
+      不是调度器的事。
+      ⚠️ Wave 0A 能力边界：投递目标是本实例安全平面，所以快路径当前只对抢到锁的实例生效，
+      其余实例仍靠 security-state-reconciler-* 在 1.5 秒内收敛（仍在 §28.3 的 5 秒预算内）。
+      本任务当前还承担"让发件箱有界"的职责 —— 没有消费者时该表会无界增长。
+      lockAtMostFor 暂定 PT1M（启发式，未按实测校准）。
+      锁名必须与 @SchedulerLock(name=...) 完全一致，由门禁 `scheduler-lock-scope-consistency` 校验。
 
 # ===================== 判定规则（取代固定清单，V9 §52） =====================
 rule:

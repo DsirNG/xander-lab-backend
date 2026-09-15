@@ -91,4 +91,15 @@ public class RefreshTokenProperties {
 
     /** 安全状态 reconcile 单批条数。 */
     private int securityReconcileBatchSize = 500;
+
+    /**
+     * 安全事件发件箱投递间隔（毫秒）。
+     *
+     * <p>V9 §28.3 的 5 秒预算里，"事件产生 → 到达宿主"给了 2 秒。快路径与兜底路径
+     * 并行，所以两者都不需要单独吃满 2 秒；这里取 1 秒，让快路径通常先到。</p>
+     */
+    private long securityOutboxPublishIntervalMs = 1_000;
+
+    /** 安全事件发件箱单轮投递条数。 */
+    private int securityOutboxPublishBatchSize = 200;
 }
