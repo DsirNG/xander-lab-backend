@@ -1,0 +1,3433 @@
+# DinQorAI microservice migration — API Migration Contract (V9 section 8).
+#
+# Bootstrapped by scripts/migration/scan.py from docs/route-inventory.yaml.
+# Re-running the scanner only APPENDS routes that are not present yet; existing
+# entries keep their hand-filled `clients` / `status` values.
+#
+# Human-owned fields: clients.{web,miniprogram,admin}, status, compatibility.
+# Machine-owned fields: id, owner, old.{method,path}, new.{method,path}.
+#
+# CI gates: `api-migration-key-coverage` (every inventory route present),
+# `contract-freeze-guard` (frozen entries must not change).
+
+generated_by: scripts/migration/scan.py
+counts:
+  total: 212
+entries:
+  - id: admin-get-admin-feature-model-configs
+    owner: admin
+    old:
+      method: GET
+      path: "/api/admin/feature-model-configs"
+    new:
+      method: GET
+      path: "/api/v2/admin/feature-model-configs"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-put-admin-feature-model-configs
+    owner: admin
+    old:
+      method: PUT
+      path: "/api/admin/feature-model-configs/{featureKey}"
+    new:
+      method: PUT
+      path: "/api/v2/admin/feature-model-configs/{featureKey}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-get-admin-model-providers
+    owner: admin
+    old:
+      method: GET
+      path: "/api/admin/model-providers"
+    new:
+      method: GET
+      path: "/api/v2/admin/model-providers"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-post-admin-model-providers
+    owner: admin
+    old:
+      method: POST
+      path: "/api/admin/model-providers"
+    new:
+      method: POST
+      path: "/api/v2/admin/model-providers"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-delete-admin-model-providers
+    owner: admin
+    old:
+      method: DELETE
+      path: "/api/admin/model-providers/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/admin/model-providers/{id}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-put-admin-model-providers
+    owner: admin
+    old:
+      method: PUT
+      path: "/api/admin/model-providers/{id}"
+    new:
+      method: PUT
+      path: "/api/v2/admin/model-providers/{id}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-patch-admin-model-providers-enabled
+    owner: admin
+    old:
+      method: PATCH
+      path: "/api/admin/model-providers/{id}/enabled"
+    new:
+      method: PATCH
+      path: "/api/v2/admin/model-providers/{id}/enabled"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-patch-admin-notifications-test-broadcast
+    owner: admin
+    old:
+      method: PATCH
+      path: "/api/admin/notifications/test-broadcast"
+    new:
+      method: PATCH
+      path: "/api/v2/admin/notifications/test-broadcast"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-get-admin-users
+    owner: admin
+    old:
+      method: GET
+      path: "/api/admin/users"
+    new:
+      method: GET
+      path: "/api/v2/admin/users"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-patch-admin-users-status
+    owner: admin
+    old:
+      method: PATCH
+      path: "/api/admin/users/{id}/status"
+    new:
+      method: PATCH
+      path: "/api/v2/admin/users/{id}/status"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-get-admin-virtual-pay-settings
+    owner: admin
+    old:
+      method: GET
+      path: "/api/admin/virtual-pay-settings"
+    new:
+      method: GET
+      path: "/api/v2/admin/virtual-pay-settings"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-put-admin-virtual-pay-settings
+    owner: admin
+    old:
+      method: PUT
+      path: "/api/admin/virtual-pay-settings"
+    new:
+      method: PUT
+      path: "/api/v2/admin/virtual-pay-settings"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-delete-admin-wechat-credential
+    owner: admin
+    old:
+      method: DELETE
+      path: "/api/admin/wechat-credential"
+    new:
+      method: DELETE
+      path: "/api/v2/admin/wechat-credential"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-get-admin-wechat-credential
+    owner: admin
+    old:
+      method: GET
+      path: "/api/admin/wechat-credential"
+    new:
+      method: GET
+      path: "/api/v2/admin/wechat-credential"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: admin-put-admin-wechat-credential
+    owner: admin
+    old:
+      method: PUT
+      path: "/api/admin/wechat-credential"
+    new:
+      method: PUT
+      path: "/api/v2/admin/wechat-credential"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-conversations-agentconversationcontroller
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/conversations"
+    new:
+      method: GET
+      path: "/api/v2/agents/conversations"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-attachments
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/attachments"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/attachments"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-conversations-shared
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/conversations/shared/{shareToken}"
+    new:
+      method: GET
+      path: "/api/v2/agents/conversations/shared/{shareToken}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-conversations-agentconversationcontroller
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/conversations/{id}"
+    new:
+      method: GET
+      path: "/api/v2/agents/conversations/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-conversations-approvals
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/conversations/{id}/approvals"
+    new:
+      method: GET
+      path: "/api/v2/agents/conversations/{id}/approvals"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-approvals-decision
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/approvals/{approvalId}/decision"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/approvals/{approvalId}/decision"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-cancel
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/cancel"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/cancel"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-conversations-events
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/conversations/{id}/events"
+    new:
+      method: GET
+      path: "/api/v2/agents/conversations/{id}/events"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-conversations-messages
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/conversations/{id}/messages"
+    new:
+      method: GET
+      path: "/api/v2/agents/conversations/{id}/messages"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-messages
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/messages"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/messages"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-messages-stream
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/messages/stream"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/messages/stream"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-delete-agent-conversations-pin
+    owner: agent
+    old:
+      method: DELETE
+      path: "/api/agent/conversations/{id}/pin"
+    new:
+      method: DELETE
+      path: "/api/v2/agents/conversations/{id}/pin"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-pin
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/pin"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/pin"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-read
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/read"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/read"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-delete-agent-conversations-share
+    owner: agent
+    old:
+      method: DELETE
+      path: "/api/agent/conversations/{id}/share"
+    new:
+      method: DELETE
+      path: "/api/v2/agents/conversations/{id}/share"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-share
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/share"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/share"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-skills
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/skills"
+    new:
+      method: GET
+      path: "/api/v2/agents/skills"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-skills
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/skills"
+    new:
+      method: POST
+      path: "/api/v2/agents/skills"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-skills-tools
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/skills/tools"
+    new:
+      method: GET
+      path: "/api/v2/agents/skills/tools"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-delete-agent-skills
+    owner: agent
+    old:
+      method: DELETE
+      path: "/api/agent/skills/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/agents/skills/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-ws-agent
+    owner: agent
+    old:
+      method: GET
+      path: "/ws/agent"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: automation-get-blog-plans-blogcontentplancontroller
+    owner: automation
+    old:
+      method: GET
+      path: "/api/blog-plans"
+    new:
+      method: GET
+      path: "/api/v2/automations/plans"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-post-blog-plans
+    owner: automation
+    old:
+      method: POST
+      path: "/api/blog-plans"
+    new:
+      method: POST
+      path: "/api/v2/automations/plans"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-post-blog-plans-ai-generate
+    owner: automation
+    old:
+      method: POST
+      path: "/api/blog-plans/ai-generate"
+    new:
+      method: POST
+      path: "/api/v2/automations/plans/ai-generate"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-post-blog-plans-topics-generate
+    owner: automation
+    old:
+      method: POST
+      path: "/api/blog-plans/topics/generate"
+    new:
+      method: POST
+      path: "/api/v2/automations/plans/topics/generate"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-delete-blog-plans
+    owner: automation
+    old:
+      method: DELETE
+      path: "/api/blog-plans/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/automations/plans/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-blog-plans-blogcontentplancontroller
+    owner: automation
+    old:
+      method: GET
+      path: "/api/blog-plans/{id}"
+    new:
+      method: GET
+      path: "/api/v2/automations/plans/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-patch-blog-plans
+    owner: automation
+    old:
+      method: PATCH
+      path: "/api/blog-plans/{id}"
+    new:
+      method: PATCH
+      path: "/api/v2/automations/plans/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-blog-plans-next
+    owner: automation
+    old:
+      method: GET
+      path: "/api/blog-plans/{id}/next"
+    new:
+      method: GET
+      path: "/api/v2/automations/plans/{id}/next"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-blog-plans-runs-blogcontentplancontroller
+    owner: automation
+    old:
+      method: GET
+      path: "/api/blog-plans/{id}/runs"
+    new:
+      method: GET
+      path: "/api/v2/automations/plans/{id}/runs"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-blog-plans-runs-blogcontentplancontroller
+    owner: automation
+    old:
+      method: GET
+      path: "/api/blog-plans/{id}/runs/{runId}"
+    new:
+      method: GET
+      path: "/api/v2/automations/plans/{id}/runs/{runId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-patch-blog-plans-status
+    owner: automation
+    old:
+      method: PATCH
+      path: "/api/blog-plans/{id}/status"
+    new:
+      method: PATCH
+      path: "/api/v2/automations/plans/{id}/status"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-post-blog-plans-trigger
+    owner: automation
+    old:
+      method: POST
+      path: "/api/blog-plans/{id}/trigger"
+    new:
+      method: POST
+      path: "/api/v2/automations/plans/{id}/trigger"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-email-reminders
+    owner: automation
+    old:
+      method: GET
+      path: "/api/email-reminders"
+    new:
+      method: GET
+      path: "/api/v2/automations/email-reminders"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-post-email-reminders
+    owner: automation
+    old:
+      method: POST
+      path: "/api/email-reminders"
+    new:
+      method: POST
+      path: "/api/v2/automations/email-reminders"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-delete-email-reminders
+    owner: automation
+    old:
+      method: DELETE
+      path: "/api/email-reminders/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/automations/email-reminders/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-patch-email-reminders-status
+    owner: automation
+    old:
+      method: PATCH
+      path: "/api/email-reminders/{id}/status"
+    new:
+      method: PATCH
+      path: "/api/v2/automations/email-reminders/{id}/status"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-notifications
+    owner: automation
+    old:
+      method: GET
+      path: "/api/notifications"
+    new:
+      method: GET
+      path: "/api/v2/automations/notifications"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-notifications-events
+    owner: automation
+    old:
+      method: GET
+      path: "/api/notifications/events"
+    new:
+      method: GET
+      path: "/api/v2/automations/notifications/events"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-patch-notifications-read-all
+    owner: automation
+    old:
+      method: PATCH
+      path: "/api/notifications/read-all"
+    new:
+      method: PATCH
+      path: "/api/v2/automations/notifications/read-all"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-notifications-unread-count
+    owner: automation
+    old:
+      method: GET
+      path: "/api/notifications/unread-count"
+    new:
+      method: GET
+      path: "/api/v2/automations/notifications/unread-count"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-patch-notifications-read
+    owner: automation
+    old:
+      method: PATCH
+      path: "/api/notifications/{id}/read"
+    new:
+      method: PATCH
+      path: "/api/v2/automations/notifications/{id}/read"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: billing-get-admin-billing-model-prices
+    owner: billing
+    old:
+      method: GET
+      path: "/api/admin/billing/model-prices"
+    new:
+      method: GET
+      path: "/api/v2/admin/billing/model-prices"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: billing-delete-admin-billing-model-prices
+    owner: billing
+    old:
+      method: DELETE
+      path: "/api/admin/billing/model-prices/{model}"
+    new:
+      method: DELETE
+      path: "/api/v2/admin/billing/model-prices/{model}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: billing-put-admin-billing-model-prices
+    owner: billing
+    old:
+      method: PUT
+      path: "/api/admin/billing/model-prices/{model}"
+    new:
+      method: PUT
+      path: "/api/v2/admin/billing/model-prices/{model}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: billing-get-points
+    owner: billing
+    old:
+      method: GET
+      path: "/api/points"
+    new:
+      method: GET
+      path: "/api/v2/billing/points"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: billing-get-points-ledger
+    owner: billing
+    old:
+      method: GET
+      path: "/api/points/ledger"
+    new:
+      method: GET
+      path: "/api/v2/billing/points/ledger"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: billing-get-points-prices
+    owner: billing
+    old:
+      method: GET
+      path: "/api/points/prices"
+    new:
+      method: GET
+      path: "/api/v2/billing/points/prices"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-get-blog-agent-tasks-blogagentcontroller
+    owner: blogagent
+    old:
+      method: GET
+      path: "/api/blog-agent/tasks"
+    new:
+      method: GET
+      path: "/api/v2/content/blog-agent/tasks"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-post-blog-agent-tasks
+    owner: blogagent
+    old:
+      method: POST
+      path: "/api/blog-agent/tasks"
+    new:
+      method: POST
+      path: "/api/v2/content/blog-agent/tasks"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-get-blog-agent-tasks-blogagentcontroller
+    owner: blogagent
+    old:
+      method: GET
+      path: "/api/blog-agent/tasks/{id}"
+    new:
+      method: GET
+      path: "/api/v2/content/blog-agent/tasks/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-get-blog-agent-tasks-events
+    owner: blogagent
+    old:
+      method: GET
+      path: "/api/blog-agent/tasks/{id}/events"
+    new:
+      method: GET
+      path: "/api/v2/content/blog-agent/tasks/{id}/events"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-post-blog-agent-tasks-messages-stream
+    owner: blogagent
+    old:
+      method: POST
+      path: "/api/blog-agent/tasks/{id}/messages/stream"
+    new:
+      method: POST
+      path: "/api/v2/content/blog-agent/tasks/{id}/messages/stream"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-post-blog-agent-tasks-publish
+    owner: blogagent
+    old:
+      method: POST
+      path: "/api/blog-agent/tasks/{id}/publish"
+    new:
+      method: POST
+      path: "/api/v2/content/blog-agent/tasks/{id}/publish"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-post-blog-agent-tasks-run
+    owner: blogagent
+    old:
+      method: POST
+      path: "/api/blog-agent/tasks/{id}/run"
+    new:
+      method: POST
+      path: "/api/v2/content/blog-agent/tasks/{id}/run"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-post-blog-agent-tasks-run-stream
+    owner: blogagent
+    old:
+      method: POST
+      path: "/api/blog-agent/tasks/{id}/run/stream"
+    new:
+      method: POST
+      path: "/api/v2/content/blog-agent/tasks/{id}/run/stream"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: bloghtml-post-blog-html-previews
+    owner: bloghtml
+    old:
+      method: POST
+      path: "/api/blog-html/previews"
+    new:
+      method: POST
+      path: "/api/v2/previews/previews"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: bloghtml-get-blog-html-raw
+    owner: bloghtml
+    old:
+      method: GET
+      path: "/blog-html/{id}/raw"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: components-get-components-menu
+    owner: components
+    old:
+      method: GET
+      path: "/api/components/menu"
+    new:
+      method: GET
+      path: "/api/v2/studio/components/menu"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: components-post-components-share
+    owner: components
+    old:
+      method: POST
+      path: "/api/components/share"
+    new:
+      method: POST
+      path: "/api/v2/studio/components/share"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: components-get-components
+    owner: components
+    old:
+      method: GET
+      path: "/api/components/{id}"
+    new:
+      method: GET
+      path: "/api/v2/studio/components/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: identity-get-auth-code
+    owner: identity
+    old:
+      method: GET
+      path: "/api/auth/code"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-login
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/login"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-logout
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/logout"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-get-auth-me
+    owner: identity
+    old:
+      method: GET
+      path: "/api/auth/me"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-put-auth-password
+    owner: identity
+    old:
+      method: PUT
+      path: "/api/auth/password"
+    new:
+      method: PUT
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-put-auth-profile
+    owner: identity
+    old:
+      method: PUT
+      path: "/api/auth/profile"
+    new:
+      method: PUT
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-qr-confirm
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/qr/confirm"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-qr-create
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/qr/create"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-qr-exchange
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/qr/exchange"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-get-auth-qr-status
+    owner: identity
+    old:
+      method: GET
+      path: "/api/auth/qr/status"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-refresh
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/refresh"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-register
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/register"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-reset-password
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/reset-password"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-get-auth-validate
+    owner: identity
+    old:
+      method: GET
+      path: "/api/auth/validate"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-wechat-bind
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/wechat-bind"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-wechat-bind-existing
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/wechat-bind-existing"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-wechat-login
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/wechat-login"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-auth-wechat-skip
+    owner: identity
+    old:
+      method: POST
+      path: "/api/auth/wechat-skip"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-well-known-oauth-authorization-server
+    owner: integration
+    old:
+      method: GET
+      path: "/.well-known/oauth-authorization-server"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-well-known-oauth-protected-resource
+    owner: integration
+    old:
+      method: GET
+      path: "/.well-known/oauth-protected-resource"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-admin-mcp-servers
+    owner: integration
+    old:
+      method: GET
+      path: "/api/admin/mcp-servers"
+    new:
+      method: GET
+      path: "/api/v2/admin/mcp-servers"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-admin-mcp-servers
+    owner: integration
+    old:
+      method: POST
+      path: "/api/admin/mcp-servers"
+    new:
+      method: POST
+      path: "/api/v2/admin/mcp-servers"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-delete-admin-mcp-servers
+    owner: integration
+    old:
+      method: DELETE
+      path: "/api/admin/mcp-servers/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/admin/mcp-servers/{id}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-put-admin-mcp-servers
+    owner: integration
+    old:
+      method: PUT
+      path: "/api/admin/mcp-servers/{id}"
+    new:
+      method: PUT
+      path: "/api/v2/admin/mcp-servers/{id}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-admin-mcp-servers-probe
+    owner: integration
+    old:
+      method: POST
+      path: "/api/admin/mcp-servers/{id}/probe"
+    new:
+      method: POST
+      path: "/api/v2/admin/mcp-servers/{id}/probe"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-agent-mcp-servers
+    owner: integration
+    old:
+      method: GET
+      path: "/api/agent/mcp-servers"
+    new:
+      method: GET
+      path: "/api/v2/agents/mcp-servers"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-agent-mcp-servers
+    owner: integration
+    old:
+      method: POST
+      path: "/api/agent/mcp-servers"
+    new:
+      method: POST
+      path: "/api/v2/agents/mcp-servers"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-delete-agent-mcp-servers
+    owner: integration
+    old:
+      method: DELETE
+      path: "/api/agent/mcp-servers/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/agents/mcp-servers/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-put-agent-mcp-servers
+    owner: integration
+    old:
+      method: PUT
+      path: "/api/agent/mcp-servers/{id}"
+    new:
+      method: PUT
+      path: "/api/v2/agents/mcp-servers/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-agent-mcp-servers-probe
+    owner: integration
+    old:
+      method: POST
+      path: "/api/agent/mcp-servers/{id}/probe"
+    new:
+      method: POST
+      path: "/api/v2/agents/mcp-servers/{id}/probe"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-blog-posts-sync-csdn
+    owner: integration
+    old:
+      method: POST
+      path: "/api/blog/posts/{postId}/sync/csdn"
+    new:
+      method: POST
+      path: "/api/v2/content/blog/posts/{postId}/sync/csdn"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-blog-posts-sync-juejin
+    owner: integration
+    old:
+      method: POST
+      path: "/api/blog/posts/{postId}/sync/juejin"
+    new:
+      method: POST
+      path: "/api/v2/content/blog/posts/{postId}/sync/juejin"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-download
+    owner: integration
+    old:
+      method: GET
+      path: "/api/download/{filename:.+}"
+    new:
+      method: GET
+      path: "/api/v2/integrations/download/{filename:.+}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-export-csv
+    owner: integration
+    old:
+      method: GET
+      path: "/api/export/csv"
+    new:
+      method: GET
+      path: "/api/v2/content/export/csv"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-export-excel
+    owner: integration
+    old:
+      method: GET
+      path: "/api/export/excel"
+    new:
+      method: GET
+      path: "/api/v2/content/export/excel"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-mcp-oauth-authorize
+    owner: integration
+    old:
+      method: GET
+      path: "/api/mcp/oauth/authorize"
+    new:
+      method: GET
+      path: "/api/v2/integrations/mcp/oauth/authorize"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-mcp-oauth-authorize-requests
+    owner: integration
+    old:
+      method: GET
+      path: "/api/mcp/oauth/authorize/requests/{requestId}"
+    new:
+      method: GET
+      path: "/api/v2/integrations/mcp/oauth/authorize/requests/{requestId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-mcp-oauth-authorize-requests-approve
+    owner: integration
+    old:
+      method: POST
+      path: "/api/mcp/oauth/authorize/requests/{requestId}/approve"
+    new:
+      method: POST
+      path: "/api/v2/integrations/mcp/oauth/authorize/requests/{requestId}/approve"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-mcp-oauth-authorize-requests-deny
+    owner: integration
+    old:
+      method: POST
+      path: "/api/mcp/oauth/authorize/requests/{requestId}/deny"
+    new:
+      method: POST
+      path: "/api/v2/integrations/mcp/oauth/authorize/requests/{requestId}/deny"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-mcp-oauth-clients
+    owner: integration
+    old:
+      method: GET
+      path: "/api/mcp/oauth/clients"
+    new:
+      method: GET
+      path: "/api/v2/integrations/mcp/oauth/clients"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-delete-mcp-oauth-clients
+    owner: integration
+    old:
+      method: DELETE
+      path: "/api/mcp/oauth/clients/{clientId}"
+    new:
+      method: DELETE
+      path: "/api/v2/integrations/mcp/oauth/clients/{clientId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-mcp-oauth-register
+    owner: integration
+    old:
+      method: POST
+      path: "/api/mcp/oauth/register"
+    new:
+      method: POST
+      path: "/api/v2/integrations/mcp/oauth/register"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-mcp-oauth-revoke
+    owner: integration
+    old:
+      method: POST
+      path: "/api/mcp/oauth/revoke"
+    new:
+      method: POST
+      path: "/api/v2/integrations/mcp/oauth/revoke"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-mcp-oauth-token
+    owner: integration
+    old:
+      method: POST
+      path: "/api/mcp/oauth/token"
+    new:
+      method: POST
+      path: "/api/v2/integrations/mcp/oauth/token"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-delete-publishing-csdn-authorization
+    owner: integration
+    old:
+      method: DELETE
+      path: "/api/publishing/csdn/authorization"
+    new:
+      method: DELETE
+      path: "/api/v2/integrations/csdn/authorization"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-publishing-csdn-authorization-cancel
+    owner: integration
+    old:
+      method: POST
+      path: "/api/publishing/csdn/authorization/cancel"
+    new:
+      method: POST
+      path: "/api/v2/integrations/csdn/authorization/cancel"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-publishing-csdn-authorization-start
+    owner: integration
+    old:
+      method: POST
+      path: "/api/publishing/csdn/authorization/start"
+    new:
+      method: POST
+      path: "/api/v2/integrations/csdn/authorization/start"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-publishing-csdn-authorization-status
+    owner: integration
+    old:
+      method: GET
+      path: "/api/publishing/csdn/authorization/status"
+    new:
+      method: GET
+      path: "/api/v2/integrations/csdn/authorization/status"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-delete-publishing-juejin-authorization
+    owner: integration
+    old:
+      method: DELETE
+      path: "/api/publishing/juejin/authorization"
+    new:
+      method: DELETE
+      path: "/api/v2/integrations/juejin/authorization"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-publishing-juejin-authorization-cancel
+    owner: integration
+    old:
+      method: POST
+      path: "/api/publishing/juejin/authorization/cancel"
+    new:
+      method: POST
+      path: "/api/v2/integrations/juejin/authorization/cancel"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-publishing-juejin-authorization-start
+    owner: integration
+    old:
+      method: POST
+      path: "/api/publishing/juejin/authorization/start"
+    new:
+      method: POST
+      path: "/api/v2/integrations/juejin/authorization/start"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-publishing-juejin-authorization-status
+    owner: integration
+    old:
+      method: GET
+      path: "/api/publishing/juejin/authorization/status"
+    new:
+      method: GET
+      path: "/api/v2/integrations/juejin/authorization/status"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-publishing-juejin-catalog-sync
+    owner: integration
+    old:
+      method: POST
+      path: "/api/publishing/juejin/catalog/sync"
+    new:
+      method: POST
+      path: "/api/v2/integrations/juejin/catalog/sync"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-upload
+    owner: integration
+    old:
+      method: POST
+      path: "/api/upload"
+    new:
+      method: POST
+      path: "/api/v2/integrations/upload"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-upload-batch
+    owner: integration
+    old:
+      method: POST
+      path: "/api/upload/batch"
+    new:
+      method: POST
+      path: "/api/v2/integrations/upload/batch"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-upload-oss
+    owner: integration
+    old:
+      method: POST
+      path: "/api/upload/oss"
+    new:
+      method: POST
+      path: "/api/v2/integrations/upload/oss"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-files-knowledgefilecontroller
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/files"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/files"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-files-upload
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/files/upload"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/files/upload"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-delete-knowledge-base-files
+    owner: knowledgebase
+    old:
+      method: DELETE
+      path: "/api/knowledge-base/files/{fileId}"
+    new:
+      method: DELETE
+      path: "/api/v2/knowledge/files/{fileId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-files-knowledgefilecontroller
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/files/{fileId}"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/files/{fileId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-files-chapters
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/files/{fileId}/chapters"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/files/{fileId}/chapters"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-files-chapters-structure
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/files/{fileId}/chapters/{chapterId}/structure"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/files/{fileId}/chapters/{chapterId}/structure"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-files-content
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/files/{fileId}/content"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/files/{fileId}/content"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-put-knowledge-base-files-folder
+    owner: knowledgebase
+    old:
+      method: PUT
+      path: "/api/knowledge-base/files/{fileId}/folder"
+    new:
+      method: PUT
+      path: "/api/v2/knowledge/files/{fileId}/folder"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-put-knowledge-base-files-name
+    owner: knowledgebase
+    old:
+      method: PUT
+      path: "/api/knowledge-base/files/{fileId}/name"
+    new:
+      method: PUT
+      path: "/api/v2/knowledge/files/{fileId}/name"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-files-preview
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/files/{fileId}/preview"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/files/{fileId}/preview"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-files-reidentify
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/files/{fileId}/reidentify"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/files/{fileId}/reidentify"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-files-structure
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/files/{fileId}/structure"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/files/{fileId}/structure"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-files-structure-regenerate
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/files/{fileId}/structure/regenerate"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/files/{fileId}/structure/regenerate"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-files-tags
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/files/{fileId}/tags"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/files/{fileId}/tags"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-put-knowledge-base-files-tags
+    owner: knowledgebase
+    old:
+      method: PUT
+      path: "/api/knowledge-base/files/{fileId}/tags"
+    new:
+      method: PUT
+      path: "/api/v2/knowledge/files/{fileId}/tags"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-delete-knowledge-base-files-tags
+    owner: knowledgebase
+    old:
+      method: DELETE
+      path: "/api/knowledge-base/files/{fileId}/tags/{tagId}"
+    new:
+      method: DELETE
+      path: "/api/v2/knowledge/files/{fileId}/tags/{tagId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-folders
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/folders"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/folders"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-folders
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/folders"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/folders"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-delete-knowledge-base-folders
+    owner: knowledgebase
+    old:
+      method: DELETE
+      path: "/api/knowledge-base/folders/{folderId}"
+    new:
+      method: DELETE
+      path: "/api/v2/knowledge/folders/{folderId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-put-knowledge-base-folders-name
+    owner: knowledgebase
+    old:
+      method: PUT
+      path: "/api/knowledge-base/folders/{folderId}/name"
+    new:
+      method: PUT
+      path: "/api/v2/knowledge/folders/{folderId}/name"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-put-knowledge-base-folders-parent
+    owner: knowledgebase
+    old:
+      method: PUT
+      path: "/api/knowledge-base/folders/{folderId}/parent"
+    new:
+      method: PUT
+      path: "/api/v2/knowledge/folders/{folderId}/parent"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-tags
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/tags"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/tags"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-tags
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/tags"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/tags"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-delete-knowledge-base-tags
+    owner: knowledgebase
+    old:
+      method: DELETE
+      path: "/api/knowledge-base/tags/{tagId}"
+    new:
+      method: DELETE
+      path: "/api/v2/knowledge/tags/{tagId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-put-knowledge-base-tags
+    owner: knowledgebase
+    old:
+      method: PUT
+      path: "/api/knowledge-base/tags/{tagId}"
+    new:
+      method: PUT
+      path: "/api/v2/knowledge/tags/{tagId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-uploads-init
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/uploads/init"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/uploads/init"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-delete-knowledge-base-uploads
+    owner: knowledgebase
+    old:
+      method: DELETE
+      path: "/api/knowledge-base/uploads/{uploadId}"
+    new:
+      method: DELETE
+      path: "/api/v2/knowledge/uploads/{uploadId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-get-knowledge-base-uploads
+    owner: knowledgebase
+    old:
+      method: GET
+      path: "/api/knowledge-base/uploads/{uploadId}"
+    new:
+      method: GET
+      path: "/api/v2/knowledge/uploads/{uploadId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-uploads-chunks
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/uploads/{uploadId}/chunks/{chunkIndex}"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/uploads/{uploadId}/chunks/{chunkIndex}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: knowledgebase-post-knowledge-base-uploads-complete
+    owner: knowledgebase
+    old:
+      method: POST
+      path: "/api/knowledge-base/uploads/{uploadId}/complete"
+    new:
+      method: POST
+      path: "/api/v2/knowledge/uploads/{uploadId}/complete"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: profile-get-profile-overview
+    owner: profile
+    old:
+      method: GET
+      path: "/api/profile/overview"
+    new:
+      method: GET
+      path: "/api/v2/users/profile/overview"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-categories
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/categories"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/categories"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-media-images
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/media/images"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/media/images"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-post-blog-media-images
+    owner: publishing
+    old:
+      method: POST
+      path: "/api/blog/media/images"
+    new:
+      method: POST
+      path: "/api/v2/content/blog/media/images"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-media-images-agent
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/media/images/agent"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/media/images/agent"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-posts-blogcontroller
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/posts"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/posts"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-post-blog-posts
+    owner: publishing
+    old:
+      method: POST
+      path: "/api/blog/posts"
+    new:
+      method: POST
+      path: "/api/v2/content/blog/posts"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-posts-manage-stats
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/posts/manage-stats"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/posts/manage-stats"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-posts-mine-blogcontroller
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/posts/mine"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/posts/mine"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-posts-mine-blogcontroller
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/posts/mine/{id}"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/posts/mine/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-posts-publish-rhythm
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/posts/publish-rhythm"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/posts/publish-rhythm"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-posts-publish-status
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/posts/publish-status"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/posts/publish-status"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-posts-recent
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/posts/recent"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/posts/recent"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-delete-blog-posts
+    owner: publishing
+    old:
+      method: DELETE
+      path: "/api/blog/posts/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/content/blog/posts/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-posts-blogcontroller
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/posts/{id}"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/posts/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-put-blog-posts
+    owner: publishing
+    old:
+      method: PUT
+      path: "/api/blog/posts/{id}"
+    new:
+      method: PUT
+      path: "/api/v2/content/blog/posts/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-delete-blog-posts-permanent
+    owner: publishing
+    old:
+      method: DELETE
+      path: "/api/blog/posts/{id}/permanent"
+    new:
+      method: DELETE
+      path: "/api/v2/content/blog/posts/{id}/permanent"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-patch-blog-posts-status
+    owner: publishing
+    old:
+      method: PATCH
+      path: "/api/blog/posts/{id}/status"
+    new:
+      method: PATCH
+      path: "/api/v2/content/blog/posts/{id}/status"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-post-blog-posts-view
+    owner: publishing
+    old:
+      method: POST
+      path: "/api/blog/posts/{id}/view"
+    new:
+      method: POST
+      path: "/api/v2/content/blog/posts/{id}/view"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-tags
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/tags"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/tags"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: publishing-get-blog-tags-popular
+    owner: publishing
+    old:
+      method: GET
+      path: "/api/blog/tags/popular"
+    new:
+      method: GET
+      path: "/api/v2/content/blog/tags/popular"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-get-recitations-attempts
+    owner: recitation
+    old:
+      method: GET
+      path: "/api/recitations/attempts/{attemptId}"
+    new:
+      method: GET
+      path: "/api/v2/learning/attempts/{attemptId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-get-recitations-materials-recitationcontroller
+    owner: recitation
+    old:
+      method: GET
+      path: "/api/recitations/materials"
+    new:
+      method: GET
+      path: "/api/v2/learning/materials"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-post-recitations-materials
+    owner: recitation
+    old:
+      method: POST
+      path: "/api/recitations/materials"
+    new:
+      method: POST
+      path: "/api/v2/learning/materials"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-delete-recitations-materials
+    owner: recitation
+    old:
+      method: DELETE
+      path: "/api/recitations/materials/{materialId}"
+    new:
+      method: DELETE
+      path: "/api/v2/learning/materials/{materialId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-get-recitations-materials-recitationcontroller
+    owner: recitation
+    old:
+      method: GET
+      path: "/api/recitations/materials/{materialId}"
+    new:
+      method: GET
+      path: "/api/v2/learning/materials/{materialId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-put-recitations-materials
+    owner: recitation
+    old:
+      method: PUT
+      path: "/api/recitations/materials/{materialId}"
+    new:
+      method: PUT
+      path: "/api/v2/learning/materials/{materialId}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-post-recitations-materials-archive
+    owner: recitation
+    old:
+      method: POST
+      path: "/api/recitations/materials/{materialId}/archive"
+    new:
+      method: POST
+      path: "/api/v2/learning/materials/{materialId}/archive"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-get-recitations-materials-attempts
+    owner: recitation
+    old:
+      method: GET
+      path: "/api/recitations/materials/{materialId}/attempts"
+    new:
+      method: GET
+      path: "/api/v2/learning/materials/{materialId}/attempts"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-post-recitations-materials-attempts
+    owner: recitation
+    old:
+      method: POST
+      path: "/api/recitations/materials/{materialId}/attempts"
+    new:
+      method: POST
+      path: "/api/v2/learning/materials/{materialId}/attempts"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: recitation-get-recitations-materials-quizzes
+    owner: recitation
+    old:
+      method: GET
+      path: "/api/recitations/materials/{materialId}/quizzes"
+    new:
+      method: GET
+      path: "/api/v2/learning/materials/{materialId}/quizzes"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: shared-kernel-get-health
+    owner: shared-kernel
+    old:
+      method: GET
+      path: "/health"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: studio-get-flow-canvases-snapshot
+    owner: studio
+    old:
+      method: GET
+      path: "/api/flow/canvases/{canvasId}/snapshot"
+    new:
+      method: GET
+      path: "/api/v2/studio/flow/canvases/{canvasId}/snapshot"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-put-flow-canvases-snapshot
+    owner: studio
+    old:
+      method: PUT
+      path: "/api/flow/canvases/{canvasId}/snapshot"
+    new:
+      method: PUT
+      path: "/api/v2/studio/flow/canvases/{canvasId}/snapshot"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-get-flow-projects-flowprojectcontroller
+    owner: studio
+    old:
+      method: GET
+      path: "/api/flow/projects"
+    new:
+      method: GET
+      path: "/api/v2/studio/flow/projects"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-post-flow-projects
+    owner: studio
+    old:
+      method: POST
+      path: "/api/flow/projects"
+    new:
+      method: POST
+      path: "/api/v2/studio/flow/projects"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-delete-flow-projects
+    owner: studio
+    old:
+      method: DELETE
+      path: "/api/flow/projects/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/studio/flow/projects/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-get-flow-projects-flowprojectcontroller
+    owner: studio
+    old:
+      method: GET
+      path: "/api/flow/projects/{id}"
+    new:
+      method: GET
+      path: "/api/v2/studio/flow/projects/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-patch-flow-projects
+    owner: studio
+    old:
+      method: PATCH
+      path: "/api/flow/projects/{id}"
+    new:
+      method: PATCH
+      path: "/api/v2/studio/flow/projects/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-get-img2three-tasks-img2threecontroller
+    owner: studio
+    old:
+      method: GET
+      path: "/api/img2three/tasks"
+    new:
+      method: GET
+      path: "/api/v2/studio/img2three/tasks"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-post-img2three-tasks
+    owner: studio
+    old:
+      method: POST
+      path: "/api/img2three/tasks"
+    new:
+      method: POST
+      path: "/api/v2/studio/img2three/tasks"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-get-img2three-tasks-img2threecontroller
+    owner: studio
+    old:
+      method: GET
+      path: "/api/img2three/tasks/{id}"
+    new:
+      method: GET
+      path: "/api/v2/studio/img2three/tasks/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: studio-post-img2three-tasks-run-stream
+    owner: studio
+    old:
+      method: POST
+      path: "/api/img2three/tasks/{id}/run/stream"
+    new:
+      method: POST
+      path: "/api/v2/studio/img2three/tasks/{id}/run/stream"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: virtualpay-get-virtual-pay-notify
+    owner: virtualpay
+    old:
+      method: GET
+      path: "/api/virtual-pay/notify"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: virtualpay-post-virtual-pay-notify
+    owner: virtualpay
+    old:
+      method: POST
+      path: "/api/virtual-pay/notify"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: virtualpay-post-virtual-pay-orders
+    owner: virtualpay
+    old:
+      method: POST
+      path: "/api/virtual-pay/orders"
+    new:
+      method: POST
+      path: "/api/v2/payments/virtual-pay/orders"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: virtualpay-get-virtual-pay-orders
+    owner: virtualpay
+    old:
+      method: GET
+      path: "/api/virtual-pay/orders/{outTradeNo}"
+    new:
+      method: GET
+      path: "/api/v2/payments/virtual-pay/orders/{outTradeNo}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: virtualpay-post-virtual-pay-orders-reconcile
+    owner: virtualpay
+    old:
+      method: POST
+      path: "/api/virtual-pay/orders/{outTradeNo}/reconcile"
+    new:
+      method: POST
+      path: "/api/v2/payments/virtual-pay/orders/{outTradeNo}/reconcile"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: virtualpay-get-virtual-pay-products
+    owner: virtualpay
+    old:
+      method: GET
+      path: "/api/virtual-pay/products"
+    new:
+      method: GET
+      path: "/api/v2/payments/virtual-pay/products"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned

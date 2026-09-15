@@ -1,0 +1,1154 @@
+# DinQorAI microservice migration — 配置归属清单（V9 section 16 / section 17）.
+#
+# Bootstrapped by scripts/migration/scan.py from docs/config-inventory.yaml.
+# Nacos 规范：Namespace = dinqor-{dev,staging,prod}，Group = 稳定逻辑服务名
+# （COMMON / DINQOR-CORE / DINQOR-GATEWAY / ...），DataId = dinqor-<service>.yaml。
+#
+# 配置优先级：部署 Secret / 环境变量 > 服务私有 Nacos > 共享 Nacos > jar 内默认值。
+# 任何配置只能有一个真源；禁止 application.yml / .env / Nacos 三处同时配置同一键。
+#
+# CI 门禁 `config-ownership-drift`：inventory 中每个键都必须在本文件出现，
+# 且 secret 键不得出现在 Nacos 明文章节。
+
+generated_by: scripts/migration/scan.py
+counts:
+  total: 227
+  service_private: 187
+  secret: 34
+  shared: 6
+config:
+  - key: agent.conversation.compaction-enabled
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.compaction-retain-ratio
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.compaction-threshold-ratio
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.context-message-limit
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.context-window-tokens
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-parallel-tools
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-steps
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-tool-failures
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.stale-conversation-minutes
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.api-key
+    source: application.yml
+    classification: secret
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.base-url
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.connect-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.model
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.read-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.reasoning-effort
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.web-search-enabled
+    source: application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: blog-html.preview.frame-ancestors
+    source: application.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.frame-ancestors
+    source: application-local.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.max-code-bytes
+    source: application.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.page-url-pattern
+    source: application.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.page-url-pattern
+    source: application-local.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.rate-limit-max-requests
+    source: application.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.rate-limit-window-seconds
+    source: application.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.ttl-seconds
+    source: application.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-content-plan.batch-size
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog-content-plan.claim-timeout-ms
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog-content-plan.enabled
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog-content-plan.enabled
+    source: application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog-content-plan.initial-delay-ms
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog-content-plan.max-active-per-user
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog-content-plan.max-created-per-day
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog-content-plan.poll-interval-ms
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.api-key
+    source: application.yml
+    classification: secret
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.api-key
+    source: application-local.yml
+    classification: secret
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.base-url
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.base-url
+    source: application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.connect-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.image-model
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.image-model
+    source: application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.image-size
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.image-size
+    source: application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.max-illustrations
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.max-illustrations
+    source: application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.model
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.model
+    source: application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.read-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.stale-task-minutes
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.web-search-enabled
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.web-search-enabled
+    source: application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.batch-size
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.claim-timeout-ms
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.display-zone
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.enabled
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.initial-delay-ms
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.max-active-per-user
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.max-created-per-day
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.max-send-attempts
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.minimum-lead-seconds
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.poll-interval-ms
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: email-reminder.retry-delay-ms
+    source: application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: admin.model-gateway.enabled
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: admin.model-gateway.encryption-key
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.accessKeyId
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.accessKeyId
+    source: application-local.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.accessKeySecret
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.accessKeySecret
+    source: application-local.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.bucketName
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.domain
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.endpoint
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.avatar.allowedTypes
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.avatar.maxSize
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.avatar.pathPrefix
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.photo.allowedTypes
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.photo.maxSize
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.photo.pathPrefix
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.video.allowedTypes
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.video.maxSize
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: aliyun.oss.upload.video.pathPrefix
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: app.cors.allowed-origins
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.enabled
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.flat.csdn-publish
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.flat.email-reminder
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.flat.juejin-publish
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.grant-register
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.models.gpt-5.6-terra.cached-write-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.models.gpt-5.6-terra.price.cached-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.models.gpt-5.6-terra.price.input-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.models.gpt-5.6-terra.price.output-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.models.gpt-image-2.price.cached-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.models.gpt-image-2.price.input-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.models.gpt-image-2.price.output-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.pre-check-min-balance
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.price.cached-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.price.input-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.price.output-milli-per-1k-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: jwt.access-token-expire
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: jwt.refresh-token-expire
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: jwt.secret
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: jwt.secret
+    source: application-local.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: mail.from
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: mail.from
+    source: application-local.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: redis-monitor.alert-retry-interval-ms
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: redis-monitor.enabled
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: redis-monitor.failure-threshold
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: redis-monitor.initial-delay-ms
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: redis-monitor.notify-recovery
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: redis-monitor.poll-interval-ms
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: redis-monitor.recipient
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.credential.encryption-key
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.credential.encryption-key
+    source: application-local.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.code-2-session-url
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.connect-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.env-version
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.read-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.virtual-pay.api-base-url
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.virtual-pay.connect-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.virtual-pay.message-token
+    source: application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.virtual-pay.read-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: mcp.blog.enabled
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.connect-timeout-seconds
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.credential-encryption-key
+    source: application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.enabled
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.max-description-length
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.max-result-length
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.max-tools-per-server
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.request-timeout-seconds
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.enabled
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.api-key
+    source: application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.authorization-timeout-seconds
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.base-url
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.credential-encryption-key
+    source: application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.enabled
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.selenium-url
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.web-console-secret
+    source: application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.dual.enabled
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.enabled
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.base-url
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.catalog-freshness-hours
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.connect-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.credential-encryption-key
+    source: application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.default-aid
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.enabled
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.read-timeout-millis
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.access-token-ttl-seconds
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.authorization-code-ttl-seconds
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.authorization-request-ttl-seconds
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.enabled
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.public-base-url
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.rate-limit-max-requests
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.rate-limit-window-seconds
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.refresh-token-ttl-seconds
+    source: application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: knowledge-base.auto-structure-chapter-threshold
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.auto-structure-max-chars
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.chunk-staging-dir
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-auto-tags
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-chapters
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-chunk-size
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-extract-chars
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-file-bytes
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-folder-depth
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-folders
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-points-per-node
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-tags
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.min-chunk-size
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.reaper-batch-size
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.reaper-enabled
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.reaper-initial-delay-ms
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.reaper-interval-ms
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.session-ttl-hours
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.summary-length
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: recitation.enabled
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: recitation.max-audio-bytes
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: recitation.stale-claim-seconds
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: recitation.worker-batch-size
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: recitation.worker-poll-interval-ms
+    source: application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: mybatis-plus.configuration.log-impl
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: mybatis-plus.configuration.map-underscore-to-camel-case
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: mybatis-plus.mapper-locations
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: mybatis-plus.type-aliases-package
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: server.port
+    source: application.yml
+    classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.application.name
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.config.import
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.database
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.host
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.host
+    source: application-local.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.password
+    source: application.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.port
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.port
+    source: application-local.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.timeout
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.driver-class-name
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.hikari.connection-timeout
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.hikari.keepalive-time
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.hikari.max-lifetime
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.hikari.validation-timeout
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.password
+    source: application.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.password
+    source: application-local.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.url
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.url
+    source: application-local.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.username
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.username
+    source: application-local.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.jackson.date-format
+    source: application.yml
+    classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.jackson.deserialization.fail-on-unknown-properties
+    source: application.yml
+    classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.jackson.time-zone
+    source: application.yml
+    classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.default-encoding
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.host
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.password
+    source: application.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.password
+    source: application-local.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.port
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.properties.mail.smtp.auth
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.properties.mail.smtp.connectiontimeout
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.properties.mail.smtp.ssl.enable
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.properties.mail.smtp.starttls.enable
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.properties.mail.smtp.starttls.required
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.properties.mail.smtp.timeout
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.properties.mail.smtp.writetimeout
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.protocol
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.username
+    source: application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.mail.username
+    source: application-local.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.servlet.multipart.max-file-size
+    source: application.yml
+    classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.servlet.multipart.max-request-size
+    source: application.yml
+    classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: img2three.agent.api-key
+    source: application.yml
+    classification: secret
+    owner: studio
+    nacos_group: DINQOR-CORE
+  - key: img2three.agent.base-url
+    source: application.yml
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
+  - key: img2three.agent.enabled
+    source: application.yml
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
+  - key: img2three.agent.model
+    source: application.yml
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
+  - key: img2three.pipeline-enabled
+    source: application.yml
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
+  - key: img2three.pipeline-root
+    source: application.yml
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
+  - key: img2three.python-command
+    source: application.yml
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE

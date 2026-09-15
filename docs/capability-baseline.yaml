@@ -1,0 +1,298 @@
+# DinQorAI 微服务迁移 — 能力清单基线（V9 §12）
+#
+# 目的：把 §2.3 的「既有能力守恒」元规则落成机器门禁，防止每一轮文档/代码修订
+# 重演「补了又丢」。
+#
+# 本清单**只增不删**。任何能力项的消失都必须显式标注 status 与审批记录。
+#
+# CI 门禁 `capability-baseline-diff`：
+#   - 能力项消失且 status 未标 retired          → CI 失败
+#   - status = changed                          → 必须存在对应 contract-changes.yaml 条目
+#   - status = retired                          → 必须存在安全 / 产品审批记录
+#
+# status 取值：
+#   active    当前有效，且已被实现或已被设计覆盖
+#   changed   语义发生变化（必须指向 contract-changes.yaml 的 id）
+#   retired   显式退场（必须有 approval 字段）
+#   planned   V9 引入的新能力，Wave 2 前必须落地
+
+counts:
+  total: 22
+
+capabilities:
+  # ===================== 管理员封禁（现状是秒级生效，不得退化） =====================
+  - id: admin-ban-new-request
+    since: V7
+    ref: V9 §26 / §28.1 / §48
+    status: active
+    evidence: "identity/application/UserAdminService.setUserStatus → revokeSessions(targetId)"
+    notes: >-
+      现状：Redis 正常时近实时撤销全部 Access（删除 login:token:<jwt> + 集合键）。
+      新架构必须保持秒级：Gateway 每请求 JWT 验签后查本地 deniedAccountIds。
+      禁止退化为等待 Access Token 30 分钟自然过期。
+    acceptance: "P95 <= 1s / P99 <= 2s / hard bound <= 5s（新请求）"
+
+  - id: admin-ban-established-sse
+    since: V8
+    ref: V9 §49 / §50 / §52 / §53
+    status: active
+    evidence: >-
+      agent/api/AgentConversationController.createEmitter → new SseEmitter(0L)（永不超时，
+      只在建连时鉴权一次）。已实现：SseConnectionHandle 登记进 ConnectionRegistry；
+      send()/sendHeartbeat() 均先查 SecurityStateCache.isDisabled → completeSubscriber。
+    notes: >-
+      SSE 建连后整个流式过程不再校验任何身份或状态。封禁必须能终止已建立的流。
+      实现：宿主本地连接注册表 + 主动断开（主要手段）+ 每次 send/heartbeat 前 O(1) 校验（兜底）。
+    acceptance: "封禁事件到达宿主后，最长残留推送 <= 5s"
+    hosts:
+      - "agent/api/AgentConversationController（2 条流）"
+      - "blogagent/api/BlogAgentController（3 条流，共用 SseSubscriber）"
+      - "automation/infrastructure/BlogPlanSseService（1 条流；控制器只转发）"
+      - "studio/api/Img2ThreeController（1 条流；无心跳，仅靠 reconciler）"
+    verified_by: "docs/stream-hosts.yaml + ci_gates.py stream-ban-boundary-coverage"
+
+  - id: admin-ban-established-ws
+    since: V8
+    ref: V9 §51 / §52 / §53
+    status: active
+    evidence: >-
+      agent/api/AgentStreamWebSocketHandler.afterConnectionEstablished 取一次 userId 存局部变量。
+      已实现：WsConnectionHandle 登记进 ConnectionRegistry；emit() 在每一帧出站前校验封禁，
+      命中则 close(4403, ACCOUNT_DISABLED)；入口侧也拒绝封禁账号建连。
+    notes: >-
+      stream(...) 里唯一的身份判断原本是数据归属校验（userId.equals(snapshot.getUserId())），
+      不是账号状态校验。现在封禁会主动 close(4403, ACCOUNT_DISABLED)，
+      并且封禁后不再回客户端 ping 的 pong（否则客户端会误判链路健康并继续重连）。
+    acceptance: "同 admin-ban-established-sse"
+    verified_by: "AgentStreamWebSocketHandlerTest（5 个封禁用例）+ stream-ban-boundary-coverage"
+
+  - id: public-endpoint-with-token-personalization
+    since: V7
+    ref: V9 §10
+    status: active
+    evidence: "AuthInterceptor.trySetUserContext —— 公开 GET 命中后仍尝试解析 token 设置 UserContext"
+    notes: "public + identity_mode: optional 语义。Gateway 分类时不得丢失。"
+    acceptance: "auth-policy.yaml 中每条 public 规则都有 identity_mode 字段"
+
+  # ===================== 长连接传输语义 =====================
+  - id: sse-not-buffered
+    since: V7
+    ref: V9 §15.2
+    status: active
+    evidence: "AgentConversationController:284 response.setHeader(\"X-Accel-Buffering\", \"no\")"
+    notes: "该头在业务代码里是硬编码的，但**如果 Gateway 层缓冲，这个头无效**。Gateway 必须对流式响应关闭聚合、chunked 转发、不压缩流式响应。"
+    acceptance: "gateway-stream-proxy-config-check 门禁通过"
+
+  - id: ws-upgrade-supported
+    since: V7
+    ref: V9 §15.2
+    status: active
+    evidence: "agent/api/AgentWebSocketConfig:56 registry.addHandler(agentStreamWebSocketHandler(), \"/ws/agent\")"
+    notes: "Gateway 必须完整透传 Upgrade / Connection / Sec-WebSocket-* 头。"
+    acceptance: "WS 建连成功率 >= 99%（Wave 2 回滚阈值：失败 > 2% 持续 5 分钟）"
+
+  - id: last-event-id-passthrough
+    since: V7
+    ref: V9 §15.2
+    status: active
+    evidence: "AgentConversationController:243 与 BlogAgentController:118 用 @RequestHeader(\"Last-Event-ID\") 读；前端 agentConversationService.js:60 与 blogAgentService.js:17 发送该头"
+    notes: "前端不是原生 EventSource（Axios + onDownloadProgress），Last-Event-ID 是应用层自传的。Gateway 必须不吞这个头。"
+    acceptance: "断线续传集成测试：游标不丢、事件不重复不丢"
+
+  # ===================== Refresh 协议 =====================
+  - id: refresh-rotation
+    since: V7
+    ref: V9 §29 / §34
+    status: planned
+    evidence: "现状 refresh 是纯无状态 JWT（AuthService.refresh 557-570 行只验签名 + isRefreshToken + status != 0）"
+    notes: "Opaque Random Token rt_<sid>.<tokenId>.<secret>，DB 只存 secret hash。sid 位于明文前缀 → sid 不是秘密。"
+    acceptance: "并发 refresh 不产生重复 successor"
+
+  - id: refresh-grace-idempotent-replay
+    since: V7
+    ref: V9 §35 / §37 / §38
+    status: planned
+    notes: "grace = 25s（refresh timeout 15s + 1 次退避重试 + 网络/调度余量 >= 5s）。第 2/3/N 次 replay 语义完全相同：始终返回同一个 RT1。"
+    acceptance: "§97 门槛：grace 内多次 replay（第 2 / 第 3 / 第 N 次）"
+
+  - id: refresh-reuse-detection
+    since: V7
+    ref: V9 §39
+    status: planned
+    notes: "四分支判定表缺一不可。第 3 行（超 grace 但仍在 retained_until 内）才判 theft 并 revoke family。"
+    acceptance: "§97 门槛：grace 外 replay 触发 revoke；retention 外 replay 不触发 theft alarm"
+
+  - id: refresh-garbage-token-no-family-revoke
+    since: V7
+    ref: V9 §39 第 4 行 / §39.1
+    status: planned
+    notes: >-
+      【防 DoS 的安全设计，不是可选优化】sid 在明文前缀，日志/Referer/客户端存储任一处泄漏即可获得。
+      若按「校验失败即可疑」处理，攻击者构造 rt_<已知sid>.<随机>.<随机> 反复提交即可让用户被反复强制登出。
+      第 4 行必须返回 401 INVALID_REFRESH_TOKEN 且**不 revoke family**。
+    acceptance: "§97 P0 阻断项：随机垃圾 token 导致 family revoke = 0"
+
+  - id: bounded-replay-history
+    since: V7
+    ref: V9 §33 / §40
+    status: planned
+    notes: "retention = 24h，每 sid 最多最近 48 代。retained_until 在写 history 行时写入 now()+24h，不得留空、不得依赖后续任务回填。容量上界 ≈ 10,000 × 48 = 480,000 行（30m Access）。"
+    acceptance: "history 行数不超过容量上界；retained_until 无 NULL"
+
+  - id: logout-revokes-refresh-session
+    since: V7
+    ref: V9 §47
+    status: planned
+    evidence: "现状 AuthService.logout()（585-601 行）只删 access 键 + 从 Set 里 remove 一个 → 登出后持有 refresh token 仍可换出全新令牌对，30 天会话恢复"
+    notes: "新模型：logout revoke 当前 Refresh Session。普通用户 logout 的最大 Access 窗口 <= 30m，这是明确取舍。"
+    acceptance: "§87 指标：logout 后旧 refresh 可用性必须为 0"
+
+  - id: mysql-refresh-sot-persistent
+    since: V7
+    ref: V9 §30 / §31 / §61
+    status: planned
+    notes: "选择 MySQL 是数据模型与持久性语义判断，不代表当前 MySQL 已高可用（MySQL 同样是单实例）。建议 RPO <= 5 分钟 / RTO <= 30 分钟。"
+    acceptance: "§87 Reliability 段有 backup_success / last_backup_age / binlog_lag / restore_drill_date"
+
+  # ===================== 事务与迁移 =====================
+  - id: account-merge-atomicity
+    since: V7
+    ref: V9 §2.3 / §75
+    status: active
+    evidence: "identity/infrastructure/AccountMergeMapper —— 全项目唯一授权跨表点，一次重归属 11 张表横跨 6 个域"
+    notes: "涉及 agent_conversation / blog_agent_task / blog_content_plan / blog_media_asset / blog_notification / blog_publish_record / email_reminder_task / flow_ai_task / flow_project / img2three_task / studio_project。共库期间不受影响，物理分库阶段必须用 Saga 或每服务一个 reparent 内部端点。"
+    acceptance: "不存在部分提交；transaction-boundary.md 覆盖该项"
+
+  - id: legacy-token-explicit-retirement
+    since: V8
+    ref: V9 §56 / §57 / §58 / §59
+    status: planned
+    notes: "必须显式删除 login:token:* 与 login:user_tokens:*，不是笼统写「旧 Redis key」。T3 判定需三条同时满足：低频 SCAN 连续多周期 = 0 + legacy refresh endpoint 请求 = 0 + 观察一个发布周期。"
+    acceptance: "legacy_login_token_count = 0 且 legacy_login_user_tokens_key_count = 0"
+
+  # ===================== 新增：Legacy Redis 缺陷 =====================
+  - id: legacy-user-tokens-bounded
+    since: V9
+    ref: V9 §56 / §59
+    status: changed
+    contract_change_ref: legacy-redis-user-tokens
+    evidence: "AuthService.generateTokenResponse:646-653 opsForSet().add 无 expire；UserAdminService.revokeSessions 遍历整个 Set"
+    notes: >-
+      login:user_tokens:<userId> 是无 TTL 的 Set，成员是完整 Access JWT。
+      不断增长、占内存、revokeSessions 遍历越来越慢 → 封禁延迟随时间单调恶化。
+      禁止项：不允许 login:user_tokens 永久遗留；不允许无 TTL JWT Set 成为长期 Session 模型。
+    acceptance: "§59 五项指标全部可观测"
+
+  # ===================== 新增：多实例前提（评审发现的硬洞） =====================
+  - id: agent-event-bus-cross-instance-fanout
+    since: V9
+    ref: V9 §4 / §27.2 / §69
+    status: planned
+    evidence: "agent/application/AgentEventBus —— 类注释原文写死「多实例部署前置条件（重要）：本总线只在单个 JVM 内生效」；实现是 Map<Long, List<Consumer<AgentEvent>>> subscribers = new ConcurrentHashMap<>()"
+    notes: >-
+      V9 §4 明确「Wave 2：core-host 允许 2 实例」，而触发执行的 HTTP 请求与 WS 握手订阅可能落在不同节点
+      → 订阅者收不到其他实例产生的事件，表现为「偶发卡住不输出」，
+      **不触发任何现有回滚阈值**（§98 只看 5xx / 断连率 / MCP 错误率）。
+      后端全库 convertAndSend / RedisMessageListener / @RabbitListener / KafkaTemplate 全部 0 匹配。
+      V9 §27.2 已为 security event 引入 Redis PubSub，必须复用给对话事件扇出，并保留 DB 重放作为跨实例兜底。
+    acceptance: "§97 门槛：事件只到部分实例时全实例收敛；Wave 2 多实例下不丢事件"
+
+  - id: security-plane-stale-fail-closed-declared
+    since: V9
+    ref: V9 §28.2 / §48 / §103
+    status: planned
+    notes: >-
+      若引入「security plane stale > N 秒即拒绝全部认证请求」的 fail-closed 语义，
+      它是**新的可用性语义**，必须写进 contract-changes.yaml 并进入本清单，
+      否则违反 §2.3 元规则。同时它与 §103 的验收问题「MySQL Refresh Session 挂了是否只影响
+      refresh/logout？」互相矛盾（account_security_state 与 refresh 表同库）—— 二者必须同时对齐。
+    acceptance: "§87 有 securityStateAge / lastSuccessfulSecuritySyncAt 指标；§103 答案与 §28.2 一致"
+
+  # ===================== 新增：可观测性承诺 =====================
+  - id: rpo-rto-observable
+    since: V9
+    ref: V9 §31 / §87
+    status: planned
+    notes: "RPO/RTO 是承诺，必须有观测量兑现：backup_success / last_backup_age / binlog_lag / restore_drill_date。没有前两个，RPO <= 5 分钟无法被监控，只能靠人工确认。"
+    acceptance: "§87 Reliability 指标段完整且已接入"
+
+  - id: scheduler-per-instance-not-globally-locked
+    since: V9
+    ref: V9 §67 / §69 / §72
+    status: planned
+    notes: "per_instance 任务禁止使用全局 ShedLock。原因：全局锁会让 N-1 个实例的本地缓存永不刷新，而验收指标（「不重复执行」）仍然通过 —— 这是一个不会失败的失败。"
+    acceptance: "scheduled-ownership.yaml 中 per_instance 项的 singleton_strategy 全部为 none / local_only"
+
+  - id: shared-kernel-no-business-dependency
+    since: V9
+    ref: V9 §21
+    status: changed
+    contract_change_ref: shared-kernel-boundary
+    evidence: "config/WebConfig.java → import identity.security.AuthInterceptor；common/RedisHealthMonitor.java → import integration.mail.MailService"
+    notes: "一旦把 common 抽成共享 jar 被各服务依赖，所有服务都传递依赖 identity + integration，libs/contracts 边界失效。ArchUnit 现有两条规则都不覆盖它（common 不是业务域）→ 必须单独加一条「共享内核不得依赖任何业务域」。"
+    acceptance: "CI 门禁 shared-kernel-reverse-dependency 通过（当前 2 处违规必须清零）"
+
+  - id: gateway-stream-proxy-transparent
+    since: V9
+    ref: V9 §15.2 / §88
+    status: planned
+    notes: "Gateway 必须不缓冲流式响应、chunked 转发、完整透传 WS Upgrade（含 Sec-WebSocket-*）、长 idle timeout、不压缩流式响应、不吞 Last-Event-ID、允许 ?token= 查询参数鉴权路径。"
+    acceptance: "gateway-stream-proxy-config-check 门禁通过"
+
+  - id: token-location-dimension-in-auth-policy
+    since: V9
+    ref: V9 §10
+    status: active
+    evidence: "AgentStreamAuthHandshakeInterceptor：优先 Authorization 头，回退 ?token=（注释原文：「iOS 等客户端可回退到 token 查询参数」）"
+    notes: "如果策略模型只能表达 Header 鉴权，Gateway 会在长连接入口误判为未认证。"
+    acceptance: "auth-policy-token-location 门禁通过：每个 SSE/WS 端点都有显式 token_location"
+
+  - id: refresh-failure-classification
+    since: V9
+    ref: V9 §45 / §46
+    status: planned
+    evidence: "前端 refreshAccessToken() 使用裸 axios.post（绕过 httpPolicy），失败后无差别 forceLoggedOut()"
+    notes: >-
+      401 INVALID_REFRESH_TOKEN / 401 REFRESH_TOKEN_REUSED / 403 ACCOUNT_DISABLED → 会话不可恢复 → forceLoggedOut。
+      503 / 5xx / network / timeout → 不清 Token、不跳登录页、backoff 后最多重试 1 次。
+      禁止把「暂时无法刷新会话」伪装成「登录过期」。
+    acceptance: "§97 P0 阻断项：503 导致客户端清登录 = 0"
+
+  - id: cross-tab-refresh-coordination
+    since: V9
+    ref: V9 §44 / §99
+    status: planned
+    evidence: "前端 BroadcastChannel / navigator.locks 均 0 处（从零建设）"
+    notes: "服务端 grace 是第一道保障，Web 第二道。降级链：BroadcastChannel → navigator.locks → localStorage lease + storage event。isRefreshing 只保留为 Tab 内锁。"
+    acceptance: "§97 门槛：2 Tab / 5 Tab 并发 refresh 不误 revoke"
+
+  - id: stream-host-ban-boundary-machine-enforced
+    since: V9
+    ref: V9 §12 / §50 / §51 / §52
+    status: active
+    evidence: >-
+      docs/stream-hosts.yaml 登记 5 个宿主 / 8 条流；
+      scripts/migration/ci_gates.py:gate_stream_ban_boundary_coverage 校验覆盖完整性。
+    notes: >-
+      这是把「封禁能终止已建立的流」从人工约定变成机器约束的那一步。
+      前两版文档里这条能力反复"补了又丢"，根因是：新增一条 SSE 端点时，
+      没有任何东西会提醒实现者去登记连接。本能力把这件事变成会失败的门禁：
+      新流端点若不在 stream-hosts.yaml 里登记，CI 直接红。
+      门禁同时校验 boundary_files 真实存在且确实引用了 ConnectionRegistry ——
+      防止"文件在、里面没真的登记连接"的空壳登记。
+      注意：机器只能回答"哪些路由是流"（route-inventory 的 stream 字段），
+      "边界在哪个文件里"仍是人工语义（例如 notifications 的边界在 service 而非 controller），
+      这正是 §13「机器约束 Key 集合 + 人工填写语义字段」的又一例。
+    acceptance: "stream-ban-boundary-coverage 门禁通过，且对「移除宿主」/「指向无注册文件」两种注入都能 FAIL"
+
+# ===================== 退场登记（必须有审批） =====================
+retired: []
+
+# ===================== 变更登记（必须指向 contract-changes.yaml） =====================
+changed:
+  - capability: legacy-user-tokens-bounded
+    contract_change_ref: legacy-redis-user-tokens
+    approval: pending
+  - capability: shared-kernel-no-business-dependency
+    contract_change_ref: shared-kernel-boundary
+    approval: pending

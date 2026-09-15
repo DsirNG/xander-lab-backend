@@ -1,0 +1,610 @@
+#!/usr/bin/env python3
+"""DinQorAI microservice migration — CI gates (V9 section 88).
+
+Runs every machine-checkable gate from the plan's CI list against the curated
+inventories in ``docs/`` and the live source tree.
+
+Usage:
+    python scripts/migration/ci_gates.py            # run all gates
+    python scripts/migration/ci_gates.py --list     # list gate names
+    python scripts/migration/ci_gates.py auth-policy-coverage   # run one gate
+
+Exit code 0 when every gate passes, 1 otherwise. Gates that cannot run yet
+(because the target module does not exist in Wave 0A) report ``SKIP`` and do
+not fail the build — they are printed so they cannot be forgotten.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover - CI must install pyyaml
+    print("ERROR: PyYAML is required to read the curated inventories.")
+    print("       pip install pyyaml")
+    raise SystemExit(2)
+
+import scan  # noqa: E402
+
+REPO = scan.REPO
+DOCS = REPO / "docs"
+CAPABILITY_LOCK = DOCS / "capability-baseline.lock"
+
+# Shared-kernel violations that exist today and are scheduled for Wave 0B.
+# The gate fails only when a NEW violation appears, so the baseline cannot rot
+# while the fix is pending. Removing an entry from this list is part of the fix.
+KNOWN_SHARED_KERNEL_VIOLATIONS = {
+    ("config", "identity"),
+    ("common", "integration"),
+}
+
+RESULTS: list[tuple[str, str, str]] = []
+
+
+def load(name: str):
+    path = DOCS / name
+    if not path.exists():
+        raise SystemExit(f"missing inventory: {path}")
+    with open(path, encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+def report(gate: str, ok: bool, detail: str) -> None:
+    RESULTS.append((gate, "PASS" if ok else "FAIL", detail))
+
+
+def skip(gate: str, detail: str) -> None:
+    RESULTS.append((gate, "SKIP", detail))
+
+
+# ---------------------------------------------------------------------------
+# Path matching (mirrors AuthInterceptor.matchPath, generalised to mid-path `*`)
+# ---------------------------------------------------------------------------
+
+def pattern_matches(pattern: str, path: str) -> bool:
+    if not pattern:
+        return False
+    if pattern.endswith("/**"):
+        prefix = pattern[:-3]
+        return path == prefix or path.startswith(prefix + "/")
+    if pattern.endswith("/*"):
+        prefix = pattern[:-2]
+        if path == prefix or path.startswith(prefix + "/"):
+            return True
+    regex = "^" + re.escape(pattern).replace(r"\*", "[^/]+") + "$"
+    return re.match(regex, path) is not None
+
+
+def methods_of(rule_match: dict) -> list[str]:
+    method = rule_match.get("method", "ANY")
+    if isinstance(method, list):
+        return [str(item).upper() for item in method]
+    return [str(method).upper()]
+
+
+def rule_matches(rule_match: dict, http_method: str, path: str) -> bool:
+    methods = methods_of(rule_match)
+    if "ANY" not in methods and http_method.upper() not in methods:
+        return False
+    if "path" in rule_match and rule_match["path"] == path:
+        return True
+    if "path_pattern" in rule_match and pattern_matches(rule_match["path_pattern"], path):
+        return True
+    if "path_prefix" in rule_match and path.startswith(rule_match["path_prefix"]):
+        return True
+    if "path_prefix_also" in rule_match and path.startswith(rule_match["path_prefix_also"]):
+        return True
+    if "path_contains" in rule_match and rule_match["path_contains"] in path:
+        return True
+    return False
+
+
+def collect_explicit_rules(policy: dict) -> list[tuple[str, dict, str]]:
+    """Return (group, match-block, access) for every explicit policy rule.
+
+    Order matters: it mirrors ``evaluation_order`` in auth-policy.yaml, so the
+    first hit is the rule the Gateway would apply.
+    """
+    rules: list[tuple[str, dict, str]] = []
+    for group in ("excluded", "prefix_rules", "explicit_private_get",
+                  "explicit_public_write", "public_get", "public_non_api",
+                  "protected", "streams"):
+        for entry in policy.get(group) or []:
+            if not isinstance(entry, dict) or "match" not in entry:
+                continue
+            access = entry.get("access")
+            if access is None:
+                access = "public" if group in ("public_get", "public_non_api") else "authenticated"
+            rules.append((group, entry["match"], access))
+    return rules
+
+
+# ---------------------------------------------------------------------------
+# Gates
+# ---------------------------------------------------------------------------
+
+def gate_route_inventory_drift() -> None:
+    gate = "route-inventory-drift"
+    on_disk = load("route-inventory.yaml")
+    regenerated = scan.build_route_inventory()
+    stored = {r["id"] for r in on_disk["routes"]}
+    fresh = {r["id"] for r in regenerated["routes"]}
+    added = sorted(fresh - stored)
+    removed = sorted(stored - fresh)
+    if not added and not removed:
+        report(gate, True, f"{len(fresh)} routes, no drift")
+        return
+    report(gate, False,
+           f"stale inventory — added={added or 'none'} removed={removed or 'none'}; "
+           f"re-run scripts/migration/scan.py")
+
+
+def gate_api_migration_key_coverage() -> None:
+    gate = "api-migration-key-coverage"
+    routes = load("route-inventory.yaml")["routes"]
+    migration = load("api-migration.yaml")["entries"]
+    covered = {entry["id"] for entry in migration}
+    missing = sorted(
+        route["id"] for route in routes
+        if route["kind"] != "servlet" and route["id"] not in covered
+    )
+    if missing:
+        report(gate, False, f"{len(missing)} routes without a migration entry: {missing[:8]}")
+        return
+    no_target = [e["id"] for e in migration if e.get("status") == "no_v2_target"]
+    report(gate, True,
+           f"{len(covered)} entries cover every route "
+           f"({len(no_target)} marked no_v2_target)")
+
+
+def gate_auth_policy_coverage() -> None:
+    """Every route must resolve to an explicit rule.
+
+    The v1 interceptor fails *open* for unmatched reads ("未匹配的 GET 保持公开").
+    That is exactly the failure mode V9 section 103 asks about ("PRIVATE GET 无
+    PUBLIC 误放"), so this gate fails when a route only reaches `public`
+    through the catch-all default instead of an explicit public rule.
+    """
+    gate = "auth-policy-coverage"
+    policy = load("auth-policy.yaml")
+    routes = load("route-inventory.yaml")["routes"]
+    rules = collect_explicit_rules(policy)
+    mcp_paths = {entry["path"] for entry in (policy.get("mcp_inbound") or [])}
+
+    unlisted_public: list[str] = []
+    unlisted_other: list[str] = []
+    for route in routes:
+        if route["kind"] == "servlet" or route["path"] in mcp_paths:
+            continue
+        hit = None
+        for group, rule_match, access in rules:
+            if rule_matches(rule_match, route["http_method"], route["path"]):
+                hit = (group, access)
+                break
+        if hit is None:
+            if route["http_method"] in ("GET", "HEAD"):
+                unlisted_public.append(f"{route['http_method']} {route['path']}")
+            else:
+                unlisted_other.append(f"{route['http_method']} {route['path']}")
+
+    if unlisted_public:
+        report(gate, False,
+               f"{len(unlisted_public)} read routes only reach `public` via the "
+               f"catch-all default (fail-open): {unlisted_public[:8]}")
+        return
+    report(gate, True,
+           f"every route matched by an explicit rule "
+           f"({len(unlisted_other)} writes rely on the authenticated default, which is fail-closed)")
+
+
+def gate_auth_policy_token_location() -> None:
+    """Every SSE / WS endpoint must declare an explicit token_location.
+
+    Resolved against the `streams` group only: an earlier generic rule (e.g.
+    `GET /api/agent/conversations/*`) also matches these paths, but it is the
+    stream-specific declaration that the Gateway needs in order to accept the
+    `?token=` handshake path.
+    """
+    gate = "auth-policy-token-location"
+    policy = load("auth-policy.yaml")
+    routes = load("route-inventory.yaml")["routes"]
+    streams = [r for r in routes if r["stream"] != "none" and r["kind"] != "servlet"]
+    stream_rules = policy.get("streams") or []
+    allowed = {"header", "query", "header_or_query", "n/a"}
+    problems: list[str] = []
+    for route in streams:
+        entry = next(
+            (e for e in stream_rules
+             if isinstance(e, dict) and "match" in e
+             and rule_matches(e["match"], route["http_method"], route["path"])),
+            None,
+        )
+        if entry is None:
+            problems.append(f"{route['http_method']} {route['path']}: no `streams` entry")
+            continue
+        value = entry.get("token_location")
+        if value not in allowed:
+            problems.append(f"{route['http_method']} {route['path']}: token_location={value!r}")
+    if problems:
+        report(gate, False,
+               f"{len(problems)}/{len(streams)} stream endpoints lack a valid token_location: "
+               f"{problems[:6]}")
+        return
+    report(gate, True, f"{len(streams)} stream endpoints all declare token_location")
+
+
+def gate_scheduled_ownership_coverage() -> None:
+    gate = "scheduled-ownership-coverage"
+    inventory = load("scheduled-inventory.yaml")["scheduled"]
+    ownership = load("scheduled-ownership.yaml")["scheduled"]
+    known = {entry["id"] for entry in ownership}
+    missing = sorted(item["id"] for item in inventory if item["id"] not in known)
+    if missing:
+        report(gate, False, f"@Scheduled entries without ownership: {missing}")
+        return
+    report(gate, True, f"{len(inventory)}/{len(inventory)} scanned entries owned "
+                       f"(+{len(known) - len(inventory)} planned)")
+
+
+def gate_execution_scope_validation() -> None:
+    gate = "execution-scope-validation"
+    ownership = load("scheduled-ownership.yaml")["scheduled"]
+    problems: list[str] = []
+    for entry in ownership:
+        scope = entry.get("execution_scope")
+        strategy = entry.get("singleton_strategy")
+        if scope not in ("global_once", "per_instance"):
+            problems.append(f"{entry['id']}: execution_scope={scope!r}")
+            continue
+        if scope == "global_once" and (not strategy or strategy == "none"):
+            problems.append(f"{entry['id']}: global_once without singleton_strategy")
+        if scope == "per_instance" and strategy not in ("none", "local_only"):
+            problems.append(f"{entry['id']}: per_instance with global lock ({strategy})")
+        for field in ("logical_owner", "current_deployment_owner", "execution_mode"):
+            if not entry.get(field):
+                problems.append(f"{entry['id']}: {field} is empty")
+    if problems:
+        report(gate, False, "; ".join(problems[:8]))
+        return
+    report(gate, True, f"{len(ownership)} entries valid")
+
+
+def gate_table_ownership_drift() -> None:
+    gate = "table-ownership-drift"
+    inventory = {t["table"] for t in load("table-inventory.yaml")["tables"]}
+    ownership_doc = load("table-ownership.yaml")
+    owned = [entry["table"] for entry in ownership_doc["tables"]]
+    owned_set = set(owned)
+    missing = sorted(inventory - owned_set)
+    ghosts = sorted(owned_set - inventory)
+    duplicates = sorted({name for name in owned if owned.count(name) > 1})
+    problems = []
+    if missing:
+        problems.append(f"{len(missing)} unowned tables: {missing[:8]}")
+    if ghosts:
+        problems.append(f"{len(ghosts)} ghost entries: {ghosts[:8]}")
+    if duplicates:
+        problems.append(f"multiple owners: {duplicates}")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True, f"{len(owned_set)} tables, single owner each")
+
+
+def gate_config_ownership_drift() -> None:
+    gate = "config-ownership-drift"
+    inventory = load("config-inventory.yaml")["config"]
+    leaves = {entry["key"] for entry in inventory if entry["leaf"]}
+    owned = {entry["key"] for entry in load("config-ownership.yaml")["config"]}
+    missing = sorted(leaves - owned)
+    if missing:
+        report(gate, False, f"{len(missing)} config keys without an owner: {missing[:8]}")
+        return
+    report(gate, True, f"{len(owned)} leaf keys classified")
+
+
+def gate_shared_kernel_reverse_dependency() -> None:
+    gate = "shared-kernel-reverse-dependency"
+    java = scan.scan_java()
+    violations = {
+        (source, target)
+        for source, targets in java["reverse_deps"].items()
+        if source in scan.SHARED_KERNEL
+        for target in targets
+    }
+    new = sorted(violations - KNOWN_SHARED_KERNEL_VIOLATIONS)
+    fixed = sorted(KNOWN_SHARED_KERNEL_VIOLATIONS - violations)
+    if new:
+        report(gate, False, f"new shared-kernel -> business-domain imports: {new}")
+        return
+    detail = f"{len(violations)} known violation(s) still pending Wave 0B"
+    if fixed:
+        detail += f"; {len(fixed)} already fixed, remove from the allow-list: {fixed}"
+    report(gate, True, detail)
+
+
+def gate_contract_changes_completeness() -> None:
+    gate = "contract-changes-completeness"
+    baseline = load("capability-baseline.yaml")
+    changes = {entry["id"] for entry in load("contract-changes.yaml")["changes"]}
+    problems: list[str] = []
+    for entry in baseline["capabilities"]:
+        status = entry.get("status")
+        ref = entry.get("contract_change_ref")
+        if status == "changed":
+            if not ref:
+                problems.append(f"{entry['id']}: status=changed without contract_change_ref")
+            elif ref not in changes:
+                problems.append(f"{entry['id']}: contract_change_ref={ref} not found")
+        if status == "retired" and not entry.get("approval"):
+            problems.append(f"{entry['id']}: retired without approval record")
+    for entry in baseline.get("changed") or []:
+        if entry.get("contract_change_ref") not in changes:
+            problems.append(f"changed registry -> {entry.get('contract_change_ref')} not found")
+    if problems:
+        report(gate, False, "; ".join(problems[:8]))
+        return
+    report(gate, True, f"{len(changes)} contract changes, all capability refs resolve")
+
+
+def gate_capability_baseline_diff() -> None:
+    """Capability list is append-only (V9 section 12).
+
+    A committed lock file records the ids seen so far. Removing an id without
+    marking it `retired` (plus an approval) fails the gate — this is the
+    mechanism that stops the "补了又丢" cycle.
+    """
+    gate = "capability-baseline-diff"
+    baseline = load("capability-baseline.yaml")
+    ids = [entry["id"] for entry in baseline["capabilities"]]
+    duplicates = sorted({i for i in ids if ids.count(i) > 1})
+    if duplicates:
+        report(gate, False, f"duplicate capability ids: {duplicates}")
+        return
+
+    current = set(ids)
+    if not CAPABILITY_LOCK.exists():
+        CAPABILITY_LOCK.write_text("\n".join(sorted(current)) + "\n",
+                                   encoding="utf-8", newline="\n")
+        report(gate, True, f"baseline lock created with {len(current)} capabilities")
+        return
+
+    locked = {line.strip() for line in CAPABILITY_LOCK.read_text(encoding="utf-8").splitlines()
+              if line.strip()}
+    removed = sorted(locked - current)
+    added = sorted(current - locked)
+    retired = {entry["id"] for entry in baseline["capabilities"]
+               if entry.get("status") == "retired" and entry.get("approval")}
+    unapproved = sorted(set(removed) - retired)
+    if unapproved:
+        report(gate, False,
+               f"capabilities removed without status=retired + approval: {unapproved}")
+        return
+    if added:
+        CAPABILITY_LOCK.write_text("\n".join(sorted(current)) + "\n",
+                                   encoding="utf-8", newline="\n")
+    report(gate, True, f"{len(current)} capabilities ({len(added)} added, {len(removed)} retired)")
+
+
+def gate_legacy_redis_reference_check() -> None:
+    """No NEW production code may depend on the legacy Redis key families.
+
+    Wave 0A cannot remove them yet (they are the current session model), so the
+    gate counts the call sites and fails only when the count grows.
+    """
+    gate = "legacy-redis-reference-check"
+    allowed = {
+        "src/main/java/com/xander/lab/common/Constants.java",
+        "src/main/java/com/xander/lab/identity/application/AuthService.java",
+        "src/main/java/com/xander/lab/identity/application/UserAdminService.java",
+    }
+    offenders: list[str] = []
+    for path in sorted((REPO / "src" / "main" / "java").rglob("*.java")):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if "REDIS_TOKEN_PREFIX" in text or "REDIS_USER_TOKENS_PREFIX" in text:
+            rel = path.relative_to(REPO).as_posix()
+            if rel not in allowed:
+                offenders.append(rel)
+    if offenders:
+        report(gate, False, f"new references to legacy token keys: {offenders}")
+        return
+    report(gate, True, f"legacy key references confined to {len(allowed)} known files")
+
+
+def gate_gateway_forbidden_dependency() -> None:
+    gate = "gateway-forbidden-dependency-check"
+    gateway_pom = REPO / "apps" / "gateway" / "pom.xml"
+    if not gateway_pom.exists():
+        skip(gate, "apps/gateway does not exist yet (Wave 1 deliverable)")
+        return
+    text = gateway_pom.read_text(encoding="utf-8")
+    forbidden = [token for token in ("spring-boot-starter-web", "xander-webmvc-support",
+                                     "xander-mybatis-support")
+                 if token in text]
+    if forbidden:
+        report(gate, False, f"gateway depends on {forbidden}")
+        return
+    report(gate, True, "gateway dependency graph is WebFlux-clean")
+
+
+def gate_gateway_stream_proxy_config() -> None:
+    gate = "gateway-stream-proxy-config-check"
+    config = REPO / "infrastructure" / "gateway"
+    if not config.exists():
+        skip(gate, "infrastructure/gateway does not exist yet (Wave 1 deliverable)")
+        return
+    text = "".join(p.read_text(encoding="utf-8") for p in sorted(config.rglob("*.y*ml")))
+    required = ["X-Accel-Buffering", "Last-Event-ID"]
+    missing = [token for token in required if token not in text]
+    if missing:
+        report(gate, False, f"gateway stream proxy config missing: {missing}")
+        return
+    report(gate, True, "stream proxy settings present")
+
+
+def gate_flyway_validation() -> None:
+    gate = "flyway-validation"
+    migrations = REPO / "migrations"
+    if not migrations.exists():
+        skip(gate, "migrations/ does not exist yet (Wave 0A deliverable in progress)")
+        return
+    versioned = sorted((migrations / "versioned").glob("V*.sql")) \
+        if (migrations / "versioned").exists() else []
+    legacy = sorted((migrations / "legacy").glob("*.sql")) \
+        if (migrations / "legacy").exists() else []
+    versions: list[str] = []
+    problems: list[str] = []
+    for path in versioned:
+        match = re.match(r"V(\d+)__", path.name)
+        if not match:
+            problems.append(f"{path.name}: does not match V<version>__<description>.sql")
+            continue
+        versions.append(match.group(1))
+    duplicates = sorted({v for v in versions if versions.count(v) > 1})
+    if duplicates:
+        problems.append(f"duplicate versions: {duplicates}")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True, f"{len(versioned)} versioned + {len(legacy)} legacy scripts, versions unique")
+
+
+def gate_stream_ban_boundary_coverage() -> None:
+    """V9 §12 / §50 / §51：每条长连接流都必须有封禁边界实现。
+
+    这是 §12「补了又丢」的机器化防线。机器能回答"哪些路由是流"
+    （route-inventory.yaml 的 stream 字段），但"边界实现在哪个文件里"是语义信息，
+    登记在 stream-hosts.yaml。本门禁同时校验三件事：
+
+    1. 每条 ``stream != none`` 的路由都被 stream-hosts.yaml 覆盖（或显式列进
+       ``unregistered_routes`` 并给出理由）；
+    2. 登记的 boundary_files 真实存在；
+    3. 每个 boundary_files 确实引用了 ``ConnectionRegistry``。
+
+    第 3 条是关键：它防止"文件在、但里面没真的登记连接"这种空壳登记。
+    """
+    gate = "stream-ban-boundary-coverage"
+    inventory = load("route-inventory.yaml")
+    hosts_file = DOCS / "stream-hosts.yaml"
+    if not hosts_file.exists():
+        report(gate, False, "docs/stream-hosts.yaml missing — stream hosts are unregistered")
+        return
+    with open(hosts_file, encoding="utf-8") as handle:
+        registry = yaml.safe_load(handle)
+
+    stream_routes = {
+        route["id"]: route.get("stream")
+        for route in inventory.get("routes", [])
+        if route.get("stream") not in (None, "none")
+    }
+    unregistered = set(registry.get("unregistered_routes") or [])
+
+    covered: set[str] = set()
+    problems: list[str] = []
+    for host in registry.get("hosts") or []:
+        host_id = host.get("id", "<unnamed>")
+        routes = host.get("routes") or []
+        if not routes:
+            problems.append(f"{host_id}: no routes declared")
+        for route_id in routes:
+            if route_id not in stream_routes:
+                problems.append(f"{host_id}: route '{route_id}' is not a stream route in route-inventory")
+            covered.add(route_id)
+
+        files = host.get("boundary_files") or []
+        if not files:
+            problems.append(f"{host_id}: no boundary_files declared")
+        for rel in files:
+            path = REPO / rel
+            if not path.exists():
+                problems.append(f"{host_id}: boundary file missing: {rel}")
+                continue
+            text = path.read_text(encoding="utf-8")
+            if "ConnectionRegistry" not in text:
+                problems.append(
+                    f"{host_id}: {rel} does not reference ConnectionRegistry "
+                    "(connection is never registered)")
+
+    missing = sorted(set(stream_routes) - covered - unregistered)
+    if missing:
+        problems.append(
+            f"{len(missing)} stream route(s) have no registered ban boundary: {missing}")
+
+    stale = sorted(covered - set(stream_routes))
+    if stale:
+        problems.append(f"stream-hosts.yaml references unknown routes: {stale}")
+
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True,
+           f"{len(stream_routes)} stream routes covered by {len(registry.get('hosts') or [])} host(s)"
+           + (f", {len(unregistered)} explicitly unregistered" if unregistered else ""))
+
+
+GATES = {
+    "route-inventory-drift": gate_route_inventory_drift,
+    "api-migration-key-coverage": gate_api_migration_key_coverage,
+    "auth-policy-coverage": gate_auth_policy_coverage,
+    "auth-policy-token-location": gate_auth_policy_token_location,
+    "scheduled-ownership-coverage": gate_scheduled_ownership_coverage,
+    "execution-scope-validation": gate_execution_scope_validation,
+    "table-ownership-drift": gate_table_ownership_drift,
+    "config-ownership-drift": gate_config_ownership_drift,
+    "shared-kernel-reverse-dependency": gate_shared_kernel_reverse_dependency,
+    "contract-changes-completeness": gate_contract_changes_completeness,
+    "capability-baseline-diff": gate_capability_baseline_diff,
+    "legacy-redis-reference-check": gate_legacy_redis_reference_check,
+    "gateway-forbidden-dependency-check": gate_gateway_forbidden_dependency,
+    "gateway-stream-proxy-config-check": gate_gateway_stream_proxy_config,
+    "flyway-validation": gate_flyway_validation,
+    "stream-ban-boundary-coverage": gate_stream_ban_boundary_coverage,
+}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("gates", nargs="*", help="run only these gates")
+    parser.add_argument("--list", action="store_true")
+    parser.add_argument("--json", action="store_true", help="emit machine-readable output")
+    args = parser.parse_args()
+
+    if args.list:
+        for name in GATES:
+            print(name)
+        return 0
+
+    selected = args.gates or list(GATES)
+    unknown = [name for name in selected if name not in GATES]
+    if unknown:
+        print(f"unknown gates: {unknown}")
+        return 2
+
+    for name in selected:
+        GATES[name]()
+
+    if args.json:
+        print(json.dumps([{"gate": g, "status": s, "detail": d} for g, s, d in RESULTS],
+                         ensure_ascii=False, indent=2))
+    else:
+        width = max(len(gate) for gate, _, _ in RESULTS)
+        for gate, status, detail in RESULTS:
+            print(f"{status:4}  {gate.ljust(width)}  {detail}")
+
+    failures = [gate for gate, status, _ in RESULTS if status == "FAIL"]
+    skipped = [gate for gate, status, _ in RESULTS if status == "SKIP"]
+    print()
+    print(f"{len(RESULTS)} gates: {len(RESULTS) - len(failures) - len(skipped)} pass, "
+          f"{len(failures)} fail, {len(skipped)} skip")
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

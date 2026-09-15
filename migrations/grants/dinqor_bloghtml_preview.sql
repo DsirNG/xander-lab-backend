@@ -1,0 +1,21 @@
+-- DinQorAI microservice migration — GRANT script for `dinqor_bloghtml_preview` (V9 §63 / §66).
+--
+-- GENERATED FILE. Do not hand-edit.
+--   source : docs/table-ownership.yaml
+--   tool   : scripts/migration/gen_grants.py
+--
+-- Effective wave: wave1
+--   Wave 0A: generate only, do not apply (V9 §6: 暂不强制拆进程)
+--   Wave 1 : apply together with the first real split, in the SAME change window
+--            that narrows core-host — otherwise ownership is a paper concept.
+--
+-- This account holds DML only. It must never receive DDL rights
+-- (V9 §102 禁止项: 业务服务拿 DDL 权限).
+--
+-- Idempotent: safe to re-run.
+
+
+-- No table grants: this service owns no MySQL tables.
+-- dinqor-bloghtml-preview is Redis-only (TTL preview sessions, no schema).
+-- Keep the account so the service can still be granted future tables
+-- without a rename, but grant it NOTHING today.

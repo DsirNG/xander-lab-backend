@@ -51,6 +51,15 @@ public class AuthInterceptor implements HandlerInterceptor {
             "GET:/api/agent/conversations",
             "GET:/api/agent/conversations/*",
             "POST:/api/agent/conversations/*",
+            // 用户技能库与远端 MCP 服务器配置都是「自己名下」的私有资料：
+            // 控制器注释明确要求登录（AgentSkillController「Authenticated API」、
+            // AgentMcpServerController「用户自己的远端 MCP 服务器配置」），
+            // 但此前没有登记 → 落到「未匹配的 GET 默认公开」兜底，变成匿名可读。
+            // 归属过滤在服务层，鉴权必须在这里，两者缺一不可。
+            "GET:/api/agent/skills",
+            "GET:/api/agent/skills/*",
+            "GET:/api/agent/mcp-servers",
+            "GET:/api/agent/mcp-servers/*",
             // 撤销分享链接同样属于私有写操作，需显式登记而非依赖兜底。
             "DELETE:/api/agent/conversations/*",
             // 个人知识、测验会话与录音任务全部属于当前用户，读写都必须显式鉴权。

@@ -1,0 +1,194 @@
+# DinQorAI 微服务迁移 — 定时任务归属清单（人工填写语义）
+#
+# 机器键集合来源：docs/scheduled-inventory.yaml（scripts/migration/scan.py 扫描 @Scheduled）
+# CI 门禁 `scheduled-ownership-coverage` 校验：
+#   1. scheduled-inventory.yaml 中每个 id 都必须在本文件出现（覆盖率 100%）
+#   2. execution_mode / execution_scope 非空且取值合法
+#   3. execution_scope = global_once  → singleton_strategy 必须存在（不得为 none）
+#   4. execution_scope = per_instance → singleton_strategy 必须为 none / local_only
+#      （V9 §69：给 per_instance 加全局锁会让 N-1 个实例的本地状态永不刷新，
+#       而"不重复执行"的验收指标仍然通过 —— 这是一个不会失败的失败）
+#
+# execution_scope 双语义是 V9 的硬性字段（§67）：只写 singleton_strategy 不足以表达语义。
+
+generated_from: docs/scheduled-inventory.yaml
+
+# Wave 0A 扫描结果（9 项）+ 新增项（6 项），共 15 项。
+counts:
+  scanned: 9
+  planned: 6
+  total: 15
+
+scheduled:
+  # ===================== Wave 0A 实际扫描到的 9 项 =====================
+
+  - id: agent-tool-invocation-reconciler
+    logical_owner: agent
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: active
+    scan_ref: src/main/java/com/xander/lab/agent/application/AgentToolInvocationReconciler.java:44
+    notes: "工具轨迹按身份配对键的未知调用回收。现网已有 DB 原子领取 + 陈旧领取回收，换 ShedLock 时必须保留原语义。"
+
+  - id: blog-content-plan-scheduler
+    logical_owner: publishing
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: active
+    scan_ref: src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java:39
+    notes: "现网为单实例，靠 DB 原子领取保证恰好一次。多实例前必须补齐互斥。"
+
+  - id: email-reminder-scheduler
+    logical_owner: automation
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: active
+    scan_ref: src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java:50
+
+  - id: csdn-authorization-service
+    logical_owner: integration
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: active
+    scan_ref: src/main/java/com/xander/lab/integration/mcp/csdn/application/CsdnAuthorizationService.java:388
+    notes: >-
+      V9 §71 要求「必须由 Wave 0A 的实际代码审查确认，不得默认填 global_once」。
+      代码审查结论：cleanupExpiredSessions() 在 synchronized(this) 内遍历**本实例内存**
+      的会话/队列（closeExpired()），随后 dispose 本实例持有的 RemoteWebDriver（Selenium sidecar）。
+      实例间不共享任何授权会话状态 → 必须 per_instance。若误填 global_once，
+      N-1 个实例上的 headless Chrome 永远不会被回收（泄漏），而验收指标仍显示"不重复执行"。
+
+  - id: juejin-authorization-service
+    logical_owner: integration
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: active
+    scan_ref: src/main/java/com/xander/lab/integration/mcp/juejin/application/JuejinAuthorizationService.java:431
+    notes: "同 csdn-authorization-service，代码审查确认 per_instance（本实例内存队列 + 本实例 WebDriver）。"
+
+  - id: knowledge-upload-session-reaper
+    logical_owner: knowledgebase
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: active
+    scan_ref: src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java:38
+
+  - id: recitation-worker
+    logical_owner: recitation
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: active
+    scan_ref: src/main/java/com/xander/lab/recitation/application/RecitationWorker.java:38
+
+  - id: img2three-service
+    logical_owner: studio
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: active
+    scan_ref: src/main/java/com/xander/lab/studio/application/Img2ThreeService.java:89
+    notes: "failAbandonedRunningTasks：回收超时未结束的 Img2Three 任务，操作的是 DB 行。"
+
+  - id: redis-health-monitor
+    logical_owner: observability
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: active
+    scan_ref: src/main/java/com/xander/lab/common/RedisHealthMonitor.java:44
+    notes: >-
+      V9 §73：必须移出 common。当前用 synchronized + 实例字段（consecutiveFailures /
+      outageNotified / lastAlertAttemptAt）做"每次故障只发一封邮件"的去重。
+      抽 jar 后每个服务 × 每个实例各跑一份 → 一次 Redis 故障发 5×N 封告警邮件。
+      它不碰业务表，所以"DB 原子领取"那套救不了它，必须 ShedLock。
+      依赖必须改为 AlertPort，而不是 MailService implementation（消除 common → integration 反向依赖）。
+
+  # ===================== V9 新增项（Wave 0A 设计，Wave 2 上线） =====================
+
+  - id: auth-refresh-history-cleanup
+    logical_owner: identity
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: planned
+    notes: "V9 §41 / §42。DELETE ... WHERE retained_until < NOW() ORDER BY retained_until LIMIT ?。batch 500~1000，每批独立事务，批间 sleep 100~500ms，依赖 idx_refresh_history_retained_until。MySQL-backed ShedLock，避免清理任务本身依赖 Redis。"
+
+  - id: auth-refresh-ciphertext-cleanup
+    logical_owner: identity
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: planned
+    notes: "V9 §43。UPDATE ... SET successor_token_ciphertext = NULL WHERE successor_ciphertext_expires_at < NOW()。30~60 秒一次。安全语义依赖时间判断，不依赖清理任务准点运行。"
+
+  - id: security-denylist-reconciler-gateway
+    logical_owner: identity
+    current_deployment_owner: dinqor-gateway
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: planned
+    notes: "V9 §69 / §70。每个 Gateway 实例维护自己的 deniedAccountIds 与自己的 cursor。reconcile interval = 1~2 秒（与 §27 / §28 的 5 秒预算一致）。禁止全局 ShedLock。"
+
+  - id: security-state-reconciler-core-host
+    logical_owner: identity
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: planned
+    notes: "V9 §52：core-host 承载 agent SSE/WS、automation SSE、blogagent SSE，且 Wave 2 之后、Wave 3 之前仍承载 studio 的 Img2Three SSE —— 因此 core-host 必须实现 LocalSecurityStateCache 与连接注册表。"
+
+  - id: security-state-reconciler-agent
+    logical_owner: identity
+    current_deployment_owner: dinqor-agent
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: planned
+    effective_from: wave2
+    notes: "V9 §52。Wave 2 起 agent 成为对话 SSE/WS 宿主。"
+
+  - id: security-state-reconciler-content-automation
+    logical_owner: identity
+    current_deployment_owner: dinqor-content-automation
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: planned
+    effective_from: wave2
+    notes: "V9 §52。Wave 2 起承载 automation SSE + blogagent SSE。"
+
+# ===================== 判定规则（取代固定清单，V9 §52） =====================
+rule:
+  statement: >-
+    任一当前部署单元，凡其承载的业务域中存在 SSE/WS，都必须维护 Security Local Cache，
+    并在 Wave 2 Staging 中验证封禁生效。
+  derived_hosts:
+    - dinqor-gateway
+    - dinqor-core-host
+    - dinqor-agent
+    - dinqor-content-automation
+    - dinqor-studio
+  stream_hosts_by_wave:
+    - wave1: [dinqor-gateway, dinqor-core-host]
+    - wave2: [dinqor-gateway, dinqor-core-host, dinqor-agent, dinqor-content-automation]
+    - wave3+: [dinqor-gateway, dinqor-core-host, dinqor-agent, dinqor-content-automation, dinqor-studio]

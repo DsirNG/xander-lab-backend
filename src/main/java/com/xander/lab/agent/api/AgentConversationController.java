@@ -8,6 +8,8 @@ import com.xander.lab.agent.application.AgentAttachmentService;
 import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.agent.application.AgentApprovalService;
 import com.xander.lab.common.Result;
+import com.xander.lab.common.security.ConnectionRegistry;
+import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.identity.security.UserContext;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -46,6 +48,10 @@ public class AgentConversationController {
     private final TaskExecutor agentTaskExecutor;
     private final TaskExecutor agentSseExecutor;
     private final TaskScheduler agentHeartbeatScheduler;
+    /** 本实例的已封禁账号集合：SSE 发送前 O(1) 校验（V9 §50 手段 B）。 */
+    private final SecurityStateCache securityStateCache;
+    /** 本实例的活跃连接注册表：封禁时主动断开已建立的流（V9 §49 / §28.2 手段 A）。 */
+    private final ConnectionRegistry connectionRegistry;
 
     @Autowired
     public AgentConversationController(AgentConversationService service,
@@ -54,7 +60,9 @@ public class AgentConversationController {
                                        AgentApprovalService approvalService,
                                        @Qualifier("agentTaskExecutor") TaskExecutor agentTaskExecutor,
                                        @Qualifier("agentSseExecutor") TaskExecutor agentSseExecutor,
-                                       @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler) {
+                                       @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler,
+                                       SecurityStateCache securityStateCache,
+                                       ConnectionRegistry connectionRegistry) {
         this.service = service;
         this.attachmentService = attachmentService;
         this.eventService = eventService;
@@ -62,6 +70,8 @@ public class AgentConversationController {
         this.agentTaskExecutor = agentTaskExecutor;
         this.agentSseExecutor = agentSseExecutor;
         this.agentHeartbeatScheduler = agentHeartbeatScheduler;
+        this.securityStateCache = securityStateCache;
+        this.connectionRegistry = connectionRegistry;
     }
 
     /** Compatibility constructor for focused controller tests that do not exercise approvals. */
@@ -72,7 +82,24 @@ public class AgentConversationController {
                                 TaskExecutor agentSseExecutor,
                                 TaskScheduler agentHeartbeatScheduler) {
         this(service, attachmentService, eventService, null, agentTaskExecutor, agentSseExecutor,
-                agentHeartbeatScheduler);
+                agentHeartbeatScheduler, new SecurityStateCache(), new ConnectionRegistry());
+    }
+
+    /**
+     * Compatibility constructor for focused controller tests that need approvals
+     * but not the security plane. Uses isolated (empty) cache/registry instances so the
+     * ban path is inert; tests that exercise it should build the real beans explicitly.
+     */
+    AgentConversationController(AgentConversationService service,
+                                AgentAttachmentService attachmentService,
+                                AgentEventService eventService,
+                                AgentApprovalService approvalService,
+                                TaskExecutor agentTaskExecutor,
+                                TaskExecutor agentSseExecutor,
+                                TaskScheduler agentHeartbeatScheduler) {
+        this(service, attachmentService, eventService, approvalService, agentTaskExecutor,
+                agentSseExecutor, agentHeartbeatScheduler, new SecurityStateCache(),
+                new ConnectionRegistry());
     }
 
     /** 根据首条消息确定标题并创建 ready 会话壳；消息执行仍由 /messages/stream 负责。 */
@@ -176,32 +203,34 @@ public class AgentConversationController {
         long runVersion = claimed.getRunVersion();
         SseEmitter emitter = createEmitter(id, response);
         AtomicBoolean subscriberOpen = new AtomicBoolean(true);
+        SseConnectionHandle handle = new SseConnectionHandle(id, userId, emitter, subscriberOpen);
         ScheduledFuture<?> heartbeat;
         try {
-            heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
+            heartbeat = scheduleHeartbeat(handle);
         } catch (RuntimeException exception) {
-            failClaimedStream(id, userId, runVersion, emitter, subscriberOpen, null);
+            failClaimedStream(id, userId, runVersion, handle, null);
             return emitter;
         }
-        registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
-        send(id, emitter, subscriberOpen, null, "started",
+        registerSubscriberCallbacks(handle, heartbeat);
+        connectionRegistry.register(handle);
+        send(handle, null, "started",
                 Map.of("phase", "understanding", "runVersion", runVersion));
         try {
             CompletableFuture.runAsync(() -> {
                 try {
                     service.executeClaimedTurn(id, userId, runVersion, content,
                             request.isDeepThinking(),
-                            event -> send(id, emitter, subscriberOpen, event));
+                            event -> send(handle, event));
                 } catch (Exception exception) {
                     // executeClaimedTurn persists and delivers the durable error event.
                     log.debug("agent claimed turn ended exceptionally for conversation {}", id);
                 } finally {
                     heartbeat.cancel(false);
-                    completeSubscriber(emitter, subscriberOpen);
+                    completeSubscriber(handle);
                 }
             }, agentTaskExecutor);
         } catch (RuntimeException exception) {
-            failClaimedStream(id, userId, runVersion, emitter, subscriberOpen, heartbeat);
+            failClaimedStream(id, userId, runVersion, handle, heartbeat);
         }
         return emitter;
     }
@@ -249,24 +278,25 @@ public class AgentConversationController {
         long cursor = resolveCursor(lastEventId, afterEventId);
         SseEmitter emitter = createEmitter(id, response);
         AtomicBoolean subscriberOpen = new AtomicBoolean(true);
+        SseConnectionHandle handle = new SseConnectionHandle(id, userId, emitter, subscriberOpen);
         ScheduledFuture<?> heartbeat;
         try {
-            heartbeat = scheduleHeartbeat(id, emitter, subscriberOpen);
+            heartbeat = scheduleHeartbeat(handle);
         } catch (RuntimeException exception) {
-            completeSubscriber(emitter, subscriberOpen);
+            completeSubscriber(handle);
             throw serviceUnavailable(exception);
         }
-        registerSubscriberCallbacks(id, emitter, subscriberOpen, heartbeat);
-        send(id, emitter, subscriberOpen, null, "started",
+        registerSubscriberCallbacks(handle, heartbeat);
+        connectionRegistry.register(handle);
+        send(handle, null, "started",
                 Map.of("phase", "recovering", "runVersion", runVersion));
         try {
             CompletableFuture.runAsync(
-                    () -> followEvents(id, userId, runVersion, cursor,
-                            emitter, subscriberOpen, heartbeat),
+                    () -> followEvents(id, userId, runVersion, cursor, handle),
                     agentSseExecutor);
         } catch (RuntimeException exception) {
             heartbeat.cancel(false);
-            completeSubscriber(emitter, subscriberOpen);
+            completeSubscriber(handle);
             throw serviceUnavailable(exception);
         }
         return emitter;
@@ -286,61 +316,65 @@ public class AgentConversationController {
         return new SseEmitter(0L);
     }
 
-    ScheduledFuture<?> scheduleHeartbeat(Long conversationId, SseEmitter emitter,
-                                         AtomicBoolean subscriberOpen) {
-        return agentHeartbeatScheduler.scheduleAtFixedRate(
-                () -> sendHeartbeat(conversationId, emitter, subscriberOpen),
+    ScheduledFuture<?> scheduleHeartbeat(SseConnectionHandle handle) {
+        ScheduledFuture<?> future = agentHeartbeatScheduler.scheduleAtFixedRate(
+                () -> sendHeartbeat(handle),
                 Instant.now().plus(HEARTBEAT_INTERVAL),
                 HEARTBEAT_INTERVAL);
+        handle.heartbeat = future;
+        return future;
     }
 
-    private void registerSubscriberCallbacks(Long conversationId, SseEmitter emitter,
-                                             AtomicBoolean subscriberOpen,
+    private void registerSubscriberCallbacks(SseConnectionHandle handle,
                                              ScheduledFuture<?> heartbeat) {
         Runnable close = () -> {
-            subscriberOpen.set(false);
+            handle.subscriberOpen.set(false);
             heartbeat.cancel(false);
-            log.debug("agent SSE subscriber closed for conversation {}", conversationId);
+            connectionRegistry.unregister(handle);
+            log.debug("agent SSE subscriber closed for conversation {}", handle.conversationId);
         };
-        emitter.onCompletion(close);
-        emitter.onTimeout(close);
-        emitter.onError(ignored -> close.run());
+        handle.emitter.onCompletion(close);
+        handle.emitter.onTimeout(close);
+        handle.emitter.onError(ignored -> close.run());
     }
 
-    private void send(Long conversationId, SseEmitter emitter, AtomicBoolean subscriberOpen,
-                      AgentEvent event) {
-        send(conversationId, emitter, subscriberOpen, event.getId(),
-                event.getEventType(), event.getDataContent());
+    private void send(SseConnectionHandle handle, AgentEvent event) {
+        send(handle, event.getId(), event.getEventType(), event.getDataContent());
     }
 
-    private void send(Long conversationId, SseEmitter emitter, AtomicBoolean subscriberOpen,
-                      Long eventId, String event, Object data) {
-        if (!subscriberOpen.get()) return;
+    private void send(SseConnectionHandle handle, Long eventId, String event, Object data) {
+        if (!handle.subscriberOpen.get()) return;
+        // V9 §50 手段 B（兜底）：SseEmitter(0L) 永不超时，所以每次发送前都要校验封禁状态。
+        // 手段 A（reconciler 主动断开）是主要手段；这里保证即使事件丢失也不会继续推送。
+        if (securityStateCache.isDisabled(handle.accountId)) {
+            log.info("[Security] 账号已封禁，终止已建立的 SSE 推送 account={}", handle.accountId);
+            completeSubscriber(handle);
+            return;
+        }
         try {
             SseEmitter.SseEventBuilder builder = SseEmitter.event().name(event).data(data);
             if (eventId != null) builder.id(eventId.toString());
-            emitter.send(builder);
+            handle.emitter.send(builder);
         } catch (IOException | IllegalStateException ignored) {
-            subscriberOpen.set(false);
+            handle.subscriberOpen.set(false);
             log.debug("agent SSE event {} was dropped for closed subscriber of conversation {}",
-                    event, conversationId);
+                    event, handle.conversationId);
         }
     }
 
     private void followEvents(Long conversationId, Long userId, long runVersion, long initialCursor,
-                              SseEmitter emitter, AtomicBoolean subscriberOpen,
-                              ScheduledFuture<?> heartbeat) {
+                              SseConnectionHandle handle) {
         try {
             eventService.follow(conversationId, userId, runVersion, initialCursor,
-                    event -> send(conversationId, emitter, subscriberOpen, event));
+                    event -> send(handle, event));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
         } catch (RuntimeException exception) {
             log.warn("agent event recovery failed for conversation {}: {}",
                     conversationId, exception.getMessage());
         } finally {
-            heartbeat.cancel(false);
-            completeSubscriber(emitter, subscriberOpen);
+            handle.heartbeatCancel();
+            completeSubscriber(handle);
         }
     }
 
@@ -355,21 +389,31 @@ public class AgentConversationController {
         return afterEventId == null ? 0L : Math.max(0L, afterEventId);
     }
 
-    private void sendHeartbeat(Long conversationId, SseEmitter emitter, AtomicBoolean subscriberOpen) {
-        if (!subscriberOpen.get()) return;
+    private void sendHeartbeat(SseConnectionHandle handle) {
+        if (!handle.subscriberOpen.get()) return;
+        // 心跳同样触发封禁校验：这样即使业务长时间无事件，也能在 SLO 内断开
+        // （V9 §50「Heartbeat 也应触发检查」）。
+        // 注意 §28.4：心跳只是兜底，主要手段是 reconciler 的主动断开；
+        // 若要把心跳当主要手段，interval 必须 <= 2 秒并写进 contract-changes.yaml。
+        if (securityStateCache.isDisabled(handle.accountId)) {
+            log.info("[Security] 账号已封禁，心跳终止 SSE account={}", handle.accountId);
+            completeSubscriber(handle);
+            return;
+        }
         try {
-            emitter.send(SseEmitter.event().comment("heartbeat"));
+            handle.emitter.send(SseEmitter.event().comment("heartbeat"));
         } catch (IOException | IllegalStateException ignored) {
-            subscriberOpen.set(false);
+            handle.subscriberOpen.set(false);
             log.debug("agent SSE heartbeat dropped for closed subscriber of conversation {}",
-                    conversationId);
+                    handle.conversationId);
         }
     }
 
-    private void completeSubscriber(SseEmitter emitter, AtomicBoolean subscriberOpen) {
-        if (subscriberOpen.getAndSet(false)) {
+    private void completeSubscriber(SseConnectionHandle handle) {
+        connectionRegistry.unregister(handle);
+        if (handle.subscriberOpen.getAndSet(false)) {
             try {
-                emitter.complete();
+                handle.emitter.complete();
             } catch (IllegalStateException ignored) {
                 // The client or container already completed the response.
             }
@@ -377,20 +421,81 @@ public class AgentConversationController {
     }
 
     private void failClaimedStream(Long conversationId, Long userId, long runVersion,
-                                   SseEmitter emitter, AtomicBoolean subscriberOpen,
+                                   SseConnectionHandle handle,
                                    ScheduledFuture<?> heartbeat) {
         if (heartbeat != null) heartbeat.cancel(false);
         service.failClaimedTurn(conversationId, userId, runVersion,
                 "智能体执行队列繁忙，请稍后重试");
         AgentEvent terminal = eventService.latestTerminal(conversationId, runVersion);
-        if (terminal != null) send(conversationId, emitter, subscriberOpen, terminal);
-        completeSubscriber(emitter, subscriberOpen);
+        if (terminal != null) send(handle, terminal);
+        completeSubscriber(handle);
     }
 
     private org.springframework.web.server.ResponseStatusException serviceUnavailable(RuntimeException cause) {
         return new org.springframework.web.server.ResponseStatusException(
                 org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE,
                 "智能体事件订阅繁忙，请稍后重试", cause);
+    }
+
+    /**
+     * 一条 SSE 订阅的连接句柄（V9 §49）。
+     *
+     * <p>把「会话、账号、emitter、开闭标志、心跳任务」打成一个对象，
+     * 既让发送边界能一次拿到全部上下文，也让封禁时可以从注册表里
+     * 反查到需要关闭的连接。</p>
+     *
+     * <p>{@link #close(String)} 是封禁路径的入口：它把流以 403 结束，
+     * 触发 {@code onError} 回调，从而取消心跳并把自己从注册表摘掉。</p>
+     */
+    final class SseConnectionHandle implements ConnectionRegistry.ConnectionHandle {
+        private final Long conversationId;
+        private final Long accountId;
+        private final SseEmitter emitter;
+        private final AtomicBoolean subscriberOpen;
+        private volatile ScheduledFuture<?> heartbeat;
+
+        SseConnectionHandle(Long conversationId, Long accountId, SseEmitter emitter,
+                            AtomicBoolean subscriberOpen) {
+            this.conversationId = conversationId;
+            this.accountId = accountId;
+            this.emitter = emitter;
+            this.subscriberOpen = subscriberOpen;
+        }
+
+        @Override
+        public Long accountId() {
+            return accountId;
+        }
+
+        @Override
+        public String kind() {
+            return ConnectionRegistry.KIND_SSE;
+        }
+
+        @Override
+        public void close(String reason) {
+            if (!subscriberOpen.getAndSet(false)) {
+                return;
+            }
+            heartbeatCancel();
+            connectionRegistry.unregister(this);
+            try {
+                emitter.completeWithError(new ResponseStatusException(HttpStatus.FORBIDDEN, reason));
+            } catch (IllegalStateException ignored) {
+                try {
+                    emitter.complete();
+                } catch (IllegalStateException ignoredAgain) {
+                    // 客户端或容器已经结束了响应
+                }
+            }
+        }
+
+        void heartbeatCancel() {
+            ScheduledFuture<?> current = heartbeat;
+            if (current != null) {
+                current.cancel(false);
+            }
+        }
     }
 
 }

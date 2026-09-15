@@ -2,6 +2,7 @@ package com.xander.lab.blogagent.api;
 
 import com.xander.lab.blogagent.application.BlogAgentEventService;
 import com.xander.lab.blogagent.application.BlogAgentService;
+import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.identity.security.UserContext;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
@@ -17,7 +18,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,12 +46,13 @@ class BlogAgentControllerTest {
     void closedSubscriberDoesNotPropagateIntoTaskExecution() {
         BlogAgentController controller = new BlogAgentController(null, null, null, null, null);
         SseEmitter emitter = new SseEmitter(0L);
-        AtomicBoolean subscriberOpen = new AtomicBoolean(true);
+        BlogAgentController.SseSubscriber subscriber = new BlogAgentController.SseSubscriber(
+                new ConnectionRegistry(), 7L, 42L, emitter);
         emitter.complete();
 
-        assertThatCode(() -> controller.send(7L, emitter, subscriberOpen, "delta", "content"))
+        assertThatCode(() -> controller.send(subscriber, "delta", "content"))
                 .doesNotThrowAnyException();
-        assertThat(subscriberOpen).isFalse();
+        assertThat(subscriber.isOpen()).isFalse();
     }
 
     @Test
@@ -62,10 +63,11 @@ class BlogAgentControllerTest {
                 any(Runnable.class), any(Instant.class), eq(Duration.ofSeconds(15)));
         BlogAgentController controller = new BlogAgentController(
                 null, null, null, null, scheduler);
+        BlogAgentController.SseSubscriber subscriber = new BlogAgentController.SseSubscriber(
+                new ConnectionRegistry(), 7L, 42L, new SseEmitter(0L));
         Instant beforeScheduling = Instant.now();
 
-        ScheduledFuture<?> result = controller.scheduleHeartbeat(
-                7L, new SseEmitter(0L), new AtomicBoolean(true));
+        ScheduledFuture<?> result = controller.scheduleHeartbeat(subscriber);
 
         ArgumentCaptor<Instant> startTime = ArgumentCaptor.forClass(Instant.class);
         verify(scheduler).scheduleAtFixedRate(

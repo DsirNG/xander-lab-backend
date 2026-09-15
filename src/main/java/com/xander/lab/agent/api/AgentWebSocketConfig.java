@@ -4,6 +4,8 @@ import com.xander.lab.agent.application.AgentConversationService;
 import com.xander.lab.agent.application.AgentEventBus;
 import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
+import com.xander.lab.common.security.ConnectionRegistry;
+import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.identity.application.AuthService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -32,6 +34,9 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
     private final TaskExecutor agentSseExecutor;
     private final TaskScheduler agentHeartbeatScheduler;
     private final AgentConversationMapper conversationMapper;
+    /** §52 判定：/ws/agent 的宿主必须维护 Security Local Cache 与连接注册表。 */
+    private final SecurityStateCache securityStateCache;
+    private final ConnectionRegistry connectionRegistry;
 
     public AgentWebSocketConfig(AgentEventService eventService,
                                 AgentEventBus eventBus,
@@ -40,7 +45,9 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
                                 ObjectMapper objectMapper,
                                 @Qualifier("agentSseExecutor") TaskExecutor agentSseExecutor,
                                 @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler,
-                                AgentConversationMapper conversationMapper) {
+                                AgentConversationMapper conversationMapper,
+                                SecurityStateCache securityStateCache,
+                                ConnectionRegistry connectionRegistry) {
         this.eventService = eventService;
         this.eventBus = eventBus;
         this.authService = authService;
@@ -49,6 +56,8 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
         this.agentSseExecutor = agentSseExecutor;
         this.agentHeartbeatScheduler = agentHeartbeatScheduler;
         this.conversationMapper = conversationMapper;
+        this.securityStateCache = securityStateCache;
+        this.connectionRegistry = connectionRegistry;
     }
 
     @Override
@@ -62,6 +71,6 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
     public AgentStreamWebSocketHandler agentStreamWebSocketHandler() {
         return new AgentStreamWebSocketHandler(
                 eventService, eventBus, objectMapper, agentSseExecutor, agentHeartbeatScheduler,
-                conversationMapper);
+                conversationMapper, securityStateCache, connectionRegistry);
     }
 }

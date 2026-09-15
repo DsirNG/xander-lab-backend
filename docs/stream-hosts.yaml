@@ -1,0 +1,107 @@
+# 长连接宿主的封禁边界登记（V9 §12 / §49 / §50 / §51 / §52）
+#
+# 为什么需要这份文件：
+# 「封禁必须能终止已建立的流」这条能力在 V7 → V8 → V9 三版文档里反复出现、又反复丢失
+# （V9 §12 称之为"补了又丢"）。机器能回答"哪些路由是流"（route-inventory.yaml 的
+# stream 字段），但"这条流的封禁边界实现在哪个文件里"是语义信息，必须人工登记。
+#
+# CI 门禁 stream-ban-boundary-coverage 拿本文件与 route-inventory.yaml 比对：
+#   1) 每一条 stream != none 的路由都必须在 hosts 里被覆盖；
+#   2) 每条 host 的 boundary_files 必须真实存在；
+#   3) 每个 boundary_files 必须引用 ConnectionRegistry（即真的登记了连接）。
+# 新增流端点时若不登记，门禁失败 —— 这就是阻止"补了又丢"的机制。
+
+generated_by: human
+ref: "V9 §12 / §49 / §50 / §51 / §52"
+
+contract:
+  shared_kernel_vocabulary:
+    - com.xander.lab.common.security.ConnectionRegistry
+    - com.xander.lab.common.security.SecurityStateCache
+  close_reason: ACCOUNT_DISABLED
+  ws_close_code: 4403
+  mechanisms:
+    - id: A
+      name: registry-active-close
+      primary: true
+      description: >-
+        连接登记进每实例 ConnectionRegistry；SecurityStateReconciler
+        （execution_scope=per_instance，interval 1.5s）命中封禁后调用 closeAll 主动断开。
+    - id: B
+      name: send-boundary-check
+      primary: false
+      description: >-
+        每一帧出站前（含心跳）O(1) 校验 SecurityStateCache.isDisabled。
+        兜底手段，覆盖"事件已到宿主、reconciler 尚未扫到"的 1~2 秒窗口。
+
+hosts:
+  - id: agent-conversation-sse
+    deployment_unit: dinqor-agent
+    routes:
+      - agent-get-agent-conversations-events
+      - agent-post-agent-conversations-messages-stream
+    boundary_files:
+      - src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    heartbeat: "SseEmitter 心跳 15s，走同一出口校验"
+    tests:
+      - src/test/java/com/xander/lab/agent/api/AgentConversationControllerTest.java
+    notes: "SseConnectionHandle 以 completeWithError(403) 结束流；封禁后不再发 payload 与心跳。"
+
+  - id: blogagent-task-sse
+    deployment_unit: dinqor-agent
+    routes:
+      - blogagent-get-blog-agent-tasks-events
+      - blogagent-post-blog-agent-tasks-messages-stream
+      - blogagent-post-blog-agent-tasks-run-stream
+    boundary_files:
+      - src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    heartbeat: "SseEmitter 心跳 15s，走同一出口校验"
+    tests:
+      - src/test/java/com/xander/lab/blogagent/api/BlogAgentControllerTest.java
+    notes: "三条端点共用同一个 SseSubscriber 句柄；拒绝队列满时也走同一收尾路径。"
+
+  - id: notifications-sse
+    deployment_unit: dinqor-content-automation
+    routes:
+      - automation-get-notifications-events
+    boundary_files:
+      - src/main/java/com/xander/lab/automation/infrastructure/BlogPlanSseService.java
+    controller_files:
+      - src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
+    heartbeat: "服务自持 25s 心跳线程，走同一出口校验"
+    tests:
+      - src/test/java/com/xander/lab/automation/infrastructure/BlogPlanSseServiceTest.java
+    notes: >-
+      控制器只做转发，封禁边界实现在 BlogPlanSseService —— 所以 boundary_files
+      指的必须是 service 而不是 controller。这正是机器猜不出来、必须人工登记的信息。
+
+  - id: img2three-sse
+    deployment_unit: dinqor-core-host
+    routes:
+      - studio-post-img2three-tasks-run-stream
+    boundary_files:
+      - src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
+    heartbeat: none
+    tests: []
+    notes: >-
+      本端点没有心跳调度器，所以 §28.4 的"心跳兜底"在这里不存在，主要手段只能是
+      reconciler 的主动断开 —— 这就是 §52 把 core-host 列进 Security Local Cache
+      清单的原因：Wave 2 之后、Wave 3 之前，studio 的这个流仍由 core-host 承载。
+      关闭只终止推送，不取消后台重建任务（任务持久化，取消会造成资产状态不一致）。
+
+  - id: agent-ws
+    deployment_unit: dinqor-agent
+    routes:
+      - agent-get-ws-agent
+    boundary_files:
+      - src/main/java/com/xander/lab/agent/api/AgentStreamWebSocketHandler.java
+    heartbeat: "WS 心跳 20s，走同一出口校验"
+    tests:
+      - src/test/java/com/xander/lab/agent/api/AgentStreamWebSocketHandlerTest.java
+    notes: >-
+      以 close(4403, ACCOUNT_DISABLED) 关闭；入口侧同时拒绝封禁账号建立新订阅，
+      且封禁后不再回客户端 ping 的 pong（否则客户端会误判链路健康并继续重连）。
+
+# 已知的、暂时无边界实现的流（必须显式列出并给出理由，否则门禁失败）。
+# 为空表示当前 8 条流全部已覆盖。
+unregistered_routes: []

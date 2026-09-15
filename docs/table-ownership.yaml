@@ -1,0 +1,328 @@
+# DinQorAI 微服务迁移 — 表归属清单（人工填写语义）
+#
+# 机器键集合来源：docs/table-inventory.yaml（由 scripts/migration/scan.py 生成）
+# 本文件是 §66 GRANT 脚本的唯一输入：grants/<service>.sql 由本文件生成。
+# CI 门禁 `table-ownership-drift` 会校验：
+#   1. table-inventory.yaml 中每一张表都必须在本文件出现（覆盖率 100%）
+#   2. 本文件不得出现 inventory 中不存在的表（幽灵条目）
+#   3. 任何一张表只能有一个 logical_owner（唯一 Owner 原则，V9 §2.2）
+#
+# 字段说明：
+#   logical_owner            业务 Owner，永不随部署方式变化
+#   current_write_owner      Wave 0 现状下的唯一写者
+#   target_deployment_unit   最终承载该表的部署单元（V9 §3 映射）
+#   revoke_from_core_host_at 何时从 core-host REVOKE（V9 §54 五阶段 / §96 十步）
+#   owner_transition         特殊三阶段切换（仅 agent_mcp_server，V9 §77）
+#   notes                    约束与风险备注
+
+generated_from: docs/table-inventory.yaml
+counts:
+  total: 66
+
+# --- 现状基线：Wave 0 全部表由单体唯一写入 -------------------------------
+defaults:
+  current_write_owner: xander-lab-backend
+  revoke_from_core_host_at: wave2-drain-complete
+
+tables:
+  # ===== agent（V9 §3：Wave 2 → dinqor-agent） =====
+  - table: agent_approval
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+  - table: agent_conversation
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+  - table: agent_event
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+    notes: "事件重放游标（Last-Event-ID）留在 agent 服务内，不得下沉到 Gateway。"
+  - table: agent_mcp_server
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+    owner_transition: stage-a-integration-write
+    notes: "V9 §77 三阶段切换：Stage A integration 唯一写 / agent 只读；Stage B agent 唯一写；Stage C REVOKE integration WRITE。切换前必须做 row count / updated_at / business key / checksum 校验。"
+  - table: agent_memory
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+  - table: agent_message
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+  - table: agent_run
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+  - table: agent_skill
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+  - table: agent_step
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+  - table: agent_tool_invocation
+    logical_owner: agent
+    target_deployment_unit: dinqor-agent
+    notes: "含工具轨迹按身份配对键；AgentToolInvocationReconciler 为 global_once。"
+
+  # ===== blogagent（V9 §3：Wave 2 → dinqor-content-automation） =====
+  - table: blog_agent_event
+    logical_owner: blogagent
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_agent_message
+    logical_owner: blogagent
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_agent_source
+    logical_owner: blogagent
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_agent_task
+    logical_owner: blogagent
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_agent_version
+    logical_owner: blogagent
+    target_deployment_unit: dinqor-content-automation
+
+  # ===== automation（V9 §3：Wave 2 → dinqor-content-automation） =====
+  - table: blog_content_plan
+    logical_owner: automation
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_notification
+    logical_owner: automation
+    target_deployment_unit: dinqor-content-automation
+    notes: "隐性耦合：knowledgebase 通过 BlogNotificationService.notifyResource 写入 resource_type/resource_id，未直连 mapper。拆分后必须走契约。"
+  - table: blog_plan_run
+    logical_owner: automation
+    target_deployment_unit: dinqor-content-automation
+  - table: email_reminder_task
+    logical_owner: automation
+    target_deployment_unit: dinqor-content-automation
+
+  # ===== publishing（V9 §3：Wave 2 → dinqor-content-automation） =====
+  - table: blog_category
+    logical_owner: publishing
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_media_asset
+    logical_owner: publishing
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_post
+    logical_owner: publishing
+    target_deployment_unit: dinqor-content-automation
+    notes: "BlogPostMapper.xml 的 5 表 JOIN 全在域内，拆库时不跨服务。"
+  - table: blog_post_tag
+    logical_owner: publishing
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_post_view
+    logical_owner: publishing
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_publish_record
+    logical_owner: publishing
+    target_deployment_unit: dinqor-content-automation
+  - table: blog_tag
+    logical_owner: publishing
+    target_deployment_unit: dinqor-content-automation
+
+  # ===== integration（V9 §3：Wave 2 → dinqor-platform-integration） =====
+  - table: csdn_platform_credential
+    logical_owner: integration
+    target_deployment_unit: dinqor-platform-integration
+    notes: "第三方凭据密文表，AES/GCM。密钥走部署 Secret，不进 Nacos 明文（V9 §16）。"
+  - table: juejin_category
+    logical_owner: integration
+    target_deployment_unit: dinqor-platform-integration
+  - table: juejin_platform_credential
+    logical_owner: integration
+    target_deployment_unit: dinqor-platform-integration
+  - table: juejin_tag
+    logical_owner: integration
+    target_deployment_unit: dinqor-platform-integration
+  - table: mcp_oauth_client
+    logical_owner: integration
+    target_deployment_unit: dinqor-platform-integration
+  - table: mcp_oauth_grant
+    logical_owner: integration
+    target_deployment_unit: dinqor-platform-integration
+  - table: mcp_oauth_token
+    logical_owner: integration
+    target_deployment_unit: dinqor-platform-integration
+
+  # ===== identity（V9 §3：留在 core-host，最终可拆 dinqor-core） =====
+  - table: sys_user
+    logical_owner: identity
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+    notes: "身份权威源。管理员封禁的 SOT 之一（V9 §27）。"
+  - table: wechat_credential
+    logical_owner: identity
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+    notes: "微信凭据密文，AES/GCM，密钥来自 WechatCredentialProperties。"
+
+  # ===== billing（V9 §3：留在 core-host） =====
+  - table: billing_model_price
+    logical_owner: billing
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: points_ledger
+    logical_owner: billing
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+    notes: "计费 charge-on-success + (biz_type,biz_key) 幂等，天然为分布式预留。"
+  - table: sys_user_points
+    logical_owner: billing
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+
+  # ===== admin（V9 §3：留在 core-host，控制面） =====
+  - table: feature_model_config
+    logical_owner: admin
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+    notes: "ModelGateway 共享契约的配置源；只能做客户端库 + 本地缓存，禁止每次模型调用远程查配置。"
+  - table: model_provider
+    logical_owner: admin
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+    notes: "provider key 密文由 ProviderKeyCipher 管理，密钥 MODEL_PROVIDER_ENCRYPTION_KEY。"
+
+  # ===== knowledgebase（V9 §3：留在 core-host，Wave 3 → dinqor-knowledge） =====
+  - table: knowledge_chapter
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_file
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_file_content
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_file_tag
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_folder
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_structure_node
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_tag
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_upload_chunk
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_upload_session
+    logical_owner: knowledgebase
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+    notes: "KnowledgeUploadSessionReaper 为 global_once（mysql_shedlock）。"
+
+  # ===== recitation（V9 §3：留在 core-host，Wave 3 → dinqor-knowledge） =====
+  - table: knowledge_quiz_attempt
+    logical_owner: recitation
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: knowledge_quiz_session
+    logical_owner: recitation
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: recitation_attempt
+    logical_owner: recitation
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: recitation_material
+    logical_owner: recitation
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+
+  # ===== studio（V9 §3：留在 core-host，Wave 3 → dinqor-studio） =====
+  - table: flow_ai_task
+    logical_owner: studio
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: flow_canvas
+    logical_owner: studio
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: flow_project
+    logical_owner: studio
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: flow_snapshot
+    logical_owner: studio
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: img2three_task
+    logical_owner: studio
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+    notes: "studio 的 Img2Three SSE 到 Wave 3 之前一直由 core-host 承载（V9 §3 / §52），所以 core-host 必须实现 LocalSecurityStateCache。"
+  - table: studio_project
+    logical_owner: studio
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+
+  # ===== components（V9 §3：留在 core-host，Wave 3 → dinqor-studio） =====
+  - table: component_category
+    logical_owner: components
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: component_detail_page
+    logical_owner: components
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: component_item
+    logical_owner: components
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: component_scenario
+    logical_owner: components
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+
+  # ===== virtualpay（V9 §3：留在 core-host，Wave 3 → dinqor-payment） =====
+  - table: virtual_pay_order
+    logical_owner: virtualpay
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+  - table: virtual_pay_settings
+    logical_owner: virtualpay
+    target_deployment_unit: dinqor-core-host
+    revoke_from_core_host_at: never
+
+  # ===== 迁移基础设施（非业务表，归 Migration Runner） =====
+  - table: xander_schema_migration
+    logical_owner: migration
+    target_deployment_unit: migration-runner
+    revoke_from_core_host_at: never
+    notes: "历史 80 脚本自建的 schema 记录表。Flyway baseline 之后由 flyway_schema_history 接管（V9 §62 / §64）。业务服务不得写入。"
+
+# --- V9 §65 新增表：由 Flyway 管理，尚未存在于历史 SQL --------------------
+pending_tables:
+  - table: auth_refresh_session
+    logical_owner: identity
+    target_deployment_unit: dinqor-core-host
+    introduced_by: V2026091501__auth_refresh_session.sql
+    notes: "Refresh Session SOT（V9 §30 / §32），MySQL 持久化。"
+  - table: auth_refresh_token_history
+    logical_owner: identity
+    target_deployment_unit: dinqor-core-host
+    introduced_by: V2026091502__auth_refresh_token_history.sql
+    notes: "有界 Replay History（V9 §33 / §40）。三个窗口独立：grace_expires_at / retained_until / successor_ciphertext_expires_at。"
+  - table: account_security_state
+    logical_owner: identity
+    target_deployment_unit: dinqor-core-host
+    introduced_by: V2026091503__account_security_state.sql
+    notes: "管理员封禁 SOT（V9 §48）。per_instance reconciler 的增量游标源。"
+  - table: security_event_outbox
+    logical_owner: identity
+    target_deployment_unit: dinqor-core-host
+    introduced_by: V2026091504__security_event_outbox.sql
+    notes: "Transactional Outbox（V9 §27）。AccountDisabled / AccountEnabled。"
+  - table: shedlock
+    logical_owner: migration
+    target_deployment_unit: shared
+    introduced_by: V2026091505__shedlock.sql
+    notes: "MySQL-backed ShedLock（V9 §41）。global_once 任务的互斥；per_instance 任务禁止使用。"

@@ -1,0 +1,344 @@
+# DinQorAI 微服务迁移 — 非路径型 Contract 变更登记（V9 §9 / §11）
+#
+# 覆盖类型（V9 §9）：
+#   token_payload / token_ttl / refresh_protocol / grace_window / replay_retention /
+#   header / error_code / sse_event / websocket_contract / websocket_close_code /
+#   storage_contract
+# 本仓库扩展的两个类型（V9 §2.3 元规则要求"能力改变必须显式登记"，这两个变更
+# 不属于上述 11 类，但同样改变既有能力，因此必须登记）：
+#   dependency_boundary   —— 共享内核依赖边界变化
+#   availability_semantics—— 新增的可用性语义（fail-closed 等）
+#
+# Contract Freeze Guard（V9 §11）：
+#   status: frozen 之后，CI 阻止 path / method / required fields / response semantics /
+#   error code / token payload / token TTL / refresh protocol / grace window /
+#   replay retention / header contract / SSE event schema / WebSocket contract /
+#   WebSocket close code 的破坏性修改。
+#   允许修改必须：显式 unfreeze + 架构/客户端审批 + 重新进入 migration 流程。
+
+counts:
+  total: 13
+  planned: 12
+  frozen: 1
+
+changes:
+  - id: auth-token-v2
+    type: token_payload
+    owner: identity
+    status: planned
+    compatibility:
+      legacy_accept_from: 2026-10-01
+      legacy_accept_until: 2027-01-31
+      new_issue_from: 2026-10-01
+      force_migration_at: 2027-02-01
+    change:
+      access_ttl:
+        old: 7d
+        new: 30m
+      add_claims:
+        - jti
+        - sid
+      keep_claims:
+        - sub
+        - type
+        - role
+        - iat
+        - exp
+      gateway_validation:
+        - signature
+        - exp
+        - issuer
+        - audience
+        - type
+        - local_security_cache
+      gateway_does_not:
+        - query_refresh_session
+        - query_mysql_by_sid
+    notes: "JWT 现状没有 jti（JwtUtil.buildToken 只有 claims + expiration，无 setId）→ 任何吊销名单方案都要先补 jti。sid 是会话关联标识（审计 / 日志 / 设备管理 / family 关联），不是校验数据库存在性的 claim。"
+    freeze_impact: "auth-token-v2 冻结后，access_ttl 与 claims 集合均不可破坏性修改。"
+
+  - id: auth-token-ttl
+    type: token_ttl
+    owner: identity
+    status: planned
+    change:
+      access_ttl:
+        old: 604800000
+        new: 1800000
+        unit: ms
+        allowed_range: [900000, 1800000]
+      refresh_session_ttl:
+        old: 2592000000
+        new: 2592000000
+        unit: ms
+    notes: "Access 从 7 天降到 15~30 分钟。安全评审允许 15~30 分钟。选 15 分钟会使 §40 的 history 容量上界翻倍，必须同步复核 §42 清理吞吐。"
+    capability_refs: [admin-ban-new-request, refresh-rotation]
+
+  - id: refresh-rotation-protocol
+    type: refresh_protocol
+    owner: identity
+    status: planned
+    change:
+      token_format:
+        old: jwt_stateless
+        new: opaque_random
+      format_template: "rt_<sid>.<tokenId>.<secret>"
+      stored_form: "secret hash only"
+      session_sot:
+        old: none
+        new: mysql.auth_refresh_session
+      rotation:
+        old: none
+        new: per_use_with_grace
+      logout_revokes_session:
+        old: false
+        new: true
+      replay_detection:
+        old: none
+        new: bounded_history_four_branch
+    notes: "现状 refresh 是纯无状态 JWT（AuthService.refresh 557-570 行只验签名 + isRefreshToken + 用户 status != 0，不查 Redis），logout 无法吊销 → 登出后 30 天内仍可恢复会话。sid 位于明文前缀，因此 sid 不是秘密（直接决定 §39 第 4 行必须存在）。"
+    capability_refs: [refresh-rotation, logout-revokes-refresh-session, refresh-reuse-detection]
+
+  - id: refresh-grace-window
+    type: grace_window
+    owner: identity
+    status: planned
+    change:
+      server_grace_seconds:
+        old: 0
+        new: 25
+    dependencies:
+      frontend_refresh_timeout_ms: 15000
+      frontend_max_retry: 1
+      frontend_backoff_ms: [500, 1000]
+      network_scheduling_margin_seconds: 5
+    formula: "grace >= refresh request timeout + 最大 retry backoff + 单程网络/调度余量 + clock/scheduler margin"
+    notes: "V9 §36：VITE_REQUEST_TIMEOUT / refresh retry count / refresh backoff / server grace 任何一项变化都必须同步复核。禁止单独改前端 timeout 而不复核 server grace。refreshAccessToken 走裸 axios.post，DEFAULT_TIMEOUT = 15000。"
+    capability_refs: [refresh-grace-idempotent-replay, refresh-failure-classification]
+
+  - id: refresh-replay-retention
+    type: replay_retention
+    owner: identity
+    status: planned
+    change:
+      retention_hours:
+        old: 0
+        new: 24
+      max_generations_per_sid:
+        old: 0
+        new: 48
+      capacity_bound_rows:
+        at_30m_access: 480000
+        at_15m_access: 960000
+    windows:
+      grace_expires_at: "幂等返回窗口（25s），决定「重放是否算 theft」"
+      retained_until: "Reuse 判定窗口（24h），决定「还能不能识别为 theft」"
+      successor_ciphertext_expires_at: "密文物理清理窗口（秒级）"
+    notes: "三个窗口独立，不得互相推导。只保留 grace 会导致 25 秒之后的真实盗用无法被识别。retained_until 在写 history 行时写入 now()+24h，不得留空、不得依赖后续任务回填。"
+    capability_refs: [bounded-replay-history, refresh-reuse-detection]
+
+  - id: refresh-error-codes
+    type: error_code
+    owner: identity
+    status: planned
+    change:
+      new:
+        - code: INVALID_REFRESH_TOKEN
+          http: 401
+          client_action: force_logout
+          revoke_family: false
+        - code: REFRESH_TOKEN_REUSED
+          http: 401
+          client_action: force_logout
+          revoke_family: true
+        - code: ACCOUNT_DISABLED
+          http: 403
+          client_action: force_logout
+          revoke_family: true
+        - code: AUTH_BACKEND_UNAVAILABLE
+          http: 503
+          client_action: keep_credentials_and_retry_once
+          revoke_family: false
+    notes: "V9 §45：401 / 403 三类 → 会话不可恢复 → forceLoggedOut；503 / 5xx / network / timeout → 不清 Token、不跳登录页、backoff 后最多重试 1 次。禁止把「暂时无法刷新会话」伪装成「登录过期」。INVALID_REFRESH_TOKEN 必须 revoke_family: false（防 DoS）。"
+    capability_refs: [refresh-garbage-token-no-family-revoke, refresh-failure-classification]
+
+  - id: api-header-contract
+    type: header
+    owner: shared
+    status: planned
+    change:
+      request:
+        - name: Authorization
+          format: "Bearer <access_jwt>"
+          notes: "SSE 与普通 API 都走这个头（前端用带鉴权拦截器的 axios 实例，不是原生 EventSource）。"
+        - name: Last-Event-ID
+          notes: "SSE 断线续传游标。前端应用层自传，Gateway 必须不吞。"
+        - name: X-Request-Id
+          notes: "新增。无则生成，有则按策略继承。"
+        - name: X-Trace-Id
+          notes: "新增。Gateway 生成或继承受信值，向下游透传（含 Feign）。"
+      response:
+        - name: X-Accel-Buffering
+          value: "no"
+          notes: "SSE 端点硬编码。Gateway 层若缓冲，这个头无效。"
+        - name: X-Trace-Id
+          notes: "回写，便于客户端报障关联。"
+      internal_identity:
+        headers:
+          - X-User-Id
+          - X-User-Role
+          - X-Auth-Jti
+          - X-Auth-Sid
+        notes: "Gateway 校验后注入的可信身份。服务端必须忽略外部直接传入的同名头（防止伪造），并只做授权、不再自行验签。"
+    notes: "BlogHTML 页面链路不强求与 API TraceId 相同，用 previewId + correlationId 关联。"
+    capability_refs: [last-event-id-passthrough, sse-not-buffered, token-location-dimension-in-auth-policy]
+
+  - id: sse-event-schema
+    type: sse_event
+    owner: agent
+    status: planned
+    change:
+      event_envelope:
+        fields: [id, event, data]
+        id: "单调递增游标，供 Last-Event-ID 续传"
+        data_encoding: json
+      heartbeat:
+        notes: "SseEmitter(0L) 永不超时，靠 scheduleHeartbeat 保活。心跳也必须触发封禁校验，否则业务无事件时无法在 SLO 内断开。"
+    constraints:
+      - "Gateway 不得缓冲（不得聚合后整段下发）"
+      - "Gateway 不得因 idle 超时提前断开活跃长连接"
+      - "不得压缩流式响应"
+    notes: "心跳若作为主要断开手段，heartbeat interval 必须 <= 2 秒并写入本文件；否则主要手段是主动断开，心跳只是兜底（V9 §28.4）。"
+    capability_refs: [sse-not-buffered, admin-ban-established-sse]
+
+  - id: websocket-contract
+    type: websocket_contract
+    owner: agent
+    status: planned
+    change:
+      endpoint:
+        old: /ws/agent
+        new: /api/v2/agents/ws
+        notes: "V9 §10 示例写 /api/v2/agents/ws/**；实际代码端点是 /ws/agent。v2 迁移时必须同步改名，并且必须显式列入 api-migration.yaml（当前它是 no_v2_target，属已知缺口）。"
+      handshake_auth:
+        order: [Authorization header, token query param]
+        notes: "AgentStreamAuthHandshakeInterceptor 优先取 Authorization 头，回退 ?token=（给 iOS 等客户端）。"
+      allowed_origins:
+        old: "*"
+        new: "显式白名单"
+        notes: "setAllowedOriginPatterns(\"*\") 现状是任意 Origin 都放行。若把凭据放进 query，必须同时加 Origin 白名单。"
+      frames:
+        client_to_server: [subscribe, unsubscribe, ping]
+        server_to_client: [agent_event, run_state, pong]
+    capability_refs: [ws-upgrade-supported, admin-ban-established-ws, token-location-dimension-in-auth-policy]
+
+  - id: ws-account-disabled-close
+    type: websocket_close_code
+    owner: identity
+    status: active
+    change:
+      close_code:
+        old: null
+        new: 4403
+      reason:
+        old: null
+        new: ACCOUNT_DISABLED
+    source_of_truth: "com.xander.lab.common.security.ConnectionRegistry#WS_CLOSE_CODE_ACCOUNT_DISABLED / #REASON_ACCOUNT_DISABLED"
+    notes: >-
+      每次 sendMessage / stream emission 前检查 securityVersion / disabled，命中则 close。
+      §97 门槛要求 Admin Ban 已建立 WS 在 hard bound 内断开。
+      常量的唯一来源是共享内核 ConnectionRegistry：任何宿主（当前 agent，Wave 3 之后还有 studio）
+      都不得各写一份字面量，否则前端要处理的关闭码会漂移。
+      前端义务：收到 4403 必须「停止重连 + 提示账号已封禁」，不得当作网络抖动重试。
+    capability_refs: [admin-ban-established-ws, stream-host-ban-boundary-machine-enforced]
+
+  - id: sse-account-disabled-close
+    type: sse_event
+    owner: identity
+    status: active
+    change:
+      observable:
+        old: "封禁后已建立的 SSE 继续推送直至本轮自然结束（永不超时）"
+        new: >-
+          宿主在每一帧出站前校验封禁状态，命中即 completeWithError(403)。
+          连接被 reconciler 主动断开时同样以 403 结束。
+      close_reason: ACCOUNT_DISABLED
+    source_of_truth: "com.xander.lab.common.security.ConnectionRegistry#REASON_ACCOUNT_DISABLED"
+    notes: >-
+      为什么 SSE 用 403 而 WS 用 4403：SSE 没有应用层关闭码，能表达的只有 HTTP 状态；
+      浏览器 EventSource 会把它转成 error 事件。前端义务与 WS 一致：
+      403 视为不可恢复，不得按「网络抖动」重连。
+      注意 studio 的 img2three 流没有心跳调度器，唯一主要手段是 reconciler 主动断开，
+      因此 core-host 必须在 §52 的 Security Local Cache 清单里。
+    capability_refs: [admin-ban-established-sse, stream-host-ban-boundary-machine-enforced]
+
+  - id: legacy-redis-user-tokens
+    type: storage_contract
+    owner: identity
+    status: planned
+    change:
+      keys_to_retire:
+        - "login:token:<jwt>"
+        - "login:user_tokens:<userId>"
+      defect:
+        key: "login:user_tokens:<userId>"
+        nature: "无 TTL 的 Set，成员是完整 Access JWT"
+        consequences:
+          - "不断增长 / 占内存"
+          - "revokeSessions 遍历越来越慢"
+          - "封禁延迟随时间单调恶化"
+      migration_steps:
+        t0: "旧结构存在"
+        t1: "新登录只生成新 Token 模型，不再向 login:user_tokens 新增成员；Gateway 同时识别 legacy / new Access；旧 refresh 成功一次后升级为新 Session"
+        t2: "主动 Session Upgrade，压缩 30 天自然迁移窗口"
+        t3: "必须显式删除 login:token:* 与 login:user_tokens:*"
+      zero_traffic_criteria:
+        - "低频 SCAN 连续多个周期 = 0（每 30~60 分钟）"
+        - "legacy refresh endpoint 请求 = 0"
+        - "观察一个发布周期"
+    notes: "Redis independence 只对新 Token 用户立即成立 —— Legacy Access 用户普通请求仍依赖旧 Redis login:token:。禁止项：不允许 login:user_tokens 永久遗留；不允许无 TTL JWT Set 成为长期 Session 模型。"
+    capability_refs: [legacy-user-tokens-bounded, legacy-token-explicit-retirement]
+
+  - id: shared-kernel-boundary
+    type: dependency_boundary
+    owner: shared
+    status: planned
+    change:
+      forbidden_dependencies:
+        - "common / config / util → 任何业务域 implementation"
+      current_violations:
+        - source: src/main/java/com/xander/lab/config/WebConfig.java
+          imports: com.xander.lab.identity.security.AuthInterceptor
+        - source: src/main/java/com/xander/lab/common/RedisHealthMonitor.java
+          imports: com.xander.lab.integration.mail.MailService
+      remedy:
+        - "config/WebConfig → 把 MVC 认证适配下沉到 xander-webmvc-support（MVC Auth Adapter），WebConfig 只装配接口"
+        - "common/RedisHealthMonitor → 依赖 AlertPort 接口，MailService 实现留在 integration；并移出 common 到 operations/redis-health 或 core-host observability worker"
+    notes: "一旦 common 抽成共享 jar 被各服务依赖，所有服务都传递依赖 identity + integration，libs/contracts 边界失效。ArchUnit 现有「domain 不依赖 infrastructure」「业务域之间不 import 实现」两条规则都不覆盖它（common 不是业务域）。"
+    capability_refs: [shared-kernel-no-business-dependency]
+
+  - id: security-plane-fail-closed
+    type: availability_semantics
+    owner: identity
+    status: planned
+    change:
+      new_semantics:
+        condition: "security plane stale 超过阈值"
+        action: "拒绝全部认证请求（fail-closed）"
+        threshold_seconds: 5
+      conflict_to_resolve:
+        - "V9 §103 问「MySQL Refresh Session 挂了是否只影响 refresh/logout？」期望答「是」"
+        - "但 account_security_state 与 refresh 表同库（§62 单物理 MySQL）→ 答案变成「否」"
+      required_observability:
+        - securityStateAge
+        - lastSuccessfulSecuritySyncAt
+    notes: "这是**新的可用性语义**，必须走 §11 Contract 流程并进入 capability-baseline，否则违反 §2.3 元规则。§28.2 与 §103 目前互相否定，必须在 Wave 2 放行评审前对齐（二选一：要么给 security plane 独立的存储/降级路径，要么改 §103 的答案）。"
+    capability_refs: [security-plane-stale-fail-closed-declared]
+
+# ===================== 冻结登记 =====================
+frozen: []
+# 说明：Wave 0A 不冻结任何条目（尚未有客户端在依赖 v2）。
+# Wave 2 完成 API + Token Contract 定型后，按 V9 §84 顺序冻结：
+#   Wave 2 API + Token Contract 定型 → Freeze → Web 联调 → 小程序联调 → 提审
+#   → 审核 / 全量 → 稳定观察 → v1 退场
+# 冻结后本文件的任何条目改动都会被 contract-freeze-guard 阻止。

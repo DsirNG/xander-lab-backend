@@ -1,0 +1,21 @@
+-- V9 §64 / §65 — Wave 0A Flyway baseline marker.
+--
+-- This migration is intentionally a NO-OP. It exists so that:
+--   1. `flyway baseline -baselineVersion=2026091500` can mark the existing
+--      production schema as "already at this version";
+--   2. the 80 historical scripts under src/main/resources/db/ stay archived and
+--      are never replayed (see migrations/legacy/AUDIT.md for the measured
+--      reasons: 8 unguarded CREATE TABLE, 31 naked ALTER, 55 of 66 tables
+--      written by more than one script);
+--   3. the first *real* schema change starts at V2026091501.
+--
+-- The authoritative description of the pre-microservices schema is the live
+-- database snapshot produced by:
+--   mysqldump --no-data --skip-comments xander_lab
+-- See migrations/README.md for the full baseline procedure.
+--
+-- Do not add DDL here. Adding statements would break the invariant that every
+-- database baselined at 2026091500 already contains exactly the pre-migration
+-- schema.
+
+SELECT 'Flyway baseline marker: pre-microservices modular monolith' AS baseline_note;
