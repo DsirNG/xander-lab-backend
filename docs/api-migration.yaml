@@ -1,13 +1,15 @@
 # DinQorAI microservice migration — API Migration Contract (V9 section 8).
 #
 # Bootstrapped by scripts/migration/scan.py from docs/route-inventory.yaml.
-# Re-running the scanner only APPENDS routes that are not present yet; existing
-# entries keep their hand-filled `clients` / `status` values.
+# Re-running the scanner REGENERATES this file, carrying over the hand-filled fields
+# of entries it recognises. The merge key is `(old.method, old.path)` — NOT `id` —
+# because ids are derived from the path and must stay free to change.
 #
 # Human-owned fields: clients.{web,miniprogram,admin}, status, compatibility.
 # Machine-owned fields: id, owner, old.{method,path}, new.{method,path}.
 #
 # CI gates: `api-migration-key-coverage` (every inventory route present),
+# `inventory-integrity` (ids unique, counts.total truthful),
 # `contract-freeze-guard` (frozen entries must not change).
 
 generated_by: scripts/migration/scan.py
@@ -30,7 +32,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: admin-put-admin-feature-model-configs
+  - id: admin-put-admin-feature-model-configs-featurekey
     owner: admin
     old:
       method: PUT
@@ -78,7 +80,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: admin-delete-admin-model-providers
+  - id: admin-delete-admin-model-providers-id
     owner: admin
     old:
       method: DELETE
@@ -94,7 +96,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: admin-put-admin-model-providers
+  - id: admin-put-admin-model-providers-id
     owner: admin
     old:
       method: PUT
@@ -110,7 +112,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: admin-patch-admin-model-providers-enabled
+  - id: admin-patch-admin-model-providers-id-enabled
     owner: admin
     old:
       method: PATCH
@@ -158,7 +160,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: admin-patch-admin-users-status
+  - id: admin-patch-admin-users-id-status
     owner: admin
     old:
       method: PATCH
@@ -254,7 +256,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-get-agent-conversations-agentconversationcontroller
+  - id: agent-get-agent-conversations
     owner: agent
     old:
       method: GET
@@ -302,7 +304,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-get-agent-conversations-shared
+  - id: agent-get-agent-conversations-shared-sharetoken
     owner: agent
     old:
       method: GET
@@ -318,7 +320,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-get-agent-conversations-agentconversationcontroller
+  - id: agent-get-agent-conversations-id
     owner: agent
     old:
       method: GET
@@ -334,7 +336,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-get-agent-conversations-approvals
+  - id: agent-get-agent-conversations-id-approvals
     owner: agent
     old:
       method: GET
@@ -350,7 +352,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-post-agent-conversations-approvals-decision
+  - id: agent-post-agent-conversations-id-approvals-approvalid-decision
     owner: agent
     old:
       method: POST
@@ -366,7 +368,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-post-agent-conversations-cancel
+  - id: agent-post-agent-conversations-id-cancel
     owner: agent
     old:
       method: POST
@@ -382,7 +384,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-get-agent-conversations-events
+  - id: agent-get-agent-conversations-id-events
     owner: agent
     old:
       method: GET
@@ -398,7 +400,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-get-agent-conversations-messages
+  - id: agent-get-agent-conversations-id-messages
     owner: agent
     old:
       method: GET
@@ -414,7 +416,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-post-agent-conversations-messages
+  - id: agent-post-agent-conversations-id-messages
     owner: agent
     old:
       method: POST
@@ -430,7 +432,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-post-agent-conversations-messages-stream
+  - id: agent-post-agent-conversations-id-messages-stream
     owner: agent
     old:
       method: POST
@@ -446,7 +448,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-delete-agent-conversations-pin
+  - id: agent-delete-agent-conversations-id-pin
     owner: agent
     old:
       method: DELETE
@@ -462,7 +464,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-post-agent-conversations-pin
+  - id: agent-post-agent-conversations-id-pin
     owner: agent
     old:
       method: POST
@@ -478,7 +480,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-post-agent-conversations-read
+  - id: agent-post-agent-conversations-id-read
     owner: agent
     old:
       method: POST
@@ -494,7 +496,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-delete-agent-conversations-share
+  - id: agent-delete-agent-conversations-id-share
     owner: agent
     old:
       method: DELETE
@@ -510,7 +512,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-post-agent-conversations-share
+  - id: agent-post-agent-conversations-id-share
     owner: agent
     old:
       method: POST
@@ -574,7 +576,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: agent-delete-agent-skills
+  - id: agent-delete-agent-skills-id
     owner: agent
     old:
       method: DELETE
@@ -607,7 +609,7 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
-  - id: automation-get-blog-plans-blogcontentplancontroller
+  - id: automation-get-blog-plans
     owner: automation
     old:
       method: GET
@@ -671,7 +673,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-delete-blog-plans
+  - id: automation-delete-blog-plans-id
     owner: automation
     old:
       method: DELETE
@@ -687,7 +689,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-get-blog-plans-blogcontentplancontroller
+  - id: automation-get-blog-plans-id
     owner: automation
     old:
       method: GET
@@ -703,7 +705,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-patch-blog-plans
+  - id: automation-patch-blog-plans-id
     owner: automation
     old:
       method: PATCH
@@ -719,7 +721,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-get-blog-plans-next
+  - id: automation-get-blog-plans-id-next
     owner: automation
     old:
       method: GET
@@ -735,7 +737,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-get-blog-plans-runs-blogcontentplancontroller
+  - id: automation-get-blog-plans-id-runs
     owner: automation
     old:
       method: GET
@@ -751,7 +753,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-get-blog-plans-runs-blogcontentplancontroller
+  - id: automation-get-blog-plans-id-runs-runid
     owner: automation
     old:
       method: GET
@@ -767,7 +769,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-patch-blog-plans-status
+  - id: automation-patch-blog-plans-id-status
     owner: automation
     old:
       method: PATCH
@@ -783,7 +785,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-post-blog-plans-trigger
+  - id: automation-post-blog-plans-id-trigger
     owner: automation
     old:
       method: POST
@@ -831,7 +833,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-delete-email-reminders
+  - id: automation-delete-email-reminders-id
     owner: automation
     old:
       method: DELETE
@@ -847,7 +849,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-patch-email-reminders-status
+  - id: automation-patch-email-reminders-id-status
     owner: automation
     old:
       method: PATCH
@@ -927,7 +929,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-patch-notifications-read
+  - id: automation-patch-notifications-id-read
     owner: automation
     old:
       method: PATCH
@@ -959,7 +961,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: billing-delete-admin-billing-model-prices
+  - id: billing-delete-admin-billing-model-prices-model
     owner: billing
     old:
       method: DELETE
@@ -975,7 +977,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: billing-put-admin-billing-model-prices
+  - id: billing-put-admin-billing-model-prices-model
     owner: billing
     old:
       method: PUT
@@ -1039,7 +1041,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-get-blog-agent-tasks-blogagentcontroller
+  - id: blogagent-get-blog-agent-tasks
     owner: blogagent
     old:
       method: GET
@@ -1071,7 +1073,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-get-blog-agent-tasks-blogagentcontroller
+  - id: blogagent-get-blog-agent-tasks-id
     owner: blogagent
     old:
       method: GET
@@ -1087,7 +1089,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-get-blog-agent-tasks-events
+  - id: blogagent-get-blog-agent-tasks-id-events
     owner: blogagent
     old:
       method: GET
@@ -1103,7 +1105,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-post-blog-agent-tasks-messages-stream
+  - id: blogagent-post-blog-agent-tasks-id-messages-stream
     owner: blogagent
     old:
       method: POST
@@ -1119,7 +1121,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-post-blog-agent-tasks-publish
+  - id: blogagent-post-blog-agent-tasks-id-publish
     owner: blogagent
     old:
       method: POST
@@ -1135,7 +1137,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-post-blog-agent-tasks-run
+  - id: blogagent-post-blog-agent-tasks-id-run
     owner: blogagent
     old:
       method: POST
@@ -1151,7 +1153,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-post-blog-agent-tasks-run-stream
+  - id: blogagent-post-blog-agent-tasks-id-run-stream
     owner: blogagent
     old:
       method: POST
@@ -1183,7 +1185,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: bloghtml-get-blog-html-raw
+  - id: bloghtml-get-blog-html-id-raw
     owner: bloghtml
     old:
       method: GET
@@ -1232,7 +1234,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: components-get-components
+  - id: components-get-components-id
     owner: components
     old:
       method: GET
@@ -1620,7 +1622,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-delete-admin-mcp-servers
+  - id: integration-delete-admin-mcp-servers-id
     owner: integration
     old:
       method: DELETE
@@ -1636,7 +1638,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-put-admin-mcp-servers
+  - id: integration-put-admin-mcp-servers-id
     owner: integration
     old:
       method: PUT
@@ -1652,7 +1654,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-post-admin-mcp-servers-probe
+  - id: integration-post-admin-mcp-servers-id-probe
     owner: integration
     old:
       method: POST
@@ -1700,7 +1702,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-delete-agent-mcp-servers
+  - id: integration-delete-agent-mcp-servers-id
     owner: integration
     old:
       method: DELETE
@@ -1716,7 +1718,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-put-agent-mcp-servers
+  - id: integration-put-agent-mcp-servers-id
     owner: integration
     old:
       method: PUT
@@ -1732,7 +1734,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-post-agent-mcp-servers-probe
+  - id: integration-post-agent-mcp-servers-id-probe
     owner: integration
     old:
       method: POST
@@ -1748,7 +1750,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-post-blog-posts-sync-csdn
+  - id: integration-post-blog-posts-postid-sync-csdn
     owner: integration
     old:
       method: POST
@@ -1764,7 +1766,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-post-blog-posts-sync-juejin
+  - id: integration-post-blog-posts-postid-sync-juejin
     owner: integration
     old:
       method: POST
@@ -1780,7 +1782,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-get-download
+  - id: integration-get-download-filename
     owner: integration
     old:
       method: GET
@@ -1844,7 +1846,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-get-mcp-oauth-authorize-requests
+  - id: integration-get-mcp-oauth-authorize-requests-requestid
     owner: integration
     old:
       method: GET
@@ -1860,7 +1862,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-post-mcp-oauth-authorize-requests-approve
+  - id: integration-post-mcp-oauth-authorize-requests-requestid-approve
     owner: integration
     old:
       method: POST
@@ -1876,7 +1878,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-post-mcp-oauth-authorize-requests-deny
+  - id: integration-post-mcp-oauth-authorize-requests-requestid-deny
     owner: integration
     old:
       method: POST
@@ -1908,7 +1910,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-delete-mcp-oauth-clients
+  - id: integration-delete-mcp-oauth-clients-clientid
     owner: integration
     old:
       method: DELETE
@@ -2164,7 +2166,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-get-knowledge-base-files-knowledgefilecontroller
+  - id: knowledgebase-get-knowledge-base-files
     owner: knowledgebase
     old:
       method: GET
@@ -2196,7 +2198,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-delete-knowledge-base-files
+  - id: knowledgebase-delete-knowledge-base-files-fileid
     owner: knowledgebase
     old:
       method: DELETE
@@ -2212,7 +2214,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-get-knowledge-base-files-knowledgefilecontroller
+  - id: knowledgebase-get-knowledge-base-files-fileid
     owner: knowledgebase
     old:
       method: GET
@@ -2228,7 +2230,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-get-knowledge-base-files-chapters
+  - id: knowledgebase-get-knowledge-base-files-fileid-chapters
     owner: knowledgebase
     old:
       method: GET
@@ -2244,7 +2246,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-post-knowledge-base-files-chapters-structure
+  - id: knowledgebase-post-knowledge-base-files-fileid-chapters-chapterid-structure
     owner: knowledgebase
     old:
       method: POST
@@ -2260,7 +2262,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-get-knowledge-base-files-content
+  - id: knowledgebase-get-knowledge-base-files-fileid-content
     owner: knowledgebase
     old:
       method: GET
@@ -2276,7 +2278,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-put-knowledge-base-files-folder
+  - id: knowledgebase-put-knowledge-base-files-fileid-folder
     owner: knowledgebase
     old:
       method: PUT
@@ -2292,7 +2294,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-put-knowledge-base-files-name
+  - id: knowledgebase-put-knowledge-base-files-fileid-name
     owner: knowledgebase
     old:
       method: PUT
@@ -2308,7 +2310,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-get-knowledge-base-files-preview
+  - id: knowledgebase-get-knowledge-base-files-fileid-preview
     owner: knowledgebase
     old:
       method: GET
@@ -2324,7 +2326,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-post-knowledge-base-files-reidentify
+  - id: knowledgebase-post-knowledge-base-files-fileid-reidentify
     owner: knowledgebase
     old:
       method: POST
@@ -2340,7 +2342,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-get-knowledge-base-files-structure
+  - id: knowledgebase-get-knowledge-base-files-fileid-structure
     owner: knowledgebase
     old:
       method: GET
@@ -2356,7 +2358,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-post-knowledge-base-files-structure-regenerate
+  - id: knowledgebase-post-knowledge-base-files-fileid-structure-regenerate
     owner: knowledgebase
     old:
       method: POST
@@ -2372,7 +2374,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-post-knowledge-base-files-tags
+  - id: knowledgebase-post-knowledge-base-files-fileid-tags
     owner: knowledgebase
     old:
       method: POST
@@ -2388,7 +2390,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-put-knowledge-base-files-tags
+  - id: knowledgebase-put-knowledge-base-files-fileid-tags
     owner: knowledgebase
     old:
       method: PUT
@@ -2404,7 +2406,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-delete-knowledge-base-files-tags
+  - id: knowledgebase-delete-knowledge-base-files-fileid-tags-tagid
     owner: knowledgebase
     old:
       method: DELETE
@@ -2452,7 +2454,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-delete-knowledge-base-folders
+  - id: knowledgebase-delete-knowledge-base-folders-folderid
     owner: knowledgebase
     old:
       method: DELETE
@@ -2468,7 +2470,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-put-knowledge-base-folders-name
+  - id: knowledgebase-put-knowledge-base-folders-folderid-name
     owner: knowledgebase
     old:
       method: PUT
@@ -2484,7 +2486,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-put-knowledge-base-folders-parent
+  - id: knowledgebase-put-knowledge-base-folders-folderid-parent
     owner: knowledgebase
     old:
       method: PUT
@@ -2532,7 +2534,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-delete-knowledge-base-tags
+  - id: knowledgebase-delete-knowledge-base-tags-tagid
     owner: knowledgebase
     old:
       method: DELETE
@@ -2548,7 +2550,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-put-knowledge-base-tags
+  - id: knowledgebase-put-knowledge-base-tags-tagid
     owner: knowledgebase
     old:
       method: PUT
@@ -2580,7 +2582,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-delete-knowledge-base-uploads
+  - id: knowledgebase-delete-knowledge-base-uploads-uploadid
     owner: knowledgebase
     old:
       method: DELETE
@@ -2596,7 +2598,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-get-knowledge-base-uploads
+  - id: knowledgebase-get-knowledge-base-uploads-uploadid
     owner: knowledgebase
     old:
       method: GET
@@ -2612,7 +2614,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-post-knowledge-base-uploads-chunks
+  - id: knowledgebase-post-knowledge-base-uploads-uploadid-chunks-chunkindex
     owner: knowledgebase
     old:
       method: POST
@@ -2628,7 +2630,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: knowledgebase-post-knowledge-base-uploads-complete
+  - id: knowledgebase-post-knowledge-base-uploads-uploadid-complete
     owner: knowledgebase
     old:
       method: POST
@@ -2724,7 +2726,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-get-blog-posts-blogcontroller
+  - id: publishing-get-blog-posts
     owner: publishing
     old:
       method: GET
@@ -2772,7 +2774,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-get-blog-posts-mine-blogcontroller
+  - id: publishing-get-blog-posts-mine
     owner: publishing
     old:
       method: GET
@@ -2788,7 +2790,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-get-blog-posts-mine-blogcontroller
+  - id: publishing-get-blog-posts-mine-id
     owner: publishing
     old:
       method: GET
@@ -2852,7 +2854,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-delete-blog-posts
+  - id: publishing-delete-blog-posts-id
     owner: publishing
     old:
       method: DELETE
@@ -2868,7 +2870,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-get-blog-posts-blogcontroller
+  - id: publishing-get-blog-posts-id
     owner: publishing
     old:
       method: GET
@@ -2884,7 +2886,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-put-blog-posts
+  - id: publishing-put-blog-posts-id
     owner: publishing
     old:
       method: PUT
@@ -2900,7 +2902,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-delete-blog-posts-permanent
+  - id: publishing-delete-blog-posts-id-permanent
     owner: publishing
     old:
       method: DELETE
@@ -2916,7 +2918,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-patch-blog-posts-status
+  - id: publishing-patch-blog-posts-id-status
     owner: publishing
     old:
       method: PATCH
@@ -2932,7 +2934,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-post-blog-posts-view
+  - id: publishing-post-blog-posts-id-view
     owner: publishing
     old:
       method: POST
@@ -2980,7 +2982,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-get-recitations-attempts
+  - id: recitation-get-recitations-attempts-attemptid
     owner: recitation
     old:
       method: GET
@@ -2996,7 +2998,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-get-recitations-materials-recitationcontroller
+  - id: recitation-get-recitations-materials
     owner: recitation
     old:
       method: GET
@@ -3028,7 +3030,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-delete-recitations-materials
+  - id: recitation-delete-recitations-materials-materialid
     owner: recitation
     old:
       method: DELETE
@@ -3044,7 +3046,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-get-recitations-materials-recitationcontroller
+  - id: recitation-get-recitations-materials-materialid
     owner: recitation
     old:
       method: GET
@@ -3060,7 +3062,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-put-recitations-materials
+  - id: recitation-put-recitations-materials-materialid
     owner: recitation
     old:
       method: PUT
@@ -3076,7 +3078,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-post-recitations-materials-archive
+  - id: recitation-post-recitations-materials-materialid-archive
     owner: recitation
     old:
       method: POST
@@ -3092,7 +3094,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-get-recitations-materials-attempts
+  - id: recitation-get-recitations-materials-materialid-attempts
     owner: recitation
     old:
       method: GET
@@ -3108,7 +3110,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-post-recitations-materials-attempts
+  - id: recitation-post-recitations-materials-materialid-attempts
     owner: recitation
     old:
       method: POST
@@ -3124,7 +3126,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: recitation-get-recitations-materials-quizzes
+  - id: recitation-get-recitations-materials-materialid-quizzes
     owner: recitation
     old:
       method: GET
@@ -3157,7 +3159,7 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
-  - id: studio-get-flow-canvases-snapshot
+  - id: studio-get-flow-canvases-canvasid-snapshot
     owner: studio
     old:
       method: GET
@@ -3173,7 +3175,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: studio-put-flow-canvases-snapshot
+  - id: studio-put-flow-canvases-canvasid-snapshot
     owner: studio
     old:
       method: PUT
@@ -3189,7 +3191,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: studio-get-flow-projects-flowprojectcontroller
+  - id: studio-get-flow-projects
     owner: studio
     old:
       method: GET
@@ -3221,7 +3223,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: studio-delete-flow-projects
+  - id: studio-delete-flow-projects-id
     owner: studio
     old:
       method: DELETE
@@ -3237,7 +3239,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: studio-get-flow-projects-flowprojectcontroller
+  - id: studio-get-flow-projects-id
     owner: studio
     old:
       method: GET
@@ -3253,7 +3255,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: studio-patch-flow-projects
+  - id: studio-patch-flow-projects-id
     owner: studio
     old:
       method: PATCH
@@ -3269,7 +3271,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: studio-get-img2three-tasks-img2threecontroller
+  - id: studio-get-img2three-tasks
     owner: studio
     old:
       method: GET
@@ -3301,7 +3303,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: studio-get-img2three-tasks-img2threecontroller
+  - id: studio-get-img2three-tasks-id
     owner: studio
     old:
       method: GET
@@ -3317,7 +3319,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: studio-post-img2three-tasks-run-stream
+  - id: studio-post-img2three-tasks-id-run-stream
     owner: studio
     old:
       method: POST
@@ -3383,7 +3385,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: virtualpay-get-virtual-pay-orders
+  - id: virtualpay-get-virtual-pay-orders-outtradeno
     owner: virtualpay
     old:
       method: GET
@@ -3399,7 +3401,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: virtualpay-post-virtual-pay-orders-reconcile
+  - id: virtualpay-post-virtual-pay-orders-outtradeno-reconcile
     owner: virtualpay
     old:
       method: POST

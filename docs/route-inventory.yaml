@@ -46,7 +46,7 @@ routes:
     handler: "com.xander.lab.billing.api.AdminModelPriceController#list"
     file: src/main/java/com/xander/lab/billing/api/AdminModelPriceController.java
     line: 30
-  - id: billing-delete-admin-billing-model-prices
+  - id: billing-delete-admin-billing-model-prices-model
     logical_owner: billing
     deployment_unit: dinqor-core-host
     kind: controller
@@ -57,7 +57,7 @@ routes:
     handler: "com.xander.lab.billing.api.AdminModelPriceController#delete"
     file: src/main/java/com/xander/lab/billing/api/AdminModelPriceController.java
     line: 47
-  - id: billing-put-admin-billing-model-prices
+  - id: billing-put-admin-billing-model-prices-model
     logical_owner: billing
     deployment_unit: dinqor-core-host
     kind: controller
@@ -79,7 +79,7 @@ routes:
     handler: "com.xander.lab.admin.api.AdminFeatureModelConfigController#list"
     file: src/main/java/com/xander/lab/admin/api/AdminFeatureModelConfigController.java
     line: 27
-  - id: admin-put-admin-feature-model-configs
+  - id: admin-put-admin-feature-model-configs-featurekey
     logical_owner: admin
     deployment_unit: dinqor-core-host
     kind: controller
@@ -112,7 +112,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#create"
     file: src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
     line: 37
-  - id: integration-delete-admin-mcp-servers
+  - id: integration-delete-admin-mcp-servers-id
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -123,7 +123,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#delete"
     file: src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
     line: 48
-  - id: integration-put-admin-mcp-servers
+  - id: integration-put-admin-mcp-servers-id
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -134,7 +134,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#update"
     file: src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
     line: 42
-  - id: integration-post-admin-mcp-servers-probe
+  - id: integration-post-admin-mcp-servers-id-probe
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -167,7 +167,7 @@ routes:
     handler: "com.xander.lab.admin.api.AdminModelProviderController#create"
     file: src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
     line: 34
-  - id: admin-delete-admin-model-providers
+  - id: admin-delete-admin-model-providers-id
     logical_owner: admin
     deployment_unit: dinqor-core-host
     kind: controller
@@ -178,7 +178,7 @@ routes:
     handler: "com.xander.lab.admin.api.AdminModelProviderController#delete"
     file: src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
     line: 56
-  - id: admin-put-admin-model-providers
+  - id: admin-put-admin-model-providers-id
     logical_owner: admin
     deployment_unit: dinqor-core-host
     kind: controller
@@ -189,7 +189,7 @@ routes:
     handler: "com.xander.lab.admin.api.AdminModelProviderController#update"
     file: src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
     line: 39
-  - id: admin-patch-admin-model-providers-enabled
+  - id: admin-patch-admin-model-providers-id-enabled
     logical_owner: admin
     deployment_unit: dinqor-core-host
     kind: controller
@@ -222,7 +222,7 @@ routes:
     handler: "com.xander.lab.admin.api.AdminUserController#list"
     file: src/main/java/com/xander/lab/admin/api/AdminUserController.java
     line: 29
-  - id: admin-patch-admin-users-status
+  - id: admin-patch-admin-users-id-status
     logical_owner: admin
     deployment_unit: dinqor-core-host
     kind: controller
@@ -288,7 +288,7 @@ routes:
     handler: "com.xander.lab.admin.api.AdminWechatCredentialController#save"
     file: src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
     line: 33
-  - id: agent-get-agent-conversations-agentconversationcontroller
+  - id: agent-get-agent-conversations
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -298,7 +298,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#list"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 94
+    line: 121
   - id: agent-post-agent-conversations
     logical_owner: agent
     deployment_unit: dinqor-agent
@@ -309,7 +309,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#create"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 79
+    line: 106
   - id: agent-post-agent-conversations-attachments
     logical_owner: agent
     deployment_unit: dinqor-agent
@@ -320,8 +320,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#uploadAttachment"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 88
-  - id: agent-get-agent-conversations-shared
+    line: 115
+  - id: agent-get-agent-conversations-shared-sharetoken
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -331,8 +331,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#getShared"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 109
-  - id: agent-get-agent-conversations-agentconversationcontroller
+    line: 136
+  - id: agent-get-agent-conversations-id
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -342,8 +342,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#get"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 99
-  - id: agent-get-agent-conversations-approvals
+    line: 126
+  - id: agent-get-agent-conversations-id-approvals
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -353,8 +353,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#approvals"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 137
-  - id: agent-post-agent-conversations-approvals-decision
+    line: 164
+  - id: agent-post-agent-conversations-id-approvals-approvalid-decision
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -364,8 +364,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#decideApproval"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 143
-  - id: agent-post-agent-conversations-cancel
+    line: 170
+  - id: agent-post-agent-conversations-id-cancel
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -375,8 +375,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#cancel"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 131
-  - id: agent-get-agent-conversations-events
+    line: 158
+  - id: agent-get-agent-conversations-id-events
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -386,8 +386,8 @@ routes:
     last_event_id: true
     handler: "com.xander.lab.agent.api.AgentConversationController#subscribe"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 241
-  - id: agent-get-agent-conversations-messages
+    line: 270
+  - id: agent-get-agent-conversations-id-messages
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -397,8 +397,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#listMessages"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 104
-  - id: agent-post-agent-conversations-messages
+    line: 131
+  - id: agent-post-agent-conversations-id-messages
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -408,8 +408,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#triggerMessage"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 214
-  - id: agent-post-agent-conversations-messages-stream
+    line: 243
+  - id: agent-post-agent-conversations-id-messages-stream
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -419,8 +419,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#sendMessage"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 167
-  - id: agent-delete-agent-conversations-pin
+    line: 194
+  - id: agent-delete-agent-conversations-id-pin
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -430,8 +430,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#unpin"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 162
-  - id: agent-post-agent-conversations-pin
+    line: 189
+  - id: agent-post-agent-conversations-id-pin
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -441,8 +441,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#pin"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 157
-  - id: agent-post-agent-conversations-read
+    line: 184
+  - id: agent-post-agent-conversations-id-read
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -452,8 +452,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#markRead"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 152
-  - id: agent-delete-agent-conversations-share
+    line: 179
+  - id: agent-delete-agent-conversations-id-share
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -463,8 +463,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#disableShare"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 125
-  - id: agent-post-agent-conversations-share
+    line: 152
+  - id: agent-post-agent-conversations-id-share
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -474,7 +474,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#enableShare"
     file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-    line: 119
+    line: 146
   - id: integration-get-agent-mcp-servers
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -497,7 +497,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#create"
     file: src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
     line: 36
-  - id: integration-delete-agent-mcp-servers
+  - id: integration-delete-agent-mcp-servers-id
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -508,7 +508,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#delete"
     file: src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
     line: 47
-  - id: integration-put-agent-mcp-servers
+  - id: integration-put-agent-mcp-servers-id
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -519,7 +519,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#update"
     file: src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
     line: 41
-  - id: integration-post-agent-mcp-servers-probe
+  - id: integration-post-agent-mcp-servers-id-probe
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -563,7 +563,7 @@ routes:
     handler: "com.xander.lab.agent.api.AgentSkillController#listTools"
     file: src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 26
-  - id: agent-delete-agent-skills
+  - id: agent-delete-agent-skills-id
     logical_owner: agent
     deployment_unit: dinqor-agent
     kind: controller
@@ -772,7 +772,7 @@ routes:
     handler: "com.xander.lab.identity.api.AuthController#wechatSkip"
     file: src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 159
-  - id: blogagent-get-blog-agent-tasks-blogagentcontroller
+  - id: blogagent-get-blog-agent-tasks
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -782,7 +782,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#list"
     file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 72
+    line: 105
   - id: blogagent-post-blog-agent-tasks
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -793,8 +793,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#create"
     file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 62
-  - id: blogagent-get-blog-agent-tasks-blogagentcontroller
+    line: 95
+  - id: blogagent-get-blog-agent-tasks-id
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -804,8 +804,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#get"
     file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 67
-  - id: blogagent-get-blog-agent-tasks-events
+    line: 100
+  - id: blogagent-get-blog-agent-tasks-id-events
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -815,8 +815,8 @@ routes:
     last_event_id: true
     handler: "com.xander.lab.blogagent.api.BlogAgentController#subscribe"
     file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 116
-  - id: blogagent-post-blog-agent-tasks-messages-stream
+    line: 151
+  - id: blogagent-post-blog-agent-tasks-id-messages-stream
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -826,8 +826,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#reviseStream"
     file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 100
-  - id: blogagent-post-blog-agent-tasks-publish
+    line: 134
+  - id: blogagent-post-blog-agent-tasks-id-publish
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -837,8 +837,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#publish"
     file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 82
-  - id: blogagent-post-blog-agent-tasks-run
+    line: 115
+  - id: blogagent-post-blog-agent-tasks-id-run
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -848,8 +848,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#run"
     file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 77
-  - id: blogagent-post-blog-agent-tasks-run-stream
+    line: 110
+  - id: blogagent-post-blog-agent-tasks-id-run-stream
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -859,7 +859,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#runStream"
     file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 87
+    line: 120
   - id: bloghtml-post-blog-html-previews
     logical_owner: bloghtml
     deployment_unit: dinqor-bloghtml-preview
@@ -871,7 +871,7 @@ routes:
     handler: "com.xander.lab.bloghtml.api.BlogHtmlPreviewController#createPreview"
     file: src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
     line: 40
-  - id: automation-get-blog-plans-blogcontentplancontroller
+  - id: automation-get-blog-plans
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -915,7 +915,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#generateTopics"
     file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 103
-  - id: automation-delete-blog-plans
+  - id: automation-delete-blog-plans-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -926,7 +926,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#delete"
     file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 68
-  - id: automation-get-blog-plans-blogcontentplancontroller
+  - id: automation-get-blog-plans-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -937,7 +937,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#detail"
     file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 51
-  - id: automation-patch-blog-plans
+  - id: automation-patch-blog-plans-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -948,7 +948,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#update"
     file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 56
-  - id: automation-get-blog-plans-next
+  - id: automation-get-blog-plans-id-next
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -959,7 +959,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#nextRun"
     file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 96
-  - id: automation-get-blog-plans-runs-blogcontentplancontroller
+  - id: automation-get-blog-plans-id-runs
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -970,7 +970,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#runs"
     file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 83
-  - id: automation-get-blog-plans-runs-blogcontentplancontroller
+  - id: automation-get-blog-plans-id-runs-runid
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -981,7 +981,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#runDetail"
     file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 90
-  - id: automation-patch-blog-plans-status
+  - id: automation-patch-blog-plans-id-status
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -992,7 +992,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#updateStatus"
     file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 62
-  - id: automation-post-blog-plans-trigger
+  - id: automation-post-blog-plans-id-trigger
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1047,7 +1047,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogMediaController#getAgentImages"
     file: src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
     line: 32
-  - id: publishing-get-blog-posts-blogcontroller
+  - id: publishing-get-blog-posts
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1080,7 +1080,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#getManageStats"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 79
-  - id: publishing-get-blog-posts-mine-blogcontroller
+  - id: publishing-get-blog-posts-mine
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1091,7 +1091,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#getMyPosts"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 61
-  - id: publishing-get-blog-posts-mine-blogcontroller
+  - id: publishing-get-blog-posts-mine-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1135,7 +1135,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#getRecentPosts"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 146
-  - id: publishing-delete-blog-posts
+  - id: publishing-delete-blog-posts-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1146,7 +1146,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#softDeletePost"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 113
-  - id: publishing-get-blog-posts-blogcontroller
+  - id: publishing-get-blog-posts-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1157,7 +1157,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#getPostById"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 152
-  - id: publishing-put-blog-posts
+  - id: publishing-put-blog-posts-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1168,7 +1168,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#updatePost"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 93
-  - id: publishing-delete-blog-posts-permanent
+  - id: publishing-delete-blog-posts-id-permanent
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1179,7 +1179,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#permanentlyDeletePost"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 123
-  - id: publishing-patch-blog-posts-status
+  - id: publishing-patch-blog-posts-id-status
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1190,7 +1190,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#updatePostStatus"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 102
-  - id: publishing-post-blog-posts-view
+  - id: publishing-post-blog-posts-id-view
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1201,7 +1201,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#recordView"
     file: src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 161
-  - id: integration-post-blog-posts-sync-csdn
+  - id: integration-post-blog-posts-postid-sync-csdn
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1212,7 +1212,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnBlogSyncController#sync"
     file: src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnBlogSyncController.java
     line: 20
-  - id: integration-post-blog-posts-sync-juejin
+  - id: integration-post-blog-posts-postid-sync-juejin
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1267,7 +1267,7 @@ routes:
     handler: "com.xander.lab.components.api.ComponentController#shareComponent"
     file: src/main/java/com/xander/lab/components/api/ComponentController.java
     line: 57
-  - id: components-get-components
+  - id: components-get-components-id
     logical_owner: components
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1278,7 +1278,7 @@ routes:
     handler: "com.xander.lab.components.api.ComponentController#getComponent"
     file: src/main/java/com/xander/lab/components/api/ComponentController.java
     line: 42
-  - id: integration-get-download
+  - id: integration-get-download-filename
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1311,7 +1311,7 @@ routes:
     handler: "com.xander.lab.automation.api.EmailReminderController#create"
     file: src/main/java/com/xander/lab/automation/api/EmailReminderController.java
     line: 40
-  - id: automation-delete-email-reminders
+  - id: automation-delete-email-reminders-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1322,7 +1322,7 @@ routes:
     handler: "com.xander.lab.automation.api.EmailReminderController#delete"
     file: src/main/java/com/xander/lab/automation/api/EmailReminderController.java
     line: 57
-  - id: automation-patch-email-reminders-status
+  - id: automation-patch-email-reminders-id-status
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1355,7 +1355,7 @@ routes:
     handler: "com.xander.lab.integration.file.FileController#exportExcel"
     file: src/main/java/com/xander/lab/integration/file/FileController.java
     line: 204
-  - id: studio-get-flow-canvases-snapshot
+  - id: studio-get-flow-canvases-canvasid-snapshot
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1366,7 +1366,7 @@ routes:
     handler: "com.xander.lab.studio.api.FlowCanvasController#getSnapshot"
     file: src/main/java/com/xander/lab/studio/api/FlowCanvasController.java
     line: 27
-  - id: studio-put-flow-canvases-snapshot
+  - id: studio-put-flow-canvases-canvasid-snapshot
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1377,7 +1377,7 @@ routes:
     handler: "com.xander.lab.studio.api.FlowCanvasController#saveSnapshot"
     file: src/main/java/com/xander/lab/studio/api/FlowCanvasController.java
     line: 40
-  - id: studio-get-flow-projects-flowprojectcontroller
+  - id: studio-get-flow-projects
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1399,7 +1399,7 @@ routes:
     handler: "com.xander.lab.studio.api.FlowProjectController#create"
     file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 44
-  - id: studio-delete-flow-projects
+  - id: studio-delete-flow-projects-id
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1410,7 +1410,7 @@ routes:
     handler: "com.xander.lab.studio.api.FlowProjectController#delete"
     file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 91
-  - id: studio-get-flow-projects-flowprojectcontroller
+  - id: studio-get-flow-projects-id
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1421,7 +1421,7 @@ routes:
     handler: "com.xander.lab.studio.api.FlowProjectController#get"
     file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 59
-  - id: studio-patch-flow-projects
+  - id: studio-patch-flow-projects-id
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1432,7 +1432,7 @@ routes:
     handler: "com.xander.lab.studio.api.FlowProjectController#update"
     file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 72
-  - id: studio-get-img2three-tasks-img2threecontroller
+  - id: studio-get-img2three-tasks
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1442,7 +1442,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.studio.api.Img2ThreeController#list"
     file: src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
-    line: 46
+    line: 69
   - id: studio-post-img2three-tasks
     logical_owner: studio
     deployment_unit: dinqor-core-host
@@ -1453,8 +1453,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.studio.api.Img2ThreeController#create"
     file: src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
-    line: 37
-  - id: studio-get-img2three-tasks-img2threecontroller
+    line: 60
+  - id: studio-get-img2three-tasks-id
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1464,8 +1464,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.studio.api.Img2ThreeController#get"
     file: src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
-    line: 55
-  - id: studio-post-img2three-tasks-run-stream
+    line: 78
+  - id: studio-post-img2three-tasks-id-run-stream
     logical_owner: studio
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1475,8 +1475,8 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.studio.api.Img2ThreeController#runStream"
     file: src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
-    line: 64
-  - id: knowledgebase-get-knowledge-base-files-knowledgefilecontroller
+    line: 87
+  - id: knowledgebase-get-knowledge-base-files
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1498,7 +1498,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#upload"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 44
-  - id: knowledgebase-delete-knowledge-base-files
+  - id: knowledgebase-delete-knowledge-base-files-fileid
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1509,7 +1509,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#delete"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 109
-  - id: knowledgebase-get-knowledge-base-files-knowledgefilecontroller
+  - id: knowledgebase-get-knowledge-base-files-fileid
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1520,7 +1520,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#detail"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 73
-  - id: knowledgebase-get-knowledge-base-files-chapters
+  - id: knowledgebase-get-knowledge-base-files-fileid-chapters
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1531,7 +1531,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#chapters"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 90
-  - id: knowledgebase-post-knowledge-base-files-chapters-structure
+  - id: knowledgebase-post-knowledge-base-files-fileid-chapters-chapterid-structure
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1542,7 +1542,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#generateChapterStructure"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 142
-  - id: knowledgebase-get-knowledge-base-files-content
+  - id: knowledgebase-get-knowledge-base-files-fileid-content
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1553,7 +1553,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#content"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 85
-  - id: knowledgebase-put-knowledge-base-files-folder
+  - id: knowledgebase-put-knowledge-base-files-fileid-folder
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1564,7 +1564,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#move"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 102
-  - id: knowledgebase-put-knowledge-base-files-name
+  - id: knowledgebase-put-knowledge-base-files-fileid-name
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1575,7 +1575,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#rename"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 96
-  - id: knowledgebase-get-knowledge-base-files-preview
+  - id: knowledgebase-get-knowledge-base-files-fileid-preview
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1586,7 +1586,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#preview"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 79
-  - id: knowledgebase-post-knowledge-base-files-reidentify
+  - id: knowledgebase-post-knowledge-base-files-fileid-reidentify
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1597,7 +1597,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#reidentify"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 116
-  - id: knowledgebase-get-knowledge-base-files-structure
+  - id: knowledgebase-get-knowledge-base-files-fileid-structure
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1608,7 +1608,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#structure"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 126
-  - id: knowledgebase-post-knowledge-base-files-structure-regenerate
+  - id: knowledgebase-post-knowledge-base-files-fileid-structure-regenerate
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1619,7 +1619,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#regenerateStructure"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 133
-  - id: knowledgebase-post-knowledge-base-files-tags
+  - id: knowledgebase-post-knowledge-base-files-fileid-tags
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1630,7 +1630,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#attachTags"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 149
-  - id: knowledgebase-put-knowledge-base-files-tags
+  - id: knowledgebase-put-knowledge-base-files-fileid-tags
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1641,7 +1641,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#replaceTags"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 156
-  - id: knowledgebase-delete-knowledge-base-files-tags
+  - id: knowledgebase-delete-knowledge-base-files-fileid-tags-tagid
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1674,7 +1674,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFolderController#create"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
     line: 33
-  - id: knowledgebase-delete-knowledge-base-folders
+  - id: knowledgebase-delete-knowledge-base-folders-folderid
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1685,7 +1685,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFolderController#delete"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
     line: 57
-  - id: knowledgebase-put-knowledge-base-folders-name
+  - id: knowledgebase-put-knowledge-base-folders-folderid-name
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1696,7 +1696,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFolderController#rename"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
     line: 38
-  - id: knowledgebase-put-knowledge-base-folders-parent
+  - id: knowledgebase-put-knowledge-base-folders-folderid-parent
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1729,7 +1729,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeTagController#create"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
     line: 38
-  - id: knowledgebase-delete-knowledge-base-tags
+  - id: knowledgebase-delete-knowledge-base-tags-tagid
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1740,7 +1740,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeTagController#delete"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
     line: 53
-  - id: knowledgebase-put-knowledge-base-tags
+  - id: knowledgebase-put-knowledge-base-tags-tagid
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1762,7 +1762,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#init"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 38
-  - id: knowledgebase-delete-knowledge-base-uploads
+  - id: knowledgebase-delete-knowledge-base-uploads-uploadid
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1773,7 +1773,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#abort"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 69
-  - id: knowledgebase-get-knowledge-base-uploads
+  - id: knowledgebase-get-knowledge-base-uploads-uploadid
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1784,7 +1784,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#status"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 44
-  - id: knowledgebase-post-knowledge-base-uploads-chunks
+  - id: knowledgebase-post-knowledge-base-uploads-uploadid-chunks-chunkindex
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1795,7 +1795,7 @@ routes:
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#uploadChunk"
     file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 50
-  - id: knowledgebase-post-knowledge-base-uploads-complete
+  - id: knowledgebase-post-knowledge-base-uploads-uploadid-complete
     logical_owner: knowledgebase
     deployment_unit: dinqor-core-host
     kind: controller
@@ -1861,7 +1861,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#authorize"
     file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 78
-  - id: integration-get-mcp-oauth-authorize-requests
+  - id: integration-get-mcp-oauth-authorize-requests-requestid
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1872,7 +1872,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#pending"
     file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 94
-  - id: integration-post-mcp-oauth-authorize-requests-approve
+  - id: integration-post-mcp-oauth-authorize-requests-requestid-approve
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1883,7 +1883,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#approve"
     file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 102
-  - id: integration-post-mcp-oauth-authorize-requests-deny
+  - id: integration-post-mcp-oauth-authorize-requests-requestid-deny
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1905,7 +1905,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#clients"
     file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 145
-  - id: integration-delete-mcp-oauth-clients
+  - id: integration-delete-mcp-oauth-clients-clientid
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1993,7 +1993,7 @@ routes:
     handler: "com.xander.lab.automation.api.BlogNotificationController#unreadCount"
     file: src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     line: 39
-  - id: automation-patch-notifications-read
+  - id: automation-patch-notifications-id-read
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -2147,7 +2147,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinCatalogController#syncCatalog"
     file: src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinCatalogController.java
     line: 20
-  - id: recitation-get-recitations-attempts
+  - id: recitation-get-recitations-attempts-attemptid
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2158,7 +2158,7 @@ routes:
     handler: "com.xander.lab.recitation.api.RecitationController#getAttempt"
     file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 97
-  - id: recitation-get-recitations-materials-recitationcontroller
+  - id: recitation-get-recitations-materials
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2180,7 +2180,7 @@ routes:
     handler: "com.xander.lab.recitation.api.RecitationController#createMaterial"
     file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 32
-  - id: recitation-delete-recitations-materials
+  - id: recitation-delete-recitations-materials-materialid
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2191,7 +2191,7 @@ routes:
     handler: "com.xander.lab.recitation.api.RecitationController#deleteMaterial"
     file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 72
-  - id: recitation-get-recitations-materials-recitationcontroller
+  - id: recitation-get-recitations-materials-materialid
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2202,7 +2202,7 @@ routes:
     handler: "com.xander.lab.recitation.api.RecitationController#getMaterial"
     file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 78
-  - id: recitation-put-recitations-materials
+  - id: recitation-put-recitations-materials-materialid
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2213,7 +2213,7 @@ routes:
     handler: "com.xander.lab.recitation.api.RecitationController#updateMaterial"
     file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 56
-  - id: recitation-post-recitations-materials-archive
+  - id: recitation-post-recitations-materials-materialid-archive
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2224,7 +2224,7 @@ routes:
     handler: "com.xander.lab.recitation.api.RecitationController#archiveMaterial"
     file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 64
-  - id: recitation-get-recitations-materials-attempts
+  - id: recitation-get-recitations-materials-materialid-attempts
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2235,7 +2235,7 @@ routes:
     handler: "com.xander.lab.recitation.api.RecitationController#listAttempts"
     file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 92
-  - id: recitation-post-recitations-materials-attempts
+  - id: recitation-post-recitations-materials-materialid-attempts
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2246,7 +2246,7 @@ routes:
     handler: "com.xander.lab.recitation.api.RecitationController#createAttempt"
     file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 83
-  - id: recitation-get-recitations-materials-quizzes
+  - id: recitation-get-recitations-materials-materialid-quizzes
     logical_owner: recitation
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2323,7 +2323,7 @@ routes:
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#create"
     file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 39
-  - id: virtualpay-get-virtual-pay-orders
+  - id: virtualpay-get-virtual-pay-orders-outtradeno
     logical_owner: virtualpay
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2334,7 +2334,7 @@ routes:
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#status"
     file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 56
-  - id: virtualpay-post-virtual-pay-orders-reconcile
+  - id: virtualpay-post-virtual-pay-orders-outtradeno-reconcile
     logical_owner: virtualpay
     deployment_unit: dinqor-core-host
     kind: controller
@@ -2356,7 +2356,7 @@ routes:
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#products"
     file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 34
-  - id: bloghtml-get-blog-html-raw
+  - id: bloghtml-get-blog-html-id-raw
     logical_owner: bloghtml
     deployment_unit: dinqor-bloghtml-preview
     kind: controller
@@ -2388,4 +2388,4 @@ routes:
     last_event_id: false
     handler: WebSocketHandler
     file: src/main/java/com/xander/lab/agent/api/AgentWebSocketConfig.java
-    line: 56
+    line: 65

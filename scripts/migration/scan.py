@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -209,7 +210,11 @@ def method_signature(content: str, annotation_end: int) -> str:
 
 def slugify(text: str) -> str:
     text = text.strip("/")
-    text = re.sub(r"\{[^}]*\}", "", text)
+    # Keep the *name* of a path variable instead of deleting it. Deleting it made
+    # ``/conversations`` and ``/conversations/{id}`` slug to the same string, so a
+    # REST collection route and its detail route collapsed into one id -- and every
+    # id-keyed gate then saw only one of the two. ``/a/{id}/b`` -> ``a-id-b``.
+    text = re.sub(r"\{([^}]*)\}", r"\1", text)
     text = re.sub(r"[^A-Za-z0-9]+", "-", text)
     return text.strip("-").lower() or "root"
 
@@ -512,12 +517,30 @@ def build_route_inventory() -> dict:
     for route in routes:
         route["id"] = route_id(route)
     routes.sort(key=lambda item: (item["path"], item["http_method"], item["file"]))
+    # Disambiguate collisions by appending the owning class name. One pass is not
+    # enough: two mappings declared on the *same* class get the *same* suffix and
+    # stay collided -- which is exactly how ``GET /conversations`` and
+    # ``GET /conversations/{id}`` both became ``...-agentconversationcontroller``,
+    # hiding one route from every id-keyed gate. The second pass guarantees that
+    # the machine-owned key set really is a set.
     seen: Counter[str] = Counter()
     for route in routes:
         seen[route["id"]] += 1
     for route in routes:
         if seen[route["id"]] > 1:
-            route["id"] = f"{route['id']}-{route['file'].rsplit('/', 1)[-1].replace('.java', '').lower()}"
+            suffix = route["file"].rsplit("/", 1)[-1].replace(".java", "").lower()
+            route["id"] = f"{route['id']}-{suffix}"
+
+    taken: set[str] = set()
+    for route in routes:
+        candidate = route["id"]
+        if candidate in taken:
+            index = 2
+            while f"{candidate}-{index}" in taken:
+                index += 1
+            candidate = f"{candidate}-{index}"
+        taken.add(candidate)
+        route["id"] = candidate
     return {
         "generated_by": "scripts/migration/scan.py",
         "note": "Machine-owned key set. Do not hand-edit; re-run the scanner.",
@@ -544,7 +567,20 @@ def route_id(route: dict) -> str:
 
 def build_scheduled_inventory() -> dict:
     java = scan_java()
-    items = sorted(java["scheduled"], key=lambda item: item["class"])
+    # Sort by (class, line) rather than class alone: a class may contribute more
+    # than one entry point, and the order between them must be reproducible.
+    items = sorted(java["scheduled"], key=lambda item: (item["class"], item["line"]))
+    # Ids are stable identifiers that docs/scheduled-ownership.yaml references by
+    # name, so keep the bare class name whenever it is unambiguous. Only a class
+    # with more than one @Scheduled gets the method appended -- without this, two
+    # entry points collapse into one id, and the loser becomes invisible to every
+    # gate (deleting it would not even change the inventory count).
+    per_class: dict[str, int] = {}
+    for item in items:
+        per_class[item["class"]] = per_class.get(item["class"], 0) + 1
+    for item in items:
+        if per_class[item["class"]] > 1 and item["method"]:
+            item["id"] = f"{item['id']}-{kebab(item['method'])}"
     return {
         "generated_by": "scripts/migration/scan.py",
         "note": "Machine-owned key set of every @Scheduled entry point.",
@@ -588,13 +624,15 @@ sibling ownership / policy files, which the CI gates validate against this file.
 API_MIGRATION_HEADER = """DinQorAI microservice migration — API Migration Contract (V9 section 8).
 
 Bootstrapped by scripts/migration/scan.py from docs/route-inventory.yaml.
-Re-running the scanner only APPENDS routes that are not present yet; existing
-entries keep their hand-filled `clients` / `status` values.
+Re-running the scanner REGENERATES this file, carrying over the hand-filled fields
+of entries it recognises. The merge key is `(old.method, old.path)` — NOT `id` —
+because ids are derived from the path and must stay free to change.
 
 Human-owned fields: clients.{web,miniprogram,admin}, status, compatibility.
 Machine-owned fields: id, owner, old.{method,path}, new.{method,path}.
 
 CI gates: `api-migration-key-coverage` (every inventory route present),
+`inventory-integrity` (ids unique, counts.total truthful),
 `contract-freeze-guard` (frozen entries must not change).
 """
 
@@ -822,34 +860,119 @@ def main() -> int:
     return 0
 
 
-EXISTING_ID_RE = re.compile(r"^\s*-\s*id:\s*(\S+)\s*$", re.MULTILINE)
+_API_ENTRY_RE = re.compile(r"^  - (\w+):\s*(.*)$")
+_API_SECTION_RE = re.compile(r"^    (\w+):\s*$")
+_API_FIELD_RE = re.compile(r"^    (\w+):\s*(.+)$")
+_API_MEMBER_RE = re.compile(r"^      (\w+):\s*(.+)$")
+_API_SECTIONS = ("old", "new", "clients", "compatibility")
+_API_HUMAN_FIELDS = ("clients", "compatibility", "status")
+
+
+def _yaml_scalar(text: str):
+    """Decode one scalar written by :mod:`yamlutil` (JSON scalars only)."""
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except (ValueError, TypeError):
+        return text
+
+
+def read_api_migration() -> dict[tuple, dict]:
+    """Read the human-owned fields out of the existing ``api-migration.yaml``.
+
+    ``scan.py`` must stay dependency-free (it is the script people re-run most), so
+    this parses the narrow subset of YAML that :mod:`yamlutil` emits rather than
+    importing PyYAML. Only the fields a human edits are returned.
+    """
+    target = OUT_DIR / "api-migration.yaml"
+    if not target.exists():
+        return {}
+
+    carried: dict[tuple, dict] = {}
+    current: dict | None = None
+    section: str | None = None
+
+    for line in target.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if _API_ENTRY_RE.match(line):
+            # Flush *before* starting the next entry: every entry starts with
+            # ``- id:``, so a trailing flush would never run and all but the last
+            # entry would be silently dropped.
+            _flush_api_entry(carried, current)
+            current = {"old": {}, "clients": {}, "compatibility": {}, "status": None}
+            section = None
+            continue
+        if current is None:
+            continue
+        member = _API_MEMBER_RE.match(line)
+        if member and section in _API_SECTIONS:
+            if section != "new":
+                current[section][member.group(1)] = _yaml_scalar(member.group(2))
+            continue
+        heading = _API_SECTION_RE.match(line)
+        if heading:
+            section = heading.group(1) if heading.group(1) in _API_SECTIONS else None
+            continue
+        field = _API_FIELD_RE.match(line)
+        if field:
+            section = None
+            if field.group(1) == "status":
+                current["status"] = _yaml_scalar(field.group(2))
+            continue
+
+    _flush_api_entry(carried, current)
+    return carried
+
+
+def _flush_api_entry(carried: dict, current: dict | None) -> None:
+    if not current:
+        return
+    key = (current["old"].get("method"), current["old"].get("path"))
+    if key == (None, None):
+        return
+    carried[key] = {field: current[field] for field in _API_HUMAN_FIELDS
+                    if current.get(field) not in (None, {})}
 
 
 def write_api_migration(routes: list[dict]) -> None:
-    """Bootstrap / merge docs/api-migration.yaml without clobbering human edits."""
+    """Merge docs/api-migration.yaml without clobbering hand-filled fields.
+
+    The merge key is ``(old.method, old.path)`` -- deliberately NOT ``id``. Ids are
+    derived from the path, so any change to the id scheme would otherwise turn every
+    existing entry into a ghost and append a fresh duplicate of it. ``old.path`` is
+    machine-owned and stable, so human-curated ``clients`` / ``status`` /
+    ``compatibility`` survive an id-scheme change.
+    """
     target = OUT_DIR / "api-migration.yaml"
     entries = build_api_migration(routes)
-    if target.exists():
-        existing = set(EXISTING_ID_RE.findall(target.read_text(encoding="utf-8")))
-        fresh = [entry for entry in entries if entry["id"] not in existing]
-        if not fresh:
-            print(f"kept docs/api-migration.yaml ({len(existing)} entries, nothing new)")
-            return
-        text = yamlutil.dumps(fresh)
-        text = text.replace("  - id:", "- id:", 1) if text.startswith("  - id:") else text
-        with open(target, "a", encoding="utf-8", newline="\n") as handle:
-            handle.write("\n# --- appended by scripts/migration/scan.py ---\n")
-            handle.write(text.lstrip("\n"))
-        print(f"appended {len(fresh)} new entries to docs/api-migration.yaml")
-        return
+    carried = read_api_migration()
+
+    preserved = 0
+    for entry in entries:
+        old_entry = carried.get(_api_join_key(entry))
+        if old_entry is None:
+            continue
+        preserved += 1
+        for field in _API_HUMAN_FIELDS:
+            if field in old_entry:
+                entry[field] = old_entry[field]
 
     payload = {
         "generated_by": "scripts/migration/scan.py",
         "counts": {"total": len(entries)},
         "entries": entries,
     }
-    target.write_text(yamlutil.dumps(payload, API_MIGRATION_HEADER), encoding="utf-8", newline="\n")
-    print(f"wrote docs/api-migration.yaml  {{'total': {len(entries)}}}")
+    target.write_text(yamlutil.dumps(payload, API_MIGRATION_HEADER),
+                      encoding="utf-8", newline="\n")
+    dropped = len(carried) - preserved
+    print(f"wrote docs/api-migration.yaml  {{'total': {len(entries)}, "
+          f"'preserved': {preserved}, 'dropped': {dropped}}}")
+
+
+def _api_join_key(entry: dict) -> tuple:
+    old = entry.get("old") or {}
+    return (old.get("method"), old.get("path"))
 
 
 def write_config_ownership(config_entries: list[dict]) -> None:

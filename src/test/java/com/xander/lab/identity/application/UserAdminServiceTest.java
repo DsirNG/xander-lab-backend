@@ -8,6 +8,7 @@ import org.apache.ibatis.builder.MapperBuilderAssistant;
 import com.xander.lab.common.Constants;
 import com.xander.lab.common.PageData;
 import com.xander.lab.identity.api.UserAdminView;
+import com.xander.lab.identity.domain.AccountSecurityState;
 import com.xander.lab.identity.domain.User;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,11 +27,13 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,12 +50,14 @@ class UserAdminServiceTest {
     private StringRedisTemplate redisTemplate;
     @Mock
     private SetOperations setOperations;
+    @Mock
+    private AccountSecurityStateService accountSecurityStateService;
 
     private UserAdminService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserAdminService(userMapper, redisTemplate);
+        service = new UserAdminService(userMapper, redisTemplate, accountSecurityStateService);
     }
 
     private User user(Long id, String role, int status) {
@@ -64,6 +69,21 @@ class UserAdminServiceTest {
         user.setRole(role);
         user.setStatus(status);
         return user;
+    }
+
+    private AccountSecurityState state(Long accountId, boolean disabled, long version) {
+        AccountSecurityState state = new AccountSecurityState();
+        state.setAccountId(accountId);
+        state.setDisabled(disabled ? 1 : 0);
+        state.setSecurityVersion(version);
+        state.setChangeSeq(version);
+        return state;
+    }
+
+    /** 封禁/解封写路径都要读回 securityVersion 打日志，因此 SOT mock 必须返回非 null。 */
+    private void stubSecurityState(boolean disabled, long version) {
+        when(accountSecurityStateService.applyState(any(), anyBoolean(), any()))
+                .thenReturn(state(7L, disabled, version));
     }
 
     @Test
@@ -88,6 +108,7 @@ class UserAdminServiceTest {
         when(userMapper.update(any(), any())).thenReturn(1);
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(setOperations.members(anyString())).thenReturn(Set.of("token-a", "token-b"));
+        stubSecurityState(true, 2L);
         User banned = user(7L, "USER", 0);
         when(userMapper.selectById(7L)).thenReturn(banned);
 
@@ -108,6 +129,7 @@ class UserAdminServiceTest {
         when(userMapper.update(any(), any())).thenReturn(1);
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(setOperations.members(anyString())).thenReturn(Set.of());
+        stubSecurityState(true, 2L);
         when(userMapper.selectById(7L)).thenReturn(user(7L, "USER", 0));
 
         service.setUserStatus(1L, 7L, 0);
@@ -119,6 +141,7 @@ class UserAdminServiceTest {
     void unbanWhenAlreadyEnabledSkipsSessionRevocation() {
         when(userMapper.selectById(7L)).thenReturn(user(7L, "USER", 1));
         when(userMapper.update(any(), any())).thenReturn(0);
+        stubSecurityState(false, 3L);
 
         UserAdminView view = service.setUserStatus(1L, 7L, 1);
 
@@ -167,10 +190,73 @@ class UserAdminServiceTest {
         when(userMapper.update(any(), any())).thenReturn(0);
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
         when(setOperations.members(anyString())).thenReturn(Set.of());
+        stubSecurityState(true, 5L);
 
         UserAdminView view = service.setUserStatus(1L, 7L, 0);
 
         assertThat(view.status()).isZero();
         verify(redisTemplate).delete(anyString());
+    }
+
+    // ===================== 新安全平面写入（V9 §26 / §27 / §48） =====================
+
+    @Test
+    void banWritesSecurityStateSotAndKeepsLegacyRedisRevoke() {
+        when(userMapper.selectById(7L)).thenReturn(user(7L, "USER", 1));
+        when(userMapper.update(any(), any())).thenReturn(1);
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+        when(setOperations.members(anyString())).thenReturn(Set.of("token-a"));
+        stubSecurityState(true, 2L);
+        when(userMapper.selectById(7L)).thenReturn(user(7L, "USER", 0));
+
+        service.setUserStatus(1L, 7L, 0);
+
+        // SOT 写入：disabled=true，reason 里必须带上操作人（审计要能回答"谁封的"）。
+        verify(accountSecurityStateService).applyState(7L, true, "admin-ban operator=1");
+        // 能力守恒（§2.3）：Wave 2 之前遗留 Redis 撤销必须仍然执行。
+        verify(redisTemplate).delete(Constants.REDIS_TOKEN_PREFIX + "token-a");
+    }
+
+    @Test
+    void unbanWritesSecurityStateWithoutRevokingSessions() {
+        when(userMapper.selectById(7L)).thenReturn(user(7L, "USER", 0));
+        when(userMapper.update(any(), any())).thenReturn(1);
+        stubSecurityState(false, 3L);
+        when(userMapper.selectById(7L)).thenReturn(user(7L, "USER", 1));
+
+        service.setUserStatus(1L, 7L, 1);
+
+        verify(accountSecurityStateService).applyState(7L, false, "admin-unban operator=1");
+        // 解封不恢复任何已撤销的会话，也不碰 Redis。
+        verify(redisTemplate, never()).delete(anyString());
+    }
+
+    @Test
+    void banStillWritesSecurityStateWhenSysUserAlreadyBanned() {
+        // sys_user 已经是封禁态（rows=0），但安全平面可能因历史数据 / 上次崩溃 / 手工改库
+        // 而与它不一致。这次调用就是最便宜的自愈机会，因此必须照写。
+        when(userMapper.selectById(7L)).thenReturn(user(7L, "USER", 0));
+        when(userMapper.update(any(), any())).thenReturn(0);
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+        when(setOperations.members(anyString())).thenReturn(Set.of());
+        stubSecurityState(true, 4L);
+
+        service.setUserStatus(1L, 7L, 0);
+
+        verify(accountSecurityStateService).applyState(7L, true, "admin-ban operator=1");
+    }
+
+    @Test
+    void rejectedOperationsNeverTouchTheSecurityPlane() {
+        when(userMapper.selectById(2L)).thenReturn(user(2L, "ADMIN", 1));
+
+        assertThatThrownBy(() -> service.setUserStatus(9L, 9L, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.setUserStatus(1L, 7L, 2))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> service.setUserStatus(1L, 2L, 0))
+                .isInstanceOf(ResponseStatusException.class);
+
+        verifyNoInteractions(accountSecurityStateService);
     }
 }

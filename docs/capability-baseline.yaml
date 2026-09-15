@@ -17,7 +17,11 @@
 #   planned   V9 引入的新能力，Wave 2 前必须落地
 
 counts:
-  total: 22
+  total: 27
+  planned: 15
+  active: 10
+  changed: 2
+  retired: 0
 
 capabilities:
   # ===================== 管理员封禁（现状是秒级生效，不得退化） =====================

@@ -10,6 +10,10 @@
 #   2) 每条 host 的 boundary_files 必须真实存在；
 #   3) 每个 boundary_files 必须引用 ConnectionRegistry（即真的登记了连接）。
 # 新增流端点时若不登记，门禁失败 —— 这就是阻止"补了又丢"的机制。
+#
+# routes 里填的是 route-inventory.yaml 的 id，而 id 由路径推导（含路径变量名）。
+# 因此改动扫描器的 id 生成规则时，本文件必须同步重跑门禁 —— id 变了但语义没变，
+# 门禁会以"引用了不存在的路由"报错，这是有意的：宁可让人确认一次，也不要静默漂移。
 
 generated_by: human
 ref: "V9 §12 / §49 / §50 / §51 / §52"
@@ -38,8 +42,8 @@ hosts:
   - id: agent-conversation-sse
     deployment_unit: dinqor-agent
     routes:
-      - agent-get-agent-conversations-events
-      - agent-post-agent-conversations-messages-stream
+      - agent-get-agent-conversations-id-events
+      - agent-post-agent-conversations-id-messages-stream
     boundary_files:
       - src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     heartbeat: "SseEmitter 心跳 15s，走同一出口校验"
@@ -50,9 +54,9 @@ hosts:
   - id: blogagent-task-sse
     deployment_unit: dinqor-agent
     routes:
-      - blogagent-get-blog-agent-tasks-events
-      - blogagent-post-blog-agent-tasks-messages-stream
-      - blogagent-post-blog-agent-tasks-run-stream
+      - blogagent-get-blog-agent-tasks-id-events
+      - blogagent-post-blog-agent-tasks-id-messages-stream
+      - blogagent-post-blog-agent-tasks-id-run-stream
     boundary_files:
       - src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     heartbeat: "SseEmitter 心跳 15s，走同一出口校验"
@@ -78,7 +82,7 @@ hosts:
   - id: img2three-sse
     deployment_unit: dinqor-core-host
     routes:
-      - studio-post-img2three-tasks-run-stream
+      - studio-post-img2three-tasks-id-run-stream
     boundary_files:
       - src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
     heartbeat: none

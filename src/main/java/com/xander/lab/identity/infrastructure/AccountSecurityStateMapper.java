@@ -2,10 +2,12 @@ package com.xander.lab.identity.infrastructure;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.xander.lab.identity.domain.AccountSecurityState;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -27,6 +29,45 @@ public interface AccountSecurityStateMapper extends BaseMapper<AccountSecuritySt
     /** 取回本连接刚分配的游标值。 */
     @Select("SELECT LAST_INSERT_ID()")
     Long currentChangeSeq();
+
+    /**
+     * 幂等写入账号安全状态（V9 §26 第 3 条 / §48）。
+     *
+     * <p>两条约束写死在 SQL 里，不能挪到 Java 侧：</p>
+     *
+     * <ol>
+     *   <li>{@code change_seq} 必须显式写入。用 AUTO_INCREMENT 会让<b>更新路径</b>
+     *       不推进该列，于是 per_instance reconciler 的 {@code change_seq > cursor}
+     *       增量拉取会静默漏掉这次封禁 —— 而实例照样收敛到"没有变化"，
+     *       是一个不会报错的失败。</li>
+     *   <li>{@code security_version} 用 SQL 侧 {@code + 1}，不做 Java 侧读-改-写。
+     *       两个管理员并发操作同一账号时，读-改-写会让两次变更算出同一个版本号，
+     *       于是任何"按版本号失效"的缓存都少失效一次。</li>
+     * </ol>
+     *
+     * <p>{@code disabled_at} 用条件赋值：解封时<b>保留</b>最近一次封禁时间。
+     * 它是 {@code admin_ban_*} 延迟指标的分母，清空会让"封禁过又被解封"的账号
+     * 从指标里消失。</p>
+     *
+     * @param disabled 1=封禁，0=正常
+     * @return 受影响行数（1=新增，2=更新，MySQL ODKU 语义）
+     */
+    @Insert("""
+            INSERT INTO account_security_state
+                (account_id, disabled, security_version, change_seq, disabled_at, reason)
+            VALUES (#{accountId}, #{disabled}, 1, #{changeSeq}, #{disabledAt}, #{reason})
+            ON DUPLICATE KEY UPDATE
+                disabled         = VALUES(disabled),
+                security_version = security_version + 1,
+                change_seq       = VALUES(change_seq),
+                disabled_at      = IF(VALUES(disabled) = 1, VALUES(disabled_at), disabled_at),
+                reason           = VALUES(reason)
+            """)
+    int upsertState(@Param("accountId") Long accountId,
+                    @Param("disabled") int disabled,
+                    @Param("changeSeq") long changeSeq,
+                    @Param("disabledAt") LocalDateTime disabledAt,
+                    @Param("reason") String reason);
 
     /**
      * per_instance reconciler 的增量拉取（V9 §70）。

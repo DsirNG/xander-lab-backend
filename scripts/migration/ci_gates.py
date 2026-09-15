@@ -244,6 +244,15 @@ def gate_scheduled_ownership_coverage() -> None:
     gate = "scheduled-ownership-coverage"
     inventory = load("scheduled-inventory.yaml")["scheduled"]
     ownership = load("scheduled-ownership.yaml")["scheduled"]
+    # A class with two @Scheduled methods used to yield two inventory rows sharing
+    # one id, so the ownership gate saw only one of them. Fail loudly instead:
+    # a duplicate id means at least one entry point has no owner.
+    ids = [item["id"] for item in inventory]
+    duplicates = sorted({name for name in ids if ids.count(name) > 1})
+    if duplicates:
+        report(gate, False, "duplicate @Scheduled ids (disambiguate by method): "
+                            f"{duplicates}")
+        return
     known = {entry["id"] for entry in ownership}
     missing = sorted(item["id"] for item in inventory if item["id"] not in known)
     if missing:
@@ -549,7 +558,67 @@ def gate_stream_ban_boundary_coverage() -> None:
            + (f", {len(unregistered)} explicitly unregistered" if unregistered else ""))
 
 
+# Every inventory that is keyed by an identifier, plus the `counts` entry that is
+# supposed to equal its length. The §13 methodology only works if the machine-owned
+# key set is actually a *set*: a duplicate key means two entities share one key, so
+# every keyed gate silently sees only one of them. A stale `counts.total` is the
+# same failure in disguise -- it is what the plan's "补了又丢" cycle looks like.
+#
+# The identity is a tuple because a config key is legitimately declared once per
+# source file (``application.yml`` vs ``application-local.yml``); its identity is
+# ``(key, source)``, not ``key``.
+ID_KEYED_INVENTORIES = (
+    ("route-inventory.yaml", "routes", ("id",), "total"),
+    ("api-migration.yaml", "entries", ("id",), "total"),
+    ("scheduled-inventory.yaml", "scheduled", ("id",), "total"),
+    ("scheduled-ownership.yaml", "scheduled", ("id",), "total"),
+    ("table-inventory.yaml", "tables", ("table",), "total"),
+    ("table-ownership.yaml", "tables", ("table",), "total"),
+    ("config-inventory.yaml", "config", ("key", "source"), "total"),
+    ("config-ownership.yaml", "config", ("key", "source"), "total"),
+    ("capability-baseline.yaml", "capabilities", ("id",), "total"),
+    ("contract-changes.yaml", "changes", ("id",), "total"),
+    ("stream-hosts.yaml", "hosts", ("id",), None),
+)
+
+
+def gate_inventory_integrity() -> None:
+    gate = "inventory-integrity"
+    problems: list[str] = []
+    for name, list_key, id_fields, count_key in ID_KEYED_INVENTORIES:
+        doc = load(name)
+        items = doc.get(list_key) or []
+        label = "+".join(id_fields)
+        keys = [tuple(item.get(field) for field in id_fields) for item in items]
+
+        blank = sum(1 for key in keys if any(part in (None, "") for part in key))
+        if blank:
+            problems.append(f"{name}: {blank} entr(y|ies) missing {label}")
+
+        present = [key for key in keys if all(part not in (None, "") for part in key)]
+        duplicates = sorted({key for key in present if present.count(key) > 1})
+        if duplicates:
+            problems.append(
+                f"{name}: duplicate {label} ({len(duplicates)}): {duplicates[:4]}")
+
+        if count_key:
+            declared = (doc.get("counts") or {}).get(count_key)
+            if declared is not None and declared != len(items):
+                problems.append(
+                    f"{name}: counts.{count_key}={declared} but {len(items)} entries")
+
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    total = sum(len(load(name).get(list_key) or [])
+                for name, list_key, _, _ in ID_KEYED_INVENTORIES)
+    report(gate, True,
+           f"{len(ID_KEYED_INVENTORIES)} inventories, {total} entries, "
+           "unique keys, declared counts match")
+
+
 GATES = {
+    "inventory-integrity": gate_inventory_integrity,
     "route-inventory-drift": gate_route_inventory_drift,
     "api-migration-key-coverage": gate_api_migration_key_coverage,
     "auth-policy-coverage": gate_auth_policy_coverage,

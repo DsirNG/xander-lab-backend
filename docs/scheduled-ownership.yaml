@@ -13,11 +13,13 @@
 
 generated_from: docs/scheduled-inventory.yaml
 
-# Wave 0A 扫描结果（9 项）+ 新增项（6 项），共 15 项。
+# Wave 0A 扫描结果（11 项）+ 新增项（3 项），共 14 项。
+# 注意 `scanned` 必须等于 docs/scheduled-inventory.yaml 的 counts.total，
+# 由门禁 `inventory-integrity` 校验。
 counts:
-  scanned: 9
-  planned: 6
-  total: 15
+  scanned: 11
+  planned: 3
+  total: 14
 
 scheduled:
   # ===================== Wave 0A 实际扫描到的 9 项 =====================
@@ -148,34 +150,43 @@ scheduled:
     status: planned
     notes: "V9 §69 / §70。每个 Gateway 实例维护自己的 deniedAccountIds 与自己的 cursor。reconcile interval = 1~2 秒（与 §27 / §28 的 5 秒预算一致）。禁止全局 ShedLock。"
 
-  - id: security-state-reconciler-core-host
+  - id: security-state-reconciler-reconcile
     logical_owner: identity
     current_deployment_owner: dinqor-core-host
     execution_mode: scheduled
     execution_scope: per_instance
     singleton_strategy: none
-    status: planned
-    notes: "V9 §52：core-host 承载 agent SSE/WS、automation SSE、blogagent SSE，且 Wave 2 之后、Wave 3 之前仍承载 studio 的 Img2Three SSE —— 因此 core-host 必须实现 LocalSecurityStateCache 与连接注册表。"
+    status: active
+    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:75
+    deployment_hosts:
+      - host: dinqor-core-host
+        effective_from: wave0a
+        reason: "承载 agent SSE/WS、automation SSE、blogagent SSE；Wave 2 之后、Wave 3 之前仍承载 studio 的 Img2Three SSE。"
+      - host: dinqor-agent
+        effective_from: wave2
+      - host: dinqor-content-automation
+        effective_from: wave2
+      - host: dinqor-studio
+        effective_from: wave3
+    notes: >-
+      V9 §69 / §70：增量拉取（change_seq > 本实例自己的游标），1.5 秒一次。
+      interval 由 §28.3 的 5 秒预算倒推 ——「事件产生 → 到达宿主」预算 <= 2 秒。
+      禁止全局 ShedLock，理由见本文件头部第 4 条（会让 N-1 个实例永不刷新）。
+      封禁的两条手段都挂在它身上：手段 A（closeAll 主动断开）在本方法内，
+      手段 B（每帧出站前 O(1) 校验）在 8 个流宿主的发送边界。
 
-  - id: security-state-reconciler-agent
+  - id: security-state-reconciler-full-reconcile
     logical_owner: identity
-    current_deployment_owner: dinqor-agent
+    current_deployment_owner: dinqor-core-host
     execution_mode: scheduled
     execution_scope: per_instance
     singleton_strategy: none
-    status: planned
-    effective_from: wave2
-    notes: "V9 §52。Wave 2 起 agent 成为对话 SSE/WS 宿主。"
-
-  - id: security-state-reconciler-content-automation
-    logical_owner: identity
-    current_deployment_owner: dinqor-content-automation
-    execution_mode: scheduled
-    execution_scope: per_instance
-    singleton_strategy: none
-    status: planned
-    effective_from: wave2
-    notes: "V9 §52。Wave 2 起承载 automation SSE + blogagent SSE。"
+    status: active
+    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:132
+    notes: >-
+      低频全量对账兜底（5 分钟）。实例长时间离线后，本地游标可能落后于已被清理的历史区间，
+      此时增量拉取会永久漏掉那一段 —— 全量刷新（listDisabled + replaceAll）保证最终收敛。
+      与增量同为一个类，因此同为 per_instance。
 
 # ===================== 判定规则（取代固定清单，V9 §52） =====================
 rule:

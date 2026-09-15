@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.common.Constants;
 import com.xander.lab.common.PageData;
 import com.xander.lab.identity.api.UserAdminView;
+import com.xander.lab.identity.domain.AccountSecurityState;
 import com.xander.lab.identity.domain.User;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,23 @@ import java.util.Set;
  * token 记录），因此封禁即刻生效，无需等待 token 自然过期；解封只改状态。
  * identity 拥有用户与会话，其它模块（如 admin）只能通过本服务操作，不得直接
  * 修改 sys_user 或登录 Redis 键。</p>
+ *
+ * <h3>双写：遗留 Redis 撤销 + 新安全平面（V9 §2.3 能力守恒）</h3>
+ * <p>当前鉴权仍然以 Redis 为准（{@code AuthInterceptor} 查 {@code login:token:<jwt>}），
+ * 所以封禁必须<b>继续</b>走 {@link #revokeSessions} —— 换成新 SOT 就删掉它，
+ * 会让封禁在 Wave 2 切换之前完全失效。同时把安全状态写进
+ * {@code account_security_state} 并发一条事务性事件，让长连接封禁
+ * （§50 / §51）与 Gateway 侧的本地 deny cache 提前就位。</p>
+ *
+ * <p>两条路径都幂等，重复执行不会互相干扰；Wave 2 切换后遗留那条再退场
+ * （已登记在 {@code contract-changes.yaml} 的 {@code legacy-redis-user-tokens}）。</p>
+ *
+ * <h3>事务边界（V9 §26）</h3>
+ * <p>{@link #setUserStatus} 与 {@link AccountSecurityStateService#applyState} 在同一个
+ * 事务里：SOT 写入、Refresh Session 撤销、Outbox 事件三者要么全成、要么全不成。
+ * 唯一不在事务里的是 {@link #revokeSessions} —— Redis 没有回滚。这是<b>故意保留</b>的：
+ * 它只可能"多撤销"，不可能"少撤销"，因此最坏结果是用户被迫重新登录一次，
+ * 而不会出现"封禁没生效"。方向上的不对称是安全的，且它在 Wave 2 就消失了。</p>
  */
 @Slf4j
 @Service
@@ -39,6 +57,7 @@ public class UserAdminService {
 
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
+    private final AccountSecurityStateService accountSecurityStateService;
 
     /**
      * 分页查询用户（可按用户名/昵称/邮箱模糊过滤），按创建时间倒序。
@@ -94,22 +113,44 @@ public class UserAdminService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "不能封禁管理员账号");
         }
 
-        // 条件更新：仅当状态确实变化时才写库，天然幂等；0 行影响说明已处于目标状态。
+        boolean disabled = status == 0;
+
+        // ① 业务状态（sys_user.status）：条件更新，仅当状态确实变化时才写库，
+        //    天然幂等；0 行影响说明已处于目标状态。
         int rows = userMapper.update(new User(), new LambdaUpdateWrapper<User>()
                 .eq(User::getId, targetId)
                 .ne(User::getStatus, status)
                 .set(User::getStatus, status));
-        if (rows == 0 && status == 1) {
-            // 解封时不需要撤销会话；直接返回库中最新状态。
-            return toView(userMapper.selectById(targetId));
+
+        // ② 遗留 Redis 撤销。鉴权在 Wave 2 切换前仍以 Redis 为准，所以这一条
+        //    绝不能删 —— 删掉会让封禁在切换前完全失效（§2.3 能力守恒）。
+        int revoked = 0;
+        if (disabled) {
+            revoked = revokeSessions(targetId);
         }
 
-        if (status == 0) {
-            int revoked = revokeSessions(targetId);
-            log.info("[Admin] 封禁用户 {} (revoked {} sessions)", targetId, revoked);
-        }
-        User updated = userMapper.selectById(targetId);
-        return toView(updated);
+        // ③ 新安全平面：SOT + 事务性事件（§26 / §27 / §48）。
+        //    注意这里【无条件】写，不跟随 ① 的 rows：① 只保证 sys_user 与目标一致，
+        //    而 account_security_state 可能因为历史数据、上一次崩溃、手工改库而与它
+        //    不一致。每次管理员操作都顺手收敛一次，是这张表最便宜的自愈机会。
+        AccountSecurityState state = accountSecurityStateService.applyState(
+                targetId, disabled, auditReason(operatorId, disabled));
+
+        log.info("[Admin] {} 用户 {} operator={} sys_user_changed={} legacy_revoked={} securityVersion={}",
+                disabled ? "封禁" : "解封", targetId, operatorId, rows > 0, revoked,
+                state.getSecurityVersion());
+        return toView(userMapper.selectById(targetId));
+    }
+
+    /**
+     * 构造写入 SOT 与安全事件的审计说明。
+     *
+     * <p>不带管理员自由文本：本接口的请求体只有 {@code status}，凭空加一个可写字段
+     * 属于新增产品能力，要走 §11 Contract 流程。当前先把"谁做的、做了什么"记全，
+     * 已经能回答审计最常问的那个问题。</p>
+     */
+    private String auditReason(Long operatorId, boolean disabled) {
+        return (disabled ? "admin-ban" : "admin-unban") + " operator=" + operatorId;
     }
 
     /**

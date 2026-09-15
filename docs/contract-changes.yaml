@@ -17,9 +17,10 @@
 #   允许修改必须：显式 unfreeze + 架构/客户端审批 + 重新进入 migration 流程。
 
 counts:
-  total: 13
+  total: 14
   planned: 12
-  frozen: 1
+  active: 2
+  frozen: 0
 
 changes:
   - id: auth-token-v2

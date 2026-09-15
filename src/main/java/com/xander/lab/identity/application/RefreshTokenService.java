@@ -384,18 +384,4 @@ public class RefreshTokenService {
         entry.setNextAttemptAt(now);
         outboxMapper.insert(entry);
     }
-
-    /** 供 AccountSecurityState 的写入方复用：分配全局单调游标。 */
-    public static AccountSecurityState disabledState(Long accountId, long securityVersion,
-                                                     long changeSeq, String reason,
-                                                     LocalDateTime now) {
-        AccountSecurityState state = new AccountSecurityState();
-        state.setAccountId(accountId);
-        state.setDisabled(1);
-        state.setSecurityVersion(securityVersion);
-        state.setChangeSeq(changeSeq);
-        state.setDisabledAt(now);
-        state.setReason(reason);
-        return state;
-    }
 }
