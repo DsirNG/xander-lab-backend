@@ -672,6 +672,118 @@ def build_config_inventory() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Cross-domain implementation imports (V9 section 81)
+# ---------------------------------------------------------------------------
+
+def _layer_of(fqcn: str) -> str:
+    """Layer segment of a domain import.
+
+    ``com.xander.lab.agent.api.Foo`` -> ``api``;
+    ``com.xander.lab.agent.application.Foo`` -> ``application``.
+
+    ``integration`` is organised by integration kind (``file`` / ``mail`` /
+    ``mcp`` / ``oss``) instead of by DDD layer, so ``com.xander.lab.integration
+    .mcp.client.Foo`` returns ``mcp``. That is intentional: it is not the
+    ``api`` layer, so it counts as implementation.
+    """
+    parts = fqcn.split(".")
+    return parts[4] if len(parts) > 4 else ""
+
+
+def build_cross_domain_imports() -> dict:
+    """The Wave 0B backlog: which domains import which others' *implementation*.
+
+    V9 section 81 says "约 280 处" cross-domain implementation imports. That is an
+    estimate, and it is the kind of number section 13 says the machine must own.
+    The machine count also splits it in a way the estimate cannot:
+
+    * ``api``-layer imports (``com.xander.lab.<domain>.api.*``) are the *contract*
+      surface Wave 0B is building. They are the only legal cross-domain import
+      afterwards, so they are counted separately and are never backlog.
+    * Implementation imports that stay inside one deployment unit are not a Wave
+      0B problem either: those two domains ship in the same process after the
+      split, so the call never turns into a network call.
+    * Implementation imports that **cross a deployment unit** are the real
+      backlog -- each one must become a contract call, an event, or move.
+
+    Shared-kernel -> business imports are deliberately NOT included; the section
+    21 gate (``shared-kernel-reverse-dependency``) owns that rule. Keeping the
+    two separate means neither can hide behind the other.
+    """
+    java = scan_java()
+    business = set(BUSINESS_DOMAINS)
+    edges: dict[tuple[str, str], dict] = {}
+    shared_kernel_sources: set[str] = set()
+    unclassified_sources: set[str] = set()
+
+    for rel, imports in sorted(java["imports"].items()):
+        marker = "/com/xander/lab/"
+        if marker not in rel:
+            continue
+        source = rel.split(marker, 1)[1].split("/")[0]
+        if source not in business:
+            # Recorded rather than skipped: a source package that is neither a
+            # domain nor the shared kernel would otherwise vanish from every
+            # count in this file, which is exactly the silent-omission failure
+            # mode section 13 exists to prevent.
+            if source in SHARED_KERNEL:
+                shared_kernel_sources.add(source)
+            else:
+                unclassified_sources.add(source)
+            continue
+        for fqcn in imports:
+            target = domain_of(fqcn)
+            if target not in business or target == source:
+                continue
+            entry = edges.setdefault((source, target), {
+                "from": source,
+                "to": target,
+                "from_unit": DEPLOYMENT_UNIT.get(source, "dinqor-core-host"),
+                "to_unit": DEPLOYMENT_UNIT.get(target, "dinqor-core-host"),
+                "crosses_deployment_unit":
+                    DEPLOYMENT_UNIT.get(source, "dinqor-core-host")
+                    != DEPLOYMENT_UNIT.get(target, "dinqor-core-host"),
+                "api_statements": 0,
+                "implementation_statements": 0,
+                "implementation_files": [],
+            })
+            if _layer_of(fqcn) == "api":
+                entry["api_statements"] += 1
+            else:
+                entry["implementation_statements"] += 1
+                if rel not in entry["implementation_files"]:
+                    entry["implementation_files"].append(rel)
+
+    ordered = sorted(edges.values(),
+                     key=lambda e: (-e["implementation_statements"], e["from"], e["to"]))
+    implementation = [e for e in ordered if e["implementation_statements"]]
+    crossing = [e for e in implementation if e["crosses_deployment_unit"]]
+    return {
+        "generated_by": "scripts/migration/scan.py",
+        "note": (
+            "V9 section 81 backlog. Only implementation_statements counts: "
+            "api_statements are the contract surface Wave 0B is building, and "
+            "same-deployment-unit edges never become network calls. "
+            "Shared-kernel -> business imports are not listed here; the section 21 "
+            "gate owns them."
+        ),
+        "counts": {
+            "implementation_statements":
+                sum(e["implementation_statements"] for e in implementation),
+            "implementation_edges": len(implementation),
+            "cross_deployment_unit_statements":
+                sum(e["implementation_statements"] for e in crossing),
+            "cross_deployment_unit_edges": len(crossing),
+            "api_statements": sum(e["api_statements"] for e in ordered),
+            "api_edges": sum(1 for e in ordered if e["api_statements"]),
+            "shared_kernel_sources": sorted(shared_kernel_sources),
+            "unclassified_sources": sorted(unclassified_sources),
+        },
+        "edges": ordered,
+    }
+
+
 HEADER = """DinQorAI microservice migration — machine-generated inventory.
 
 Generated by: scripts/migration/scan.py
@@ -898,6 +1010,7 @@ def main() -> int:
         "scheduled-inventory.yaml": build_scheduled_inventory(),
         "table-inventory.yaml": build_table_inventory(),
         "config-inventory.yaml": build_config_inventory(),
+        "cross-domain-imports.yaml": build_cross_domain_imports(),
     }
 
     for name, payload in artifacts.items():
@@ -1106,14 +1219,29 @@ def build_report(artifacts: dict) -> str:
         for entry in unassigned_config:
             lines.append(f"  - `{entry['key']}` ({entry['source']})")
 
-    lines += ["", "## Cross-domain implementation imports", "",
-              "Computed from `import com.xander.lab.<other domain>...`.",
-              "", "| from \\ to | domains imported |", "|---|---|"]
-    java = scan_java()
-    for domain, targets in java["reverse_deps"].items():
-        if targets:
-            lines.append(f"| {domain} | {', '.join(targets)} |")
+    cross = artifacts["cross-domain-imports.yaml"]
+    counts = cross["counts"]
+    lines += ["", "## Cross-domain implementation imports (V9 section 81)", "",
+              "Counted from `import com.xander.lab.<other domain>.<layer>...`. Only the",
+              "implementation layer is backlog; `api` is the contract surface Wave 0B builds.",
+              "",
+              f"- implementation statements: **{counts['implementation_statements']}** "
+              f"across {counts['implementation_edges']} edges",
+              f"- of which cross a deployment unit (the real backlog): "
+              f"**{counts['cross_deployment_unit_statements']}** across "
+              f"{counts['cross_deployment_unit_edges']} edges",
+              f"- api-layer statements (contract surface): **{counts['api_statements']}**",
+              "",
+              "| from | to | impl | api | crosses unit | from unit -> to unit |",
+              "|---|---|---|---|---|---|"]
+    for edge in cross["edges"]:
+        lines.append(
+            f"| {edge['from']} | {edge['to']} | {edge['implementation_statements']} | "
+            f"{edge['api_statements']} | {'yes' if edge['crosses_deployment_unit'] else 'no'} | "
+            f"{edge['from_unit']} -> {edge['to_unit']} |"
+        )
 
+    java = scan_java()
     lines += ["", "## Shared kernel reverse dependencies (V9 section 21 gate)", ""]
     violations = []
     for source, targets in java["reverse_deps"].items():

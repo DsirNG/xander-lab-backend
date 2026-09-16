@@ -75,29 +75,67 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
   - `shedlock.enabled` (application.yml)
 
-## Cross-domain implementation imports
+## Cross-domain implementation imports (V9 section 81)
 
-Computed from `import com.xander.lab.<other domain>...`.
+Counted from `import com.xander.lab.<other domain>.<layer>...`. Only the
+implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 
-| from \ to | domains imported |
-|---|---|
-| admin | automation, identity, virtualpay |
-| agent | admin, automation, billing, blogagent, identity, integration, publishing, recitation |
-| automation | billing, blogagent, identity, integration, publishing, recitation |
-| billing | identity |
-| blogagent | admin, billing, identity, publishing |
-| bloghtml | identity |
-| common | integration |
-| components | identity |
-| config | identity |
-| identity | billing, integration |
-| integration | agent, automation, billing, identity, publishing |
-| knowledgebase | automation, identity, integration |
-| profile | billing, identity, publishing |
-| publishing | blogagent, identity, integration |
-| recitation | admin, identity, integration |
-| studio | admin, billing, blogagent, identity, publishing |
-| virtualpay | admin, identity |
+- implementation statements: **172** across 49 edges
+- of which cross a deployment unit (the real backlog): **125** across 31 edges
+- api-layer statements (contract surface): **38**
+
+| from | to | impl | api | crosses unit | from unit -> to unit |
+|---|---|---|---|---|---|
+| integration | publishing | 22 | 11 | yes | dinqor-platform-integration -> dinqor-content-automation |
+| agent | publishing | 10 | 3 | yes | dinqor-agent -> dinqor-content-automation |
+| integration | identity | 9 | 0 | yes | dinqor-platform-integration -> dinqor-core-host |
+| agent | identity | 7 | 0 | yes | dinqor-agent -> dinqor-core-host |
+| agent | automation | 6 | 9 | yes | dinqor-agent -> dinqor-content-automation |
+| agent | billing | 6 | 0 | yes | dinqor-agent -> dinqor-core-host |
+| automation | integration | 6 | 0 | yes | dinqor-content-automation -> dinqor-platform-integration |
+| blogagent | publishing | 6 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
+| virtualpay | identity | 6 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| integration | agent | 5 | 0 | yes | dinqor-platform-integration -> dinqor-agent |
+| publishing | identity | 5 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
+| agent | blogagent | 4 | 2 | yes | dinqor-agent -> dinqor-content-automation |
+| agent | integration | 4 | 0 | yes | dinqor-agent -> dinqor-platform-integration |
+| agent | recitation | 4 | 4 | yes | dinqor-agent -> dinqor-core-host |
+| automation | blogagent | 4 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
+| automation | identity | 4 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
+| automation | publishing | 4 | 0 | no | dinqor-content-automation -> dinqor-content-automation |
+| blogagent | admin | 4 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
+| integration | billing | 4 | 0 | yes | dinqor-platform-integration -> dinqor-core-host |
+| knowledgebase | identity | 4 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| admin | identity | 3 | 2 | no | dinqor-core-host -> dinqor-core-host |
+| components | identity | 3 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| studio | identity | 3 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| agent | admin | 2 | 0 | yes | dinqor-agent -> dinqor-core-host |
+| automation | billing | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
+| automation | recitation | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
+| blogagent | billing | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
+| knowledgebase | automation | 2 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
+| knowledgebase | integration | 2 | 0 | yes | dinqor-core-host -> dinqor-platform-integration |
+| profile | identity | 2 | 1 | no | dinqor-core-host -> dinqor-core-host |
+| publishing | integration | 2 | 0 | yes | dinqor-content-automation -> dinqor-platform-integration |
+| recitation | admin | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| recitation | integration | 2 | 0 | yes | dinqor-core-host -> dinqor-platform-integration |
+| studio | admin | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| studio | billing | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| studio | publishing | 2 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
+| admin | automation | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
+| admin | virtualpay | 1 | 1 | no | dinqor-core-host -> dinqor-core-host |
+| billing | identity | 1 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| blogagent | identity | 1 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
+| bloghtml | identity | 1 | 0 | yes | dinqor-bloghtml-preview -> dinqor-core-host |
+| identity | billing | 1 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| identity | integration | 1 | 0 | yes | dinqor-core-host -> dinqor-platform-integration |
+| integration | automation | 1 | 0 | yes | dinqor-platform-integration -> dinqor-content-automation |
+| profile | billing | 1 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| profile | publishing | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
+| publishing | blogagent | 1 | 0 | no | dinqor-content-automation -> dinqor-content-automation |
+| recitation | identity | 1 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| studio | blogagent | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
+| virtualpay | admin | 0 | 1 | no | dinqor-core-host -> dinqor-core-host |
 
 ## Shared kernel reverse dependencies (V9 section 21 gate)
 

@@ -339,6 +339,68 @@ def gate_shared_kernel_reverse_dependency() -> None:
     report(gate, True, detail)
 
 
+def gate_cross_domain_import_baseline() -> None:
+    """V9 section 81: the cross-domain implementation-import backlog must shrink.
+
+    The plan estimates "约 280" such imports. ``docs/cross-domain-imports.yaml``
+    holds the machine count instead (section 13: the machine owns the key set),
+    and the machine count is lower -- 172 statements, of which only 125 actually
+    cross a deployment unit and therefore have to become contracts at all.
+
+    This gate fails when any edge grows, so a new cross-domain implementation
+    import cannot be added while the backlog is being worked off. Shrinking is
+    expected; when an edge reaches zero its baseline entry must be deleted,
+    otherwise the remaining backlog looks bigger than it is and the Wave 0B
+    progress number stops meaning anything.
+    """
+    gate = "cross-domain-import-baseline"
+    baseline = load("cross-domain-imports.yaml")
+    live = scan.build_cross_domain_imports()
+
+    def by_edge(payload: dict) -> dict[tuple[str, str], int]:
+        return {(edge["from"], edge["to"]): edge["implementation_statements"]
+                for edge in payload["edges"] if edge["implementation_statements"]}
+
+    base_edges = by_edge(baseline)
+    live_edges = by_edge(live)
+
+    # The committed file must agree with itself. A `counts` block that disagrees
+    # with its own `edges` would silently invalidate every threshold below.
+    recomputed = sum(base_edges.values())
+    declared = (baseline.get("counts") or {}).get("implementation_statements")
+    if declared != recomputed:
+        report(gate, False,
+               f"docs/cross-domain-imports.yaml is self-inconsistent: counts says "
+               f"{declared}, edges sum to {recomputed} -- re-run "
+               f"scripts/migration/scan.py")
+        return
+
+    added = sorted(edge for edge in live_edges if edge not in base_edges)
+    grown = sorted((edge, base_edges[edge], live_edges[edge])
+                   for edge in live_edges
+                   if edge in base_edges and live_edges[edge] > base_edges[edge])
+    if added or grown:
+        problems = []
+        if added:
+            problems.append("new cross-domain implementation edge(s): "
+                            + ", ".join(f"{s}->{t}" for s, t in added))
+        if grown:
+            problems.append("edge(s) that grew: "
+                            + ", ".join(f"{s}->{t} {before}->{after}"
+                                        for (s, t), before, after in grown))
+        report(gate, False, "; ".join(problems))
+        return
+
+    at_zero = sorted(edge for edge in base_edges if not live_edges.get(edge))
+    detail = (f"{recomputed} implementation statements across {len(base_edges)} edges "
+              f"({live['counts']['cross_deployment_unit_statements']} cross a "
+              f"deployment unit)")
+    if at_zero:
+        detail += (f"; {len(at_zero)} edge(s) now at zero, delete them from the "
+                   f"baseline: {at_zero}")
+    report(gate, True, detail)
+
+
 def gate_contract_changes_completeness() -> None:
     gate = "contract-changes-completeness"
     baseline = load("capability-baseline.yaml")
@@ -777,6 +839,7 @@ GATES = {
     "table-ownership-drift": gate_table_ownership_drift,
     "config-ownership-drift": gate_config_ownership_drift,
     "shared-kernel-reverse-dependency": gate_shared_kernel_reverse_dependency,
+    "cross-domain-import-baseline": gate_cross_domain_import_baseline,
     "contract-changes-completeness": gate_contract_changes_completeness,
     "capability-baseline-diff": gate_capability_baseline_diff,
     "legacy-redis-reference-check": gate_legacy_redis_reference_check,
