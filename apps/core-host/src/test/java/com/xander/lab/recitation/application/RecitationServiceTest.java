@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.integration.oss.OssService;
+import com.xander.lab.integration.api.OssPort;
 import com.xander.lab.recitation.api.RecitationMaterialView;
 import com.xander.lab.recitation.api.UpdateRecitationMaterialRequest;
 import com.xander.lab.recitation.domain.ArchiveFilter;
@@ -52,7 +52,7 @@ class RecitationServiceTest {
     private RecitationAttemptMapper attemptMapper;
     private KnowledgeQuizAttemptMapper quizAttemptMapper;
     private KnowledgeQuizSessionMapper quizSessionMapper;
-    private OssService ossService;
+    private OssPort ossPort;
     private RecitationProperties properties;
     private RecitationService service;
 
@@ -72,11 +72,11 @@ class RecitationServiceTest {
         attemptMapper = mock(RecitationAttemptMapper.class);
         quizAttemptMapper = mock(KnowledgeQuizAttemptMapper.class);
         quizSessionMapper = mock(KnowledgeQuizSessionMapper.class);
-        ossService = mock(OssService.class);
+        ossPort = mock(OssPort.class);
         properties = new RecitationProperties();
         properties.setEnabled(true);
         service = new RecitationService(materialMapper, attemptMapper, quizAttemptMapper, quizSessionMapper,
-                new RecitationAligner(), ossService, properties,
+                new RecitationAligner(), ossPort, properties,
                 inlineTransactions(), new ObjectMapper());
     }
 
@@ -253,14 +253,14 @@ class RecitationServiceTest {
 
         service.deleteMaterial(42L, 7L);
 
-        InOrder order = inOrder(attemptMapper, quizAttemptMapper, quizSessionMapper, materialMapper, ossService);
+        InOrder order = inOrder(attemptMapper, quizAttemptMapper, quizSessionMapper, materialMapper, ossPort);
         // 音频地址必须在删库之前读出来，否则记录一没就再也找不到该删哪些对象。
         order.verify(attemptMapper).selectList(any());
         order.verify(quizAttemptMapper).delete(any());
         order.verify(quizSessionMapper).delete(any());
         order.verify(attemptMapper).delete(any());
         order.verify(materialMapper).delete(any());
-        order.verify(ossService).deleteByUrlQuietly("https://cdn.test/a.mp3");
+        order.verify(ossPort).deleteByUrlQuietly("https://cdn.test/a.mp3");
     }
 
     @Test
@@ -280,7 +280,7 @@ class RecitationServiceTest {
 
         assertThat(result.id()).isEqualTo(88L);
         verify(attemptMapper, never()).insert(any(RecitationAttempt.class));
-        verifyNoInteractions(ossService);
+        verifyNoInteractions(ossPort);
     }
 
     @Test
@@ -290,7 +290,7 @@ class RecitationServiceTest {
 
         service.deleteMaterial(42L, 7L);
 
-        verifyNoInteractions(ossService);
+        verifyNoInteractions(ossPort);
         verify(materialMapper).delete(any());
     }
 
@@ -307,7 +307,7 @@ class RecitationServiceTest {
 
         verify(materialMapper, never()).update(any(), any());
         verify(materialMapper, never()).delete(any());
-        verifyNoInteractions(quizAttemptMapper, quizSessionMapper, ossService);
+        verifyNoInteractions(quizAttemptMapper, quizSessionMapper, ossPort);
     }
 
     @Test
@@ -315,7 +315,7 @@ class RecitationServiceTest {
         assertThatThrownBy(() -> service.deleteMaterial(null, 7L))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("未登录");
 
-        verifyNoInteractions(materialMapper, attemptMapper, quizAttemptMapper, ossService);
+        verifyNoInteractions(materialMapper, attemptMapper, quizAttemptMapper, ossPort);
     }
     /** 一条已经背熟的知识：掌握度非零，才能看出哪些改动会把它清零。 */
     private RecitationMaterial stored(String content) {

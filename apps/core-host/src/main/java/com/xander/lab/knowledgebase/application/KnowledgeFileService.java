@@ -2,8 +2,8 @@ package com.xander.lab.knowledgebase.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xander.lab.integration.oss.OssService;
-import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.integration.api.OssPort;
+import com.xander.lab.integration.api.UploadResponse;
 import com.xander.lab.knowledgebase.api.KnowledgeChapterView;
 import com.xander.lab.knowledgebase.api.KnowledgeFilePreviewView;
 import com.xander.lab.knowledgebase.api.KnowledgeFileView;
@@ -63,7 +63,7 @@ public class KnowledgeFileService {
     private final KnowledgeStructureService structureService;
     private final KnowledgeIngestionService ingestionService;
     private final KnowledgeTagService tagService;
-    private final OssService ossService;
+    private final OssPort ossPort;
     private final KnowledgeBaseProperties properties;
 
     /**
@@ -124,7 +124,7 @@ public class KnowledgeFileService {
         validateExtension(extension);
         validateSize(content == null ? 0 : content.length);
 
-        UploadResponse uploaded = ossService.upload(content, safeName, contentType, OSS_PATH_PREFIX);
+        UploadResponse uploaded = ossPort.upload(content, safeName, contentType, OSS_PATH_PREFIX);
         KnowledgeFile file = new KnowledgeFile();
         file.setUserId(userId);
         file.setFolderId(folderId);
@@ -144,7 +144,7 @@ public class KnowledgeFileService {
             fileMapper.insert(file);
         } catch (RuntimeException e) {
             // 记录没落上，刚传上去的对象就成了孤儿，顺手删掉。
-            ossService.deleteByUrlQuietly(uploaded.getUrl());
+            ossPort.deleteByUrlQuietly(uploaded.getUrl());
             throw e;
         }
 
@@ -434,13 +434,13 @@ public class KnowledgeFileService {
             return;
         }
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            ossService.deleteByUrlQuietly(storageUrl);
+            ossPort.deleteByUrlQuietly(storageUrl);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                ossService.deleteByUrlQuietly(storageUrl);
+                ossPort.deleteByUrlQuietly(storageUrl);
             }
         });
     }

@@ -1,7 +1,7 @@
 package com.xander.lab.integration.file;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.integration.api.UploadResponse;
 import com.xander.lab.integration.file.FileService;
 import com.xander.lab.integration.oss.OssService;
 import lombok.RequiredArgsConstructor;

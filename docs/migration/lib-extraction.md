@@ -44,13 +44,19 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | 契约模块 | 状态 | 内容 | 跨部署单元实现依赖的收益 |
 |---|---|---|---|
 | `content-api` | **已完成** | `BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits` | `integration → publishing` 22 → 5；总计 −18 条跨单元 import |
+| `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
 | `core-api` | 未开始 | — | 按目标域聚合，`core-host` 相关边 |
 | `agent-api` | 未开始 | — | — |
 | `automation-api` | 未开始 | — | — |
-| `integration-api` | 未开始 | — | 最大的剩余目标域（7 个域指向它，共 17 条） |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
 | `payment-api` | 未开始 | — | — |
+
+`integration` 域**不是一次性搬完的**：它被 7 个域引用的 7 个类型里，只有 2 个是"能直接搬"的。
+剩下 5 个（CSDN / 掘金 的凭证与同步服务、`MailService`）都是**具体实现而非接口**，
+搬它们要先做端口抽取；其中 `MailService` 还 import 了
+`automation.domain.EmailReminderMailTemplates`（一个业务域类型），
+在解开那处依赖之前**根本搬不动**。详见 §3quater.5。
 
 ⚠️ **契约模块不是"共享库"**，但它的包名必须登记在 `SHARED_KERNEL` 里，
 理由见 §6 与 §10.3：否则把类型搬进契约之后，跨域基线**一点都不会动**，
@@ -196,14 +202,21 @@ HTTP 契约，服务间契约是另一件事。
 | 1 | `dinqor-agent` → `dinqor-content-automation` | 19 |
 | 2 | `dinqor-agent` → `dinqor-core-host` | 14 |
 | 3 | `dinqor-content-automation` → `dinqor-core-host` | 12 |
-| 4 | `dinqor-content-automation` → `dinqor-platform-integration` | 8 |
+| 4 | `dinqor-content-automation` → `dinqor-platform-integration` | 6 |
 | 5 | `dinqor-core-host` → `dinqor-content-automation` | 7 |
 | 6 | `dinqor-platform-integration` → `dinqor-content-automation` | 6 |
 | 7 | `dinqor-platform-integration` → `dinqor-agent` | 5 |
 | 8 | `dinqor-platform-integration` → `dinqor-core-host` | 5 |
-| 9 | `dinqor-core-host` → `dinqor-platform-integration` | 5 |
-| 10 | `dinqor-agent` → `dinqor-platform-integration` | 4 |
-| | **合计** | **85**（10 条有向边） |
+| 9 | `dinqor-core-host` → `dinqor-platform-integration` | 1 |
+| 10 | `dinqor-agent` → `dinqor-platform-integration` | 2 |
+| | **合计** | **77**（10 条有向边） |
+
+⚠️ 本表在 §3quater 抽出 OSS 契约后**重新测量**过：`content-automation → platform-integration`
+8 → 6、`core-host → platform-integration` 5 → 1、`agent → platform-integration` 4 → 2，
+总数 85 → 77。**形状没有变** —— 仍是 10 条有向边、仍是同一个强连通分量，
+所以 `deployment-unit-coupling` 门禁不受影响。这正是 §16.2 那句话的实证：
+**契约线在减语句，不改形状**；要改形状得等某条边整体归零（三条域间边归零了，
+但对应的单元间边还有别的域在撑着）。
 
 ### 3ter.1 图的两个性质
 
@@ -253,6 +266,111 @@ HTTP 契约，服务间契约是另一件事。
 门禁立刻报 `4 direction(s) cleared` —— 那是**我的基线错了，不是代码错了**
 （`agent → content-automation` 和 `agent → core-host` 本来就是单向的）。
 已改成硬编码真实的 8 个有序对。
+
+---
+
+## 3quater. 第二个业务契约：`contracts/integration-api`（OSS 端口）
+
+### 3quater.1 与 `content-api` 的根本差别：这次不是"搬"，是"抽端口"
+
+`content-api` 是**搬家**：`BlogPublisher` 本来就是一个接口，连着它的 DTO 一起换个包就行。
+`integration-api` 不是 —— `integration` 域被跨域引用的 7 个类型**没有一个是接口**：
+
+| 类型 | 被谁引用 | 形态 | 能直接搬吗 |
+|---|---|---|---|
+| `oss.OssService` | agent / knowledgebase / publishing / recitation | 具体类（阿里云 SDK、`@Value`、懒建客户端） | ✗ 要抽端口 |
+| `oss.UploadResponse` | 同上 4 个 | 纯 DTO（lombok） | ✓（去掉 lombok 后） |
+| `mcp.csdn.application.CsdnCredentialService` | automation | 具体类（MyBatis mapper + javax.crypto） | ✗ |
+| `mcp.juejin.application.JuejinCredentialService` | automation | 具体类（同上 + Jackson） | ✗ |
+| `mcp.juejin.application.JuejinBlogSyncService` | agent / automation | 具体类，且 import 了 `publishing.application.*` | ✗ |
+| `mcp.csdn.application.CsdnBlogSyncService` | agent | 具体类，同上 | ✗ |
+| `mail.MailService` | automation / identity | 具体类，且 import 了 **`automation.domain.EmailReminderMailTemplates`** | ✗ **被业务域依赖挡住** |
+
+所以本轮只做了能做的两个（合计 −8 条），并把"为什么剩下 5 个不能直接搬"写清楚 ——
+这比硬搬 5 个具体类要好：把 `CsdnCredentialService` 搬进契约会连 MyBatis-Plus
+和 javax.crypto 一起拖进去，契约当场变成 §19 禁止的超级 jar。
+
+### 3quater.2 端口签名：`byte[]` 而不是 `MultipartFile`
+
+`OssService` 原本有 3 个公开方法：
+
+```java
+UploadResponse upload(MultipartFile file, String pathPrefix);                          // 流式
+UploadResponse upload(byte[] bytes, String originalName, String contentType, String prefix);
+boolean        deleteByUrlQuietly(String url);
+```
+
+`MultipartFile` 是 **spring-web 类型**，放进契约会让 spring-web 出现在每个依赖契约的服务
+（含 §19 那个 WebFlux Gateway）的 classpath 上，而且跨进程时**没有 MultipartFile 可传**。
+所以端口只收 `byte[]`；`upload(MultipartFile, String)` 作为**本域内的便捷重载**留在
+`OssService` 上（只有本域的 `FileController` 用它）。
+
+⚠️ **这是一次真实的行为改动，必须留痕**：三个跨域调用方从"把 `MultipartFile` 的输入流
+直接交给 SDK"变成"先 `getBytes()` 读进内存"。三点理由说明可接受：
+
+1. 三个调用方都在上传前卡了大小上限（agent 20MB、publishing 10MB、recitation 有校验），
+   所以读进内存是**有界**的；
+2. 同域内已经有一处这么做了 —— `KnowledgeFileService` 一直在用 `byte[]` 重载；
+3. 跨进程之后本来也只能传字节。
+
+⚠️ **顺带修掉一条误导性日志**：`byte[]` 重载的失败信息原本写死
+`"智能体图片上传至云存储失败"`，但这条方法现在服务 4 个域（智能体附件、知识库文件、
+博客媒体、背诵音频）。已改成中立的 `"文件上传至云存储失败"`，并保留 cause。
+没有测试断言过这条文案，改它是安全的。
+
+### 3quater.3 `UploadResponse`：手写而不是 lombok
+
+契约 POM 只能有 test-scope 依赖，源码只能 import JDK（门禁 `contract-dependency-boundary`），
+所以 `@Data @Builder @NoArgsConstructor @AllArgsConstructor` 全部去掉，改成
+**显式 final 类 + 显式 getter + 规范构造器**。
+
+- 保留 `getUrl()` 这套前缀是刻意的：22 处调用点（4 个域）因此**一行都不用改**，
+  JSON 字段名也完全不变。改成 record 会让 22 处访问器全变（`url()`），diff 更大且没有收益。
+- 去掉 `builder()` 只影响 4 处构造点（`OssService`×2、`FileService`、1 个测试）。
+- 新增 `UploadResponseTest`：构造器的参数顺序就是契约的字段顺序，而
+  `url` / `originalName` / `storedName` **三个相邻的 String** 重排不会有任何编译错误，
+  所以用互不相同的字面量逐个断言钉住它（§11：字段改动属于契约改动）。
+
+### 3quater.4 收益（重新生成基线后实测）
+
+| 边 | 实现语句 | 跨部署单元 |
+|---|---|---|
+| `knowledgebase → integration` | 2 → **0** | 边归零 |
+| `publishing → integration` | 2 → **0** | 边归零 |
+| `recitation → integration` | 2 → **0** | 边归零 |
+| `agent → integration` | 4 → 2 | 仍跨单元（剩下的是 CSDN / 掘金 同步服务） |
+| **合计** | **116 → 108** | **85 → 77**（−8） |
+
+    implementation_statements          116 → 108  (-8)
+    cross_deployment_unit_statements    85 →  77  (-8)
+    cross_deployment_unit_edges         28 →  25  (3 条边归零)
+    api_statements                      38 →  38  (未变)
+
+三条边直接归零 —— 这是契约抽取第一次让**边数**下降（`content-api` 那次 28 → 28 没变）。
+
+### 3quater.5 ⚠️ 剩下的 5 个类型：为什么不能直接搬
+
+**CSDN / 掘金 的凭证与同步服务（4 个）**：都是具体类，内部依赖 MyBatis-Plus mapper、
+`javax.crypto`、Jackson、以及各自的 `infrastructure` 包。搬它们必须先抽端口
+（`CredentialPort` / `BlogSyncPort`），也就是本轮对 OSS 做的同一件事。而
+`JuejinBlogSyncService` / `CsdnBlogSyncService` 还 import 了
+`publishing.application.PublicationService` 与 `BlogService` —— 那是**反向**的跨单元依赖，
+属于另一条边（`integration → publishing`，已在 `content-api` 那次降到 5 条）。
+
+**`MailService`：被一处业务域依赖挡住，搬不动。** 它 import 了
+`com.xander.lab.automation.domain.EmailReminderMailTemplates` —— 一个**业务域的类型**。
+契约不能 import 业务域（门禁判据一），所以要么先把模板挪到别处、要么让调用方把
+渲染好的内容传进来。**在解开这处依赖之前，`MailService` 无论如何都进不了契约。**
+
+### 3quater.6 ⚠️ 记录而不解决：端口解决了"依赖方向"，没解决"跨进程"
+
+`OssPort` 让 4 个域不再依赖 `integration` 的**实现类**，这是实打实的进步：
+拆分之后它们仍然编译得过，只需要换一个 `OssPort` 的实现（HTTP 客户端桩）。
+对比 `content-api` 里那个 `BlogPublisher`（§3bis.5）—— 那个连端口形状都没定，
+Spring 的 `List<BlogPublisher>` 注入在跨进程时直接失效。**端口先立起来，替换就成了装配问题。**
+
+但要说清楚：**本轮没有让任何东西变成真正的服务间调用**。4 个域仍在同一个进程里，
+拿到的是同一个 `OssService` bean。真正的跨进程调用是 Wave 2 的事。
 
 ---
 
@@ -487,7 +605,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 7 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **85** 条（原 103）。`integration-api` 是下一个最大目标域（7 个域指向它，17 条） | Wave 0B 剩余 |
+| 6 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **77** 条（原 103 → 85 → 77）。下一个最大目标仍是 `integration` 域的其余 5 个类型，但它们**都是具体实现**，要先抽端口；其中 `MailService` 被一处业务域依赖挡住（§3quater.5） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

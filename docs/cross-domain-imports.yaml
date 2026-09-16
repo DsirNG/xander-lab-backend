@@ -7,10 +7,10 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 116
-  implementation_edges: 42
-  cross_deployment_unit_statements: 85
-  cross_deployment_unit_edges: 28
+  implementation_statements: 108
+  implementation_edges: 39
+  cross_deployment_unit_statements: 77
+  cross_deployment_unit_edges: 25
   api_statements: 38
   api_edges: 11
   shared_kernel_sources:
@@ -19,6 +19,7 @@ counts:
     - config
     - content
     - filter
+    - integration.api
   unclassified_sources:
     - DinQorAIApplication.java
 edges:
@@ -128,16 +129,6 @@ edges:
       - apps/core-host/src/main/java/com/xander/lab/agent/application/ImageGenerationTool.java
       - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
   - from: agent
-    to: integration
-    from_unit: dinqor-agent
-    to_unit: dinqor-platform-integration
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 4
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/AgentAttachmentService.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
-  - from: agent
     to: recitation
     from_unit: dinqor-agent
     to_unit: dinqor-core-host
@@ -208,6 +199,15 @@ edges:
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentStreamAuthHandshakeInterceptor.java
       - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentWebSocketConfig.java
+  - from: agent
+    to: integration
+    from_unit: dinqor-agent
+    to_unit: dinqor-platform-integration
+    crosses_deployment_unit: true
+    api_statements: 0
+    implementation_statements: 2
+    implementation_files:
+      - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
   - from: automation
     to: billing
     from_unit: dinqor-content-automation
@@ -263,15 +263,6 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/knowledgebase/application/KnowledgeIngestionService.java
-  - from: knowledgebase
-    to: integration
-    from_unit: dinqor-core-host
-    to_unit: dinqor-platform-integration
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/knowledgebase/application/KnowledgeFileService.java
   - from: publishing
     to: identity
     from_unit: dinqor-content-automation
@@ -281,15 +272,6 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/publishing/application/BlogService.java
-  - from: publishing
-    to: integration
-    from_unit: dinqor-content-automation
-    to_unit: dinqor-platform-integration
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/publishing/application/BlogMediaService.java
   - from: recitation
     to: admin
     from_unit: dinqor-core-host
@@ -299,15 +281,6 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/recitation/infrastructure/DashScopeRecitationAsrClient.java
-  - from: recitation
-    to: integration
-    from_unit: dinqor-core-host
-    to_unit: dinqor-platform-integration
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/recitation/application/RecitationService.java
   - from: studio
     to: admin
     from_unit: dinqor-core-host

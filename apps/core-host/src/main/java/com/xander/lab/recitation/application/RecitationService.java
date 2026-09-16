@@ -3,8 +3,8 @@ package com.xander.lab.recitation.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.integration.oss.OssService;
-import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.integration.api.OssPort;
+import com.xander.lab.integration.api.UploadResponse;
 import com.xander.lab.recitation.api.CreateRecitationMaterialRequest;
 import com.xander.lab.recitation.api.RecitationAttemptView;
 import com.xander.lab.recitation.api.RecitationMaterialView;
@@ -33,6 +33,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
@@ -53,7 +54,7 @@ public class RecitationService {
     private final KnowledgeQuizAttemptMapper quizAttemptMapper;
     private final KnowledgeQuizSessionMapper quizSessionMapper;
     private final RecitationAligner aligner;
-    private final OssService ossService;
+    private final OssPort ossPort;
     private final RecitationProperties properties;
     private final TransactionTemplate transactionTemplate;
     private final ObjectMapper objectMapper;
@@ -301,7 +302,7 @@ public class RecitationService {
                     .eq(RecitationMaterial::getId, materialId)
                     .eq(RecitationMaterial::getUserId, userId));
         });
-        audioUrls.forEach(ossService::deleteByUrlQuietly);
+        audioUrls.forEach(ossPort::deleteByUrlQuietly);
     }
 
     /**
@@ -352,7 +353,9 @@ public class RecitationService {
         }
         if (attemptId == null) throw new IllegalStateException("无法创建背诵任务");
         try {
-            UploadResponse uploaded = ossService.upload(file, "recitations/" + userId + "/");
+            UploadResponse uploaded = ossPort.upload(
+                    readFully(file), file.getOriginalFilename(), file.getContentType(),
+                    "recitations/" + userId + "/");
             transactionTemplate.executeWithoutResult(status -> attemptMapper.update(null,
                     new LambdaUpdateWrapper<RecitationAttempt>()
                             .eq(RecitationAttempt::getId, attemptId)
@@ -372,6 +375,20 @@ public class RecitationService {
             throw error;
         }
         return getAttempt(userId, attemptId);
+    }
+
+    /**
+     * {@code MultipartFile} 转 {@code byte[]}。
+     *
+     * <p>IOException 折成非受检异常，交给调用点外层既有的 {@code catch (RuntimeException)}
+     * —— 读不出内容与上传失败一样，都要把这条 attempt 标成 FAILED，而不是留在 UPLOADING。</p>
+     */
+    private static byte[] readFully(MultipartFile file) {
+        try {
+            return file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("无法读取上传内容", e);
+        }
     }
 
     private String normalizeClientRequestId(String value) {

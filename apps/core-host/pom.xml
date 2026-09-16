@@ -55,6 +55,19 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            Object-storage service-to-service contract: OssPort / UploadResponse
+            (V9 §18 / §91). Four domains across four deployment units injected the concrete
+            integration.oss.OssService and read its result type, so the port and its data
+            cannot live in the integration domain. Zero transitive dependencies by design;
+            see contracts/integration-api/pom.xml.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>integration-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>

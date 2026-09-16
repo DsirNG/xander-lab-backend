@@ -1,7 +1,7 @@
 package com.xander.lab.context;
 
 import com.xander.lab.agent.application.AgentAttachmentService;
-import com.xander.lab.integration.oss.OssService;
+import com.xander.lab.integration.api.OssPort;
 import com.xander.lab.publishing.application.BlogMediaService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class AgentAttachmentServiceWiringTest {
 
     @MockBean
-    private OssService ossService;
+    private OssPort ossPort;
 
     @MockBean
     private BlogMediaService mediaService;

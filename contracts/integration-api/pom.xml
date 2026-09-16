@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>integration-api</artifactId>
+    <name>integration-api</name>
+    <description>
+        Service-to-service contract for object storage (V9 §18 / §91).
+
+        Members: OssPort (the storage port) and UploadResponse (what an upload returns).
+        Both were reached for from four other future deployment units -- agent,
+        knowledgebase, publishing and recitation all injected the concrete OssService and
+        read its UploadResponse. After the split that is four services depending on another
+        service's implementation class, so the port and its result type move to a module
+        every side may depend on.
+
+        Package note: this module's package is com.xander.lab.integration.api, which sits
+        inside the integration domain's own namespace because V9 §18 names the module
+        integration-api. That is exactly the case SHARED_KERNEL had to be taught to express:
+        its entries are now package prefixes matched longest-first, so this module is listed
+        as integration.api rather than integration. Listing the bare domain would not
+        misfile the domain -- it would make this contract invisible, because a business
+        domain wins in the scanner and every type moved here would keep being counted as a
+        domain edge. See the shared-kernel-classification gate and lib-extraction.md §6.1.
+
+        Zero dependencies, and that is the point. OssPort deliberately takes byte[] and not
+        Spring's MultipartFile: a contract is depended on by every service, including the
+        WebFlux Gateway, so a Spring web type here would put spring-web on all of them and
+        would also be the wrong shape for a call that has to survive becoming a network
+        call. Callers holding a MultipartFile convert at the call site.
+
+        UploadResponse is hand written rather than lombok annotated on purpose: this is a
+        wire contract, so its shape should be readable without knowing lombok's defaults,
+        and it is what lets the module stay JDK only without weakening the gate.
+    </description>
+
+    <dependencies>
+        <!--
+            No compile or runtime dependency by design. junit-jupiter is test-scoped: the
+            canonical constructor's argument order is the contract's field order, and a
+            silent reorder would swap two adjacent String fields without any compile error,
+            so a test pins it.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class".
+            -->
+        </plugins>
+    </build>
+
+</project>

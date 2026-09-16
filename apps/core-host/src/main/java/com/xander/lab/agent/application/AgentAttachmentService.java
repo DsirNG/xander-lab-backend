@@ -1,13 +1,14 @@
 package com.xander.lab.agent.application;
 
 import com.xander.lab.agent.domain.AgentAttachment;
-import com.xander.lab.integration.oss.OssService;
-import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.integration.api.OssPort;
+import com.xander.lab.integration.api.UploadResponse;
 import com.xander.lab.publishing.application.BlogMediaService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.Locale;
 import java.util.Set;
 
@@ -20,11 +21,11 @@ public class AgentAttachmentService {
             "pdf", "txt", "md", "json", "html", "xml", "doc", "docx", "rtf", "odt",
             "ppt", "pptx", "csv", "xls", "xlsx", "tsv", "java", "js", "jsx", "ts", "tsx", "py", "css");
 
-    private final OssService ossService;
+    private final OssPort ossPort;
     private final BlogMediaService mediaService;
 
-    public AgentAttachmentService(OssService ossService, BlogMediaService mediaService) {
-        this.ossService = ossService;
+    public AgentAttachmentService(OssPort ossPort, BlogMediaService mediaService) {
+        this.ossPort = ossPort;
         this.mediaService = mediaService;
     }
 
@@ -40,7 +41,14 @@ public class AgentAttachmentService {
         }
         String contentType = StringUtils.hasText(file.getContentType())
                 ? file.getContentType().trim() : "application/octet-stream";
-        UploadResponse uploaded = ossService.upload(file, "agent/" + userId + "/");
+        // 大小上面已经卡过 20MB，所以整份读进内存是有界的。
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalStateException("无法读取附件内容", e);
+        }
+        UploadResponse uploaded = ossPort.upload(content, name, contentType, "agent/" + userId + "/");
         if (mediaService != null && contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
             var asset = mediaService.saveAgentUploadedImage(userId, uploaded);
             return new AgentAttachment(uploaded.getUrl(), name, contentType, uploaded.getSize(), asset.getId());

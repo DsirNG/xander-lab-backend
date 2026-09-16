@@ -76,6 +76,34 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 `BlogPostMapper` 的投影目标（`@JsonIgnore tagsRaw` 承接 `GROUP_CONCAT`），搬它之前必须先把
 上线形状与持久化投影分开。
 
+**搬 vs 抽端口：先看那个类型是不是接口。** 这是两种不同的活，别混：
+
+- 类型**本来就是接口**（或纯 DTO）→ 搬家，连同它的 DTO 一起换包。先例 `BlogPublisher`。
+- 类型是**具体实现**（`@Service`、拖 SDK / mapper / `@Value`）→ 不能搬，只能**抽端口**：
+  在契约里新建一个接口，让原实现 `implements` 它，调用方改依赖接口。
+  先例 `OssPort` / `OssService`。
+
+抽端口时的两条硬规矩：
+
+1. **端口签名不得含框架类型。** 典型的坑是 Spring 的 `MultipartFile` —— 它是 spring-web 类型，
+   放进契约会让 spring-web 出现在每个依赖契约的服务（含 WebFlux Gateway）的 classpath 上，
+   而且**跨进程时根本没有 MultipartFile 可传**。改成 `byte[]` + 元信息，调用方在调用点转换。
+   原方法可作为**本域内的便捷重载**留在实现类上（先例：`OssService.upload(MultipartFile, String)`
+   留给同域的 `FileController`）。
+2. **换签名会带来真实行为改动，必须留痕。** 从"把 `MultipartFile` 的输入流交给 SDK"改成
+   "先 `getBytes()` 读进内存"是**流式 → 全量**的变化。可接受的前提是调用方上传前已经卡了大小上限；
+   写进提交信息与 `docs/migration/lib-extraction.md`，别当成纯重构。
+
+**`SHARED_KERNEL` 里契约的包名可能要带点。** §18 的 8 个契约里有 4 个
+（`agent-api` / `automation-api` / `integration-api` / `studio-api`）的名字同时是业务域，
+包只能落在 `com.xander.lab.<域>.api`。条目按**最长前缀**匹配，所以登记 `integration.api`
+（**不要**登记裸 `integration`：那会让契约隐形，因为业务域在扫描器里优先）。
+
+**搬类型进契约时，调用方要一起改。** `OssService` 那次一共动了 4 个域 + 4 个测试文件。
+改完必须 `grep -rn "<旧包名>" --include=*.java apps/ contracts/` 复核，
+**不要信 Edit/替换脚本的成功返回** —— 本轮就因为漏改一个赋值左侧（`ossService = mock(...)`
+只改了右边）而编译失败一次。
+
 ## API 与异常契约
 
 - 所有错误响应：`{ "code", "message", "data" }`；code 必须与真实 HTTP 语义一致（400/401/403/404/5xx 不被 HTTP 200 包装）。
@@ -199,5 +227,28 @@ python scripts/migration/ci_gates.py
 P=path/to/File.java
 [ "$(git hash-object "$P")" = "$(git rev-parse HEAD:$P)" ] && echo RESTORED
 ```
+
+### ⚠️ 不要用 `git rm` 删文件（会连带删掉整个目录树）
+
+2026-09-16 实测：`git rm -q apps/core-host/src/main/java/com/xander/lab/integration/oss/UploadResponse.java`
+（**单个文件**）之后，`apps/core-host/src/main/java/com/xander/lab/integration/` 下
+**84 个文件全部从工作区消失**，而 `git status` 只报 ` D`。
+文件都在 HEAD 里，`git reset -q HEAD -- <dir> && git checkout HEAD -- <dir>` 可完整恢复。
+
+**规矩：删被跟踪的文件用普通删除，让 `git add -u` 去记录。**
+
+```bash
+python -c "import pathlib; pathlib.Path('path/to/File.java').unlink()"
+# 然后 git add -u，git status 会显示 ' D'，和 git rm 的效果一样，但不会连带删目录
+```
+
+**任何批量删除/移动之后，立刻数一遍目录里的文件数**，别只看 `git status`：
+
+```bash
+find <dir> -name "*.java" | wc -l     # 和删除前对比
+```
+
+本环境对"删目录"这类操作明显不可靠（另有嵌套 ref 静默丢失、见 `notes/repo-workflow.md`），
+所以**不要**用会自己决定删目录边界的工具。
 
 本地环境：JDK 17 = `C:\jdk-17.0.2`，Redis localhost:6379，MySQL 101.33.246.103:3306（xander_lab）。提交标题用中文并以「【dxd】」为前缀，正文含 `desc:`；只 stage 任务相关文件，不提交凭据与本地配置。

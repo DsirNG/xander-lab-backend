@@ -1,6 +1,6 @@
 package com.xander.lab.integration.file;
 
-import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.integration.api.UploadResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -73,14 +73,8 @@ public class FileService {
 
         log.info("[File] 文件上传成功：{} → {}", originalName, storedName);
 
-        return UploadResponse.builder()
-                .url(accessUrl + "/" + storedName)
-                .originalName(originalName)
-                .storedName(storedName)
-                .size(file.getSize())
-                .contentType(file.getContentType())
-                .extension(extension)
-                .build();
+        return new UploadResponse(accessUrl + "/" + storedName, originalName, storedName,
+                file.getSize(), file.getContentType(), extension);
     }
 
     /**

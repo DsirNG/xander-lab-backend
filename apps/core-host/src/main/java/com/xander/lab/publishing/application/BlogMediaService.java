@@ -5,8 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.common.PageData;
-import com.xander.lab.integration.oss.OssService;
-import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.integration.api.OssPort;
+import com.xander.lab.integration.api.UploadResponse;
 import com.xander.lab.publishing.domain.BlogMediaAsset;
 import com.xander.lab.publishing.infrastructure.BlogMediaAssetMapper;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +27,7 @@ public class BlogMediaService {
     private static final Set<String> SUPPORTED_TYPES = Set.of("image/png", "image/jpeg", "image/webp", "image/gif");
 
     private final BlogMediaAssetMapper assetMapper;
-    private final OssService ossService;
+    private final OssPort ossPort;
 
     public BlogMediaAsset uploadImage(Long userId, MultipartFile file) {
         requireUser(userId);
@@ -51,7 +51,15 @@ public class BlogMediaService {
             throw new IllegalArgumentException("无法识别图片内容");
         }
 
-        UploadResponse uploaded = ossService.upload(file, "photos/blog/");
+        // 上面已经卡过 10MB，所以整份读进内存是有界的。
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("无法读取图片内容", e);
+        }
+        UploadResponse uploaded = ossPort.upload(
+                content, file.getOriginalFilename(), file.getContentType(), "photos/blog/");
         BlogMediaAsset asset = new BlogMediaAsset();
         asset.setUserId(userId);
         asset.setUrl(uploaded.getUrl());
@@ -77,7 +85,7 @@ public class BlogMediaService {
         }
         if (image == null) throw new IllegalStateException("智能体生成的图片格式无法识别");
 
-        UploadResponse uploaded = ossService.upload(
+        UploadResponse uploaded = ossPort.upload(
                 generated.bytes(), originalName, generated.contentType(), "photos/blog/agent/");
         BlogMediaAsset asset = new BlogMediaAsset();
         asset.setUserId(userId);

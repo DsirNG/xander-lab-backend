@@ -11,7 +11,7 @@
  * {@code knowledge_quiz_*}）、通知表 {@code blog_notification}（属 {@code automation}）、
  * 对象存储与本地文件投递（属 {@code integration}）、用户与登录态（属 {@code identity}）。</p>
  *
- * <p><b>依赖方向</b>：本模块通过 {@code integration.oss} 落对象存储，通过 {@code automation} 的
+ * <p><b>依赖方向</b>：本模块通过契约 {@code integration.api.OssPort} 落对象存储，通过 {@code automation} 的
  * {@code BlogNotificationService#notifyResource} 发“大部头未自动出结构图”这类通知，
  * 通过 {@code identity} 的 {@code UserContext} 读当前用户。其他模块只能调用本模块 application 层，
  * 不得直接访问本模块 mapper。</p>

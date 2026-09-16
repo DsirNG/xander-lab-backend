@@ -201,6 +201,19 @@ empty except for shared infrastructure:
    frontend-facing DTOs (`publishing.api.BlogPostDTO` / `BlogPostVO`) deliberately
    stay with the domain until its api layer is split, because `BlogPostVO` is also
    the MyBatis projection target of `BlogPostMapper`.
+8. `contracts/integration-api` holds the object-storage port (`OssPort`) and its
+   result (`UploadResponse`), because four domains in four different deployment
+   units (`agent`, `knowledgebase`, `publishing`, `recitation`) all injected the
+   concrete `integration.oss.OssService`. Unlike item 7 this was not a *move*: none
+   of the seven cross-domain types in `integration` is an interface, so the port had
+   to be **introduced**. `OssPort` takes `byte[]` rather than Spring's
+   `MultipartFile` — a contract is depended on by every service including the
+   WebFlux gateway, and a `MultipartFile` cannot be sent over a network call
+   anyway. `OssService.upload(MultipartFile, String)` survives as an in-domain
+   convenience for `FileController`. The remaining five types (CSDN/Juejin
+   credential and sync services, `MailService`) stay where they are: they are
+   concrete implementations, and `MailService` additionally imports
+   `automation.domain.EmailReminderMailTemplates`, which a contract may not do.
 
 ## Agent HTTP, SSE, and WebSocket Contract
 

@@ -36,6 +36,7 @@
         <module>libs/xander-mybatis-support</module>
         <module>libs/xander-auth-core</module>
         <module>contracts/content-api</module>
+        <module>contracts/integration-api</module>
         <module>apps/core-host</module>
     </modules>
 

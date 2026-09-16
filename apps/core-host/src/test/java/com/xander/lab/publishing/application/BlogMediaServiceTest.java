@@ -3,7 +3,7 @@ package com.xander.lab.publishing.application;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.common.PageData;
 import com.xander.lab.auth.core.UserContext;
-import com.xander.lab.integration.oss.OssService;
+import com.xander.lab.integration.api.OssPort;
 import com.xander.lab.publishing.domain.BlogMediaAsset;
 import com.xander.lab.publishing.infrastructure.BlogMediaAssetMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -25,7 +25,7 @@ class BlogMediaServiceTest {
     }
 
     private BlogMediaService serviceWith(BlogMediaAssetMapper mapper) {
-        return new BlogMediaService(mapper, mock(OssService.class));
+        return new BlogMediaService(mapper, mock(OssPort.class));
     }
 
     @Test

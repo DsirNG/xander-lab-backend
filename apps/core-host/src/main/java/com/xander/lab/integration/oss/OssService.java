@@ -3,23 +3,28 @@ package com.xander.lab.integration.oss;
 import com.aliyun.oss.ClientBuilderConfiguration;
 import com.aliyun.oss.OSS;
 import com.aliyun.oss.OSSClientBuilder;
-import com.xander.lab.integration.oss.UploadResponse;
+import com.xander.lab.integration.api.OssPort;
+import com.xander.lab.integration.api.UploadResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.InputStream;
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.util.UUID;
 
 /**
  * 阿里云 OSS 服务
  * 对应前端 axios 封装中的 upload() 方法
+ *
+ * <p>它是 {@link OssPort} 的**实现**，端口本身在 {@code contracts/integration-api}。
+ * 这样 agent / knowledgebase / publishing / recitation 四个域只依赖接口，
+ * 将来本服务被拆成独立进程时，换成 HTTP 客户端实现即可，调用方代码不用动。</p>
  */
 @Slf4j
 @Service
-public class OssService {
+public class OssService implements OssPort {
 
     @Value("${aliyun.oss.endpoint}")
     private String endpoint;
@@ -58,7 +63,16 @@ public class OssService {
     }
 
     /**
-     * 上传文件到 OSS
+     * 上传一个 Spring 上传对象，**本域内**的便捷重载。
+     *
+     * <p>刻意不放进 {@link OssPort}：{@code MultipartFile} 是 spring-web 类型，
+     * 放进契约会让 spring-web 出现在每个依赖契约的服务（含 WebFlux Gateway）的
+     * classpath 上，而且跨进程时没有 {@code MultipartFile} 可传。
+     * 只有本域的 {@code FileController} 用它；跨域调用方走
+     * {@link #upload(byte[], String, String, String)}。</p>
+     *
+     * <p>与端口方法的一个真实差别：这里把 {@code MultipartFile} 的输入流直接交给 SDK，
+     * 不把文件读进内存；端口方法收的是 {@code byte[]}，天然是全量的。</p>
      *
      * @param file       文件对象
      * @param pathPrefix 路径前缀（如 avatars/）
@@ -82,41 +96,32 @@ public class OssService {
 
             log.info("[OSS] 文件上传成功: {}", fileUrl);
 
-            return UploadResponse.builder()
-                    .url(fileUrl)
-                    .originalName(originalName)
-                    .storedName(storedName)
-                    .size(file.getSize())
-                    .contentType(file.getContentType())
-                    .extension(extension)
-                    .build();
+            return new UploadResponse(fileUrl, originalName, storedName,
+                    file.getSize(), file.getContentType(), extension);
         } catch (Exception e) {
             log.error("[OSS] 文件上传异常: {}", e.getMessage());
-            throw new RuntimeException("文件上传至云存储失败");
+            throw new RuntimeException("文件上传至云存储失败", e);
         }
     }
 
-    public UploadResponse upload(byte[] bytes, String originalName, String contentType, String pathPrefix) {
+    @Override
+    public UploadResponse upload(byte[] content, String originalName, String contentType, String pathPrefix) {
         try {
             String extension = originalName != null && originalName.contains(".")
                     ? originalName.substring(originalName.lastIndexOf('.') + 1).toLowerCase()
                     : "png";
             String storedName = UUID.randomUUID() + "." + extension;
             String objectName = pathPrefix + storedName;
-            try (InputStream inputStream = new ByteArrayInputStream(bytes)) {
+            try (InputStream inputStream = new ByteArrayInputStream(content)) {
                 client().putObject(bucketName, objectName, inputStream);
             }
-            return UploadResponse.builder()
-                    .url(domain + "/" + objectName)
-                    .originalName(originalName)
-                    .storedName(storedName)
-                    .size((long) bytes.length)
-                    .contentType(contentType)
-                    .extension(extension)
-                    .build();
+            return new UploadResponse(domain + "/" + objectName, originalName, storedName,
+                    (long) content.length, contentType, extension);
         } catch (Exception e) {
-            log.error("[OSS] 智能体图片上传失败: {}", e.getMessage());
-            throw new IllegalStateException("智能体图片上传至云存储失败", e);
+            // 措辞保持中立：这条端口方法服务 4 个域（智能体附件、知识库文件、博客媒体、
+            // 背诵音频），原先写死"智能体图片"会让其余三处失败时的日志指向错误的对象。
+            log.error("[OSS] 内容上传失败: {}", e.getMessage());
+            throw new IllegalStateException("文件上传至云存储失败", e);
         }
     }
 
@@ -128,6 +133,7 @@ public class OssService {
      *
      * @return 是否确实完成了删除
      */
+    @Override
     public boolean deleteByUrlQuietly(String url) {
         String prefix = domain + "/";
         if (url == null || !url.startsWith(prefix)) {
