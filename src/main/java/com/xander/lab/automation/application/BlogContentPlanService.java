@@ -473,7 +473,21 @@ public class BlogContentPlanService {
     /** Refines a seed topic into a deduplicated topic series for a plan's
      * multi-day queue. Excludes the seed, the requester's already-published
      * posts, and existing queue topics so generated titles stay fresh. */
-    @Transactional(readOnly = true)
+    /*
+     * ⚠️ 刻意【不加】事务注解，尤其不能加只读事务注解（readOnly = true）。
+     *
+     * 本方法自己只读，但它调用的 agentService.generateTopicSeries 会做两件
+     * 只读事务不该容纳的事：外部模型 HTTP 调用（BlogAgentService L126），
+     * 以及 billingService.chargeTokens 写库（L142）。
+     *
+     * readOnly 在 MySQL 上只是给驱动的提示、不是强制约束，所以「只读事务里发生写」
+     * 不会报任何错 —— 后果是模型调用慢时一个只读事务会持有连接数秒到数十秒
+     * （连接池耗尽的经典成因），而且没有任何功能性症状。
+     *
+     * 去掉事务后：requireUser / selectList 各自是独立单语句（本就无需事务），
+     * 外部调用彻底在事务之外，chargeTokens 拿到自己的事务。这正是
+     * backend-norms 的「网络调用必须在事务之外」。
+     */
     public List<String> generateTopics(Long userId, BlogContentPlanTopicsGenerateRequest request) {
         requireUser(userId);
         String seed = request.getTopic().strip();

@@ -119,8 +119,21 @@ public class AgentMcpServerService {
      *
      * <p>失败时**保留**上一次的工具目录。清掉会让这台服务器的能力从工具面里静默消失，
      * 而对方可能只是临时不可达；保留则最坏是模型调到一个不存在的工具、拿到一条明确报错。</p>
+     *
+     * <p><b>⚠️ 刻意【不加】事务注解。</b>方法体第一件事是
+     * {@link McpConnectionFactory#listTools} —— 一次真实的 {@code java.net.http}
+     * 往返，超时由 MCP 客户端决定。把它圈进事务有两个后果：</p>
+     * <ul>
+     *   <li>远端慢 → 事务长时间持有数据库连接（连接池耗尽的经典成因）；</li>
+     *   <li>而且事务<b>换不来任何原子性</b>：远端副作用已经发生了，本地回滚撤销不了它。
+     *       这里的事务只会把锁窗口撑大，不会让"远端 + 本地"变成一体。</li>
+     * </ul>
+     *
+     * <p>去掉事务是安全的：方法体里只有<b>一条</b>写语句（{@code mapper.updateById}），
+     * 它本身就是原子的；{@code changed()} 只是内存缓存失效。这正是 backend-norms 的
+     * 「网络调用必须在事务之外；先落意图、再调远端、结果单独事务持久化」——
+     * 单条 UPDATE 走自动提交，已经满足"结果单独事务持久化"。</p>
      */
-    @Transactional
     public AgentMcpServerView probe(Long id, long ownerUserId) {
         requireEnabled();
         AgentMcpServer server = require(id, ownerUserId);

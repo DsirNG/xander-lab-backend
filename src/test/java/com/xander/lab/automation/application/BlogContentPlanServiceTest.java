@@ -2,6 +2,7 @@ package com.xander.lab.automation.application;
 
 import com.xander.lab.automation.api.BlogContentPlanAiGenerateRequest;
 import com.xander.lab.automation.api.BlogContentPlanCreateRequest;
+import com.xander.lab.automation.api.BlogContentPlanTopicsGenerateRequest;
 import com.xander.lab.automation.api.BlogContentPlanUpdateRequest;
 import com.xander.lab.automation.api.BlogContentPlanVO;
 import com.xander.lab.automation.domain.BlogContentPlan;
@@ -16,8 +17,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
@@ -229,5 +232,44 @@ class BlogContentPlanServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .extracting(ex -> ((ResponseStatusException) ex).getStatusCode().value())
                 .isEqualTo(HttpStatus.CONFLICT.value());
+    }
+
+    /**
+     * generateTopics 必须【没有】事务注解（V9 §75 跨域事务边界）。
+     *
+     * <p>它调用的 {@code agentService.generateTopicSeries} 会做外部模型 HTTP 调用
+     * 并调用 {@code billingService.chargeTokens} 写库。加了 {@code @Transactional}
+     * （尤其是 {@code readOnly = true}）会把这两件事圈进一个只读事务：</p>
+     *
+     * <ul>
+     *   <li>readOnly 在 MySQL 上只是提示、不是约束 → <b>写进去不报错</b>，零症状；</li>
+     *   <li>模型调用慢时，一个只读事务会持有数据库连接数秒到数十秒。</li>
+     * </ul>
+     *
+     * <p>只能靠注解反射守：纯单测拿不到 Spring 代理，而把它加回去之后
+     * 所有功能测试仍然全绿 —— 症状只在生产高峰（连接池耗尽）出现。</p>
+     */
+    @Test
+    void generateTopicsMustNotBeTransactional() throws NoSuchMethodException {
+        Method method = BlogContentPlanService.class.getMethod(
+                "generateTopics", Long.class, BlogContentPlanTopicsGenerateRequest.class);
+
+        assertThat(method.getAnnotation(Transactional.class))
+                .as("generateTopics 不得带 @Transactional —— 它经 agentService 做外部模型调用"
+                        + "与计费写库，圈进事务（尤其 readOnly）会让慢模型调用长时间占用数据库连接，"
+                        + "而 readOnly 下的写不会报错、没有任何功能性症状")
+                .isNull();
+    }
+
+    /** nextRunAfter 是纯计算 + 单条查询，保持只读事务是合理的 —— 这条与上一条一起
+     * 钉住"哪些方法该有、哪些不该有"，避免下次修订一刀切地全删或全加。 */
+    @Test
+    void nextRunAfterStaysReadOnlyTransactional() throws NoSuchMethodException {
+        Method method = BlogContentPlanService.class.getMethod(
+                "nextRunAfter", Long.class, Long.class, long.class);
+
+        Transactional transactional = method.getAnnotation(Transactional.class);
+        assertThat(transactional).as("nextRunAfter 应保留只读事务").isNotNull();
+        assertThat(transactional.readOnly()).as("nextRunAfter 不应变成读写事务").isTrue();
     }
 }

@@ -44,7 +44,8 @@ MySQL 库 `xander_lab`、一个 `DataSource`、一个事务管理器。
 | **Compensation** | 单点补偿：写一个"待处理/失败"状态，由后续流程收敛 | ⚠️ 见 §5.3（`RecitationService` 的 `UPLOADING` 状态机） |
 
 **关键判据**：只要事务里出现了**不可回滚的副作用**（对象存储、HTTP、MCP、Redis），
-"继续本地事务"就已经是错的 —— 不是拆库后才错，是**现在就错**。§4 列出三处。
+"继续本地事务"就已经是错的 —— 不是拆库后才错，是**现在就错**。§4 列出两处
+（本轮已修），另有第三处属于拆库后的决策点，见 §3.2。
 
 ---
 
@@ -80,7 +81,7 @@ MySQL 库 `xander_lab`、一个 `DataSource`、一个事务管理器。
 | `@Transactional` 方法 | `create`（L80–81）、`findReadyTaskByClientRequestId`（L110–111，readOnly）、`findPublishedPost`（L671–672，readOnly） |
 | 事务内跨域调用 | `blogService.getBlogById`（L674，publishing，**只读**）；`finalizeResult`（L293）→ `billingService.chargeTokens`（L334，billing，**写**） |
 | 事务内不可回滚副作用 | **无**（模型/图像调用都在事务外，见下） |
-| 判定 | **继续本地事务**（但 §4.1 是重点） |
+| 判定 | **继续本地事务**（扣费是 Wave 2 决策，见下） |
 
 **这是本次审计里"设计得最对"的一个类。** 它的长流程 `execute(...)`（L179）
 用多次 `transactionTemplate` 小块（L182/187/225/228/231）包住**每一步 DB 写**，
@@ -97,9 +98,20 @@ finalizeResult(225)                               ← 事务内，且内部只�
 这正是"拆服务后不需要 Saga"的形态：**每一步的 DB 写是原子的，
 步骤之间的推进靠状态字段（`updateStage`），不靠长事务。**
 
-⚠️ 但 `finalizeResult` 在事务内调 `billingService.chargeTokens`（L334）——
-拆库后这会变成"blogagent 提交了，billing 没扣费"或反之。这一处需要
-Outbox 或改成 §3.1 那种"事务外 + Quietly"的形态。
+⚠️ `finalizeResult` 在事务内调 `billingService.chargeTokens`（L334）——
+**这一处今天不是缺陷，而是 Wave 2 的决策点。** 扣费是同库的 DB 写、可回滚，
+所以"要么都成、要么都回滚"的事务语义今天**是正确的**（用户拿到文章就一定会被扣费，
+反之亦然）。它不符合 §4 的判据（事务里出现不可回滚的副作用），
+所以本轮**刻意没有改它**。
+
+拆库后它会变成"blogagent 提交了，billing 没扣费"或反之，必须选一个：
+Outbox（推荐）或改成 §3.1 那种"事务外 + Quietly"的形态。
+**不能**改成"REST 调用 + 靠调用方回滚" —— 那样 billing 已经扣了、
+blogagent 回滚，用户被多扣。
+
+⚠️ 顺带说清"改成 Quietly 形态"的**语义代价**：那会让"文章已交付但没扣费"
+成为可能（计费失败被吞掉）。今天的事务保证了二者一致，放弃它是一次
+**有意的**取舍，不是纯技术清理 —— 所以它必须走 §11 Contract 流程，不能顺手改。
 
 `publish(...)`（L658）与 `reviewCompliance(...)`（L705）**刻意不加事务**：
 它们分别调用外部发布平台与模型审核。保持这个选择。
@@ -143,14 +155,14 @@ Redis 没有回滚 —— 若 DB 回滚，被删的旧 token 不会恢复，用�
 
 ---
 
-### 3.4 `automation/application/BlogContentPlanService` ⚠️ 有一处真实缺陷
+### 3.4 `automation/application/BlogContentPlanService`
 
 | 项 | 内容 |
 |---|---|
-| `@Transactional` 方法 | **14 个**（本组最多）：`create`(L71)、`createOneShotPlans`(L182)、`update`(L284)、`updateStatus`(L374)、`delete`(L416)、`trigger`(L429) 等，其中 7 个 `readOnly = true` |
-| 事务内跨域调用 | `recitationService.getMaterial`（L115 / L319，recitation，只读）；`csdn/juejinCredentialService.isAuthorized`（L552–553，integration，只读）；`agentService.generateTopicSeries`（L483，blogagent） |
-| 事务内不可回滚副作用 | `generateTopics`（L475–476）内 → `modelClient.planTopicSeries`（`BlogAgentService` L126，**HTTP**）+ `billingService.chargeTokens`（L142，**写**） |
-| 判定 | **继续本地事务**，但 `generateTopics` 必须先修（见 §4.2） |
+| `@Transactional` 方法 | **13 个**（本组最多）：`create`(L71)、`createOneShotPlans`(L182)、`update`(L284)、`updateStatus`(L374)、`delete`(L416)、`trigger`(L429) 等，其中 7 个 `readOnly = true`。`generateTopics` 已去掉（见 §4.1） |
+| 事务内跨域调用 | `recitationService.getMaterial`（L115 / L319，recitation，只读）；`csdn/juejinCredentialService.isAuthorized`（L552–553，integration，只读） |
+| 事务内不可回滚副作用 | **无**（`generateTopics` 的外部模型调用与计费写库已移出事务，见 §4.1） |
+| 判定 | **继续本地事务** |
 
 另外 `trigger`（L429）→ `runService.createManualRun`（L440）→
 `transactionTemplate.execute`（`BlogPlanRunService` L73）构成**同域嵌套大事务**。
@@ -258,71 +270,85 @@ Redis 没有回滚 —— 若 DB 回滚，被删的旧 token 不会恢复，用�
 
 ---
 
-### 3.10 `integration/mcp/client/application/AgentMcpServerService` ⚠️ 有一处真实缺陷
+### 3.10 `integration/mcp/client/application/AgentMcpServerService`
 
 | 项 | 内容 |
 |---|---|
-| `@Transactional` 方法 | `list`(L58)、`create`(L66)、`update`(L86)、`delete`(L106)、`probe`(L123) |
+| `@Transactional` 方法 | `list`(L58，readOnly)、`create`(L66)、`update`(L86)、`delete`(L106) —— `probe` 已去掉 |
 | 事务内跨域调用 | `changed()` → `toolSource.invalidate` / `toolRegistry.invalidate`（agent 域，纯内存，无 IO） |
-| 事务内不可回滚副作用 | **`probe`（L124）内 `connectionFactory.listTools`（L128）—— 外部 MCP / HTTP 往返** |
-| 判定 | **继续本地事务**，但 `probe` 必须先修（见 §4.3） |
+| 事务内不可回滚副作用 | **无**（`probe` 的外部 MCP 往返已移出事务，见 §4.2） |
+| 判定 | **继续本地事务** |
 
 ---
 
-## 4. 三处"现在就错"的缺陷
+## 4. 两处「现在就错」的外部 IO 缺陷（本轮已修）
 
-这三处不是拆服务后才出问题，**当前就是错的**。它们共同的特征是：
-事务里出现了不可回滚的副作用，而失败路径只影响性能或数据新鲜度，
-所以功能测试全绿。
+判据是**事务里出现了不可回滚的副作用**。只有符合这条的才算"现在就错" ——
+因为它和拆不拆库无关：把网络往返圈进事务，今天就意味着连接被占住，
+而事务**换不来任何原子性**（远端副作用已经发生，本地回滚撤销不了它）。
 
-### 4.1 `BlogAgentService.finalizeResult` 在事务内扣费
+⚠️ 这条判据刻意把 `BlogAgentService.finalizeResult` 的"事务内扣费"**排除在外**：
+扣费是同库的 DB 写、**可回滚**，今天"要么都成、要么都回滚"的事务语义是正确的，
+甚至正是想要的行为。它属于拆库后才需要决策的问题，已登记在 §3.2。
 
-`finalizeResult`（L293）在一个 `transactionTemplate` 块（L225 / L468）内调用
-`billingService.chargeTokens`（L334）。两侧同库，所以现在要么都成、要么都回滚。
+下面两处本轮已修，修法与守护测试写在各自小节里。
 
-拆库后必须选一个：Outbox（推荐）或改成 §3.1 那种事务外 `Quietly` 形态。
-**不能**改成"REST 调用 + 靠调用方回滚" —— 那样 billing 已经扣了，
-而 blogagent 回滚，用户被多扣。
+### 4.1 `BlogContentPlanService.generateTopics`：只读事务里的写 + 外部调用 —— ✅ 已修
 
-### 4.2 `BlogContentPlanService.generateTopics`：只读事务里的写 + 外部调用
+修复前：
 
 ```java
-@Transactional(readOnly = true)                     // L475
+@Transactional(readOnly = true)
 public List<String> generateTopics(Long userId, BlogContentPlanTopicsGenerateRequest request) {
     ...
-    return agentService.generateTopicSeries(...);    // L483
+    return agentService.generateTopicSeries(...);
 }
 ```
 
 `generateTopicSeries`（`BlogAgentService` L121）**没有注解**，所以它跑在调用方的
 **只读事务**里，然后做了两件只读事务不该做的事：
 
-1. `modelClient.planTopicSeries`（L126）—— **外部 HTTP 调用，且无超时边界保护事务**；
+1. `modelClient.planTopicSeries`（L126）—— **外部 HTTP 调用**；
 2. `billingService.chargeTokens`（L142）—— **写**，`@Transactional`（REQUIRED）
    会**加入这个只读事务**。
 
 后果：模型调用慢的时候，一个只读事务会持有连接数秒到数十秒；
 而"只读事务里发生写"在 MySQL 上不会报错（`readOnly` 只是给驱动/优化的提示），
-所以**没有任何症状**。这是本组最值得优先修的一处。
+所以**没有任何症状**。
 
-修法：把 `generateTopics` 的事务去掉（它本来只读，去掉更安全），
-让 `chargeTokens` 用自己的事务。
+**修法**：去掉整个事务注解（不是只去掉 `readOnly`）。方法自身只读，
+`requireUser` / `selectList` 各自是独立单语句、本就不需要事务；
+外部调用因此彻底在事务之外，`chargeTokens` 拿到自己的事务。
 
-### 4.3 `AgentMcpServerService.probe` 在事务内做外部 MCP 往返
+**守护**：`BlogContentPlanServiceTest#generateTopicsMustNotBeTransactional`
+用注解反射断言 `generateTopics` **没有** `@Transactional` ——
+纯单测拿不到 Spring 代理，把注解加回去之后所有功能测试仍然全绿。
+同一文件里的 `nextRunAfterStaysReadOnlyTransactional` 反向钉住"纯读方法保留只读事务"，
+避免下次修订一刀切地全删或全加。两条都做过注入验证。
 
-`probe`（L123–124）是 `@Transactional`，事务体内第一件事就是
-`connectionFactory.listTools(server)`（L128）—— 一个真实的
+### 4.2 `AgentMcpServerService.probe` 在事务内做外部 MCP 往返 —— ✅ 已修
+
+修复前 `probe` 是 `@Transactional`，事务体内第一件事就是
+`connectionFactory.listTools(server)` —— 一个真实的
 `java.net.http.HttpClient` 往返，超时由 MCP 客户端决定。
 
 后果有两面：
 
 - **远端慢** → 事务长时间持有数据库连接（连接池耗尽的经典成因）；
-- **远端成功、`mapper.updateById`（L141）失败** → 远端已经建立了连接/会话，
-  而本地状态回滚。方法注释（L120–122）说明失败时**保留**上一次工具目录，
-  所以回滚本身符合预期；但"远端副作用已发生"这件事没有记录。
+- **远端成功、`mapper.updateById` 失败** → 远端已经建立了连接/会话，
+  而本地状态回滚。方法注释说明失败时**保留**上一次工具目录，
+  所以回滚本身符合预期；但"远端副作用已发生"这件事没有记录 ——
+  **事务在这里并不能把"远端 + 本地"变成一体**，它只是把锁窗口撑大。
 
-修法：把 `listTools` 移到事务外，只让 `mapper.updateById` 留在事务里。
-这也是 §3.2 已经采用的形态。
+**修法**：去掉事务注解。方法体里只有**一条**写语句（`mapper.updateById`，L154），
+它本身就是原子的；`changed()` 只是内存缓存失效。单条 UPDATE 走自动提交，
+已经满足 backend-norms 的"结果单独事务持久化"。
+
+**守护**：新建 `AgentMcpServerServiceTest`，两条注解反射断言 ——
+`probeMustNotBeTransactional`（外部往返方法不得有事务）
+与 `localOnlyMethodsKeepTheirTransaction`（`list`/`create`/`update`/`delete`
+保持事务，其中 `create` 的"查重 + 插入"必须同事务才能防并发同名）。
+已做注入验证。
 
 ---
 
@@ -374,21 +400,25 @@ OSS 上传（L355）                            ← 事务外
 
 ## 6. 汇总表
 
-| 服务 | 事务方法数 | 事务内跨域调用 | 事务内不可回滚副作用 | 判定 | 优先修 |
+| 服务 | 事务方法数 | 事务内跨域调用 | 事务内不可回滚副作用 | 判定 | 备注 |
 |---|---|---|---|---|---|
 | `AgentConversationService` | 1 | 无 | 无 | 继续本地事务 | — |
-| `BlogAgentService` | 3 | `blogService`(读)、`billingService`(写) | 无 | 继续本地事务 | ⚠️ §4.1 |
-| `AuthService` | 2 | **11 张跨域表** + `billingService` | **Redis ×4** | 继续本地事务 | ⚠️ §3.3 |
-| `BlogContentPlanService` | 14 | `recitation`(读)、`agentService` | **HTTP + 写** | 继续本地事务 | ⚠️ §4.2 |
+| `BlogAgentService` | 3 | `blogService`(读)、`billingService`(写) | 无 | 继续本地事务 | 扣费需 Wave 2 决策（§3.2） |
+| `AuthService` | 2 | **11 张跨域表** + `billingService` | **Redis ×4** | 继续本地事务 | ⚠️ 最难拆（§3.3） |
+| `BlogContentPlanService` | **13** | `recitation`(读) | **无** | 继续本地事务 | ✅ §4.1 已修 |
 | `KnowledgeFileService` | 8 | 无 | 无（已用 afterCommit） | 继续本地事务 | — |
 | `KnowledgeIngestionService` | 4（全 REQUIRES_NEW） | `notificationService`(写) | 无 | 继续本地事务 | 拆后需 Outbox |
 | `BlogService` | 10 | `userMapper`(读) | **Redis ×2** | 继续本地事务 | 注解陷阱（§3.7） |
 | `RecitationService` | 8 | 无 | 无 | 继续本地事务 | — |
 | `VirtualPaySettingsService` | 2 | 无 | 无 | 继续本地事务 | — |
-| `AgentMcpServerService` | 5 | agent 缓存（内存） | **MCP HTTP** | 继续本地事务 | ⚠️ §4.3 |
+| `AgentMcpServerService` | **4** | agent 缓存（内存） | **无** | 继续本地事务 | ✅ §4.2 已修 |
 
 **10/10 都是"继续本地事务"** —— 这不是好消息，而是说：
 **Wave 0A 只完成了"登记"，没有任何一处已经改造。** 改造属于 Wave 2。
+
+⚠️ 两个 ✅ 只是**去掉了事务里的外部 IO**（这是今天就错的技术缺陷），
+**并没有改变判定** —— 这 10 处仍然全部依赖"同一个库、同一个事务管理器"，
+拆库那一刻每一处的语义都会变，而没有一行会报编译错误。
 
 ---
 
@@ -397,10 +427,12 @@ OSS 上传（L355）                            ← 事务外
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | 10 处全部未改造 | 本文是登记，不是实现。§75 的六个选项里，Outbox / REST / Saga 都还没落地 | Wave 2 |
-| §4.1–§4.3 三处真实缺陷未修 | 见 §4。它们在当前单库下"能跑"，所以不会被功能测试发现 | 建议 Wave 0B 修 |
+| ~~§4 两处外部 IO 缺陷~~ | 已修（§4.1 `generateTopics`、§4.2 `probe`），各有注解反射测试守护并做过注入验证 | ✅ 本轮完成 |
+| `BlogAgentService` 事务内扣费 | 今天同库、可回滚，语义正确；拆库后必须选 Outbox 或事务外 Quietly。**不能**改成"REST + 靠调用方回滚"（billing 已扣、blogagent 回滚 → 多扣） | Wave 2 决策 |
 | `AuthService` 账号合并的拆解方案未定 | 11 张跨域表 + Redis，是唯一一处"必须跨域原子"的写事务。§3.3 给了两个方向，尚未选型 | Wave 2 设计 |
 | 无跨域事务的机器门禁 | 机器能扫 `@Transactional` 方法（`scheduled-inventory.yaml` 是同类先例），但"这个方法体内的调用是否跨域"需要解析注入字段与调用链 —— 目前只能人工登记 | 待评估 |
 | 自调用导致注解失效无门禁 | §3.7 / §3.9 的两处陷阱当前无害，但删掉外层注解会静默丢事务。ArchUnit 可以检测"同类自调用一个带事务注解的方法" | Wave 0B |
+| 外部 IO 只在两处有注解守卫 | §4 的两处已由注解反射测试钉住，但**没有全局规则**：新写的方法若在事务里做 HTTP，不会有任何门禁发现 | Wave 0B（ArchUnit） |
 
 ---
 
@@ -415,12 +447,30 @@ python scripts/migration/scan.py
 python scripts/migration/ci_gates.py
 ```
 
+§4 两处修复各有一条注解反射测试（**这是它们唯一的守护**，功能测试发现不了）：
+
+```bash
+# §4.1 generateTopics 不得有事务注解 + nextRunAfter 保留只读事务
+java ... -Dtest=BlogContentPlanServiceTest test
+
+# §4.2 probe 不得有事务注解 + 纯本地方法保留事务
+java ... -Dtest=AgentMcpServerServiceTest test
+```
+
+两条都做过**注入验证**：把注解加回去 → 对应用例立刻失败。
+
 人工复核的最小流程：
 
 1. 按 §6 的表逐个确认"事务方法数"与"跨域调用"两列仍然成立；
-2. 重点确认 §4 的三处是否已修 —— 修掉之后本节的条目应当删除，
-   而不是标记为"已解决"（保持清单是**当前事实**，不是历史记录）。
+2. 重点确认 §4 的两处**没有退化**（注解被加回来时，只有那两条反射测试会红）；
+3. 确认 §3.2 的扣费项仍在 —— 它在拆库前**不应该**被"顺手修掉"：
+   今天的事务语义是正确的，改了反而会让"文章已交付但没扣费"成为可能。
 
 ⚠️ 与 `capability-baseline.yaml` 的关系：§12 要求能力清单只增不减。
 本文属于**问题清单**，允许条目被删除（问题修好了就该消失）——
 两者语义相反，不要合并。
+
+⚠️ 数 `@Transactional` 时别用裸 `grep -c "@Transactional"`：本仓库的注释里
+会**引用注解原文**（例如 `BlogContentPlanService` 的 `generateTopics` 上方就写了
+"不能加只读事务注解"并解释了原因）。计数要用 `grep -cE "^\s+@Transactional"`，
+否则注释会被算成注解。
