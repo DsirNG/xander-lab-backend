@@ -233,6 +233,31 @@ empty except for shared infrastructure:
    `ModelGatewayTest` pins each literal — a rename would not break the build, it
    would silently orphan existing rows.
 
+10. `contracts/payment-api` holds `BillingBiz`, the charging catalogue whose values
+    are persisted as `points_ledger.biz_type`. Another *move*, not a port: it is a
+    final constants class with a private constructor and no imports at all. The
+    criterion is the one used throughout — the type crosses a deployment unit,
+    because **every charging call site has to name what it is charging for**, and
+    those call sites live in six domains across three future deployment units
+    (`dinqor-agent`, `dinqor-platform-integration`, `dinqor-content-automation`,
+    `dinqor-core-host`). It is not an internal enum of `billing`: after the split the
+    other services would each need a copy (which would drift) or a dependency on
+    another service's internals (which reverses the boundary). The catalogue is
+    named for the *capability* (`payment`) rather than the current module
+    (`billing`), which is why its package is `com.xander.lab.payment.api` — the §18
+    module list is deliberately not a mirror of today's directory names.
+    `BillingService`, the other cross-domain type in this domain, is a concrete
+    `@Service` over three MyBatis mappers and is imported by seven domains; it needs
+    a port, not a move, and that port is **not** in this change because
+    `chargeTokens(...)` takes `com.xander.lab.common.ModelUsage`, which carries
+    Jackson — the same undecided contract-dependency-boundary question that blocks
+    `agent-api` (see `docs/migration/lib-extraction.md` §3quinquies.5). Renaming a
+    catalogue value does not break the build, it silently orphans existing ledger
+    rows, so `BillingBizTest` reflects over every `public static final String` field
+    and compares the whole map rather than asserting field by field — a per-field
+    test would miss "a new charging item was added and nobody added an assertion",
+    which is the likeliest change of all.
+
 ## Agent HTTP, SSE, and WebSocket Contract
 
 Authenticated orchestration routes live under `/api/agent/conversations`.

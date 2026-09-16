@@ -50,7 +50,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `automation-api` | 未开始 | — | — |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
-| `payment-api` | 未开始 | — | — |
+| `payment-api` | **已完成**（第一步／共两步） | `BillingBiz`（`points_ledger.biz_type` 词表） | `agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7） |
 
 `integration` 域**不是一次性搬完的**：它被 7 个域引用的 7 个类型里，只有 2 个是"能直接搬"的。
 剩下 5 个（CSDN / 掘金 的凭证与同步服务、`MailService`）都是**具体实现而非接口**，
@@ -479,6 +479,135 @@ FAIL  shared-kernel-classification  module(s) ship package(s) core.api (contract
 
 ---
 
+## 3sexies. 第四个业务契约：`contracts/payment-api`（计费词表）
+
+### 3sexies.1 为什么是 `payment-api` 而不是 `billing-api`
+
+§18 给的 8 个模块名是固定的，里面没有 `billing-api`。被搬的类型住在 `billing` 域，
+但契约名是 `payment`，于是包名是 `com.xander.lab.payment.api`。
+
+这不是"换个名字"的小事：`payment` 既不是业务域（域叫 `billing` / `virtualpay`），
+也不在 `SHARED_KERNEL` 里 —— 它**必须是带点条目** `payment.api`，理由与 §6.1 相同。
+顺带说明 §18 的命名是按**能力**（payment）而不是按**现有模块**（billing）来的，
+这正是 §91 想要的效果：契约名不跟着当前代码结构走。
+
+### 3sexies.2 又一次"搬"，而且这次**验证方式**也值得记下来
+
+`BillingBiz` 是 final 常量类、私有构造器、**零 import**，所以搬运不碰任何行为。
+但"不碰行为"这件事本轮不是靠眼睛确认的，而是靠一次**字面量整体比对**：
+
+```bash
+diff <(git show HEAD:<旧路径> | grep -oE '"[a-z0-9-]+"' | sort) \
+     <(grep -oE '"[a-z0-9-]+"' <新路径> | sort)
+# -> 无输出，LITERALS IDENTICAL
+```
+
+**规矩**：搬常量类 / 枚举类时，"看起来一样"不算验证。用 `git show HEAD:<path>`
+取出原文，抽出字面量排序后 diff。这样"漏抄一个常量"和"抄错一个字母"都会当场暴露，
+而这两种错误都**不会**被编译器发现（少一个常量：只要没人用就编译得过；抄错字母：字符串）。
+
+### 3sexies.3 契约测试用**整体比对**而不是逐条断言
+
+`BillingBizTest` 用反射取出**全部** `public static final String` 字段，与预期 `Map`
+整体 `assertEquals`：
+
+```java
+for (Field f : BillingBiz.class.getDeclaredFields()) {
+    if (!Modifier.isStatic(f.getModifiers()) || !Modifier.isFinal(f.getModifiers())) continue;
+    if (f.getType() != String.class) continue;
+    found.put(f.getName(), (String) f.get(null));
+}
+assertEquals(EXPECTED, actualConstants());
+```
+
+**为什么不用逐条 `assertEquals`**：逐条断言**漏掉"新增了一个常量但没人回来补断言"**
+这种情况，而那恰恰是最可能发生的 —— 新增计费项时，人会记得改常量、不会记得改测试。
+整体比对让新增 / 改名 / 删除三种改动**全部**失败，不需要任何人记得补一行。
+
+⚠️ 这也是为什么这条测试不是"常量等于自己"的空测试：这些字符串是
+`points_ledger.biz_type` 的列值，改名**不会编译报错**，只会让库里已有的流水行静默失配
+（统计按旧值查不到、新扣费照常写入）。属 §2.3"静默降低既有能力"。
+
+⚠️ 另外钉住了一处**跨模块耦合**：`BillingService.isCreditBiz()` 按
+`GRANT_REGISTER` / `MERGE_CREDIT` 判断一笔流水是收入还是消耗（决定余额方向）。
+新增一个"收入类"业务项而忘了同步那处判断，余额方向会反 —— 运行期才暴露。
+测试里把"哪两个是收入类"显式钉住，改动者至少会在测试名里看到这件事。
+
+### 3sexies.4 收益（重新生成基线后实测）
+
+```
+agent      -> billing   6 -> 3   （跨部署单元）
+integration-> billing   4 -> 2   （跨部署单元）
+automation -> billing   2 -> 1   （跨部署单元）
+blogagent  -> billing   2 -> 1   （跨部署单元）
+studio     -> billing   2 -> 1   （同单元，dinqor-core-host 内部）
+
+implementation_statements          98 -> 90  (-8)
+cross_deployment_unit_statements   71 -> 64  (-7)
+cross_deployment_unit_edges        23 -> 23  （无变化）
+api_statements                     38 -> 38
+```
+
+⚠️ **8 条语句移除、但只有 7 条是跨单元的**：`studio → billing` 的 1 条是同单元边。
+别把"移除 8 条"直接写成"跨单元 −8"。
+
+⚠️ **没有一条边归零**，因为 `billing` 的入边同时被 `BillingService` 撑着 ——
+7 个域仍各自 import 那个具体 `@Service`。所以本轮**不需要**从基线里删边，
+`at_zero` 为空。这与 `core-api` 那次（四条边全归零、`admin` 入边清空）形成对照：
+**词表搬走了，行为没有搬走。** 契约能搬走的只有数据形状，剩下的必须靠端口。
+
+### 3sexies.5 ⚠️ 带点条目的盲区：第三次确认，而且这次最强
+
+把 `payment.api` 从 `SHARED_KERNEL` 删掉做对照实验：
+
+```
+登记 payment.api：impl 90 / cross 64 / api 38   unclassified_sources=[DinQorAIApplication.java]
+删掉 payment.api：impl 90 / cross 64 / api 38   unclassified_sources=[DinQorAIApplication.java, payment]
+```
+
+**三个指标逐字节相同**，而耦合一点没变 —— 那些 import 被**静默丢掉**了。
+唯一信号是 `unclassified_sources` 多出 `payment`，以及
+`shared-kernel-classification` FAIL：
+
+> module(s) ship package(s) payment.api (contracts/payment-api) that SHARED_KERNEL does not
+> cover -- imports of them would be dropped from the cross-domain baseline without any
+> coupling being removed.
+
+这是三次实验里最干净的一次，因为 `core` 那次至少还多一个 `unclassified_sources` 条目能看出端倪，
+而这里的"错状态"与"对状态"在**全部三个头条数字上完全一致**。
+**结论重申（§6.1 / §3quinquies.4）：对带点条目，门禁是唯一的保护，指标完全靠不住。**
+
+### 3sexies.6 ⚠️ 顺手修掉一个门禁自身的缺陷：pass 消息混了基线与实时
+
+`cross-domain-import-baseline` 的通过消息原来是：
+
+```python
+detail = (f"{recomputed} implementation statements across {len(base_edges)} edges "
+          f"({live['counts']['cross_deployment_unit_statements']} cross a deployment unit)")
+```
+
+`recomputed` 来自**基线文件**，`cross_deployment_unit_statements` 来自**实时扫描**。
+两个数描述的是**两个不同时刻**，拼成一句话就**不对应任何一个真实状态** ——
+本轮它打印的是 "98 implementation statements ... (64 cross a deployment unit)"，
+而当时真实状态是 90/64。更糟的是：**它永远显示不出"缩减"**，
+而缩减正是这个门禁的 docstring 说自己要追踪的东西
+（"the Wave 0B progress number stops meaning anything"）。
+
+已改为两个数都取实时值，并在与基线不同时附一句 `; baseline was N`：
+
+```
+PASS  cross-domain-import-baseline   90 implementation statements across 35 edges
+                                     (64 cross a deployment unit)
+```
+
+**规矩（已进 backend-norms skill）**：门禁的 pass 消息里**所有数字必须取自同一时刻**。
+想要"对比"就显式写成两个字段（`X; baseline was Y`），不要在一个句子里混。
+做注入验证时也要**专门测 pass 路径**：只测 FAIL 路径的话，一个永远显示错数字的
+pass 消息会一直藏在"全绿"里 —— 它不影响门禁的判定，只影响人读到的东西，
+而人读到的东西决定了下一步做什么。
+
+---
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`
@@ -710,7 +839,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 5 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **71** 条（原 103 → 85 → 77 → 71）。最大的两个剩余目标 `billing`（12）与 `identity`（14）**都卡在同一个设计决策上**：契约的依赖边界是否允许 Jackson / `xander-model`（见 §3quinquies.5）。`agent-api` 同样卡在这里 | Wave 0B 剩余 |
+| 4 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **64** 条（原 103 → 85 → 77 → 71 → 64）。按被依赖目标排序：`publishing` 24（17 跨单元）、`identity` 15、`automation` 10、`blogagent` 10、`billing` 10（**卡在 Jackson 决策上**，见 §3quinquies.5）、`integration` 9。`agent-api` 同样卡在 Jackson | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

@@ -80,15 +80,14 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 Counted from `import com.xander.lab.<other domain>.<layer>...`. Only the
 implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 
-- implementation statements: **98** across 35 edges
-- of which cross a deployment unit (the real backlog): **71** across 23 edges
+- implementation statements: **90** across 35 edges
+- of which cross a deployment unit (the real backlog): **64** across 23 edges
 - api-layer statements (contract surface): **38**
 
 | from | to | impl | api | crosses unit | from unit -> to unit |
 |---|---|---|---|---|---|
 | agent | publishing | 9 | 3 | yes | dinqor-agent -> dinqor-content-automation |
 | agent | automation | 6 | 9 | yes | dinqor-agent -> dinqor-content-automation |
-| agent | billing | 6 | 0 | yes | dinqor-agent -> dinqor-core-host |
 | automation | integration | 6 | 0 | yes | dinqor-content-automation -> dinqor-platform-integration |
 | blogagent | publishing | 5 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
 | integration | agent | 5 | 0 | yes | dinqor-platform-integration -> dinqor-agent |
@@ -97,21 +96,21 @@ implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 | agent | blogagent | 4 | 2 | yes | dinqor-agent -> dinqor-content-automation |
 | agent | recitation | 4 | 4 | yes | dinqor-agent -> dinqor-core-host |
 | automation | blogagent | 4 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
-| integration | billing | 4 | 0 | yes | dinqor-platform-integration -> dinqor-core-host |
+| agent | billing | 3 | 0 | yes | dinqor-agent -> dinqor-core-host |
 | admin | identity | 2 | 2 | no | dinqor-core-host -> dinqor-core-host |
 | agent | identity | 2 | 0 | yes | dinqor-agent -> dinqor-core-host |
 | agent | integration | 2 | 0 | yes | dinqor-agent -> dinqor-platform-integration |
-| automation | billing | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
 | automation | publishing | 2 | 0 | no | dinqor-content-automation -> dinqor-content-automation |
 | automation | recitation | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
-| blogagent | billing | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
 | components | identity | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
+| integration | billing | 2 | 0 | yes | dinqor-platform-integration -> dinqor-core-host |
 | knowledgebase | automation | 2 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | publishing | identity | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
-| studio | billing | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
 | studio | publishing | 2 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | admin | automation | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | admin | virtualpay | 1 | 1 | no | dinqor-core-host -> dinqor-core-host |
+| automation | billing | 1 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
+| blogagent | billing | 1 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
 | identity | billing | 1 | 0 | no | dinqor-core-host -> dinqor-core-host |
 | identity | integration | 1 | 0 | yes | dinqor-core-host -> dinqor-platform-integration |
 | integration | automation | 1 | 0 | yes | dinqor-platform-integration -> dinqor-content-automation |
@@ -120,6 +119,7 @@ implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 | profile | identity | 1 | 1 | no | dinqor-core-host -> dinqor-core-host |
 | profile | publishing | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | publishing | blogagent | 1 | 0 | no | dinqor-content-automation -> dinqor-content-automation |
+| studio | billing | 1 | 0 | no | dinqor-core-host -> dinqor-core-host |
 | studio | blogagent | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | virtualpay | admin | 0 | 1 | no | dinqor-core-host -> dinqor-core-host |
 

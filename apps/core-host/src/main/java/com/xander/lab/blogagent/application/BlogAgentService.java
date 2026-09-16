@@ -9,7 +9,7 @@ import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentSessionVO;
 import com.xander.lab.billing.application.BillingService;
-import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import com.xander.lab.publishing.api.BlogPostVO;

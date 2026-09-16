@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.billing.application.BillingService;
-import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.publishing.application.BlogMediaService;

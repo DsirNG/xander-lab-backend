@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>payment-api</artifactId>
+    <name>payment-api</name>
+    <description>
+        Service-to-service contract for the payment / points domain (V9 §18 / §91).
+
+        Step 1 of two. Members: BillingBiz, the billing catalogue — the vocabulary a caller must
+        speak to charge for anything.
+
+        Why it crosses a deployment unit. BillingBiz holds the biz_type values written to
+        points_ledger.biz_type. Every charging call site has to name the thing it charges for,
+        and those call sites live in six domains across three future deployment units:
+        dinqor-agent (AgentConversationService, ImageGenerationTool, PublishPostTool),
+        dinqor-platform-integration (CsdnMcpApplicationService, JuejinMcpApplicationService),
+        dinqor-content-automation (EmailReminderScheduler, BlogAgentService) and
+        dinqor-core-host (Img2ThreeService). The vocabulary is shared, so it cannot belong to
+        the billing domain alone: after the split, four services would each need a copy or a
+        dependency pointing into another service's internals.
+
+        Why this is a pure move and the port is not here yet. BillingBiz is a final class of
+        String constants with a private constructor and no imports at all, so it moves without
+        touching a single behaviour. BillingService — the other cross-domain type in this domain,
+        imported by seven domains — is a concrete @Service over three MyBatis mappers, so it
+        needs a port, not a move. That port is deliberately NOT in this commit: its
+        chargeTokens(...) signature takes com.xander.lab.common.ModelUsage, which lives in
+        libs/xander-model and carries a Jackson dependency (ModelUsage.fromJson), so the port
+        forces a decision that has not been made yet — is a contract allowed to depend on a
+        framework-free shared kernel, or must it own an equivalent DTO? See
+        docs/migration/lib-extraction.md §3quinquies.5. Until that is answered this module holds
+        the vocabulary only. The same shape as contracts/integration-api, which took the OSS
+        pair and left the five concrete services behind.
+
+        Zero dependencies, and that is the point. A contract that drags in a framework cannot be
+        depended on by every service, and V9 §19 is explicit that the WebFlux Gateway must stay
+        free of spring-webmvc. Nothing here may gain a compile dependency without a deliberate
+        decision; test scope is fine.
+
+        The package is com.xander.lab.payment.api rather than com.xander.lab.payment. "payment"
+        is not a business domain (the domains are "billing" and "virtualpay"), but a bare first
+        segment would still be classified as one by the cross-domain scanner and the contract
+        would then be invisible in the metrics; the dotted entry "payment.api" is registered in
+        SHARED_KERNEL for exactly that reason (see docs/migration/lib-extraction.md §6.1).
+
+        What is deliberately NOT here: ModelPrice / PointAccount / PointsLedger (persistence
+        entities and the mapper projection targets), BillingProperties (configuration), and the
+        price-calculation rules. Those are behaviour and stay in the billing domain.
+    </description>
+
+    <dependencies>
+        <!--
+            No compile or runtime dependency by design. junit-jupiter is test-scoped: the
+            constants below are persisted as points_ledger.biz_type values, so a rename would
+            not break the build, it would silently orphan existing ledger rows and break the
+            isCreditBiz classification. The test pins every literal.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class".
+            -->
+        </plugins>
+    </build>
+
+</project>

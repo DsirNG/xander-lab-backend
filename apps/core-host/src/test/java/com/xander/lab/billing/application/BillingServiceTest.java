@@ -1,7 +1,7 @@
 package com.xander.lab.billing.application;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.billing.domain.ModelPrice;
 import com.xander.lab.billing.domain.PointAccount;
 import com.xander.lab.billing.domain.PointsLedger;

@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.csdn.application;
 
 import com.xander.lab.billing.application.BillingService;
-import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;

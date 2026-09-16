@@ -21,7 +21,7 @@ import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
 import com.xander.lab.agent.infrastructure.AgentModelClient;
 import com.xander.lab.billing.application.BillingService;
-import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;

@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.publishing.application.BlogMediaService;
 import com.xander.lab.publishing.domain.BlogMediaAsset;
 import com.xander.lab.billing.application.BillingService;
-import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import com.xander.lab.studio.api.Img2ThreeTaskVO;

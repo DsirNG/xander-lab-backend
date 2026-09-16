@@ -99,6 +99,12 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 包只能落在 `com.xander.lab.<域>.api`。条目按**最长前缀**匹配，所以登记 `integration.api`
 （**不要**登记裸 `integration`：那会让契约隐形，因为业务域在扫描器里优先）。
 
+还有第三种情况：**契约名与它所属的业务域不同名**。`payment-api` 搬的是 `billing` 域的类型，
+包是 `com.xander.lab.payment.api`。`payment` 既不是业务域（域叫 `billing` / `virtualpay`）
+也不在 `SHARED_KERNEL` 里 —— 同样必须是带点条目 `payment.api`。
+§18 的契约名是按**能力**而不是按**现有模块**命名的（`payment` 对 `billing`），
+这是 §91 的意图，所以"名字对不上现有目录"是正常的，别顺手改成 `billing.api`。
+
 **搬类型进契约时，调用方要一起改。** `OssService` 那次一共动了 4 个域 + 4 个测试文件。
 改完必须 `grep -rn "<旧包名>" --include=*.java apps/ contracts/` 复核，
 **不要信 Edit/替换脚本的成功返回** —— 本轮就因为漏改一个赋值左侧（`ossService = mock(...)`
@@ -115,14 +121,49 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 自动补 import 的脚本会给这类文件塞进一个**未使用**的 import（本轮 `GlobalExceptionHandler`
 和 `FeatureModelConfig` 各中一次），补完要回头检查。
 
-**⚠️ 契约包名前缀不是业务域名时（`core.api`），指标完全靠不住，只有门禁能发现问题。**
-`integration.api` 那次已经知道登记裸域名会让契约隐形；`core.api` 这次做了对照实验，
-结论更硬：**把 `core.api` 从 `SHARED_KERNEL` 里删掉，`implementation_statements` /
-`cross_deployment_unit_statements` / `api_statements` 一个都不动**
-（98 / 71 / 38 完全一致）。因为 `core` 既不在 `BUSINESS_DOMAINS` 里，也不在
-`SHARED_KERNEL` 里，那些 import 只是被**静默丢掉**，而数字与"正确"状态一模一样。
-唯一信号是 `unclassified_sources` 多出一个 `core`，以及
-`shared-kernel-classification` 门禁 FAIL。**别因为数字好看就跳过门禁。**
+**⚠️ 契约包名前缀不是业务域名时（`core.api` / `payment.api`），指标完全靠不住，只有门禁能发现问题。**
+做过三次对照实验，一次比一次干净：
+
+| 实验 | 从 `SHARED_KERNEL` 删掉 | impl / cross / api |
+|---|---|---|
+| `integration.api` | `integration.api` | 116/85/38 不变（但 `integration` 是业务域，另有多出 5 条假反向依赖） |
+| `core.api` | `core.api` | 98/71/38 不变，`unclassified_sources` 多出 `core` |
+| `payment.api` | `payment.api` | **90/64/38 完全不变**，`unclassified_sources` 多出 `payment` |
+
+因为 `core` / `payment` 既不在 `BUSINESS_DOMAINS` 里，也不在 `SHARED_KERNEL` 里，
+那些 import 只是被**静默丢掉**，而数字与"正确"状态一模一样 —— 第三次实验里
+**错状态与对状态在全部三个头条数字上逐字节相同**。唯一信号是
+`unclassified_sources` 多一个条目，以及 `shared-kernel-classification` 门禁 FAIL。
+**别因为数字好看就跳过门禁。**
+
+**⚠️ 搬常量类 / 枚举类时，用"字面量整体 diff"验证，不要用眼睛。**
+`BillingBiz` 是 final 常量类、零 import，"看起来一样"不算验证。用 `git show HEAD:<旧路径>`
+取出原文，抽出字面量排序后 diff：
+
+```bash
+diff <(git show HEAD:<旧路径> | grep -oE '"[a-z0-9-]+"' | sort) \
+     <(grep -oE '"[a-z0-9-]+"' <新路径> | sort)
+# 无输出 = 字面量完全一致
+```
+
+**漏抄一个常量**和**抄错一个字母**都不会被编译器发现（少一个常量：只要没人用就编译得过；
+抄错字母：字符串而已），只有这一步能抓到。
+
+**⚠️ 常量目录的契约测试要"整体比对"，不要逐条 `assertEquals`。**
+用反射取出**全部** `public static final String` 字段，与预期 `Map` 整体 `assertEquals`：
+
+```java
+for (Field f : Catalogue.class.getDeclaredFields()) {
+    if (!Modifier.isStatic(f.getModifiers()) || !Modifier.isFinal(f.getModifiers())) continue;
+    if (f.getType() != String.class) continue;
+    found.put(f.getName(), (String) f.get(null));
+}
+assertEquals(EXPECTED, found);
+```
+
+理由：逐条断言**漏掉"新增了一个常量但没人回来补断言"**，而那恰恰是最可能发生的 ——
+新增业务项时人会记得改常量、不会记得改测试。整体比对让新增 / 改名 / 删除**全部**失败，
+不依赖任何人记得补一行。（先例：`BillingBizTest` / `ModelGatewayTest`。）
 
 **⚠️ 契约的依赖边界（JDK-only）遇到 Jackson 时不要顺手放宽。** `agent-api` 与
 `payment-api` 都卡在同一处：`AgentTool.parametersSchema()` 返回 `JsonNode`、
@@ -254,6 +295,26 @@ python scripts/migration/ci_gates.py
 P=path/to/File.java
 [ "$(git hash-object "$P")" = "$(git rev-parse HEAD:$P)" ] && echo RESTORED
 ```
+
+**⚠️ 注入验证要**专门测 pass 路径**，不能只测 FAIL 路径。**
+只证明"能拦"是不够的：门禁的**通过消息**也可能一直在说谎，而它不影响判定，
+所以会一直藏在"全绿"里 —— 但人读到的东西决定了下一步做什么。
+
+2026-09-16 实测一处：`cross-domain-import-baseline` 的通过消息把**基线文件**里的总数
+和**实时扫描**的跨单元数拼在一句话里：
+
+```python
+# 错的：两个数来自两个不同时刻
+detail = f"{recomputed} implementation statements across {len(base_edges)} edges " \
+         f"({live['counts']['cross_deployment_unit_statements']} cross a deployment unit)"
+# 打印出 "98 implementation statements ... (64 cross a deployment unit)"，
+# 而当时真实状态是 90/64 —— 这句话不对应任何一个真实时刻，
+# 而且它永远显示不出"缩减"，可缩减正是这条门禁 docstring 说要追踪的东西。
+```
+
+**规矩：门禁的 pass 消息里所有数字必须取自同一时刻。**
+要对比就显式写成两个字段（`X; baseline was Y`），不要在一个句子里混。
+验证方法同上：临时把基线改成一个"看起来缩了"的值，跑一次看 pass 消息是否如实。
 
 ### ⚠️ 不要用 `git rm` 删文件（会连带删掉整个目录树）
 

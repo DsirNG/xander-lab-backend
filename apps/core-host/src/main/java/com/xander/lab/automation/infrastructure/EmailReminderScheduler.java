@@ -4,7 +4,7 @@ import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
 import com.xander.lab.automation.domain.EmailReminderTask;
 import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
 import com.xander.lab.billing.application.BillingService;
-import com.xander.lab.billing.domain.BillingBiz;
+import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.integration.mail.MailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

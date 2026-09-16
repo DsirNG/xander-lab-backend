@@ -1,6 +1,27 @@
-package com.xander.lab.billing.domain;
+package com.xander.lab.payment.api;
 
-/** 计费目录枚举：与扣费调用点一一对应，作为 points_ledger.biz_type 的值。 */
+/**
+ * 计费目录：与扣费调用点一一对应，作为 {@code points_ledger.biz_type} 的值。
+ *
+ * <p>名字叫"枚举"但用的是常量类 —— 这些值要落库，也要出现在流水视图里，
+ * 用 {@code String} 才能在不迁移数据的前提下新增业务项。</p>
+ *
+ * <h2>为什么这个类在契约里</h2>
+ *
+ * <p>它不是"billing 域的内部枚举"。**每一个扣费调用点都必须说出自己在为什么收费**，
+ * 而这些调用点分布在六个域、三个部署单元里（agent / integration / automation /
+ * blogagent / studio，以及 billing 自己）。拆分之后，那四个服务要么各自复制一份词表
+ * （然后就一定会漂移），要么反向依赖另一个服务的内部 —— 两条路都不能走。
+ * 所以词表本身是契约。</p>
+ *
+ * <h2>⚠️ 改动这些字面量等于改契约（V9 §11）</h2>
+ *
+ * <p>它们被持久化为 {@code points_ledger.biz_type} 的列值。改名**不会编译报错**，
+ * 只会让库里已有的流水行静默失配：统计与对账按旧值查不到，而新的扣费照常写入。
+ * 同时 {@code BillingService.isCreditBiz()} 按 {@link #GRANT_REGISTER} 与
+ * {@link #MERGE_CREDIT} 判断一笔流水是收入还是消耗 —— 新增一个"收入类"业务项时
+ * 忘了同步那处判断，余额方向就会反。{@code BillingBizTest} 把全部字面量逐个钉住。</p>
+ */
 public final class BillingBiz {
 
     private BillingBiz() {

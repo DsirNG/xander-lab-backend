@@ -500,8 +500,10 @@ def gate_cross_domain_import_baseline() -> None:
 
     The plan estimates "约 280" such imports. ``docs/cross-domain-imports.yaml``
     holds the machine count instead (section 13: the machine owns the key set),
-    and the machine count is lower -- 172 statements, of which only 125 actually
-    cross a deployment unit and therefore have to become contracts at all.
+    and the first machine count was much lower -- 172 statements, of which only
+    125 crossed a deployment unit and therefore had to become contracts at all.
+    Wave 0B has been shrinking that ever since; the message below reports the
+    live figure, so read it as the current backlog, not as the 172 baseline.
 
     This gate fails when any edge grows, so a new cross-domain implementation
     import cannot be added while the backlog is being worked off. Shrinking is
@@ -548,9 +550,17 @@ def gate_cross_domain_import_baseline() -> None:
         return
 
     at_zero = sorted(edge for edge in base_edges if not live_edges.get(edge))
-    detail = (f"{recomputed} implementation statements across {len(base_edges)} edges "
+    # Report the LIVE backlog, not the baseline's. Both numbers in one sentence have
+    # to describe the same state, and the state a reader cares about is "what is left
+    # today". Mixing a baseline total with a live cross-unit count produces a sentence
+    # that is true of no moment in time -- and it hides the shrink, which is the one
+    # thing this gate's message is supposed to show.
+    live_total = sum(live_edges.values())
+    detail = (f"{live_total} implementation statements across {len(live_edges)} edges "
               f"({live['counts']['cross_deployment_unit_statements']} cross a "
               f"deployment unit)")
+    if live_total != recomputed:
+        detail += f"; baseline was {recomputed}"
     if at_zero:
         detail += (f"; {len(at_zero)} edge(s) now at zero, delete them from the "
                    f"baseline: {at_zero}")

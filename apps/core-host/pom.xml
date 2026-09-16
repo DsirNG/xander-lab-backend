@@ -82,6 +82,19 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            Payment / points service-to-service contract: BillingBiz, the biz_type catalogue
+            (V9 §18 / §91). Every charging call site has to name what it charges for, and those
+            call sites sit in six domains across three future deployment units. The
+            implementation (BillingService over three MyBatis mappers) stays in the billing
+            domain and needs a port, not a move; see contracts/payment-api/pom.xml.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>payment-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>
