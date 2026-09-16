@@ -45,7 +45,7 @@ hosts:
       - agent-get-agent-conversations-id-events
       - agent-post-agent-conversations-id-messages-stream
     boundary_files:
-      - src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     heartbeat: "SseEmitter 心跳 15s，走同一出口校验"
     tests:
       - src/test/java/com/xander/lab/agent/api/AgentConversationControllerTest.java
@@ -58,7 +58,7 @@ hosts:
       - blogagent-post-blog-agent-tasks-id-messages-stream
       - blogagent-post-blog-agent-tasks-id-run-stream
     boundary_files:
-      - src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+      - apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     heartbeat: "SseEmitter 心跳 15s，走同一出口校验"
     tests:
       - src/test/java/com/xander/lab/blogagent/api/BlogAgentControllerTest.java
@@ -69,9 +69,9 @@ hosts:
     routes:
       - automation-get-notifications-events
     boundary_files:
-      - src/main/java/com/xander/lab/automation/infrastructure/BlogPlanSseService.java
+      - apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogPlanSseService.java
     controller_files:
-      - src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
+      - apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     heartbeat: "服务自持 25s 心跳线程，走同一出口校验"
     tests:
       - src/test/java/com/xander/lab/automation/infrastructure/BlogPlanSseServiceTest.java
@@ -84,7 +84,7 @@ hosts:
     routes:
       - studio-post-img2three-tasks-id-run-stream
     boundary_files:
-      - src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
+      - apps/core-host/src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
     heartbeat: none
     tests: []
     notes: >-
@@ -98,7 +98,7 @@ hosts:
     routes:
       - agent-get-ws-agent
     boundary_files:
-      - src/main/java/com/xander/lab/agent/api/AgentStreamWebSocketHandler.java
+      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentStreamWebSocketHandler.java
     heartbeat: "WS 心跳 20s，走同一出口校验"
     tests:
       - src/test/java/com/xander/lab/agent/api/AgentStreamWebSocketHandlerTest.java

@@ -22,7 +22,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#authorizationServerMetadata"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 50
   - id: integration-get-well-known-oauth-protected-resource
     logical_owner: integration
@@ -33,7 +33,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#protectedResourceMetadata"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 35
   - id: billing-get-admin-billing-model-prices
     logical_owner: billing
@@ -44,7 +44,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.billing.api.AdminModelPriceController#list"
-    file: src/main/java/com/xander/lab/billing/api/AdminModelPriceController.java
+    file: apps/core-host/src/main/java/com/xander/lab/billing/api/AdminModelPriceController.java
     line: 30
   - id: billing-delete-admin-billing-model-prices-model
     logical_owner: billing
@@ -55,7 +55,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.billing.api.AdminModelPriceController#delete"
-    file: src/main/java/com/xander/lab/billing/api/AdminModelPriceController.java
+    file: apps/core-host/src/main/java/com/xander/lab/billing/api/AdminModelPriceController.java
     line: 47
   - id: billing-put-admin-billing-model-prices-model
     logical_owner: billing
@@ -66,7 +66,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.billing.api.AdminModelPriceController#upsert"
-    file: src/main/java/com/xander/lab/billing/api/AdminModelPriceController.java
+    file: apps/core-host/src/main/java/com/xander/lab/billing/api/AdminModelPriceController.java
     line: 36
   - id: admin-get-admin-feature-model-configs
     logical_owner: admin
@@ -77,7 +77,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminFeatureModelConfigController#list"
-    file: src/main/java/com/xander/lab/admin/api/AdminFeatureModelConfigController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminFeatureModelConfigController.java
     line: 27
   - id: admin-put-admin-feature-model-configs-featurekey
     logical_owner: admin
@@ -88,7 +88,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminFeatureModelConfigController#update"
-    file: src/main/java/com/xander/lab/admin/api/AdminFeatureModelConfigController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminFeatureModelConfigController.java
     line: 32
   - id: integration-get-admin-mcp-servers
     logical_owner: integration
@@ -99,7 +99,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#list"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
     line: 32
   - id: integration-post-admin-mcp-servers
     logical_owner: integration
@@ -110,7 +110,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#create"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
     line: 37
   - id: integration-delete-admin-mcp-servers-id
     logical_owner: integration
@@ -121,7 +121,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#delete"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
     line: 48
   - id: integration-put-admin-mcp-servers-id
     logical_owner: integration
@@ -132,7 +132,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#update"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
     line: 42
   - id: integration-post-admin-mcp-servers-id-probe
     logical_owner: integration
@@ -143,7 +143,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#probe"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
     line: 54
   - id: admin-get-admin-model-providers
     logical_owner: admin
@@ -154,7 +154,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminModelProviderController#list"
-    file: src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
     line: 29
   - id: admin-post-admin-model-providers
     logical_owner: admin
@@ -165,7 +165,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminModelProviderController#create"
-    file: src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
     line: 34
   - id: admin-delete-admin-model-providers-id
     logical_owner: admin
@@ -176,7 +176,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminModelProviderController#delete"
-    file: src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
     line: 56
   - id: admin-put-admin-model-providers-id
     logical_owner: admin
@@ -187,7 +187,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminModelProviderController#update"
-    file: src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
     line: 39
   - id: admin-patch-admin-model-providers-id-enabled
     logical_owner: admin
@@ -198,7 +198,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminModelProviderController#setEnabled"
-    file: src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminModelProviderController.java
     line: 46
   - id: admin-patch-admin-notifications-test-broadcast
     logical_owner: admin
@@ -209,7 +209,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminNotificationController#testBroadcast"
-    file: src/main/java/com/xander/lab/admin/api/AdminNotificationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminNotificationController.java
     line: 23
   - id: admin-get-admin-users
     logical_owner: admin
@@ -220,7 +220,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminUserController#list"
-    file: src/main/java/com/xander/lab/admin/api/AdminUserController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminUserController.java
     line: 29
   - id: admin-patch-admin-users-id-status
     logical_owner: admin
@@ -231,7 +231,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminUserController#updateStatus"
-    file: src/main/java/com/xander/lab/admin/api/AdminUserController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminUserController.java
     line: 38
   - id: admin-get-admin-virtual-pay-settings
     logical_owner: admin
@@ -242,7 +242,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminVirtualPaySettingsController#get"
-    file: src/main/java/com/xander/lab/admin/api/AdminVirtualPaySettingsController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminVirtualPaySettingsController.java
     line: 16
   - id: admin-put-admin-virtual-pay-settings
     logical_owner: admin
@@ -253,7 +253,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminVirtualPaySettingsController#save"
-    file: src/main/java/com/xander/lab/admin/api/AdminVirtualPaySettingsController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminVirtualPaySettingsController.java
     line: 19
   - id: admin-delete-admin-wechat-credential
     logical_owner: admin
@@ -264,7 +264,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminWechatCredentialController#clear"
-    file: src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
     line: 39
   - id: admin-get-admin-wechat-credential
     logical_owner: admin
@@ -275,7 +275,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminWechatCredentialController#get"
-    file: src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
     line: 27
   - id: admin-put-admin-wechat-credential
     logical_owner: admin
@@ -286,7 +286,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.admin.api.AdminWechatCredentialController#save"
-    file: src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
+    file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
     line: 33
   - id: agent-get-agent-conversations
     logical_owner: agent
@@ -297,7 +297,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#list"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 121
   - id: agent-post-agent-conversations
     logical_owner: agent
@@ -308,7 +308,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#create"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 106
   - id: agent-post-agent-conversations-attachments
     logical_owner: agent
@@ -319,7 +319,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#uploadAttachment"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 115
   - id: agent-get-agent-conversations-shared-sharetoken
     logical_owner: agent
@@ -330,7 +330,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#getShared"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 136
   - id: agent-get-agent-conversations-id
     logical_owner: agent
@@ -341,7 +341,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#get"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 126
   - id: agent-get-agent-conversations-id-approvals
     logical_owner: agent
@@ -352,7 +352,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#approvals"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 164
   - id: agent-post-agent-conversations-id-approvals-approvalid-decision
     logical_owner: agent
@@ -363,7 +363,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#decideApproval"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 170
   - id: agent-post-agent-conversations-id-cancel
     logical_owner: agent
@@ -374,7 +374,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#cancel"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 158
   - id: agent-get-agent-conversations-id-events
     logical_owner: agent
@@ -385,7 +385,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#subscribe"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 270
   - id: agent-get-agent-conversations-id-messages
     logical_owner: agent
@@ -396,7 +396,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#listMessages"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 131
   - id: agent-post-agent-conversations-id-messages
     logical_owner: agent
@@ -407,7 +407,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#triggerMessage"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 243
   - id: agent-post-agent-conversations-id-messages-stream
     logical_owner: agent
@@ -418,7 +418,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#sendMessage"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 194
   - id: agent-delete-agent-conversations-id-pin
     logical_owner: agent
@@ -429,7 +429,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#unpin"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 189
   - id: agent-post-agent-conversations-id-pin
     logical_owner: agent
@@ -440,7 +440,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#pin"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 184
   - id: agent-post-agent-conversations-id-read
     logical_owner: agent
@@ -451,7 +451,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#markRead"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 179
   - id: agent-delete-agent-conversations-id-share
     logical_owner: agent
@@ -462,7 +462,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#disableShare"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 152
   - id: agent-post-agent-conversations-id-share
     logical_owner: agent
@@ -473,7 +473,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#enableShare"
-    file: src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 146
   - id: integration-get-agent-mcp-servers
     logical_owner: integration
@@ -484,7 +484,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#list"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
     line: 31
   - id: integration-post-agent-mcp-servers
     logical_owner: integration
@@ -495,7 +495,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#create"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
     line: 36
   - id: integration-delete-agent-mcp-servers-id
     logical_owner: integration
@@ -506,7 +506,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#delete"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
     line: 47
   - id: integration-put-agent-mcp-servers-id
     logical_owner: integration
@@ -517,7 +517,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#update"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
     line: 41
   - id: integration-post-agent-mcp-servers-id-probe
     logical_owner: integration
@@ -528,7 +528,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#probe"
-    file: src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
     line: 54
   - id: agent-get-agent-skills
     logical_owner: agent
@@ -539,7 +539,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentSkillController#list"
-    file: src/main/java/com/xander/lab/agent/api/AgentSkillController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 24
   - id: agent-post-agent-skills
     logical_owner: agent
@@ -550,7 +550,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentSkillController#create"
-    file: src/main/java/com/xander/lab/agent/api/AgentSkillController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 27
   - id: agent-get-agent-skills-tools
     logical_owner: agent
@@ -561,7 +561,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentSkillController#listTools"
-    file: src/main/java/com/xander/lab/agent/api/AgentSkillController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 26
   - id: agent-delete-agent-skills-id
     logical_owner: agent
@@ -572,7 +572,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentSkillController#archive"
-    file: src/main/java/com/xander/lab/agent/api/AgentSkillController.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 28
   - id: identity-get-auth-code
     logical_owner: identity
@@ -583,7 +583,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#sendCode"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 96
   - id: identity-post-auth-login
     logical_owner: identity
@@ -594,7 +594,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#login"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 110
   - id: identity-post-auth-logout
     logical_owner: identity
@@ -605,7 +605,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#logout"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 221
   - id: identity-get-auth-me
     logical_owner: identity
@@ -616,7 +616,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#getCurrentUser"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 239
   - id: identity-put-auth-password
     logical_owner: identity
@@ -627,7 +627,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#changePassword"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 275
   - id: identity-put-auth-profile
     logical_owner: identity
@@ -638,7 +638,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#updateProfile"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 257
   - id: identity-post-auth-qr-confirm
     logical_owner: identity
@@ -649,7 +649,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#confirmQrLogin"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 70
   - id: identity-post-auth-qr-create
     logical_owner: identity
@@ -660,7 +660,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#createQrLogin"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 56
   - id: identity-post-auth-qr-exchange
     logical_owner: identity
@@ -671,7 +671,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#exchangeQrLogin"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 82
   - id: identity-get-auth-qr-status
     logical_owner: identity
@@ -682,7 +682,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#qrStatus"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 65
   - id: identity-post-auth-refresh
     logical_owner: identity
@@ -693,7 +693,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#refresh"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 203
   - id: identity-post-auth-register
     logical_owner: identity
@@ -704,7 +704,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#register"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 302
   - id: identity-post-auth-reset-password
     logical_owner: identity
@@ -715,7 +715,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#resetPassword"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 288
   - id: identity-get-auth-validate
     logical_owner: identity
@@ -726,7 +726,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#validateToken"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 319
   - id: identity-post-auth-wechat-bind
     logical_owner: identity
@@ -737,7 +737,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#wechatBind"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 144
   - id: identity-post-auth-wechat-bind-existing
     logical_owner: identity
@@ -748,7 +748,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#wechatBindExisting"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 174
   - id: identity-post-auth-wechat-login
     logical_owner: identity
@@ -759,7 +759,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#wechatLogin"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 129
   - id: identity-post-auth-wechat-skip
     logical_owner: identity
@@ -770,7 +770,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#wechatSkip"
-    file: src/main/java/com/xander/lab/identity/api/AuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 159
   - id: blogagent-get-blog-agent-tasks
     logical_owner: blogagent
@@ -781,7 +781,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#list"
-    file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     line: 105
   - id: blogagent-post-blog-agent-tasks
     logical_owner: blogagent
@@ -792,7 +792,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#create"
-    file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     line: 95
   - id: blogagent-get-blog-agent-tasks-id
     logical_owner: blogagent
@@ -803,7 +803,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#get"
-    file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     line: 100
   - id: blogagent-get-blog-agent-tasks-id-events
     logical_owner: blogagent
@@ -814,7 +814,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#subscribe"
-    file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     line: 151
   - id: blogagent-post-blog-agent-tasks-id-messages-stream
     logical_owner: blogagent
@@ -825,7 +825,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#reviseStream"
-    file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     line: 134
   - id: blogagent-post-blog-agent-tasks-id-publish
     logical_owner: blogagent
@@ -836,7 +836,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#publish"
-    file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     line: 115
   - id: blogagent-post-blog-agent-tasks-id-run
     logical_owner: blogagent
@@ -847,7 +847,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#run"
-    file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     line: 110
   - id: blogagent-post-blog-agent-tasks-id-run-stream
     logical_owner: blogagent
@@ -858,7 +858,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#runStream"
-    file: src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     line: 120
   - id: bloghtml-post-blog-html-previews
     logical_owner: bloghtml
@@ -869,7 +869,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.bloghtml.api.BlogHtmlPreviewController#createPreview"
-    file: src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
+    file: apps/core-host/src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
     line: 40
   - id: automation-get-blog-plans
     logical_owner: automation
@@ -880,7 +880,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#list"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 45
   - id: automation-post-blog-plans
     logical_owner: automation
@@ -891,7 +891,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#create"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 33
   - id: automation-post-blog-plans-ai-generate
     logical_owner: automation
@@ -902,7 +902,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#aiGenerate"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 39
   - id: automation-post-blog-plans-topics-generate
     logical_owner: automation
@@ -913,7 +913,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#generateTopics"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 103
   - id: automation-delete-blog-plans-id
     logical_owner: automation
@@ -924,7 +924,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#delete"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 68
   - id: automation-get-blog-plans-id
     logical_owner: automation
@@ -935,7 +935,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#detail"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 51
   - id: automation-patch-blog-plans-id
     logical_owner: automation
@@ -946,7 +946,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#update"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 56
   - id: automation-get-blog-plans-id-next
     logical_owner: automation
@@ -957,7 +957,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#nextRun"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 96
   - id: automation-get-blog-plans-id-runs
     logical_owner: automation
@@ -968,7 +968,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#runs"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 83
   - id: automation-get-blog-plans-id-runs-runid
     logical_owner: automation
@@ -979,7 +979,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#runDetail"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 90
   - id: automation-patch-blog-plans-id-status
     logical_owner: automation
@@ -990,7 +990,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#updateStatus"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 62
   - id: automation-post-blog-plans-id-trigger
     logical_owner: automation
@@ -1001,7 +1001,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#trigger"
-    file: src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 75
   - id: publishing-get-blog-categories
     logical_owner: publishing
@@ -1012,7 +1012,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getCategories"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 175
   - id: publishing-get-blog-media-images
     logical_owner: publishing
@@ -1023,7 +1023,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogMediaController#getImages"
-    file: src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
     line: 25
   - id: publishing-post-blog-media-images
     logical_owner: publishing
@@ -1034,7 +1034,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogMediaController#uploadImage"
-    file: src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
     line: 39
   - id: publishing-get-blog-media-images-agent
     logical_owner: publishing
@@ -1045,7 +1045,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogMediaController#getAgentImages"
-    file: src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
     line: 32
   - id: publishing-get-blog-posts
     logical_owner: publishing
@@ -1056,7 +1056,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getPosts"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 136
   - id: publishing-post-blog-posts
     logical_owner: publishing
@@ -1067,7 +1067,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#publishPost"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 44
   - id: publishing-get-blog-posts-manage-stats
     logical_owner: publishing
@@ -1078,7 +1078,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getManageStats"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 79
   - id: publishing-get-blog-posts-mine
     logical_owner: publishing
@@ -1089,7 +1089,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getMyPosts"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 61
   - id: publishing-get-blog-posts-mine-id
     logical_owner: publishing
@@ -1100,7 +1100,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getMyPostById"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 84
   - id: publishing-get-blog-posts-publish-rhythm
     logical_owner: publishing
@@ -1111,7 +1111,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getMyPublishRhythm"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 74
   - id: publishing-get-blog-posts-publish-status
     logical_owner: publishing
@@ -1122,7 +1122,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getPublishStatus"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 51
   - id: publishing-get-blog-posts-recent
     logical_owner: publishing
@@ -1133,7 +1133,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getRecentPosts"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 146
   - id: publishing-delete-blog-posts-id
     logical_owner: publishing
@@ -1144,7 +1144,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#softDeletePost"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 113
   - id: publishing-get-blog-posts-id
     logical_owner: publishing
@@ -1155,7 +1155,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getPostById"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 152
   - id: publishing-put-blog-posts-id
     logical_owner: publishing
@@ -1166,7 +1166,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#updatePost"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 93
   - id: publishing-delete-blog-posts-id-permanent
     logical_owner: publishing
@@ -1177,7 +1177,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#permanentlyDeletePost"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 123
   - id: publishing-patch-blog-posts-id-status
     logical_owner: publishing
@@ -1188,7 +1188,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#updatePostStatus"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 102
   - id: publishing-post-blog-posts-id-view
     logical_owner: publishing
@@ -1199,7 +1199,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#recordView"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 161
   - id: integration-post-blog-posts-postid-sync-csdn
     logical_owner: integration
@@ -1210,7 +1210,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnBlogSyncController#sync"
-    file: src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnBlogSyncController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnBlogSyncController.java
     line: 20
   - id: integration-post-blog-posts-postid-sync-juejin
     logical_owner: integration
@@ -1221,7 +1221,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinBlogSyncController#sync"
-    file: src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinBlogSyncController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinBlogSyncController.java
     line: 30
   - id: publishing-get-blog-tags
     logical_owner: publishing
@@ -1232,7 +1232,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getAllTags"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 180
   - id: publishing-get-blog-tags-popular
     logical_owner: publishing
@@ -1243,7 +1243,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getPopularTags"
-    file: src/main/java/com/xander/lab/publishing/api/BlogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 185
   - id: components-get-components-menu
     logical_owner: components
@@ -1254,7 +1254,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.components.api.ComponentController#getMenu"
-    file: src/main/java/com/xander/lab/components/api/ComponentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/components/api/ComponentController.java
     line: 30
   - id: components-post-components-share
     logical_owner: components
@@ -1265,7 +1265,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.components.api.ComponentController#shareComponent"
-    file: src/main/java/com/xander/lab/components/api/ComponentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/components/api/ComponentController.java
     line: 57
   - id: components-get-components-id
     logical_owner: components
@@ -1276,7 +1276,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.components.api.ComponentController#getComponent"
-    file: src/main/java/com/xander/lab/components/api/ComponentController.java
+    file: apps/core-host/src/main/java/com/xander/lab/components/api/ComponentController.java
     line: 42
   - id: integration-get-download-filename
     logical_owner: integration
@@ -1287,7 +1287,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.file.FileController#downloadFile"
-    file: src/main/java/com/xander/lab/integration/file/FileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 145
   - id: automation-get-email-reminders
     logical_owner: automation
@@ -1298,7 +1298,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.EmailReminderController#list"
-    file: src/main/java/com/xander/lab/automation/api/EmailReminderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
     line: 25
   - id: automation-post-email-reminders
     logical_owner: automation
@@ -1309,7 +1309,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.EmailReminderController#create"
-    file: src/main/java/com/xander/lab/automation/api/EmailReminderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
     line: 40
   - id: automation-delete-email-reminders-id
     logical_owner: automation
@@ -1320,7 +1320,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.EmailReminderController#delete"
-    file: src/main/java/com/xander/lab/automation/api/EmailReminderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
     line: 57
   - id: automation-patch-email-reminders-id-status
     logical_owner: automation
@@ -1331,7 +1331,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.EmailReminderController#updateStatus"
-    file: src/main/java/com/xander/lab/automation/api/EmailReminderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
     line: 46
   - id: integration-get-export-csv
     logical_owner: integration
@@ -1342,7 +1342,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.file.FileController#exportCsv"
-    file: src/main/java/com/xander/lab/integration/file/FileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 183
   - id: integration-get-export-excel
     logical_owner: integration
@@ -1353,7 +1353,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.file.FileController#exportExcel"
-    file: src/main/java/com/xander/lab/integration/file/FileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 204
   - id: studio-get-flow-canvases-canvasid-snapshot
     logical_owner: studio
@@ -1364,7 +1364,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.FlowCanvasController#getSnapshot"
-    file: src/main/java/com/xander/lab/studio/api/FlowCanvasController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/FlowCanvasController.java
     line: 27
   - id: studio-put-flow-canvases-canvasid-snapshot
     logical_owner: studio
@@ -1375,7 +1375,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.FlowCanvasController#saveSnapshot"
-    file: src/main/java/com/xander/lab/studio/api/FlowCanvasController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/FlowCanvasController.java
     line: 40
   - id: studio-get-flow-projects
     logical_owner: studio
@@ -1386,7 +1386,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.FlowProjectController#list"
-    file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 32
   - id: studio-post-flow-projects
     logical_owner: studio
@@ -1397,7 +1397,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.FlowProjectController#create"
-    file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 44
   - id: studio-delete-flow-projects-id
     logical_owner: studio
@@ -1408,7 +1408,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.FlowProjectController#delete"
-    file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 91
   - id: studio-get-flow-projects-id
     logical_owner: studio
@@ -1419,7 +1419,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.FlowProjectController#get"
-    file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 59
   - id: studio-patch-flow-projects-id
     logical_owner: studio
@@ -1430,7 +1430,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.FlowProjectController#update"
-    file: src/main/java/com/xander/lab/studio/api/FlowProjectController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/FlowProjectController.java
     line: 72
   - id: studio-get-img2three-tasks
     logical_owner: studio
@@ -1441,7 +1441,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.Img2ThreeController#list"
-    file: src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
     line: 69
   - id: studio-post-img2three-tasks
     logical_owner: studio
@@ -1452,7 +1452,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.Img2ThreeController#create"
-    file: src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
     line: 60
   - id: studio-get-img2three-tasks-id
     logical_owner: studio
@@ -1463,7 +1463,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.studio.api.Img2ThreeController#get"
-    file: src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
     line: 78
   - id: studio-post-img2three-tasks-id-run-stream
     logical_owner: studio
@@ -1474,7 +1474,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.studio.api.Img2ThreeController#runStream"
-    file: src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
     line: 87
   - id: knowledgebase-get-knowledge-base-files
     logical_owner: knowledgebase
@@ -1485,7 +1485,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#search"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 58
   - id: knowledgebase-post-knowledge-base-files-upload
     logical_owner: knowledgebase
@@ -1496,7 +1496,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#upload"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 44
   - id: knowledgebase-delete-knowledge-base-files-fileid
     logical_owner: knowledgebase
@@ -1507,7 +1507,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#delete"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 109
   - id: knowledgebase-get-knowledge-base-files-fileid
     logical_owner: knowledgebase
@@ -1518,7 +1518,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#detail"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 73
   - id: knowledgebase-get-knowledge-base-files-fileid-chapters
     logical_owner: knowledgebase
@@ -1529,7 +1529,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#chapters"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 90
   - id: knowledgebase-post-knowledge-base-files-fileid-chapters-chapterid-structure
     logical_owner: knowledgebase
@@ -1540,7 +1540,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#generateChapterStructure"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 142
   - id: knowledgebase-get-knowledge-base-files-fileid-content
     logical_owner: knowledgebase
@@ -1551,7 +1551,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#content"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 85
   - id: knowledgebase-put-knowledge-base-files-fileid-folder
     logical_owner: knowledgebase
@@ -1562,7 +1562,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#move"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 102
   - id: knowledgebase-put-knowledge-base-files-fileid-name
     logical_owner: knowledgebase
@@ -1573,7 +1573,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#rename"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 96
   - id: knowledgebase-get-knowledge-base-files-fileid-preview
     logical_owner: knowledgebase
@@ -1584,7 +1584,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#preview"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 79
   - id: knowledgebase-post-knowledge-base-files-fileid-reidentify
     logical_owner: knowledgebase
@@ -1595,7 +1595,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#reidentify"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 116
   - id: knowledgebase-get-knowledge-base-files-fileid-structure
     logical_owner: knowledgebase
@@ -1606,7 +1606,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#structure"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 126
   - id: knowledgebase-post-knowledge-base-files-fileid-structure-regenerate
     logical_owner: knowledgebase
@@ -1617,7 +1617,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#regenerateStructure"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 133
   - id: knowledgebase-post-knowledge-base-files-fileid-tags
     logical_owner: knowledgebase
@@ -1628,7 +1628,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#attachTags"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 149
   - id: knowledgebase-put-knowledge-base-files-fileid-tags
     logical_owner: knowledgebase
@@ -1639,7 +1639,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#replaceTags"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 156
   - id: knowledgebase-delete-knowledge-base-files-fileid-tags-tagid
     logical_owner: knowledgebase
@@ -1650,7 +1650,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFileController#detachTag"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
     line: 162
   - id: knowledgebase-get-knowledge-base-folders
     logical_owner: knowledgebase
@@ -1661,7 +1661,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFolderController#list"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
     line: 28
   - id: knowledgebase-post-knowledge-base-folders
     logical_owner: knowledgebase
@@ -1672,7 +1672,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFolderController#create"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
     line: 33
   - id: knowledgebase-delete-knowledge-base-folders-folderid
     logical_owner: knowledgebase
@@ -1683,7 +1683,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFolderController#delete"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
     line: 57
   - id: knowledgebase-put-knowledge-base-folders-folderid-name
     logical_owner: knowledgebase
@@ -1694,7 +1694,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFolderController#rename"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
     line: 38
   - id: knowledgebase-put-knowledge-base-folders-folderid-parent
     logical_owner: knowledgebase
@@ -1705,7 +1705,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeFolderController#move"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
     line: 45
   - id: knowledgebase-get-knowledge-base-tags
     logical_owner: knowledgebase
@@ -1716,7 +1716,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeTagController#list"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
     line: 33
   - id: knowledgebase-post-knowledge-base-tags
     logical_owner: knowledgebase
@@ -1727,7 +1727,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeTagController#create"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
     line: 38
   - id: knowledgebase-delete-knowledge-base-tags-tagid
     logical_owner: knowledgebase
@@ -1738,7 +1738,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeTagController#delete"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
     line: 53
   - id: knowledgebase-put-knowledge-base-tags-tagid
     logical_owner: knowledgebase
@@ -1749,7 +1749,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeTagController#update"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
     line: 45
   - id: knowledgebase-post-knowledge-base-uploads-init
     logical_owner: knowledgebase
@@ -1760,7 +1760,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#init"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 38
   - id: knowledgebase-delete-knowledge-base-uploads-uploadid
     logical_owner: knowledgebase
@@ -1771,7 +1771,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#abort"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 69
   - id: knowledgebase-get-knowledge-base-uploads-uploadid
     logical_owner: knowledgebase
@@ -1782,7 +1782,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#status"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 44
   - id: knowledgebase-post-knowledge-base-uploads-uploadid-chunks-chunkindex
     logical_owner: knowledgebase
@@ -1793,7 +1793,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#uploadChunk"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 50
   - id: knowledgebase-post-knowledge-base-uploads-uploadid-complete
     logical_owner: knowledgebase
@@ -1804,7 +1804,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.knowledgebase.api.KnowledgeUploadController#complete"
-    file: src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
     line: 61
   - id: integration-any-mcp
     logical_owner: integration
@@ -1815,7 +1815,7 @@ routes:
     stream: none
     last_event_id: false
     handler: ServletRegistrationBean
-    file: src/main/java/com/xander/lab/integration/mcp/blog/api/BlogMcpServerConfiguration.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/blog/api/BlogMcpServerConfiguration.java
     line: 40
   - id: integration-any-mcp-csdn
     logical_owner: integration
@@ -1826,7 +1826,7 @@ routes:
     stream: none
     last_event_id: false
     handler: ServletRegistrationBean
-    file: src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnMcpServerConfiguration.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnMcpServerConfiguration.java
     line: 36
   - id: integration-any-mcp-dual
     logical_owner: integration
@@ -1837,7 +1837,7 @@ routes:
     stream: none
     last_event_id: false
     handler: ServletRegistrationBean
-    file: src/main/java/com/xander/lab/integration/mcp/dual/api/DualPublishMcpServerConfiguration.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/dual/api/DualPublishMcpServerConfiguration.java
     line: 38
   - id: integration-any-mcp-juejin
     logical_owner: integration
@@ -1848,7 +1848,7 @@ routes:
     stream: none
     last_event_id: false
     handler: ServletRegistrationBean
-    file: src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinMcpServerConfiguration.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinMcpServerConfiguration.java
     line: 39
   - id: integration-get-mcp-oauth-authorize
     logical_owner: integration
@@ -1859,7 +1859,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#authorize"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 78
   - id: integration-get-mcp-oauth-authorize-requests-requestid
     logical_owner: integration
@@ -1870,7 +1870,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#pending"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 94
   - id: integration-post-mcp-oauth-authorize-requests-requestid-approve
     logical_owner: integration
@@ -1881,7 +1881,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#approve"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 102
   - id: integration-post-mcp-oauth-authorize-requests-requestid-deny
     logical_owner: integration
@@ -1892,7 +1892,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#deny"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 114
   - id: integration-get-mcp-oauth-clients
     logical_owner: integration
@@ -1903,7 +1903,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#clients"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 145
   - id: integration-delete-mcp-oauth-clients-clientid
     logical_owner: integration
@@ -1914,7 +1914,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#revokeClient"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 150
   - id: integration-post-mcp-oauth-register
     logical_owner: integration
@@ -1925,7 +1925,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#register"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 66
   - id: integration-post-mcp-oauth-revoke
     logical_owner: integration
@@ -1936,7 +1936,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#revoke"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 137
   - id: integration-post-mcp-oauth-token
     logical_owner: integration
@@ -1947,7 +1947,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.security.api.McpOAuthController#token"
-    file: src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/api/McpOAuthController.java
     line: 122
   - id: automation-get-notifications
     logical_owner: automation
@@ -1958,7 +1958,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogNotificationController#list"
-    file: src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     line: 33
   - id: automation-get-notifications-events
     logical_owner: automation
@@ -1969,7 +1969,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogNotificationController#events"
-    file: src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     line: 25
   - id: automation-patch-notifications-read-all
     logical_owner: automation
@@ -1980,7 +1980,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogNotificationController#markAllRead"
-    file: src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     line: 50
   - id: automation-get-notifications-unread-count
     logical_owner: automation
@@ -1991,7 +1991,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogNotificationController#unreadCount"
-    file: src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     line: 39
   - id: automation-patch-notifications-id-read
     logical_owner: automation
@@ -2002,7 +2002,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogNotificationController#markRead"
-    file: src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     line: 44
   - id: billing-get-points
     logical_owner: billing
@@ -2013,7 +2013,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.billing.api.PointsController#overview"
-    file: src/main/java/com/xander/lab/billing/api/PointsController.java
+    file: apps/core-host/src/main/java/com/xander/lab/billing/api/PointsController.java
     line: 22
   - id: billing-get-points-ledger
     logical_owner: billing
@@ -2024,7 +2024,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.billing.api.PointsController#ledger"
-    file: src/main/java/com/xander/lab/billing/api/PointsController.java
+    file: apps/core-host/src/main/java/com/xander/lab/billing/api/PointsController.java
     line: 27
   - id: billing-get-points-prices
     logical_owner: billing
@@ -2035,7 +2035,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.billing.api.PointsController#prices"
-    file: src/main/java/com/xander/lab/billing/api/PointsController.java
+    file: apps/core-host/src/main/java/com/xander/lab/billing/api/PointsController.java
     line: 34
   - id: profile-get-profile-overview
     logical_owner: profile
@@ -2046,7 +2046,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.profile.api.ProfileOverviewController#overview"
-    file: src/main/java/com/xander/lab/profile/api/ProfileOverviewController.java
+    file: apps/core-host/src/main/java/com/xander/lab/profile/api/ProfileOverviewController.java
     line: 21
   - id: integration-delete-publishing-csdn-authorization
     logical_owner: integration
@@ -2057,7 +2057,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController#disconnect"
-    file: src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
     line: 30
   - id: integration-post-publishing-csdn-authorization-cancel
     logical_owner: integration
@@ -2068,7 +2068,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController#cancel"
-    file: src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
     line: 36
   - id: integration-post-publishing-csdn-authorization-start
     logical_owner: integration
@@ -2079,7 +2079,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController#start"
-    file: src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
     line: 20
   - id: integration-get-publishing-csdn-authorization-status
     logical_owner: integration
@@ -2090,7 +2090,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController#status"
-    file: src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
     line: 25
   - id: integration-delete-publishing-juejin-authorization
     logical_owner: integration
@@ -2101,7 +2101,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#disconnect"
-    file: src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
     line: 30
   - id: integration-post-publishing-juejin-authorization-cancel
     logical_owner: integration
@@ -2112,7 +2112,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#cancel"
-    file: src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
     line: 36
   - id: integration-post-publishing-juejin-authorization-start
     logical_owner: integration
@@ -2123,7 +2123,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#start"
-    file: src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
     line: 20
   - id: integration-get-publishing-juejin-authorization-status
     logical_owner: integration
@@ -2134,7 +2134,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#status"
-    file: src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
     line: 25
   - id: integration-post-publishing-juejin-catalog-sync
     logical_owner: integration
@@ -2145,7 +2145,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinCatalogController#syncCatalog"
-    file: src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinCatalogController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinCatalogController.java
     line: 20
   - id: recitation-get-recitations-attempts-attemptid
     logical_owner: recitation
@@ -2156,7 +2156,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#getAttempt"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 97
   - id: recitation-get-recitations-materials
     logical_owner: recitation
@@ -2167,7 +2167,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#listMaterials"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 43
   - id: recitation-post-recitations-materials
     logical_owner: recitation
@@ -2178,7 +2178,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#createMaterial"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 32
   - id: recitation-delete-recitations-materials-materialid
     logical_owner: recitation
@@ -2189,7 +2189,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#deleteMaterial"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 72
   - id: recitation-get-recitations-materials-materialid
     logical_owner: recitation
@@ -2200,7 +2200,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#getMaterial"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 78
   - id: recitation-put-recitations-materials-materialid
     logical_owner: recitation
@@ -2211,7 +2211,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#updateMaterial"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 56
   - id: recitation-post-recitations-materials-materialid-archive
     logical_owner: recitation
@@ -2222,7 +2222,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#archiveMaterial"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 64
   - id: recitation-get-recitations-materials-materialid-attempts
     logical_owner: recitation
@@ -2233,7 +2233,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#listAttempts"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 92
   - id: recitation-post-recitations-materials-materialid-attempts
     logical_owner: recitation
@@ -2244,7 +2244,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#createAttempt"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 83
   - id: recitation-get-recitations-materials-materialid-quizzes
     logical_owner: recitation
@@ -2255,7 +2255,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.recitation.api.RecitationController#listQuizzes"
-    file: src/main/java/com/xander/lab/recitation/api/RecitationController.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
     line: 103
   - id: integration-post-upload
     logical_owner: integration
@@ -2266,7 +2266,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.file.FileController#upload"
-    file: src/main/java/com/xander/lab/integration/file/FileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 100
   - id: integration-post-upload-batch
     logical_owner: integration
@@ -2277,7 +2277,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.file.FileController#uploadBatch"
-    file: src/main/java/com/xander/lab/integration/file/FileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 120
   - id: integration-post-upload-oss
     logical_owner: integration
@@ -2288,7 +2288,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.file.FileController#uploadToOss"
-    file: src/main/java/com/xander/lab/integration/file/FileController.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 69
   - id: virtualpay-get-virtual-pay-notify
     logical_owner: virtualpay
@@ -2299,7 +2299,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#verifyNotifyUrl"
-    file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
+    file: apps/core-host/src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 85
   - id: virtualpay-post-virtual-pay-notify
     logical_owner: virtualpay
@@ -2310,7 +2310,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#notify"
-    file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
+    file: apps/core-host/src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 67
   - id: virtualpay-post-virtual-pay-orders
     logical_owner: virtualpay
@@ -2321,7 +2321,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#create"
-    file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
+    file: apps/core-host/src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 39
   - id: virtualpay-get-virtual-pay-orders-outtradeno
     logical_owner: virtualpay
@@ -2332,7 +2332,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#status"
-    file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
+    file: apps/core-host/src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 56
   - id: virtualpay-post-virtual-pay-orders-outtradeno-reconcile
     logical_owner: virtualpay
@@ -2343,7 +2343,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#reconcile"
-    file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
+    file: apps/core-host/src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 61
   - id: virtualpay-get-virtual-pay-products
     logical_owner: virtualpay
@@ -2354,7 +2354,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.virtualpay.api.VirtualPayController#products"
-    file: src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
+    file: apps/core-host/src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
     line: 34
   - id: bloghtml-get-blog-html-id-raw
     logical_owner: bloghtml
@@ -2365,7 +2365,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.bloghtml.api.BlogHtmlPreviewController#renderPage"
-    file: src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
+    file: apps/core-host/src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
     line: 51
   - id: shared-kernel-get-health
     logical_owner: shared-kernel
@@ -2376,7 +2376,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.common.HealthController#health"
-    file: src/main/java/com/xander/lab/common/HealthController.java
+    file: apps/core-host/src/main/java/com/xander/lab/common/HealthController.java
     line: 22
   - id: agent-get-ws-agent
     logical_owner: agent
@@ -2387,5 +2387,5 @@ routes:
     stream: ws
     last_event_id: false
     handler: WebSocketHandler
-    file: src/main/java/com/xander/lab/agent/api/AgentWebSocketConfig.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentWebSocketConfig.java
     line: 65

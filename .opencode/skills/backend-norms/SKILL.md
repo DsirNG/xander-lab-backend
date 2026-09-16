@@ -15,6 +15,17 @@ description: DinQorAI Java 后端（xander-lab-backend）编码规范。Use when
 - 每个业务模块根目录要有 `package-info.java` 说明归属与允许依赖；架构性变更必须同步更新 `docs/ARCHITECTURE.md`。
 - 每个公开业务类/接口要有一句职责式 JavaDoc；并发控制、token 处理、幂等、重试、兼容性处理前要加注释说明"为什么"。
 
+**物理布局（V9 §18 起）**：应用源码在 `apps/core-host/src/`，抽出的共享库在 `libs/<name>/src/`，
+根 `pom.xml` 是聚合器 + 父 POM（`packaging=pom`，`artifactId=xander-lab-parent`）。
+`spring-boot-maven-plugin` 只声明在 `apps/core-host/pom.xml`，**不要**挪到父 POM
+（子模块会继承 repackage 目标，而它需要 main class，库模块会直接构建失败）。
+
+跨这两个根的路径引用要一起更新：`scripts/migration/` 下的门禁允许清单、`docs/*.yaml` 里
+curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新，其余要手改）。
+`scripts/migration/scan.py` 用 `java_roots()` 同时扫应用根与所有 `libs/*/src/main/java`，
+**不要**把它写死回单根 —— 否则一旦有类被移进 libs，它会从所有机器清单里静默消失
+（包括遗留 Redis 键清单，那正是"常量被搬走就没人管了"的成因）。
+
 ## API 与异常契约
 
 - 所有错误响应：`{ "code", "message", "data" }`；code 必须与真实 HTTP 语义一致（400/401/403/404/5xx 不被 HTTP 200 包装）。
@@ -56,7 +67,7 @@ description: DinQorAI Java 后端（xander-lab-backend）编码规范。Use when
 
 ## 测试
 
-- 模块在 `src/test/java` 有镜像包；应用服务/安全规则/调度器/适配器必须有行为测试。
+- 模块在 `apps/core-host/src/test/java` 有镜像包；应用服务/安全规则/调度器/适配器必须有行为测试。
 - 控制器测试覆盖校验、鉴权、归属、真实 HTTP 状态。
 - 单元测试不依赖网络/生产凭据/真邮箱/真发布账号；确定性、相互独立、清理 ThreadLocal/静态状态。
 - 修 bug 必须带回归测试；禁止为过构建删弱测试。

@@ -27,7 +27,9 @@ target/
 .DS_Store
 ### Local Config ###
 .env
-src/main/resources/application-local.yml
+# application-local.yml is auto-loaded and holds local secrets -- it must stay ignored.
+# Path follows the V9 §18 move of the application to apps/core-host/.
+apps/core-host/src/main/resources/application-local.yml
 .env.local
 .env.production
 .env.development

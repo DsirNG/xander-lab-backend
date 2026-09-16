@@ -471,15 +471,33 @@ def gate_legacy_redis_reference_check() -> None:
     gate pins the set of files allowed to reference them: adding a fourth call
     site fails. Retirement (V9 §57 T3) must shrink this set down to Constants.java
     and then delete the constants -- see docs/migration/legacy-redis-retirement.md §9.
+
+    Two details that matter after the Wave 0B library extraction:
+
+    * the scan covers ``libs/*/src/main/java`` as well as ``src/main/java``
+      (``scan.java_files()``). Constants.java now lives in libs/xander-model, and a
+      scan of ``src/`` alone would have reported "0 offenders" -- the file that
+      *declares* the legacy keys would simply have stopped existing as far as this
+      gate is concerned.
+    * every allow-listed path must actually exist. Otherwise a future move leaves a
+      stale entry that can never match, and the gate passes while claiming to pin
+      three files. (A move is caught anyway, because the new path shows up as an
+      offender -- but only if the file still references the constants.)
     """
     gate = "legacy-redis-reference-check"
     allowed = {
-        "src/main/java/com/xander/lab/common/Constants.java",
-        "src/main/java/com/xander/lab/identity/application/AuthService.java",
-        "src/main/java/com/xander/lab/identity/application/UserAdminService.java",
+        "libs/xander-model/src/main/java/com/xander/lab/common/Constants.java",
+        "apps/core-host/src/main/java/com/xander/lab/identity/application/AuthService.java",
+        "apps/core-host/src/main/java/com/xander/lab/identity/application/UserAdminService.java",
     }
+    missing = sorted(rel for rel in allowed if not (REPO / rel).exists())
+    if missing:
+        report(gate, False,
+               f"allow-list points at file(s) that no longer exist: {missing} -- "
+               f"update the path, do not delete the entry")
+        return
     offenders: list[str] = []
-    for path in sorted((REPO / "src" / "main" / "java").rglob("*.java")):
+    for path in scan.java_files():
         text = path.read_text(encoding="utf-8", errors="replace")
         if "REDIS_TOKEN_PREFIX" in text or "REDIS_USER_TOKENS_PREFIX" in text:
             rel = path.relative_to(REPO).as_posix()

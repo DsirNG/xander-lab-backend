@@ -308,9 +308,9 @@ changes:
       forbidden_dependencies:
         - "common / config / util → 任何业务域 implementation"
       current_violations:
-        - source: src/main/java/com/xander/lab/config/WebConfig.java
+        - source: apps/core-host/src/main/java/com/xander/lab/config/WebConfig.java
           imports: com.xander.lab.identity.security.AuthInterceptor
-        - source: src/main/java/com/xander/lab/common/RedisHealthMonitor.java
+        - source: apps/core-host/src/main/java/com/xander/lab/common/RedisHealthMonitor.java
           imports: com.xander.lab.integration.mail.MailService
       remedy:
         - "config/WebConfig → 把 MVC 认证适配下沉到 xander-webmvc-support（MVC Auth Adapter），WebConfig 只装配接口"

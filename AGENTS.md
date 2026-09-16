@@ -38,7 +38,7 @@
 
 - Every `CREATE TABLE` and `ALTER TABLE ... ADD COLUMN` includes Chinese `COMMENT` on the table and every column.
 - Comments must explain enums, foreign keys, units, ownership, and lifecycle meaning rather than repeat names.
-- Existing-table changes go in `src/main/resources/db/*_migration.sql`; keep baseline `*_schema.sql` files aligned.
+- Existing-table changes go in `apps/core-host/src/main/resources/db/*_migration.sql`; keep baseline `*_schema.sql` files aligned.
 - Never rely on `CREATE TABLE IF NOT EXISTS` to update an existing table; use explicit migration statements.
 - Do not hide destructive schema changes in startup code or automatic entity synchronization.
 - Add indexes for ownership filters, due-task scans, idempotency keys, foreign keys, and stable pagination. Document non-obvious query patterns.
@@ -117,7 +117,7 @@
 
 ## Testing and build gates
 
-- Mirror each business module under `src/test/java`. Application services, security rules, schedulers, transitions, and adapters require behavior tests.
+- Mirror each business module under `apps/core-host/src/test/java`. Application services, security rules, schedulers, transitions, and adapters require behavior tests.
 - Controller tests cover validation, authentication, ownership outcomes, and real HTTP status mapping. Bean Validation DTOs need contract tests.
 - Test idempotency, duplicate delivery, stale claims, retry exhaustion, partial multi-platform failure, and restart recovery for durable workflows.
 - Mapper interfaces without custom SQL do not need empty tests. Custom SQL, locking queries, migrations, and uniqueness assumptions need integration tests.

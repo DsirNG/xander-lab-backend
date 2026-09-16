@@ -36,10 +36,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import yamlutil  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-JAVA_ROOT = REPO / "src" / "main" / "java"
-RESOURCES = REPO / "src" / "main" / "resources"
+# V9 §18: the application lives in apps/core-host/ and extracted libraries in libs/<name>/.
+# These are the roots the scanner treats as "the codebase"; see java_roots() for why the
+# library roots have to be included rather than assumed.
+APP_ROOT = REPO / "apps" / "core-host"
+JAVA_ROOT = APP_ROOT / "src" / "main" / "java"
+LIB_ROOT = REPO / "libs"
+RESOURCES = APP_ROOT / "src" / "main" / "resources"
 DB_DIR = RESOURCES / "db"
 OUT_DIR = REPO / "docs"
+
+
+def java_roots() -> list[Path]:
+    """Every Java source root in the repo, not just the application's.
+
+    Scanning only the application root means that the moment a class is moved into a
+    library it disappears from *every* inventory below -- including the legacy-Redis
+    key list, which is exactly how a moved constant would quietly stop being tracked.
+    So both roots are always scanned.
+    """
+    roots = [JAVA_ROOT]
+    roots.extend(sorted(path for path in LIB_ROOT.glob("*/src/main/java") if path.is_dir()))
+    return roots
+
+
+def java_files() -> list[Path]:
+    return sorted(path for root in java_roots() for path in root.rglob("*.java"))
 
 # ---------------------------------------------------------------------------
 # Domain model
@@ -262,7 +284,7 @@ def scan_java() -> dict:
     scheduled_re = re.compile(r"@Scheduled\b")
     redis_re = re.compile(r'"((?:[a-z][a-z0-9]*:){1,3}(?:[a-z0-9*{}_\-]*))"')
 
-    for path in sorted(JAVA_ROOT.rglob("*.java")):
+    for path in java_files():
         content = read_text(path)
         rel = path.relative_to(REPO).as_posix()
         package_match = PACKAGE_RE.search(content)
@@ -394,7 +416,7 @@ WS_HANDLER_RE = re.compile(r"addHandler\s*\(\s*[\w.]+\(\s*\)\s*,\s*\"([^\"]+)\""
 
 def scan_non_mvc() -> list[dict]:
     found: list[dict] = []
-    for path in sorted(JAVA_ROOT.rglob("*.java")):
+    for path in java_files():
         content = read_text(path)
         rel = path.relative_to(REPO).as_posix()
         package_match = PACKAGE_RE.search(content)

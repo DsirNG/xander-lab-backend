@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import scan  # noqa: E402
 
-DB_DIR = scan.REPO / "src" / "main" / "resources" / "db"
+DB_DIR = scan.DB_DIR
 LEGACY_DIR = scan.REPO / "migrations" / "legacy"
 
 CREATE_RE = re.compile(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(\w+)`?", re.IGNORECASE)

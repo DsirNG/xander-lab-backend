@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>xander-model</artifactId>
+    <name>xander-model</name>
+    <description>
+        Pure shared kernel (V9 §19 / §20). Holds only classes with no infrastructure coupling:
+        Constants, Result, ModelCallResult, ModelUsage.
+
+        Why this module exists: a single "common.jar" that carries MVC + MyBatis + Redis cannot be
+        depended on by the WebFlux Gateway, because pulling spring-boot-starter-web into a WebFlux app
+        makes it fail to start. So the shared kernel is split by technology, and this one is the
+        piece every service may use.
+
+        Forbidden here (V9 §20): Spring MVC, WebFlux, MyBatis, Redis, any business domain.
+        Enforced by ArchUnitModelBoundaryTest in this module.
+
+        Deliberate non-members, and why:
+        - PageData      -> xander-mybatis-support. Its only content is a MyBatis-Plus IPage
+                           adapter (constructor + static of(IPage)), so it is not MyBatis-free.
+                           V9 §19 lists it as pure and V9 §20 puts it here while also requiring
+                           "no MyBatis"; those two statements contradict each other and the
+                           MyBatis-free rule wins.
+        - HealthController / RedisHealthMonitor / RedisHealthProbe
+                        -> application / operations, not a shared lib (V9 §19: "运维型 Redis
+                           health check does not go into the general libs").
+        - common/security/*
+                        -> application (long-connection security plane, V9 §49-§51).
+    </description>
+
+    <dependencies>
+        <!--
+            jackson-databind only: ModelCallResult / ModelUsage expose a JsonNode payload.
+            It is a plain JSON library, not part of the forbidden set (Spring MVC / WebFlux /
+            MyBatis / Redis), and a WebFlux Gateway can depend on it.
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class". A library that
+                silently became an executable fat jar would be worse: it would stop being usable
+                as a plain dependency.
+            -->
+        </plugins>
+    </build>
+
+</project>

@@ -310,23 +310,30 @@ legacy user_tokens key count = 0
 
 ## 9. 机器门禁：`legacy-redis-reference-check`
 
-`scripts/migration/ci_gates.py` L405 的门禁逻辑：
+`scripts/migration/ci_gates.py` 的 `gate_legacy_redis_reference_check`（L467）逻辑：
 
 ```python
 allowed = {
-    "src/main/java/com/xander/lab/common/Constants.java",
-    "src/main/java/com/xander/lab/identity/application/AuthService.java",
-    "src/main/java/com/xander/lab/identity/application/UserAdminService.java",
+    "libs/xander-model/src/main/java/com/xander/lab/common/Constants.java",
+    "apps/core-host/src/main/java/com/xander/lab/identity/application/AuthService.java",
+    "apps/core-host/src/main/java/com/xander/lab/identity/application/UserAdminService.java",
 }
 ```
 
 **只允许这三个文件引用旧键族**，其它任何文件出现
 `REDIS_TOKEN_PREFIX` / `REDIS_USER_TOKENS_PREFIX` 即失败。
 
-门禁注释解释了为什么是"允许清单"而不是"计数增长"：
+⚠️ Wave 0B 起 `Constants.java` 在 `libs/xander-model/`（V9 §19 共享库抽取），
+所以扫描范围**必须**同时覆盖 `libs/*/src/main/java` 与 `apps/core-host/src/main/java`
+（门禁用 `scan.java_files()`）。若只扫应用根，这个**定义**旧键族的文件会从门禁视野里消失，
+门禁会报「0 offenders」而不是失败 —— 这是本次抽取最容易踩的坑。
 
-> Wave 0A cannot remove them yet (they are the current session model),
-> so the gate counts the call sites and fails only when the count grows.
+门禁有两条判据，且**允许清单是「必须存在」语义**：
+
+1. 允许清单里的每个路径都必须真实存在，否则 FAIL
+   （`allow-list points at file(s) that no longer exist`）。
+   所以文件被搬走时门禁**会**失败，不会被一条永不匹配的陈旧条目骗过去。
+2. 除这三个文件外出现旧键族引用即 FAIL。
 
 ⚠️ 这个门禁守的是**扩散**，不是**退场**。
 它防止"新代码又去用旧键族"，但不会告诉你"旧键族什么时候能删" ——
@@ -334,9 +341,8 @@ allowed = {
 
 ⚠️ 退场时（T3）必须**同时**更新这个 `allowed` 集合：删掉
 `AuthService` / `UserAdminService` 两条之后，门禁才能证明"生产代码已无引用"。
-若只删代码不改门禁，门禁会因为允许清单里的文件不再匹配而……仍然通过
-（它是"允许清单"语义，不是"必须存在"语义）。所以 T3 的正确动作是
-**把 `allowed` 收缩到只剩 `Constants.java`，然后再删常量**。
+正确顺序是**把 `allowed` 收缩到只剩 `Constants.java`，然后再删常量**；
+反序（先删代码）会被第 1 条判据挡下。
 
 ---
 
@@ -359,9 +365,10 @@ allowed = {
 # 门禁：旧键族引用是否仍被限制在 3 个文件内
 python scripts/migration/ci_gates.py
 
-# 人工：确认写入点只有一处
-grep -rn "REDIS_USER_TOKENS_PREFIX" src/main/java/
-# 期望：Constants.java（定义）/ AuthService.java（写 + 登出移除）/ UserAdminService.java（遍历撤销）
+# 人工：确认写入点只有一处（两个源码根都要扫）
+grep -rn "REDIS_USER_TOKENS_PREFIX" apps/core-host/src/main/java/ libs/*/src/main/java/
+# 期望：Constants.java（定义，在 libs/xander-model）/ AuthService.java（写 + 登出移除）
+#       / UserAdminService.java（遍历撤销）
 ```
 
 ⚠️ 本文档描述的 T1/T2/T3 **尚未开始**（Wave 0A 不改部署，也不改鉴权路径）。

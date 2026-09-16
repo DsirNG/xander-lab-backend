@@ -14,96 +14,96 @@ scheduled:
     method: reconcileUnknownInvocations
     trigger: "fixedDelayString = \"${agent-harness.reconciliation-delay-ms:60000}\""
     logical_owner: agent
-    file: src/main/java/com/xander/lab/agent/application/AgentToolInvocationReconciler.java
+    file: apps/core-host/src/main/java/com/xander/lab/agent/application/AgentToolInvocationReconciler.java
     line: 50
   - id: blog-content-plan-scheduler
     class: com.xander.lab.automation.infrastructure.BlogContentPlanScheduler
     method: dispatchDuePlans
     trigger: "fixedDelayString = \"${blog-content-plan.poll-interval-ms:15000}\", initialDelayString = \"${blog-content-plan.initial-delay-ms:15000}\""
     logical_owner: automation
-    file: src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java
     line: 40
   - id: email-reminder-scheduler
     class: com.xander.lab.automation.infrastructure.EmailReminderScheduler
     method: dispatchDueReminders
     trigger: "fixedDelayString = \"${email-reminder.poll-interval-ms:10000}\", initialDelayString = \"${email-reminder.initial-delay-ms:15000}\""
     logical_owner: automation
-    file: src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java
+    file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java
     line: 51
   - id: redis-health-monitor
     class: com.xander.lab.common.RedisHealthMonitor
     method: checkRedis
     trigger: "fixedDelayString = \"${redis-monitor.poll-interval-ms:30000}\", initialDelayString = \"${redis-monitor.initial-delay-ms:30000}\""
     logical_owner: unassigned
-    file: src/main/java/com/xander/lab/common/RedisHealthMonitor.java
+    file: apps/core-host/src/main/java/com/xander/lab/common/RedisHealthMonitor.java
     line: 45
   - id: auth-refresh-ciphertext-cleanup
     class: com.xander.lab.identity.application.AuthRefreshCiphertextCleanup
     method: clearExpiredCiphertext
     trigger: "fixedDelayString = \"${auth.refresh.ciphertext-cleanup-interval-ms:30000}\""
     logical_owner: identity
-    file: src/main/java/com/xander/lab/identity/application/AuthRefreshCiphertextCleanup.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/application/AuthRefreshCiphertextCleanup.java
     line: 70
   - id: auth-refresh-history-cleanup
     class: com.xander.lab.identity.application.AuthRefreshHistoryCleanup
     method: cleanupExpiredHistory
     trigger: "fixedDelayString = \"${auth.refresh.history-cleanup-interval-ms:300000}\""
     logical_owner: identity
-    file: src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java
     line: 74
   - id: security-event-outbox-publisher
     class: com.xander.lab.identity.application.SecurityEventOutboxPublisher
     method: publishDueEvents
     trigger: "fixedDelayString = \"${auth.refresh.security-outbox-publish-interval-ms:1000}\""
     logical_owner: identity
-    file: src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java
     line: 99
   - id: security-state-reconciler-reconcile
     class: com.xander.lab.identity.application.SecurityStateReconciler
     method: reconcile
     trigger: "fixedDelayString = \"${auth.refresh.security-reconcile-interval-ms:1500}\""
     logical_owner: identity
-    file: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java
     line: 78
   - id: security-state-reconciler-full-reconcile
     class: com.xander.lab.identity.application.SecurityStateReconciler
     method: fullReconcile
     trigger: "fixedDelayString = \"${auth.refresh.security-full-reconcile-interval-ms:300000}\""
     logical_owner: identity
-    file: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java
+    file: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java
     line: 126
   - id: csdn-authorization-service
     class: com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService
     method: cleanupExpiredSessions
     trigger: "fixedDelayString = \"${mcp.csdn.platform.cleanup-interval-ms:15000}\""
     logical_owner: integration
-    file: src/main/java/com/xander/lab/integration/mcp/csdn/application/CsdnAuthorizationService.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/application/CsdnAuthorizationService.java
     line: 388
   - id: juejin-authorization-service
     class: com.xander.lab.integration.mcp.juejin.application.JuejinAuthorizationService
     method: cleanupExpiredSessions
     trigger: "fixedDelayString = \"${mcp.juejin.platform.cleanup-interval-ms:15000}\""
     logical_owner: integration
-    file: src/main/java/com/xander/lab/integration/mcp/juejin/application/JuejinAuthorizationService.java
+    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/application/JuejinAuthorizationService.java
     line: 431
   - id: knowledge-upload-session-reaper
     class: com.xander.lab.knowledgebase.infrastructure.KnowledgeUploadSessionReaper
     method: reapExpiredSessions
     trigger: "fixedDelayString = \"${knowledge-base.reaper-interval-ms:3600000}\", initialDelayString = \"${knowledge-base.reaper-initial-delay-ms:60000}\""
     logical_owner: knowledgebase
-    file: src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java
+    file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java
     line: 39
   - id: recitation-worker
     class: com.xander.lab.recitation.application.RecitationWorker
     method: process
     trigger: "fixedDelayString = \"${recitation.worker-poll-interval-ms:2000}\""
     logical_owner: recitation
-    file: src/main/java/com/xander/lab/recitation/application/RecitationWorker.java
+    file: apps/core-host/src/main/java/com/xander/lab/recitation/application/RecitationWorker.java
     line: 39
   - id: img2three-service
     class: com.xander.lab.studio.application.Img2ThreeService
     method: failAbandonedRunningTasks
     trigger: "fixedDelay = 60_000"
     logical_owner: studio
-    file: src/main/java/com/xander/lab/studio/application/Img2ThreeService.java
+    file: apps/core-host/src/main/java/com/xander/lab/studio/application/Img2ThreeService.java
     line: 90

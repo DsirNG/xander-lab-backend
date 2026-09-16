@@ -56,7 +56,7 @@ Wave 2    开始减法：agent / integration / publishing / blogagent / automati
 15 个域与仓库包一一对应，可以直接核对：
 
 ```
-src/main/java/com/xander/lab/
+apps/core-host/src/main/java/com/xander/lab/
   admin/  agent/  automation/  billing/  blogagent/  bloghtml/
   components/  identity/  integration/  knowledgebase/  profile/
   publishing/  recitation/  studio/  virtualpay/
@@ -184,7 +184,7 @@ python scripts/migration/ci_gates.py
 
 人工核对的最小流程：
 
-1. 按 §2 的表确认 15 个域仍在 `src/main/java/com/xander/lab/` 下各有一个包；
+1. 按 §2 的表确认 15 个域仍在 `apps/core-host/src/main/java/com/xander/lab/` 下各有一个包；
 2. 确认 `table-ownership.yaml` 的 `target_deployment_unit` 取值集合
    等于 §2 表里出现过的单元名 ∪ `{shared, migration-runner}`；
 3. 确认 §4 的长连接宿主表与 `stream-hosts.yaml` 的 `deployment_unit` 字段一致

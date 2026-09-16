@@ -32,7 +32,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/agent/application/AgentToolInvocationReconciler.java:50
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/agent/application/AgentToolInvocationReconciler.java:50
     notes: "工具轨迹按身份配对键的未知调用回收。现网已有 DB 原子领取 + 陈旧领取回收，换 ShedLock 时必须保留原语义。"
 
   - id: blog-content-plan-scheduler
@@ -42,7 +42,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java:40
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java:40
     notes: "现网为单实例，靠 DB 原子领取保证恰好一次。多实例前必须补齐互斥。"
 
   - id: email-reminder-scheduler
@@ -52,7 +52,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java:51
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java:51
 
   - id: csdn-authorization-service
     logical_owner: integration
@@ -61,7 +61,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: src/main/java/com/xander/lab/integration/mcp/csdn/application/CsdnAuthorizationService.java:388
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/application/CsdnAuthorizationService.java:388
     notes: >-
       V9 §71 要求「必须由 Wave 0A 的实际代码审查确认，不得默认填 global_once」。
       代码审查结论：cleanupExpiredSessions() 在 synchronized(this) 内遍历**本实例内存**
@@ -76,7 +76,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: src/main/java/com/xander/lab/integration/mcp/juejin/application/JuejinAuthorizationService.java:431
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/application/JuejinAuthorizationService.java:431
     notes: "同 csdn-authorization-service，代码审查确认 per_instance（本实例内存队列 + 本实例 WebDriver）。"
 
   - id: knowledge-upload-session-reaper
@@ -86,7 +86,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java:39
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java:39
 
   - id: recitation-worker
     logical_owner: recitation
@@ -95,7 +95,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/recitation/application/RecitationWorker.java:39
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/recitation/application/RecitationWorker.java:39
 
   - id: img2three-service
     logical_owner: studio
@@ -104,7 +104,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/studio/application/Img2ThreeService.java:90
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/studio/application/Img2ThreeService.java:90
     notes: "failAbandonedRunningTasks：回收超时未结束的 Img2Three 任务，操作的是 DB 行。"
 
   - id: redis-health-monitor
@@ -114,7 +114,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/common/RedisHealthMonitor.java:45
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/common/RedisHealthMonitor.java:45
     notes: >-
       V9 §73：必须移出 common。当前用 synchronized + 实例字段（consecutiveFailures /
       outageNotified / lastAlertAttemptAt）做"每次故障只发一封邮件"的去重。
@@ -131,7 +131,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java:74
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java:74
     notes: >-
       V9 §41 / §42。DELETE FROM auth_refresh_token_history WHERE retained_until < now
       ORDER BY retained_until LIMIT ?。删的是**共享**表行 → global_once（多实例同时删同一段
@@ -152,7 +152,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/identity/application/AuthRefreshCiphertextCleanup.java:70
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/AuthRefreshCiphertextCleanup.java:70
     notes: >-
       V9 §41 / §43。UPDATE auth_refresh_token_history SET successor_token_ciphertext = NULL
       WHERE successor_ciphertext_expires_at < now AND successor_token_ciphertext IS NOT NULL。
@@ -181,7 +181,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:78
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:78
     deployment_hosts:
       - host: dinqor-core-host
         effective_from: wave0a
@@ -206,7 +206,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:126
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:126
     notes: >-
       低频全量对账兜底（5 分钟）。实例长时间离线后，本地游标可能落后于已被清理的历史区间，
       此时增量拉取会永久漏掉那一段 —— 全量刷新（listDisabled + replaceAll）保证最终收敛。
@@ -219,7 +219,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java:99
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java:99
     notes: >-
       V9 §27 的快路径：消费 security_event_outbox 并投递。
       **为什么是 global_once 而不是 per_instance**：本任务领取的是共享的发件箱行，

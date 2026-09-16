@@ -1,6 +1,6 @@
 # DinQorAI 微服务迁移 — 鉴权策略清单（人工填写语义）
 #
-# 来源：src/main/java/com/xander/lab/identity/security/AuthInterceptor.java
+# 来源：apps/core-host/src/main/java/com/xander/lab/identity/security/AuthInterceptor.java
 #       （全局唯一鉴权点，84 条 METHOD:/api/path 显式白名单 + 4 条前缀规则 + 兜底）
 #       + agent/api/AgentWebSocketConfig.java（WS 握手，独立拦截器）
 #       + 各 McpServerConfiguration（Servlet 注册，独立鉴权体系）

@@ -3,15 +3,18 @@ FROM maven:3.8.5-openjdk-17 AS builder
 
 WORKDIR /app
 
-# Copy pom.xml and settings.xml
+# Copy the POMs first so the dependency layer is cached independently of source edits.
 COPY pom.xml .
 COPY settings.xml .
+COPY libs/xander-model/pom.xml ./libs/xander-model/pom.xml
+COPY apps/core-host/pom.xml ./apps/core-host/pom.xml
 
 # Download dependencies using Aliyun mirror
 RUN mvn dependency:go-offline -B -s settings.xml
 
 # Copy source code and build jar
-COPY src ./src
+COPY libs ./libs
+COPY apps ./apps
 RUN mvn package -DskipTests -s settings.xml
 
 
@@ -31,8 +34,8 @@ RUN sed -i \
         python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the built jar from the builder stage
-COPY --from=builder /app/target/*.jar app.jar
+# Copy the built jar from the builder stage (the application module is apps/core-host)
+COPY --from=builder /app/apps/core-host/target/*.jar app.jar
 # Keep the upstream pipeline in the runtime image; the backend executes these scripts by path.
 COPY plugins/img2threejs ./plugins/img2threejs
 
