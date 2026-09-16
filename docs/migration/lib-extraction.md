@@ -369,6 +369,43 @@ Maven 直接拒绝：
 这次抽取在唯一的进度指标上完全隐形。这是本轮实测过的：`content` 登记后
 `shared_kernel_sources` 才从 `[auth, common, config, filter]` 变成含 `content`。
 
+### 6.1 ⚠️ 契约落在业务域命名空间里时，`SHARED_KERNEL` 必须写**带点**的条目
+
+§18 列的 8 个契约里，**有 4 个的名字同时是业务域**：
+`agent-api` / `automation-api` / `integration-api` / `studio-api`。
+它们的包只能落在 `com.xander.lab.<域>.api`，于是撞上扫描器原本的一条硬限制：
+
+**`SHARED_KERNEL` 原本只按"第一段"匹配**（`domain_of()` 取 `parts[3]`），
+所以 `com.xander.lab.integration.api` 无法被单独表达 —— 只能登记 `integration`，
+而那会把整个域一起划成共享内核。
+
+已改成：**条目是包前缀、允许带点、按最长匹配**（`shared_kernel_owner()`），
+`shared_kernel_packages()` 也从"第一段"改成回报**实际声明的包**（`content.api` 而不是 `content`）。
+
+| 包 | 最长匹配 | 结果 |
+|---|---|---|
+| `com.xander.lab.integration.api.UploadResponse` | `integration.api` | 共享内核 → 不计入跨域基线 |
+| `com.xander.lab.integration.oss.OssService` | （无） | 业务域 `integration` → 计入 |
+
+⚠️ **登记裸的 `integration` 不会"把域误划成共享内核"——真正的后果是契约隐形。**
+实测（把 `integration` 加进 `SHARED_KERNEL` 后重跑）：跨域基线**仍是 116 / 85，一条都没少**，
+因为扫描器里 `BUSINESS_DOMAINS` 优先，`domain_of` 返回的 `integration` 仍被当作业务域。
+真正的两个后果是：
+
+1. **契约隐形**：`domain_of("…integration.api.X")` 返回 `integration`（业务域），
+   于是搬进契约的类型**照样被算作域间边**，这次抽取在进度指标上不动一分 —— 正是本门禁存在的理由；
+2. **假报警**：`integration → <各域>` 的每条 import 都会变成
+   `shared-kernel-reverse-dependency` 违规（实测多出 5 条）。
+
+所以 `shared-kernel-classification` 新增判据二「**窄性**」：
+**任何条目都不得等于业务域名、也不得是业务域名的前缀**。裸 `integration` 直接 FAIL。
+判据一「覆盖」同时改成按声明包深度比对，报错信息现在给出 `content.api` 这种精确包名。
+
+⚠️ 这次改动的安全验证方式是**基线必须逐字节不变**：改完扫描器、**不搬任何类**，
+重新生成 `docs/cross-domain-imports.yaml` 与 `docs/migration-scan-report.md`，
+`git diff -- docs/` **必须为空**。实测为空（116 / 85 / 28 / 38 全部不变），
+说明最长匹配对改动前就存在的每个包返回的都是原值。
+
 ---
 
 ## 7. 与 §80 的关系

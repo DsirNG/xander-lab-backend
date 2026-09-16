@@ -341,13 +341,13 @@ def gate_shared_kernel_reverse_dependency() -> None:
 
 
 def gate_shared_kernel_classification() -> None:
-    """Every package shipped by ``libs/`` or ``contracts/`` must be in ``SHARED_KERNEL``.
+    """``SHARED_KERNEL`` must cover exactly the module packages, and stay narrow.
 
-    ``SHARED_KERNEL`` is a hardcoded package-name list and the cross-domain scanner
-    classifies imports by package name. So a module whose package is missing from that
-    list is misfiled *silently*: its classes are still scanned, but an import of one is
-    neither a business-domain edge nor a shared-kernel source, so every edge pointing at
-    it is dropped. The backlog number then goes DOWN while the coupling is unchanged.
+    ``SHARED_KERNEL`` is a hardcoded prefix list and the cross-domain scanner classifies
+    imports by package name. So a module whose package is missing from that list is
+    misfiled *silently*: its classes are still scanned, but an import of one is neither a
+    business-domain edge nor a shared-kernel source, so every edge pointing at it is
+    dropped. The backlog number then goes DOWN while the coupling is unchanged.
 
     That is the silent-omission failure V9 section 13 exists to prevent, so the key set is
     derived from the tree and compared instead of trusted.
@@ -355,20 +355,56 @@ def gate_shared_kernel_classification() -> None:
     Contract modules are covered deliberately: a contract exists to be the legal
     cross-service dependency, so forgetting to classify it would make the extraction that
     created it invisible in the very number it was supposed to move.
+
+    Two criteria:
+
+    1. **Coverage.** Every package a module declares must be matched by some entry
+       (by equality or as a sub-package), reported at the *declared* package depth.
+    2. **Narrowness.** No entry may name a business domain or be a prefix of one. This is
+       the mirror image of criterion 1, and the harm is *not* that the domain would be
+       misfiled as shared kernel -- ``BUSINESS_DOMAINS`` wins in the scanner, so the
+       backlog count would not move at all. The harm is that a contract listed this way
+       becomes **invisible**: ``domain_of`` would return the broad domain name, which is
+       still a business domain, so a type moved into the contract keeps being counted as a
+       domain edge and the extraction moves no number. It also raises false
+       ``shared-kernel-reverse-dependency`` violations for every import the domain makes.
+       A contract for such a domain must therefore be listed as ``integration.api``.
     """
     gate = "shared-kernel-classification"
     provided = scan.shared_kernel_packages()
     declared = set(scan.SHARED_KERNEL)
-    missing = sorted(set(provided) - declared)
-    if missing:
-        where = ", ".join(f"{pkg} ({', '.join(provided[pkg])})" for pkg in missing)
+    domains = set(scan.BUSINESS_DOMAINS)
+
+    def covered_by(package: str, entry: str) -> bool:
+        return package == entry or package.startswith(entry + ".")
+
+    uncovered = sorted(pkg for pkg in provided
+                       if scan.shared_kernel_owner(f"com.xander.lab.{pkg}") is None)
+    if uncovered:
+        where = ", ".join(f"{pkg} ({', '.join(provided[pkg])})" for pkg in uncovered)
         report(gate, False,
-               f"module(s) ship package(s) {where} that SHARED_KERNEL does not list -- "
+               f"module(s) ship package(s) {where} that SHARED_KERNEL does not cover -- "
                f"imports of them would be dropped from the cross-domain baseline without "
                f"any coupling being removed. Add them to SHARED_KERNEL in "
                f"scripts/migration/scan.py")
         return
-    in_app = sorted(declared - set(provided) - set(scan.BUSINESS_DOMAINS))
+
+    too_broad = sorted(entry for entry in scan.SHARED_KERNEL
+                       if any(covered_by(domain, entry) for domain in domains))
+    if too_broad:
+        report(gate, False,
+               f"SHARED_KERNEL entr(ies) {too_broad} name a business domain or a prefix of "
+               f"one. A business domain always wins in the scanner, so this does NOT "
+               f"misfile the domain -- it makes any contract under it invisible: the "
+               f"contract's types would still be counted as domain edges, so moving a type "
+               f"into it would move no number, and every import the domain makes would "
+               f"raise a false shared-kernel-reverse-dependency violation. List the "
+               f"contract narrowly instead (e.g. 'integration.api', not 'integration')")
+        return
+
+    in_app = sorted(entry for entry in scan.SHARED_KERNEL
+                    if not any(covered_by(pkg, entry) for pkg in provided)
+                    and entry not in domains)
     detail = (f"all {len(provided)} module package(s) classified: "
               + ", ".join(f"{pkg} <- {'/'.join(provided[pkg])}" for pkg in sorted(provided)))
     if in_app:

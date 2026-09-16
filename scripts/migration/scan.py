@@ -73,11 +73,20 @@ def java_files() -> list[Path]:
 
 
 def shared_kernel_packages() -> dict[str, list[str]]:
-    """``com.xander.lab.<pkg>`` -> the module dirs under ``libs/`` or ``contracts/``
-    that ship it.
+    """``com.xander.lab.<declared package>`` -> the module dirs under ``libs/`` or
+    ``contracts/`` that ship it.
+
+    The **declared** package is what gets reported (``com.xander.lab.content.api``, not
+    ``com.xander.lab.content``), and that distinction only starts to matter once a contract
+    lives inside a business domain's namespace. ``contracts/integration-api`` ships
+    ``com.xander.lab.integration.api``; reporting the first segment would make the gate
+    demand a ``SHARED_KERNEL`` entry broad enough to also swallow ``integration.oss``,
+    ``integration.mail`` and ``integration.mcp`` -- which would drop every one of those
+    edges from the backlog while the coupling stayed exactly the same. Reporting the
+    declared package keeps the required entry as narrow as the module actually is.
 
     Used by the ``shared-kernel-classification`` gate to check that ``SHARED_KERNEL``
-    lists every package a non-application module ships. See the comment above
+    covers every package a non-application module ships. See the comment above
     ``SHARED_KERNEL`` for why a missing entry is worse than a loud failure: the coupling
     stays, the count drops.
 
@@ -93,9 +102,10 @@ def shared_kernel_packages() -> dict[str, list[str]]:
         for path in root.rglob("*.java"):
             parts = path.relative_to(root).as_posix().split("/")
             if len(parts) >= 4 and parts[:3] == ["com", "xander", "lab"]:
-                provided.setdefault(parts[3], [])
-                if module not in provided[parts[3]]:
-                    provided[parts[3]].append(module)
+                package = ".".join(parts[3:-1])
+                provided.setdefault(package, [])
+                if module not in provided[package]:
+                    provided[package].append(module)
     return {name: sorted(mods) for name, mods in sorted(provided.items())}
 
 
@@ -122,6 +132,14 @@ BUSINESS_DOMAINS = [
     "profile",
 ]
 # Packages that belong to the shared kernel rather than to a business domain.
+#
+# Entries are package **prefixes**, matched by ``shared_kernel_owner()`` taking the longest
+# match, so they may be dotted. That is not decoration: 4 of the 8 contracts V9 section 18
+# names (``agent-api`` / ``automation-api`` / ``integration-api`` / ``studio-api``) are
+# named after a package that is *also* a business domain. A contract for those has to live
+# at ``com.xander.lab.<domain>.api``, and listing the bare domain would classify the whole
+# domain as shared kernel -- dropping every ``integration.oss`` / ``integration.mail`` /
+# ``integration.mcp`` edge from the backlog while the coupling was unchanged.
 #
 # ``common`` / ``config`` / ``filter`` / ``util`` are the in-app shared packages; ``auth``
 # is the package provided by ``libs/xander-auth-core`` (V9 §20); ``content`` is the package
@@ -280,7 +298,48 @@ def join_path(prefix: str, suffix: str) -> str:
     return prefix.rstrip("/") + "/" + suffix.lstrip("/")
 
 
+def shared_kernel_owner(package: str) -> str | None:
+    """The ``SHARED_KERNEL`` entry that owns ``package``, or ``None``.
+
+    Accepts a package name or a class FQCN -- callers pass both.
+
+    Entries are package *prefixes* and may be dotted, which is what lets a contract be
+    classified narrowly even when it sits inside a business domain's own namespace. The
+    match takes the **longest** entry, and that is the whole mechanism:
+
+        com.xander.lab.integration.api.UploadResponse -> integration.api  (shared kernel)
+        com.xander.lab.integration.oss.OssService     -> None            (business domain)
+
+    Without the dotted entry a contract under ``integration`` could only be expressed by
+    listing ``integration`` itself, which would classify ``integration.oss`` / ``.mail`` /
+    ``.mcp`` as shared kernel too and silently drop their edges from the backlog.
+    """
+    parts = package.split(".")
+    if len(parts) < 4 or parts[:3] != ["com", "xander", "lab"]:
+        return None
+    rest = ".".join(parts[3:])
+    best: str | None = None
+    for entry in SHARED_KERNEL:
+        if rest == entry or rest.startswith(entry + "."):
+            if best is None or len(entry) > len(best):
+                best = entry
+    return best
+
+
 def domain_of(package: str) -> str:
+    """The owner of ``package``: a business domain, or the shared-kernel entry.
+
+    Returning the shared-kernel entry (``content``, ``integration.api``) rather than a
+    domain name is deliberate -- it is what makes an import of a contract invisible to the
+    backlog scanner, because callers test ``target not in BUSINESS_DOMAINS``. A
+    shared-kernel entry is never in ``BUSINESS_DOMAINS``, so those imports are skipped.
+
+    For every package that existed before the dotted entries were introduced this returns
+    exactly what the old first-segment implementation returned.
+    """
+    owner = shared_kernel_owner(package)
+    if owner is not None:
+        return owner
     parts = package.split(".")
     if len(parts) >= 4 and parts[:3] == ["com", "xander", "lab"]:
         return parts[3]
@@ -807,7 +866,16 @@ def build_cross_domain_imports() -> dict:
         marker = "/com/xander/lab/"
         if marker not in rel:
             continue
-        source = rel.split(marker, 1)[1].split("/")[0]
+        # The source package is the *directory* path, not just its first segment: a
+        # contract at contracts/integration-api/.../integration/api/Foo.java is the
+        # package com.xander.lab.integration.api, and taking the first segment would file
+        # the contract's own sources under the business domain it is a contract for.
+        # domain_of() then resolves it to the longest matching SHARED_KERNEL entry.
+        tail = rel.split(marker, 1)[1].split("/")
+        if len(tail) >= 2:
+            source = domain_of("com.xander.lab." + ".".join(tail[:-1]))
+        else:
+            source = tail[0]
         if source not in business:
             # Recorded rather than skipped: a source package that is neither a
             # domain nor the shared kernel would otherwise vanish from every
