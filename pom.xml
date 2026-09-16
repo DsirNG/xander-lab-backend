@@ -37,6 +37,7 @@
         <module>libs/xander-auth-core</module>
         <module>contracts/content-api</module>
         <module>contracts/integration-api</module>
+        <module>contracts/core-api</module>
         <module>apps/core-host</module>
     </modules>
 

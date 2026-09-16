@@ -8,6 +8,7 @@ import com.xander.lab.admin.domain.ModelProvider;
 import com.xander.lab.admin.infrastructure.FeatureModelConfigMapper;
 import com.xander.lab.admin.infrastructure.ModelGatewayProperties;
 import com.xander.lab.admin.infrastructure.ModelProviderMapper;
+import com.xander.lab.core.api.ModelGateway;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;

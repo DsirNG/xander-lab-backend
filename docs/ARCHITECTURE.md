@@ -215,6 +215,24 @@ empty except for shared infrastructure:
    concrete implementations, and `MailService` additionally imports
    `automation.domain.EmailReminderMailTemplates`, which a contract may not do.
 
+9. `contracts/core-api` holds the runtime model-routing SPI (`ModelGateway`), its
+   `ModelEndpoint` record, and `FeatureModelNotConfiguredException`. Like item 7
+   this is a *move*, not an introduced port: the type was already an interface.
+   The implementation (`ModelGatewayService`, which reads `model_provider` and
+   `model_feature_config`) stays in the `admin` domain of `dinqor-core-host`, while
+   the consumers sit in three future deployment units — `dinqor-agent`,
+   `dinqor-content-automation` and `dinqor-core-host` — so an interface owned by the
+   provider but depended on across a service boundary points the wrong way. The
+   exception travels with the interface rather than the implementation: it is
+   documented SPI behaviour ("the gateway is on and this feature has no usable
+   endpoint"), `BlogAgentImageClient` catches it and `GlobalExceptionHandler` maps
+   it to HTTP 400. With this extraction `admin` has **zero** inbound implementation
+   imports; the only remaining edge is `virtualpay → admin` on the `admin.api` layer,
+   which is contract surface rather than backlog. The `FEATURE_*` and `API_STYLE_*`
+   constants are persisted as `model_feature_config` column values, so
+   `ModelGatewayTest` pins each literal — a rename would not break the build, it
+   would silently orphan existing rows.
+
 ## Agent HTTP, SSE, and WebSocket Contract
 
 Authenticated orchestration routes live under `/api/agent/conversations`.

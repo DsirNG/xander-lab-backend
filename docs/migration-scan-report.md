@@ -80,8 +80,8 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 Counted from `import com.xander.lab.<other domain>.<layer>...`. Only the
 implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 
-- implementation statements: **108** across 39 edges
-- of which cross a deployment unit (the real backlog): **77** across 25 edges
+- implementation statements: **98** across 35 edges
+- of which cross a deployment unit (the real backlog): **71** across 23 edges
 - api-layer statements (contract surface): **38**
 
 | from | to | impl | api | crosses unit | from unit -> to unit |
@@ -97,10 +97,8 @@ implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 | agent | blogagent | 4 | 2 | yes | dinqor-agent -> dinqor-content-automation |
 | agent | recitation | 4 | 4 | yes | dinqor-agent -> dinqor-core-host |
 | automation | blogagent | 4 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
-| blogagent | admin | 4 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
 | integration | billing | 4 | 0 | yes | dinqor-platform-integration -> dinqor-core-host |
 | admin | identity | 2 | 2 | no | dinqor-core-host -> dinqor-core-host |
-| agent | admin | 2 | 0 | yes | dinqor-agent -> dinqor-core-host |
 | agent | identity | 2 | 0 | yes | dinqor-agent -> dinqor-core-host |
 | agent | integration | 2 | 0 | yes | dinqor-agent -> dinqor-platform-integration |
 | automation | billing | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
@@ -110,8 +108,6 @@ implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 | components | identity | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
 | knowledgebase | automation | 2 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | publishing | identity | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
-| recitation | admin | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
-| studio | admin | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
 | studio | billing | 2 | 0 | no | dinqor-core-host -> dinqor-core-host |
 | studio | publishing | 2 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | admin | automation | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |

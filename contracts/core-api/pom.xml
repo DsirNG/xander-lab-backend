@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>core-api</artifactId>
+    <name>core-api</name>
+    <description>
+        Service-to-service contract for the core host (V9 §18 / §91).
+
+        Members: ModelGateway (the runtime model-routing SPI) and its nested ModelEndpoint record,
+        plus FeatureModelNotConfiguredException, which is the only failure the SPI may raise and
+        which callers in other deployment units are required to propagate rather than swallow.
+
+        Why these three and nothing else. ModelGateway is an interface whose *implementation*
+        (ModelGatewayService, reading model_provider / model_feature_config) stays in the admin
+        domain of dinqor-core-host, while its *consumers* sit in three different future deployment
+        units: dinqor-agent (AgentModelClient), dinqor-content-automation (BlogAgentImageClient,
+        BlogAgentModelClient) and dinqor-core-host (DashScopeRecitationAsrClient,
+        Img2ThreeModelClient). An interface owned by the provider but implemented only there, and
+        depended upon across a service boundary, points the wrong way once the split happens; the
+        port moves to a module both sides may depend on. This is the same reasoning as
+        contracts/content-api, and unlike contracts/integration-api it is a pure move: the type was
+        already an interface, so no port had to be invented.
+
+        The exception travels with the interface, not with the implementation. FeatureModelNotConfigured
+        is documented behaviour of the SPI ("the gateway is on and this feature has no usable
+        endpoint"), and BlogAgentImageClient catches it and GlobalExceptionHandler maps it to HTTP 400.
+        Leaving it in the admin domain would keep a cross-unit import alive for no benefit.
+
+        Zero dependencies, and that is the point. A contract that drags in a framework cannot be
+        depended on by every service, and V9 §19 is explicit that the WebFlux Gateway must stay free
+        of spring-webmvc. Nothing here may gain a compile dependency without a deliberate decision;
+        test scope is fine. Note that ModelEndpoint deliberately exposes the decrypted apiKey as a
+        plain String: this module is about the shape of the value, not about how it is protected.
+        ProviderKeyCipher, the AES key handling and the provider registry all stay in admin.
+
+        The package is com.xander.lab.core.api rather than com.xander.lab.core. "core" is not a
+        business domain, but a bare first segment would still be classified as one by the
+        cross-domain scanner, and the contract would then be invisible in the metrics; the
+        dotted entry "core.api" is registered in SHARED_KERNEL for exactly that reason
+        (see docs/migration/lib-extraction.md §6.1).
+
+        What is deliberately NOT here: the resolved-endpoint cache, the per-feature assignment
+        rules, the api-style whitelist validation (FeatureModelConfigService) and the admin HTTP
+        surface. Those are behaviour and stay in admin. What IS here is the vocabulary the
+        behaviour speaks: the feature keys and the api styles, which are persisted as
+        model_feature_config column values and therefore cannot be renamed casually.
+    </description>
+
+    <dependencies>
+        <!--
+            No compile or runtime dependency by design. junit-jupiter is test-scoped: the FEATURE_*
+            and API_STYLE_* constants below are persisted as database column values, so a silent
+            rename would break existing rows rather than break the build. The test pins them.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class".
+            -->
+        </plugins>
+    </build>
+
+</project>

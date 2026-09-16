@@ -14,6 +14,7 @@ COPY libs/xander-mybatis-support/pom.xml ./libs/xander-mybatis-support/pom.xml
 COPY libs/xander-auth-core/pom.xml ./libs/xander-auth-core/pom.xml
 COPY contracts/content-api/pom.xml ./contracts/content-api/pom.xml
 COPY contracts/integration-api/pom.xml ./contracts/integration-api/pom.xml
+COPY contracts/core-api/pom.xml ./contracts/core-api/pom.xml
 COPY apps/core-host/pom.xml ./apps/core-host/pom.xml
 
 # Download dependencies using Aliyun mirror

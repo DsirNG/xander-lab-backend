@@ -68,6 +68,20 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            Core-host service-to-service contract: ModelGateway + ModelEndpoint +
+            FeatureModelNotConfiguredException (V9 §18 / §91). The implementation
+            (ModelGatewayService, reading model_provider / model_feature_config) stays in the
+            admin domain, but the consumers sit in three future deployment units: dinqor-agent,
+            dinqor-content-automation and dinqor-core-host. Zero transitive dependencies by
+            design; see contracts/core-api/pom.xml.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>core-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>

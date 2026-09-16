@@ -159,7 +159,8 @@ BUSINESS_DOMAINS = [
 # so ``shared_kernel_packages()`` below derives the set from the tree and the
 # ``shared-kernel-classification`` gate compares the two. Adding a module means adding its
 # package here; the gate fails until you do.
-SHARED_KERNEL = ["auth", "common", "config", "content", "filter", "integration.api", "util"]
+SHARED_KERNEL = ["auth", "common", "config", "content", "core.api", "filter",
+                 "integration.api", "util"]
 
 # Import prefixes a ``contracts/*`` module is allowed to use (V9 §19 / §21).
 #

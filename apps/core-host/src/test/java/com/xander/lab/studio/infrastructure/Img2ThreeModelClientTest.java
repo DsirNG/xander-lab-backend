@@ -2,8 +2,8 @@ package com.xander.lab.studio.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
-import com.xander.lab.admin.application.ModelGateway;
-import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
+import com.xander.lab.core.api.ModelGateway;
+import com.xander.lab.core.api.ModelGateway.ModelEndpoint;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.common.ModelCallResult;
 import org.junit.jupiter.api.AfterEach;

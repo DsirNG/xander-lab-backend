@@ -2,8 +2,8 @@ package com.xander.lab.studio.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.admin.application.ModelGateway;
-import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
+import com.xander.lab.core.api.ModelGateway;
+import com.xander.lab.core.api.ModelGateway.ModelEndpoint;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;

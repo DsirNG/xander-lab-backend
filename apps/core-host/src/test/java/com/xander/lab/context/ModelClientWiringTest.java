@@ -1,6 +1,6 @@
 package com.xander.lab.context;
 
-import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.core.api.ModelGateway;
 import com.xander.lab.admin.infrastructure.FeatureModelConfigMapper;
 import com.xander.lab.admin.infrastructure.ModelGatewayProperties;
 import com.xander.lab.admin.infrastructure.ModelProviderMapper;

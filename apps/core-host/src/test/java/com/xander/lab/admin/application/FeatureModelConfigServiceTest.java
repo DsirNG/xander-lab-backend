@@ -7,6 +7,7 @@ import com.xander.lab.admin.domain.ModelProvider;
 import com.xander.lab.admin.infrastructure.FeatureModelConfigMapper;
 import com.xander.lab.admin.infrastructure.ModelGatewayProperties;
 import com.xander.lab.admin.infrastructure.ModelProviderMapper;
+import com.xander.lab.core.api.ModelGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

@@ -45,7 +45,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 |---|---|---|---|
 | `content-api` | **已完成** | `BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits` | `integration → publishing` 22 → 5；总计 −18 条跨单元 import |
 | `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
-| `core-api` | 未开始 | — | 按目标域聚合，`core-host` 相关边 |
+| `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException` | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；跨部署单元 **−6**；总计 **−10** |
 | `agent-api` | 未开始 | — | — |
 | `automation-api` | 未开始 | — | — |
 | `knowledge-api` | 未开始 | — | — |
@@ -374,6 +374,111 @@ Spring 的 `List<BlogPublisher>` 注入在跨进程时直接失效。**端口先
 
 ---
 
+## 3quinquies. 第三个业务契约：`contracts/core-api`（模型路由 SPI）
+
+### 3quinquies.1 又一个"搬"，而且是本轮最干净的一次
+
+`ModelGateway` 被跨域引用的 2 个类型**本来就是接口与 record**，
+不像 `integration` 那样需要先造端口：
+
+| 类型 | 被谁引用 | 形态 | 处理 |
+|---|---|---|---|
+| `admin.application.ModelGateway` | agent / blogagent / recitation / studio | **接口** | 搬 |
+| `admin.application.ModelGateway.ModelEndpoint` | 同上 4 个 | **record**（嵌套） | 跟着搬 |
+| `admin.application.FeatureModelNotConfiguredException` | blogagent（catch）/ `GlobalExceptionHandler` | `RuntimeException` 子类 | 跟着搬 |
+
+判据仍是 §3quater.1 那条：**实现跨部署单元**。实现（`ModelGatewayService`，
+读 `model_provider` / `model_feature_config` 两张表）留在 `dinqor-core-host` 的 admin 域，
+调用方却横跨三个部署单元 —— agent（`dinqor-agent`）、blogagent
+（`dinqor-content-automation`）、recitation + studio（`dinqor-core-host`）。
+
+### 3quinquies.2 异常跟着接口走，不跟着实现走
+
+`FeatureModelNotConfiguredException` 不是"实现的意外"，而是**接口的约定行为**：
+网关开着、某功能没有可用端点时就抛它，调用方**必须向上传播而不回退到环境变量**。
+blogagent 的图片客户端 `catch` 它，`GlobalExceptionHandler` 按类型映射成 HTTP 400。
+留在 admin 域只会白白多留一条跨单元 import，所以三个类型一起走。
+
+### 3quinquies.3 收益（重新生成基线后实测）
+
+```
+agent      -> admin   2 -> 0     （边归零，跨部署单元）
+blogagent  -> admin   4 -> 0     （边归零，跨部署单元）
+recitation -> admin   2 -> 0     （边归零，同单元）
+studio     -> admin   2 -> 0     （边归零，同单元）
+
+implementation_statements          108 -> 98  (-10)
+cross_deployment_unit_statements    77 -> 71  (-6)
+cross_deployment_unit_edges         25 -> 23  （2 条跨单元边归零）
+api_statements                      38 -> 38  （未变）
+```
+
+⚠️ **`admin` 作为被依赖目标的实现依赖现在归零**：四条入边**整条消失**，
+而不只是数字变小。剩下唯一一条 `virtualpay → admin` 是 `api_statements`
+（`admin.api` 层的 import），那是**正在建的契约面**，不是待还的债。
+
+⚠️ 与 §3ter 一致：耦合图 71 条但**形状未变**（仍 10 条有向边、同一强连通分量），
+所以 `deployment-unit-coupling` 门禁不受影响。
+
+### 3quinquies.4 ⚠️ 带点条目的盲区：这一次**只有门禁**能发现问题
+
+`integration.api` 那次（§6.1）已经知道：登记裸域名会让契约"隐形"。
+这次做了对照实验，把结论说得更准 —— **`core.api` 从 `SHARED_KERNEL` 里删掉之后，
+所有指标一个都不动**：
+
+```
+登记 core.api：impl 98 / cross 71 / api 38   unclassified_sources = [DinQorAIApplication.java]
+删掉 core.api：impl 98 / cross 71 / api 38   unclassified_sources = [DinQorAIApplication.java, core]
+```
+
+也就是说，**契约包的包名前缀不是业务域名时（`core` 不在 `BUSINESS_DOMAINS` 里），
+扫描器既不会把它当业务域算进边，也不会把它当共享内核排除 —— 那些 import 只是
+被静默丢掉，而数字与"正确"状态完全一致。** 唯一的信号是
+`unclassified_sources` 多出一个 `core`，以及 `shared-kernel-classification` 门禁的 FAIL：
+
+```
+FAIL  shared-kernel-classification  module(s) ship package(s) core.api (contracts/core-api)
+      that SHARED_KERNEL does not cover -- imports of them would be dropped from the
+      cross-domain baseline without any coupling being removed.
+```
+
+**结论：对带点条目，门禁是唯一的保护，指标完全靠不住。**
+不要因为"数字好看"就跳过门禁。`core.api` 已登记（`scan.py` 的 `SHARED_KERNEL`）。
+
+### 3quinquies.5 与 `agent-api` 的关系：那个契约还卡在 Jackson 上
+
+本轮**没有**顺手动 `agent` 域那 4 个被 `integration` 引用的类型
+（`AgentTool` / `AgentToolRegistry` / `AgentDynamicToolSource` / `AgentPromptSection`），
+原因是它们**不都是纯 JDK**：
+
+- `AgentToolRegistry` 是 `@Component` **具体实现**（Spring + Jackson），根本不能进契约；
+- `AgentTool` 虽然是接口，但 `parametersSchema()` 返回 **`com.fasterxml.jackson.databind.JsonNode`**；
+- 只有 `AgentDynamicToolSource`（接口）与 `AgentPromptSection`（record）是纯 JDK。
+
+`payment-api` 也卡在同一处：`BillingService.chargeTokens(...)` 收
+`com.xander.lab.common.ModelUsage`，而它住在 `libs/xander-model`、带 Jackson 依赖
+（`ModelUsage.fromJson(JsonNode)`）。
+
+所以这是一个**必须一起回答的问题**，两个契约都等它：
+
+> 契约的依赖边界到底是"只许 JDK"，还是"JDK + 无框架的共享内核库（`xander-model`）"？
+
+三个可选方向，**本轮未定**：
+
+1. **维持 JDK-only**，契约自带等价 DTO（`TokenUsage(inputTokens, cachedTokens, outputTokens)`），
+   调用方在边界转换。代价：`chargeTokens` 的 8 个调用点各加一次转换；
+   `AgentTool` 的 `JsonNode` 无处可去，只能把 `parametersSchema()` 改成 `String`（调用点更多）。
+2. **放宽到"JDK + `xander-model`"**，把 `CONTRACT_ALLOWED_IMPORT_PREFIXES` 从
+   `('java.',)` 改成允许 `com.xander.lab.common.`。代价：契约开始传递 Jackson
+   （WebFlux Gateway 本来就有 Jackson，实际无害），但"契约零依赖"这条不变量没了。
+3. **按类型分开**：数据形状纯 JDK 的走方向 1，签名里真的有 `JsonNode` 的走方向 2。
+   代价：判据变成"看情况"，而"看情况"正是 §13 要避免的。
+
+**建议方向 1**，因为它保住了"契约可被任何服务依赖"这条硬不变量，而代价是机械的
+（转换点可数、可用测试钉住）。但这是设计决策，不应当在实现里顺手做掉。
+
+---
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`
@@ -605,7 +710,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 6 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **77** 条（原 103 → 85 → 77）。下一个最大目标仍是 `integration` 域的其余 5 个类型，但它们**都是具体实现**，要先抽端口；其中 `MailService` 被一处业务域依赖挡住（§3quater.5） | Wave 0B 剩余 |
+| 5 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **71** 条（原 103 → 85 → 77 → 71）。最大的两个剩余目标 `billing`（12）与 `identity`（14）**都卡在同一个设计决策上**：契约的依赖边界是否允许 Jackson / `xander-model`（见 §3quinquies.5）。`agent-api` 同样卡在这里 | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

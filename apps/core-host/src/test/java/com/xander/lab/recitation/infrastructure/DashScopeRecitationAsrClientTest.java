@@ -1,7 +1,7 @@
 package com.xander.lab.recitation.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.admin.application.ModelGateway;
+import com.xander.lab.core.api.ModelGateway;
 import com.xander.lab.recitation.application.RecitationAsrPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

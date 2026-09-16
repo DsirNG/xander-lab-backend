@@ -7,10 +7,10 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 108
-  implementation_edges: 39
-  cross_deployment_unit_statements: 77
-  cross_deployment_unit_edges: 25
+  implementation_statements: 98
+  implementation_edges: 35
+  cross_deployment_unit_statements: 71
+  cross_deployment_unit_edges: 23
   api_statements: 38
   api_edges: 11
   shared_kernel_sources:
@@ -18,6 +18,7 @@ counts:
     - common
     - config
     - content
+    - core.api
     - filter
     - integration.api
   unclassified_sources:
@@ -150,16 +151,6 @@ edges:
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogContentPlanService.java
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogPlanRunService.java
-  - from: blogagent
-    to: admin
-    from_unit: dinqor-content-automation
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 4
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentImageClient.java
-      - apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentModelClient.java
   - from: integration
     to: billing
     from_unit: dinqor-platform-integration
@@ -180,15 +171,6 @@ edges:
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminUserController.java
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
-  - from: agent
-    to: admin
-    from_unit: dinqor-agent
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelClient.java
   - from: agent
     to: identity
     from_unit: dinqor-agent
@@ -272,24 +254,6 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/publishing/application/BlogService.java
-  - from: recitation
-    to: admin
-    from_unit: dinqor-core-host
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/recitation/infrastructure/DashScopeRecitationAsrClient.java
-  - from: studio
-    to: admin
-    from_unit: dinqor-core-host
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/studio/infrastructure/Img2ThreeModelClient.java
   - from: studio
     to: billing
     from_unit: dinqor-core-host

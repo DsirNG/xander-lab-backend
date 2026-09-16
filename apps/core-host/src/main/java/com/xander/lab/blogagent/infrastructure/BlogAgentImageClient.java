@@ -2,8 +2,8 @@ package com.xander.lab.blogagent.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.admin.application.ModelGateway;
-import com.xander.lab.admin.application.ModelGateway.ModelEndpoint;
+import com.xander.lab.core.api.ModelGateway;
+import com.xander.lab.core.api.ModelGateway.ModelEndpoint;
 import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -73,7 +73,7 @@ public class BlogAgentImageClient {
             if (!gateway.candidates(ModelGateway.FEATURE_BLOG_AGENT_IMAGE).isEmpty()) {
                 return true;
             }
-        } catch (com.xander.lab.admin.application.FeatureModelNotConfiguredException e) {
+        } catch (com.xander.lab.core.api.FeatureModelNotConfiguredException e) {
             return false;
         }
         return StringUtils.hasText(properties.getApiKey()) && StringUtils.hasText(properties.getImageModel());

@@ -83,10 +83,10 @@ public class GlobalExceptionHandler {
      * 模型网关启用后功能未配置可用模型（见 ModelGateway 契约）
      * 属于业务可修复状态（去管理台配置即可），映射为 400 并向用户展示明确文案。
      */
-    @ExceptionHandler(com.xander.lab.admin.application.FeatureModelNotConfiguredException.class)
+    @ExceptionHandler(com.xander.lab.core.api.FeatureModelNotConfiguredException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleFeatureModelNotConfigured(
-            com.xander.lab.admin.application.FeatureModelNotConfiguredException ex) {
+            com.xander.lab.core.api.FeatureModelNotConfiguredException ex) {
         log.warn("[ModelGateway] 功能未配置模型：{}", ex.getMessage());
         return Result.badRequest(ex.getMessage());
     }

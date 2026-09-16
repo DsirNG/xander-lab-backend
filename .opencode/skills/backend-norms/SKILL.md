@@ -104,6 +104,33 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 **不要信 Edit/替换脚本的成功返回** —— 本轮就因为漏改一个赋值左侧（`ossService = mock(...)`
 只改了右边）而编译失败一次。
 
+**⚠️ 从包里搬走类型时，`import` 要按"**每一个**被搬的类型"补，不能只按你搜的那个名字补。**
+被搬的类型原来在 `admin.application`，同包引用**没有 import 语句**。搬走之后，
+`ModelGatewayService` 里裸写的 `FeatureModelNotConfiguredException` 就找不到了
+（编译报 `找不到符号: 类 FeatureModelNotConfiguredException`），
+而按 `\bModelGateway\b` 搜索的脚本**一条都命中不了它** —— 因为那个名字里没有 "ModelGateway"。
+规矩：搬完先把**每个**被搬类型的简单名各搜一遍（`grep -rn "\b<SimpleName>\b"`），
+再逐个补 import；或者干脆先编译一次，让 javac 把所有缺符号的位置一次列出来。
+另外，只出现在 Javadoc `{@code}` 或字符串里的名字**不需要** import，
+自动补 import 的脚本会给这类文件塞进一个**未使用**的 import（本轮 `GlobalExceptionHandler`
+和 `FeatureModelConfig` 各中一次），补完要回头检查。
+
+**⚠️ 契约包名前缀不是业务域名时（`core.api`），指标完全靠不住，只有门禁能发现问题。**
+`integration.api` 那次已经知道登记裸域名会让契约隐形；`core.api` 这次做了对照实验，
+结论更硬：**把 `core.api` 从 `SHARED_KERNEL` 里删掉，`implementation_statements` /
+`cross_deployment_unit_statements` / `api_statements` 一个都不动**
+（98 / 71 / 38 完全一致）。因为 `core` 既不在 `BUSINESS_DOMAINS` 里，也不在
+`SHARED_KERNEL` 里，那些 import 只是被**静默丢掉**，而数字与"正确"状态一模一样。
+唯一信号是 `unclassified_sources` 多出一个 `core`，以及
+`shared-kernel-classification` 门禁 FAIL。**别因为数字好看就跳过门禁。**
+
+**⚠️ 契约的依赖边界（JDK-only）遇到 Jackson 时不要顺手放宽。** `agent-api` 与
+`payment-api` 都卡在同一处：`AgentTool.parametersSchema()` 返回 `JsonNode`、
+`BillingService.chargeTokens(...)` 收 `ModelUsage`（住在 `libs/xander-model`，
+带 Jackson）。放宽 `CONTRACT_ALLOWED_IMPORT_PREFIXES` 是**设计决策**，
+不是重构的顺带产物 —— 见 `docs/migration/lib-extraction.md` §3quinquies.5，
+先把问题记下来问清楚，别在实现里悄悄改掉这条不变量。
+
 ## API 与异常契约
 
 - 所有错误响应：`{ "code", "message", "data" }`；code 必须与真实 HTTP 语义一致（400/401/403/404/5xx 不被 HTTP 200 包装）。

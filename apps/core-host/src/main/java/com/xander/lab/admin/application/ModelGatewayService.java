@@ -7,6 +7,8 @@ import com.xander.lab.admin.infrastructure.FeatureModelConfigMapper;
 import com.xander.lab.admin.infrastructure.ModelGatewayProperties;
 import com.xander.lab.admin.infrastructure.ModelProviderMapper;
 import com.xander.lab.admin.infrastructure.ProviderKeyCipher;
+import com.xander.lab.core.api.FeatureModelNotConfiguredException;
+import com.xander.lab.core.api.ModelGateway;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

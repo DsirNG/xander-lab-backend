@@ -1,4 +1,4 @@
-package com.xander.lab.admin.application;
+package com.xander.lab.core.api;
 
 import java.util.List;
 
