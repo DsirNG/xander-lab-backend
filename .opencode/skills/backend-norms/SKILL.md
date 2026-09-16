@@ -64,6 +64,28 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 - 新配置组用类型化 `@ConfigurationProperties` 并校验；带凭据/调度器/外部副作用的功能默认关闭直到配置与迁移就绪。
 - 生产值只能来自环境变量或本地配置（`application-local.yml` 自动加载、不得提交）。
 - 只在 JDK/现有栈解决不了时加依赖。
+- **无法验证的配置改动不要做**。改配置前先确认有没有测试真的会加载它 —— 例如
+  `mybatis-plus.mapper-locations` 在本仓库**没有任何测试会解析**（五个 `@SpringBootTest`
+  都是切片上下文，显式 `classes = {...}` 并 `@MockBean` 掉 mapper），所以改它属于
+  「改完只会被生产环境发现」。这类情况一律**用门禁把现状钉住**，等有验证手段的那一波再改
+  （参考 `ci_gates.py` 里 `KNOWN_MYBATIS_GLOBAL_SCAN` / `KNOWN_SHARED_KERNEL_VIOLATIONS`
+  的「只禁新增、修好即删条目」手法）。
+- MyBatis 配置（V9 §80）：mapper XML 只能放在 `apps/<module>/src/main/resources/mapper/`，
+  **不要**放进 `libs/` —— 共享 jar 在每个服务的 classpath 上，等于每个服务都加载了别的域的
+  SQL。新增 mapper XML 后必须确认它被本模块自己的 `mapper-locations` 匹配到，
+  否则是死文件，运行时报 `Invalid bound statement`，看起来像代码 bug 而不是配置 bug。
+
+## POM / XML
+
+- **XML 注释里不能出现 `--`**。Maven 会在编译任何类之前整体失败：
+  `Non-parseable POM pom.xml: in comment after two dashes (--) next character must be > not ...`。
+  写注释时把破折号对改成逗号/冒号/「到」。门禁 `xml-comment-double-dash` 会拦住它。
+- 带 `<modules>` 的 POM **必须** `packaging=pom`（`Aggregator projects require 'pom'`），
+  所以根 POM 不能兼作应用模块。
+- `spring-boot-maven-plugin` **只能**声明在应用模块（`apps/core-host/pom.xml`）。
+  放父 POM 会让库模块继承 `repackage`，库没有 main class，报 `Unable to find main class`。
+- 库与应用共用的依赖版本走父 POM 的 `<properties>`（例如 `${mybatis.plus.version}`），
+  **不要**在子 POM 内联写死：同一依赖两个版本会在 classpath 上出现两份类，报错现场离原因很远。
 
 ## 测试
 
@@ -83,4 +105,22 @@ mvn -q test
 mvn -q -DskipTests compile
 ```
 
-本地环境：JDK 17 = `C:\jdk-17.0.2`，Maven 3.9.9，Redis localhost:6379，MySQL 101.33.246.103:3306（xander_lab）。提交标题用中文并以「【dxd】」为前缀，正文含 `desc:`；只 stage 任务相关文件，不提交凭据与本地配置。
+⚠️ **在 Git Bash 里 `mvn` 直接跑不起来**（MSYS 路径没被转成 Windows 路径，
+报 `ClassNotFoundException: plexus.classworlds.launcher.Launcher`）。用完整 java 命令行：
+
+```bash
+"C:/jdk-17.0.2/bin/java.exe" \
+  -classpath "D:/soft/apache-maven-3.9.6/boot/plexus-classworlds-2.7.0.jar" \
+  "-Dclassworlds.conf=D:/soft/apache-maven-3.9.6/bin/m2.conf" \
+  "-Dmaven.home=D:/soft/apache-maven-3.9.6" \
+  "-Dmaven.multiModuleProjectDirectory=D:/blog/xander-lab-backend" \
+  org.codehaus.plexus.classworlds.launcher.Launcher -o test
+```
+
+迁移相关的机器门禁（清单一致性 / 依赖方向 / 配置归属等）另有一套，改动后也要跑：
+
+```bash
+python scripts/migration/ci_gates.py
+```
+
+本地环境：JDK 17 = `C:\jdk-17.0.2`，Redis localhost:6379，MySQL 101.33.246.103:3306（xander_lab）。提交标题用中文并以「【dxd】」为前缀，正文含 `desc:`；只 stage 任务相关文件，不提交凭据与本地配置。
