@@ -521,6 +521,141 @@ def gate_cross_domain_import_baseline() -> None:
     report(gate, True, detail)
 
 
+# V9 section 3: the four deployment units the Wave 2 split has to untangle.
+WAVE2_UNITS = (
+    "dinqor-agent",
+    "dinqor-content-automation",
+    "dinqor-core-host",
+    "dinqor-platform-integration",
+)
+
+# The unit pairs that depend on each other in *implementation* terms, measured 2026-09-16.
+# Stored as ordered pairs so the baseline records direction, not just adjacency.
+#
+# Shape of the graph, and why it matters for Wave 2:
+#
+#   * Four pairs are mutual: agent <-> platform-integration, content-automation <->
+#     core-host, content-automation <-> platform-integration, core-host <->
+#     platform-integration.
+#   * agent -> content-automation and agent -> core-host are one-way (19 and 14
+#     statements); nothing points back at agent from those two units.
+#   * Despite the one-way edges, all four units still form ONE strongly-connected
+#     component, via the chord cycle agent -> content-automation -> core-host ->
+#     platform-integration -> agent. So no unit is a leaf.
+#
+# This is NOT itself a defect. After the split these become ordinary service-to-service
+# calls, and A calling B while B calls A is normal. What it does mean is that Wave 2 has no
+# "extract the leaf first" order available: each unit needs both its outgoing and its
+# incoming cross-unit implementation imports converted, and a contract module is precisely
+# what converts one (it lets the caller depend on the port without depending on the
+# implementation). That is why the contract line, not the lib line, is the one that moves
+# this graph.
+MUTUAL_UNIT_PAIRS = frozenset({
+    ("dinqor-agent", "dinqor-platform-integration"),
+    ("dinqor-content-automation", "dinqor-core-host"),
+    ("dinqor-content-automation", "dinqor-platform-integration"),
+    ("dinqor-core-host", "dinqor-platform-integration"),
+    ("dinqor-platform-integration", "dinqor-agent"),
+    ("dinqor-core-host", "dinqor-content-automation"),
+    ("dinqor-platform-integration", "dinqor-content-automation"),
+    ("dinqor-platform-integration", "dinqor-core-host"),
+})
+
+
+def gate_deployment_unit_coupling() -> None:
+    """The deployment-unit graph must not get *more* tangled than it is.
+
+    Three criteria, all about the shape of the graph rather than its size (the size is
+    ``cross-domain-import-baseline``'s job):
+
+    1. **``bloghtml`` stays isolated.** V9 section 3 extracts it alone in Wave 1, ahead of
+       every other domain. That is only possible because it currently has no cross-unit
+       implementation edge in either direction -- a precondition, not a coincidence. A
+       single new edge pointing at or from it would make the Wave 1 extraction depend on a
+       conversion nobody has scheduled.
+    2. **No new unit joins the strongly-connected component.** The four Wave 2 units reach
+       each other in implementation terms, directly or through a chord cycle, so none of
+       them is a leaf. A unit that joins that component cannot be extracted on its own
+       either, and the set is much easier to keep from growing than to untangle later.
+    3. **No new mutually-dependent pair.** Weaker than criterion 2 and reported separately
+       because it is the more actionable signal: a mutual pair is a concrete pair of
+       statements to convert, whereas the component is a summary.
+
+    The reverse direction is reported too: pairs that stopped being mutual, or a component
+    that shrank, are progress and should be removed from the baselines so the remaining
+    tangle stays visible.
+    """
+    gate = "deployment-unit-coupling"
+    live = scan.build_cross_domain_imports()
+
+    edges: dict[tuple[str, str], int] = {}
+    for edge in live["edges"]:
+        if not edge["implementation_statements"] or not edge["crosses_deployment_unit"]:
+            continue
+        key = (edge["from_unit"], edge["to_unit"])
+        edges[key] = edges.get(key, 0) + edge["implementation_statements"]
+
+    bloghtml_unit = scan.DEPLOYMENT_UNIT["bloghtml"]
+    touching_bloghtml = sorted(f"{a} -> {b}" for a, b in edges if bloghtml_unit in (a, b))
+    if touching_bloghtml:
+        report(gate, False,
+               f"{bloghtml_unit} has cross-unit implementation dependency/ies "
+               f"{touching_bloghtml}, but V9 section 3 extracts it alone in Wave 1 -- "
+               f"convert or remove them first, or move the domain out of Wave 1")
+        return
+
+    # Reachability closure over <= 10 units, so a plain transitive closure beats
+    # pulling in a graph library. A unit reaches itself by definition.
+    units = sorted({unit for pair in edges for unit in pair} | set(WAVE2_UNITS))
+    reach = {unit: {unit} for unit in units}
+    for source, target in edges:
+        reach[source].add(target)
+    for via in units:
+        for unit in units:
+            if via in reach[unit]:
+                reach[unit] |= reach[via]
+
+    def component_of(unit: str) -> set[str]:
+        return {other for other in units
+                if other in reach[unit] and unit in reach[other]}
+
+    component = component_of(WAVE2_UNITS[0])
+    joined = sorted(component - set(WAVE2_UNITS))
+    if joined:
+        report(gate, False,
+               f"{joined} joined the Wave 2 strongly-connected component "
+               f"({sorted(component)}): those units now reach each other in implementation "
+               f"terms, so none of them can be extracted alone. Convert the new direction "
+               f"through a contract first")
+        return
+
+    # MUTUAL_UNIT_PAIRS records ordered pairs (so the baseline keeps direction), but a
+    # mutual dependency is a property of the *pair*: reporting (a, b) and (b, a) as two
+    # findings would double every line and read as two problems instead of one. Compare
+    # and report on the canonicalised pair, keeping the ordered baseline for the record.
+    def canonical(pair: tuple[str, str]) -> tuple[str, str]:
+        return tuple(sorted(pair))
+
+    mutual = {canonical((a, b)) for a, b in edges if (b, a) in edges}
+    baseline_pairs = {canonical(pair) for pair in MUTUAL_UNIT_PAIRS}
+    added = sorted(mutual - baseline_pairs)
+    if added:
+        report(gate, False,
+               f"new mutually-dependent unit pair(s) {added}: the units now reach each "
+               f"other in implementation terms, so neither can be extracted without the "
+               f"other. Convert one direction through a contract first")
+        return
+
+    cleared = sorted(baseline_pairs - mutual)
+    detail = (f"{len(WAVE2_UNITS)} units in one component "
+              f"({len(mutual)} mutually-dependent pair(s)); "
+              f"{bloghtml_unit} still isolated")
+    if cleared:
+        detail += (f"; {len(cleared)} pair(s) no longer mutual, delete both directions "
+                   f"from MUTUAL_UNIT_PAIRS: {cleared}")
+    report(gate, True, detail)
+
+
 def gate_contract_changes_completeness() -> None:
     gate = "contract-changes-completeness"
     baseline = load("capability-baseline.yaml")
@@ -1241,6 +1376,7 @@ GATES = {
     "shared-kernel-classification": gate_shared_kernel_classification,
     "contract-dependency-boundary": gate_contract_dependency_boundary,
     "cross-domain-import-baseline": gate_cross_domain_import_baseline,
+    "deployment-unit-coupling": gate_deployment_unit_coupling,
     "contract-changes-completeness": gate_contract_changes_completeness,
     "capability-baseline-diff": gate_capability_baseline_diff,
     "legacy-redis-reference-check": gate_legacy_redis_reference_check,

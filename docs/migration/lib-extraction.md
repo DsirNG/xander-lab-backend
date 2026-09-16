@@ -186,6 +186,76 @@ HTTP 契约，服务间契约是另一件事。
 
 ---
 
+## 3ter. 部署单元耦合图（Wave 2 的入手顺序由这张图决定）
+
+§2.2 的进度表按"域 → 域"计数，但 Wave 2 拆的是**部署单元**，不是域。
+把同一条基线按 `scan.DEPLOYMENT_UNIT` 聚合一次，得到真正要解的那张图：
+
+| # | 方向 | 实现语句数 |
+|---|---|---|
+| 1 | `dinqor-agent` → `dinqor-content-automation` | 19 |
+| 2 | `dinqor-agent` → `dinqor-core-host` | 14 |
+| 3 | `dinqor-content-automation` → `dinqor-core-host` | 12 |
+| 4 | `dinqor-content-automation` → `dinqor-platform-integration` | 8 |
+| 5 | `dinqor-core-host` → `dinqor-content-automation` | 7 |
+| 6 | `dinqor-platform-integration` → `dinqor-content-automation` | 6 |
+| 7 | `dinqor-platform-integration` → `dinqor-agent` | 5 |
+| 8 | `dinqor-platform-integration` → `dinqor-core-host` | 5 |
+| 9 | `dinqor-core-host` → `dinqor-platform-integration` | 5 |
+| 10 | `dinqor-agent` → `dinqor-platform-integration` | 4 |
+| | **合计** | **85**（10 条有向边） |
+
+### 3ter.1 图的两个性质
+
+**性质一：四个单元构成一个强连通分量。** 互相依赖的对有 4 组
+（`agent ↔ platform-integration`、`content-automation ↔ core-host`、
+`content-automation ↔ platform-integration`、`core-host ↔ platform-integration`）。
+另有两条**单向**边：`agent → content-automation`（19）与 `agent → core-host`（14），
+没有反向边；但通过 `agent → content-automation → core-host → platform-integration → agent`
+这条弦回路，四个单元仍然互相可达。
+
+**这不是缺陷。** 拆分之后这些就是普通的服务间调用，"A 调 B 而 B 也调 A"很正常。
+它的真实含义是：**Wave 2 没有"先摘叶子"的顺序可用**。每个单元都得同时处理
+出边和入边，而契约模块正好能转换其中一条（让调用方依赖端口而不依赖实现）——
+所以**能推动这张图的是契约线，不是 lib 线**。
+
+**性质二：`bloghtml` 完全孤立。** 它在实现层面**一条边都没有**（入、出皆无）。
+§3 把它排在 Wave 1 单独先搬，前提就是这个 —— 这是**前提，不是巧合**。
+只要出现一条指向它或来自它的边，Wave 1 的单独抽取就要依赖一次没人排期的转换。
+
+### 3ter.2 门禁 `deployment-unit-coupling`
+
+上面两个性质用三条判据冻住（比 `cross-domain-import-baseline` 更关注图的**形状**，
+后者只管**规模**）：
+
+1. `bloghtml` 保持孤立；
+2. 没有新单元加入这个强连通分量（分量用传递闭包算，≤10 个单元不值得引入图库）；
+3. 没有新的互相依赖单元对（判据 2 更弱、更可操作：一组互相依赖的对是两条具体的语句，
+   分量只是个摘要）。
+
+反向也报：不再互相依赖的对会提示从 `MUTUAL_UNIT_PAIRS` 基线里删掉两个方向，
+免得已经解开的纠缠继续藏在基线里。
+
+三条判据都用**注入法**验证过（改代码 → 观察 FAIL → 恢复 → 观察 PASS）：
+
+| 判据 | 注入方式 | 观察到的失败信息 |
+|---|---|---|
+| 1 | 给 `BlogHtmlPreviewService` 加一条指向 `agent` 的 import | `dinqor-bloghtml-preview has cross-unit implementation dependency/ies ['dinqor-bloghtml-preview -> dinqor-agent']` |
+| 2 | 把 `recitation` 拆成独立单元 `dinqor-recitation` | `['dinqor-recitation'] joined the Wave 2 strongly-connected component` |
+| 3 | 给 `EmailReminderService` 加一条指向 `agent` 的 import | `new mutually-dependent unit pair(s) [('dinqor-agent', 'dinqor-content-automation')]` |
+
+⚠️ 判据 2 需要**第六个单元**才会触发（今天只有 5 个，`bloghtml` 孤立，
+所以 `component - WAVE2_UNITS` 恒为空）。它是一条**前瞻护栏**：
+当 `payment-api` / `knowledge-api` 这类契约模块将来对应出新的部署单元时，
+这个门禁会立刻发现它落进了这团纠缠里。验证时用 `recitation` 临时造了第六个单元。
+
+⚠️ **判据 3 的第一版是错的**：我最初用推导式生成四个单元的全部 12 个有序对当基线，
+门禁立刻报 `4 direction(s) cleared` —— 那是**我的基线错了，不是代码错了**
+（`agent → content-automation` 和 `agent → core-host` 本来就是单向的）。
+已改成硬编码真实的 8 个有序对。
+
+---
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`
@@ -350,6 +420,10 @@ python scripts/migration/ci_gates.py
 
 `dockerfile-module-coverage`：根 POM 的每个 `<module>` 都必须在 Dockerfile 里
 既 COPY 了 `pom.xml`、又 COPY 了源码目录。见 §6 表格。
+
+`deployment-unit-coupling` 的三条判据：`bloghtml` 保持孤立；没有新单元加入 Wave 2
+的强连通分量；没有新的互相依赖单元对。这是唯一一条看**图形状**而不是**规模**的门禁，
+详见 §3ter。三条判据都用注入法验证过（判据 2 需要临时造第六个单元才能触发）。
 
 `xml-authoring-safety` 的两条判据：注释里不得出现 `--`；文件必须能被 XML 解析器解析。
 第二条是本轮新增的 —— 写 `contracts/content-api/pom.xml` 的 `<description>` 时写了
