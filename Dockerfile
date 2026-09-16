@@ -4,9 +4,15 @@ FROM maven:3.8.5-openjdk-17 AS builder
 WORKDIR /app
 
 # Copy the POMs first so the dependency layer is cached independently of source edits.
+# Every module in the root POM's <modules> must appear here, or the reactor fails before
+# it compiles anything ("Child module ... does not exist"). Adding a module means editing
+# this file twice: once for its pom.xml here, once for its sources below.
 COPY pom.xml .
 COPY settings.xml .
 COPY libs/xander-model/pom.xml ./libs/xander-model/pom.xml
+COPY libs/xander-mybatis-support/pom.xml ./libs/xander-mybatis-support/pom.xml
+COPY libs/xander-auth-core/pom.xml ./libs/xander-auth-core/pom.xml
+COPY contracts/content-api/pom.xml ./contracts/content-api/pom.xml
 COPY apps/core-host/pom.xml ./apps/core-host/pom.xml
 
 # Download dependencies using Aliyun mirror
@@ -14,6 +20,7 @@ RUN mvn dependency:go-offline -B -s settings.xml
 
 # Copy source code and build jar
 COPY libs ./libs
+COPY contracts ./contracts
 COPY apps ./apps
 RUN mvn package -DskipTests -s settings.xml
 

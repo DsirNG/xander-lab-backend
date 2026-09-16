@@ -9,7 +9,7 @@ import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.application.BlogService;
-import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.content.api.PublishResult;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 

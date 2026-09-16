@@ -21,8 +21,8 @@ import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
-import com.xander.lab.publishing.domain.PublishCommand;
-import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.content.api.PublishCommand;
+import com.xander.lab.content.api.PublishResult;
 import com.xander.lab.recitation.application.RecitationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

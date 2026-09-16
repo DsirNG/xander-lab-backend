@@ -178,16 +178,29 @@ empty except for shared infrastructure:
 3. MCP, CSDN, model, OSS, file, and mail adapters moved into `integration`.
 4. Recurring content plans, durable runs, and the daily trigger pipeline live under `automation`; the poller claims due plans atomically and recovers stale claims so multiple instances cannot double-execute.
 5. FlowCraft and Img2Three live under `studio`; the UI component library lives under `components`.
-6. Shared cross-module contracts live under `common`: `Result` and the model
-   call/usage types in `libs/xander-model`, the pagination response `PageData`
-   and the MyBatis-Plus interceptor in `libs/xander-mybatis-support`, the
-   trusted identity model (`UserContext`) and token verifier (`JwtUtil`) in
-   `libs/xander-auth-core`, and the operational health endpoints still on the
-   application module (`apps/core-host`). The split is deliberate, not cosmetic:
-   a WebFlux gateway can depend on `xander-model` and `xander-auth-core` but must
-   never pull in MyBatis, so they cannot share one jar. The auth lib also keeps
-   `HandlerInterceptor` out on purpose — `AuthInterceptor` stays in
-   `identity.security`, where the Servlet-side wiring lives.
+6. Shared cross-module code is split by technology, not collected in one `common`
+   jar: `Result` and the model call/usage types in `libs/xander-model`, the
+   pagination response `PageData` and the MyBatis-Plus interceptor in
+   `libs/xander-mybatis-support`, the trusted identity model (`UserContext`) and
+   token verifier (`JwtUtil`) in `libs/xander-auth-core`, and the operational
+   health endpoints still on the application module (`apps/core-host`). The split
+   is deliberate, not cosmetic: a WebFlux gateway can depend on `xander-model` and
+   `xander-auth-core` but must never pull in MyBatis, so they cannot share one jar.
+   The auth lib also keeps `HandlerInterceptor` out on purpose — `AuthInterceptor`
+   stays in `identity.security`, where the Servlet-side wiring lives.
+7. Types that cross a future *service* boundary live in `contracts/`, not in
+   either domain. `contracts/content-api` holds the publish SPI (`BlogPublisher`)
+   and its data (`PublishCommand`, `PublishResult`, `PublishingLimits`), because
+   the CSDN and Juejin adapters implement that port from the `integration` domain
+   while `PublicationService` consumes it from `publishing`. Leaving the port in
+   `publishing.domain` would make `integration` implement an interface owned by
+   another service once the split happens. Contract modules are **dependency
+   free** (JDK imports only, no compile/runtime dependency): every service depends
+   on them, including the WebFlux gateway, so a contract that grows a framework
+   dependency has become the super-`common` jar in a different folder. The
+   frontend-facing DTOs (`publishing.api.BlogPostDTO` / `BlogPostVO`) deliberately
+   stay with the domain until its api layer is split, because `BlogPostVO` is also
+   the MyBatis projection target of `BlogPostMapper`.
 
 ## Agent HTTP, SSE, and WebSocket Contract
 

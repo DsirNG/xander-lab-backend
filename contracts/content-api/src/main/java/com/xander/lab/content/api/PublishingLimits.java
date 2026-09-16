@@ -1,9 +1,12 @@
-package com.xander.lab.publishing.domain;
+package com.xander.lab.content.api;
 
 /**
  * 多平台发布共享的限制常量。外部平台各有要求，这里统一取最严格的值，
  * 保证同一份发布数据对 CSDN 与掘金都合法：掘金摘要硬性要求 50-100 字，
  * 故摘要上限为 100 字；掘金标签至少 1 个且编辑器最多 3 个，故按 3 个封顶。
+ *
+ * <p>放在契约模块而不是某个域里：它约束的是<b>适配器</b>（{@code CsdnPublisher} /
+ * {@code JuejinPublisher}）必须接受的输入范围，也就是端口契约的一部分。</p>
  */
 public final class PublishingLimits {
     /** 摘要最大长度（字符），取两个外部平台中最严格的上限：掘金 100 / CSDN 200。 */

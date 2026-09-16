@@ -43,6 +43,18 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            Content-domain service-to-service contract: BlogPublisher / PublishCommand /
+            PublishResult / PublishingLimits (V9 §18 / §91). Both the content domain and the
+            integration domain reach for these types, so they cannot live in either one.
+            Zero transitive dependencies by design; see contracts/content-api/pom.xml.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>content-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>

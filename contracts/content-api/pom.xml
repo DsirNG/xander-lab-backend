@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>content-api</artifactId>
+    <name>content-api</name>
+    <description>
+        Service-to-service contract for the content domain (V9 §18 / §91).
+
+        Members: BlogPublisher (the publish SPI), PublishCommand, PublishResult, PublishingLimits.
+        These were reached for from a different future deployment unit: the CSDN and Juejin
+        adapters live in the integration domain (dinqor-platform-integration) and implemented
+        an interface owned by publishing (dinqor-content-automation). After the split that is a
+        dependency pointing the wrong way across a service boundary, so the port and its data
+        move to a module both sides may depend on.
+
+        Zero dependencies, and that is the point. A contract that drags in a framework cannot
+        be depended on by every service, and V9 §19 is explicit that the WebFlux Gateway must
+        stay free of spring-webmvc. Nothing here may gain a compile dependency without a
+        deliberate decision; test scope is fine.
+
+        What is deliberately NOT here yet:
+        - publishing.api.BlogPostDTO / BlogPostVO. They already live in the domain's api layer,
+          which the cross-domain scanner classifies as contract surface rather than as backlog,
+          so moving them would change no measured number. They are also the *frontend* HTTP
+          contract (web / miniprogram), a different audience from the service-to-service one.
+          They join this module when the domain's api layer itself is split, in Wave 2.
+          Note BlogPostVO is simultaneously the MyBatis projection target of BlogPostMapper
+          (@JsonIgnore tagsRaw = GROUP_CONCAT result), so that split has to separate the wire
+          shape from the persistence projection first.
+
+        What is NOT a defect but is a real decision point: BlogPublisher is collected by Spring
+        as a plain List and its implementations live in another future deployment unit.
+        That works in one process and cannot work across two. Recorded in
+        docs/migration/lib-extraction.md; it must be decided before Wave 2.
+    </description>
+
+    <dependencies>
+        <!--
+            No compile or runtime dependency by design. junit-jupiter is test-scoped: a contract
+            that silently loses its normalisation behaviour is exactly the kind of capability
+            regression V9 §2.3 forbids, so the behaviour is pinned by a test.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class".
+            -->
+        </plugins>
+    </build>
+
+</project>

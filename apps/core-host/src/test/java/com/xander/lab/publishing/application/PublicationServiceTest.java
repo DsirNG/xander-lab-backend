@@ -1,8 +1,8 @@
 package com.xander.lab.publishing.application;
 
-import com.xander.lab.publishing.domain.BlogPublisher;
-import com.xander.lab.publishing.domain.PublishCommand;
-import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.content.api.BlogPublisher;
+import com.xander.lab.content.api.PublishCommand;
+import com.xander.lab.content.api.PublishResult;
 import com.xander.lab.publishing.infrastructure.BlogPublishRecord;
 import com.xander.lab.publishing.infrastructure.BlogPublishRecordMapper;
 import org.junit.jupiter.api.BeforeEach;

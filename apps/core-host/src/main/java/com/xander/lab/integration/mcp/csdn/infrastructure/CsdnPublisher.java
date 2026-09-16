@@ -1,10 +1,10 @@
 package com.xander.lab.integration.mcp.csdn.infrastructure;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.xander.lab.publishing.domain.BlogPublisher;
-import com.xander.lab.publishing.domain.PublishCommand;
-import com.xander.lab.publishing.domain.PublishResult;
-import com.xander.lab.publishing.domain.PublishingLimits;
+import com.xander.lab.content.api.BlogPublisher;
+import com.xander.lab.content.api.PublishCommand;
+import com.xander.lab.content.api.PublishResult;
+import com.xander.lab.content.api.PublishingLimits;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import org.jsoup.Jsoup;
 import org.springframework.stereotype.Component;

@@ -5,7 +5,7 @@ import com.xander.lab.billing.domain.BillingBiz;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.publishing.api.BlogPostVO;
-import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.content.api.PublishResult;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

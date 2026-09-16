@@ -4,7 +4,7 @@ import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnMcpApplicationService;
-import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.content.api.PublishResult;
 import com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

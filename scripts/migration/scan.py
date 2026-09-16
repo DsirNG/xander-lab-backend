@@ -36,48 +36,67 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import yamlutil  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
-# V9 §18: the application lives in apps/core-host/ and extracted libraries in libs/<name>/.
-# These are the roots the scanner treats as "the codebase"; see java_roots() for why the
-# library roots have to be included rather than assumed.
+# V9 §18: the application lives in apps/core-host/, extracted libraries in libs/<name>/,
+# and the cross-service contracts in contracts/<name>/. These are the roots the scanner
+# treats as "the codebase"; see java_roots() for why the non-application roots have to be
+# included rather than assumed.
 APP_ROOT = REPO / "apps" / "core-host"
 JAVA_ROOT = APP_ROOT / "src" / "main" / "java"
 LIB_ROOT = REPO / "libs"
+CONTRACTS_ROOT = REPO / "contracts"
 RESOURCES = APP_ROOT / "src" / "main" / "resources"
 DB_DIR = RESOURCES / "db"
 OUT_DIR = REPO / "docs"
+
+
+def module_source_roots() -> list[Path]:
+    """``libs/*/src/main/java`` and ``contracts/*/src/main/java``, in stable order."""
+    roots: list[Path] = []
+    for parent in (LIB_ROOT, CONTRACTS_ROOT):
+        roots.extend(sorted(path for path in parent.glob("*/src/main/java") if path.is_dir()))
+    return roots
 
 
 def java_roots() -> list[Path]:
     """Every Java source root in the repo, not just the application's.
 
     Scanning only the application root means that the moment a class is moved into a
-    library it disappears from *every* inventory below -- including the legacy-Redis
-    key list, which is exactly how a moved constant would quietly stop being tracked.
-    So both roots are always scanned.
+    library or a contract module it disappears from *every* inventory below -- including
+    the legacy-Redis key list, which is exactly how a moved constant would quietly stop
+    being tracked. So every root is always scanned.
     """
-    roots = [JAVA_ROOT]
-    roots.extend(sorted(path for path in LIB_ROOT.glob("*/src/main/java") if path.is_dir()))
-    return roots
+    return [JAVA_ROOT, *module_source_roots()]
 
 
 def java_files() -> list[Path]:
     return sorted(path for root in java_roots() for path in root.rglob("*.java"))
 
 
-def lib_packages() -> set[str]:
-    """Top-level ``com.xander.lab.<pkg>`` packages actually provided by ``libs/``.
+def shared_kernel_packages() -> dict[str, list[str]]:
+    """``com.xander.lab.<pkg>`` -> the module dirs under ``libs/`` or ``contracts/``
+    that ship it.
 
     Used by the ``shared-kernel-classification`` gate to check that ``SHARED_KERNEL``
-    lists every package a library ships. See the comment above ``SHARED_KERNEL`` for why
-    a missing entry is worse than a loud failure: the coupling stays, the count drops.
+    lists every package a non-application module ships. See the comment above
+    ``SHARED_KERNEL`` for why a missing entry is worse than a loud failure: the coupling
+    stays, the count drops.
+
+    Contract modules count too, and for the same reason. A contract's whole purpose is to
+    be the one legal cross-service dependency, so its package must be recognised as shared
+    kernel -- otherwise every import of it looks like a cross-domain implementation import
+    and the backlog number would *not* move when a type is moved into a contract. The
+    extraction would look like it did nothing.
     """
-    packages: set[str] = set()
-    for root in sorted(path for path in LIB_ROOT.glob("*/src/main/java") if path.is_dir()):
+    provided: dict[str, list[str]] = {}
+    for root in module_source_roots():
+        module = root.relative_to(REPO).as_posix().rsplit("/src/main/java", 1)[0]
         for path in root.rglob("*.java"):
             parts = path.relative_to(root).as_posix().split("/")
             if len(parts) >= 4 and parts[:3] == ["com", "xander", "lab"]:
-                packages.add(parts[3])
-    return packages
+                provided.setdefault(parts[3], [])
+                if module not in provided[parts[3]]:
+                    provided[parts[3]].append(module)
+    return {name: sorted(mods) for name, mods in sorted(provided.items())}
 
 
 # ---------------------------------------------------------------------------
@@ -105,16 +124,32 @@ BUSINESS_DOMAINS = [
 # Packages that belong to the shared kernel rather than to a business domain.
 #
 # ``common`` / ``config`` / ``filter`` / ``util`` are the in-app shared packages; ``auth``
-# is the package provided by ``libs/xander-auth-core`` (V9 §20).
+# is the package provided by ``libs/xander-auth-core`` (V9 §20); ``content`` is the package
+# provided by ``contracts/content-api`` (V9 §18/§91).
 #
-# This is a hardcoded list and that is a real hazard: a new lib whose package is missing
-# here is *silently* misfiled. Its classes are still scanned, but the cross-domain scanner
-# treats the package as neither a domain nor shared kernel and drops every edge pointing at
-# it -- so the backlog number goes DOWN while the coupling is unchanged. That is exactly the
-# silent-omission failure V9 section 13 exists to prevent, so ``lib_packages()`` below
-# derives the set from the tree and the ``shared-kernel-classification`` gate compares the
-# two. Adding a lib means adding its package here; the gate fails until you do.
-SHARED_KERNEL = ["auth", "common", "config", "filter", "util"]
+# Contract packages belong here even though a contract is not a "library". A contract's
+# whole purpose is to be the one legal cross-service dependency, so an import of one must
+# not be counted as a cross-domain implementation import -- if it were, moving a type into
+# a contract would leave the backlog number unchanged and the extraction would look like it
+# did nothing.
+#
+# This is a hardcoded list and that is a real hazard: a new lib or contract module whose
+# package is missing here is *silently* misfiled. Its classes are still scanned, but the
+# cross-domain scanner treats the package as neither a domain nor shared kernel and drops
+# every edge pointing at it -- so the backlog number goes DOWN while the coupling is
+# unchanged. That is exactly the silent-omission failure V9 section 13 exists to prevent,
+# so ``shared_kernel_packages()`` below derives the set from the tree and the
+# ``shared-kernel-classification`` gate compares the two. Adding a module means adding its
+# package here; the gate fails until you do.
+SHARED_KERNEL = ["auth", "common", "config", "content", "filter", "util"]
+
+# Import prefixes a ``contracts/*`` module is allowed to use (V9 §19 / §21).
+#
+# Kept as a tuple so the ``contract-dependency-boundary`` gate has one place to read and a
+# deliberate edit is the only way to widen it. The JDK is the whole list on purpose: a
+# contract is depended on by every service, including the WebFlux Gateway, so any framework
+# prefix here would be the super-common.jar §19 forbids, wearing a different name.
+CONTRACT_ALLOWED_IMPORT_PREFIXES = ("java.",)
 
 # V9 section 3 / section 89: domain -> deployment unit.
 DEPLOYMENT_UNIT = {

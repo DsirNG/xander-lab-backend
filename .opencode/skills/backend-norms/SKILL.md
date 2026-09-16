@@ -15,15 +15,23 @@ description: DinQorAI Java 后端（xander-lab-backend）编码规范。Use when
 - 每个业务模块根目录要有 `package-info.java` 说明归属与允许依赖；架构性变更必须同步更新 `docs/ARCHITECTURE.md`。
 - 每个公开业务类/接口要有一句职责式 JavaDoc；并发控制、token 处理、幂等、重试、兼容性处理前要加注释说明"为什么"。
 
-**物理布局（V9 §18 起）**：应用源码在 `apps/core-host/src/`，抽出的共享库在 `libs/<name>/src/`，
+**物理布局（V9 §18 起）**：应用源码在 `apps/core-host/src/`，抽出的共享库在
+`libs/<name>/src/`，跨服务的契约模块在 `contracts/<name>/src/`，
 根 `pom.xml` 是聚合器 + 父 POM（`packaging=pom`，`artifactId=xander-lab-parent`）。
 `spring-boot-maven-plugin` 只声明在 `apps/core-host/pom.xml`，**不要**挪到父 POM
 （子模块会继承 repackage 目标，而它需要 main class，库模块会直接构建失败）。
 
-跨这两个根的路径引用要一起更新：`scripts/migration/` 下的门禁允许清单、`docs/*.yaml` 里
+**新增一个模块要改四处，缺一处就是"本地好的、只有产物坏"**：
+根 POM 的 `<modules>`、应用 POM 的依赖、`scan.py` 的 `SHARED_KERNEL`（包名）、
+**`Dockerfile` 两行**（先 `COPY <module>/pom.xml` 供 `dependency:go-offline` 用，
+再 `COPY <顶层目录> ./<顶层目录>` 供构建用 —— 漏了第一行报
+`Child module ... does not exist`）。门禁 `dockerfile-module-coverage` 会拦住 Dockerfile 那两行。
+
+跨这些根的路径引用要一起更新：`scripts/migration/` 下的门禁允许清单、`docs/*.yaml` 里
 curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新，其余要手改）。
-`scripts/migration/scan.py` 用 `java_roots()` 同时扫应用根与所有 `libs/*/src/main/java`，
-**不要**把它写死回单根 —— 否则一旦有类被移进 libs，它会从所有机器清单里静默消失
+`scripts/migration/scan.py` 用 `java_roots()` 同时扫应用根、所有 `libs/*/src/main/java`
+与所有 `contracts/*/src/main/java`，
+**不要**把它写死回单根 —— 否则一旦有类被移进 libs 或 contracts，它会从所有机器清单里静默消失
 （包括遗留 Redis 键清单，那正是"常量被搬走就没人管了"的成因）。
 
 ⚠️ **把类移进 libs 时，新库的包名必须加进 `scan.py` 的 `SHARED_KERNEL`。**
@@ -39,7 +47,34 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 ⚠️ **库自己拥有自己的测试**：类搬进 libs，它的测试也跟着进 `libs/<name>/src/test/java`，
 并在 lib 的 POM 里加 test-scope 依赖。测试留在应用模块等于应用拥有它不再拥有的类。
 核对测试总数时要**各模块相加** —— `mvn -o test` 的 `Results:` 是逐模块打印的，
-只看最后一个会误判成"测试变少了"。
+只看最后一个会误判成"测试变少了"。也别用 `target/surefire-reports/` 累加：它不清理，
+会留下已迁出测试类的旧报告。
+
+## 契约模块（`contracts/<domain>-api`）
+
+**什么时候把类型放进 `contracts/`**：它跨**部署单元**。判断方法不是"看起来像契约"，而是
+"它的实现方和调用方拆分后会在两个进程里"。先例：`BlogPublisher` 由内容域
+（`dinqor-content-automation`）定义并消费，实现却在 integration 域
+（`dinqor-platform-integration`）—— 留在 `publishing.domain` 就会变成"integration 在实现
+另一个服务的接口"，依赖方向反了。
+
+**硬约束（门禁 `contract-dependency-boundary` 检查）**：
+
+- **零依赖**。契约源码只允许 import JDK 与自己的包；POM 里除 test scope 外不得有依赖。
+  理由：契约要被**每个**服务依赖，包括 WebFlux Gateway，而 §19 说它一旦被拖进
+  `spring-boot-starter-web` 就启动失败。长胖的契约就是超级 common.jar 换了个名字。
+- **不放实现**：没有 `@Service`、没有 Repository、没有 mapper。
+- **改字段 = 契约变更**：字段增删改影响两个服务的序列化，走 §11 的 Contract Freeze 流程。
+
+**包名要登记进 `SHARED_KERNEL`**（同 libs，见上）。契约尤其要注意：契约的存在意义就是
+"成为唯一合法的跨服务依赖"，包名不登记的话，把类型搬进契约之后跨域基线**一条都不会少**，
+这次抽取在唯一的进度指标上完全隐形。
+
+**不要顺手把 api 层的 DTO/VO 一起搬。** 它们在 `<domain>.api` 下，扫描器**本来就**算作
+契约面（`api_statements`）而不是待还的债，搬它们不改变任何被度量的数字，只会把 diff 撑大；
+而且它们是**前端**的 HTTP 契约，与服务间契约受众不同。`publishing.api.BlogPostVO` 还同时是
+`BlogPostMapper` 的投影目标（`@JsonIgnore tagsRaw` 承接 `GROUP_CONCAT`），搬它之前必须先把
+上线形状与持久化投影分开。
 
 ## API 与异常契约
 
@@ -94,7 +129,12 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 
 - **XML 注释里不能出现 `--`**。Maven 会在编译任何类之前整体失败：
   `Non-parseable POM pom.xml: in comment after two dashes (--) next character must be > not ...`。
-  写注释时把破折号对改成逗号/冒号/「到」。门禁 `xml-comment-double-dash` 会拦住它。
+  写注释时把破折号对改成逗号/冒号/「到」。
+- **POM 的 `<description>` / `<name>` 是文本节点，裸 `<` 和裸 `&` 同样让文件不可解析**：
+  写 `List<BlogPublisher>` 会报 `TEXT must be immediately followed by END_TAG and not START_TAG`。
+  要写就用 `&lt;`，或直接改成"a plain List"这种不含尖括号的说法。
+  两条都由门禁 `xml-authoring-safety` 拦住（判据一查注释里的 `--` 并给出精确位置，
+  判据二对每个 `*.xml` 跑一次 XML 解析兜底）。
 - 带 `<modules>` 的 POM **必须** `packaging=pom`（`Aggregator projects require 'pom'`），
   所以根 POM 不能兼作应用模块。
 - `spring-boot-maven-plugin` **只能**声明在应用模块（`apps/core-host/pom.xml`）。
@@ -137,5 +177,9 @@ mvn -q -DskipTests compile
 ```bash
 python scripts/migration/ci_gates.py
 ```
+
+**改了任何 POM 或新增模块时，先跑门禁再跑 Maven。** `xml-authoring-safety` 与
+`dockerfile-module-coverage` 覆盖的失败都是"反应堆在编译任何类之前整体失败"，
+跑一次门禁几秒钟就能拿到精确到行号的报错，而 `mvn` 要先走完一轮启动。
 
 本地环境：JDK 17 = `C:\jdk-17.0.2`，Redis localhost:6379，MySQL 101.33.246.103:3306（xander_lab）。提交标题用中文并以「【dxd】」为前缀，正文含 `desc:`；只 stage 任务相关文件，不提交凭据与本地配置。

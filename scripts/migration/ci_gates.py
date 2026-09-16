@@ -20,6 +20,7 @@ import argparse
 import json
 import re
 import sys
+import xml.etree.ElementTree
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -340,34 +341,122 @@ def gate_shared_kernel_reverse_dependency() -> None:
 
 
 def gate_shared_kernel_classification() -> None:
-    """Every package shipped by ``libs/`` must be listed in ``SHARED_KERNEL``.
+    """Every package shipped by ``libs/`` or ``contracts/`` must be in ``SHARED_KERNEL``.
 
     ``SHARED_KERNEL`` is a hardcoded package-name list and the cross-domain scanner
-    classifies imports by package name. So a library whose package is missing from that
+    classifies imports by package name. So a module whose package is missing from that
     list is misfiled *silently*: its classes are still scanned, but an import of one is
     neither a business-domain edge nor a shared-kernel source, so every edge pointing at
     it is dropped. The backlog number then goes DOWN while the coupling is unchanged.
 
     That is the silent-omission failure V9 section 13 exists to prevent, so the key set is
     derived from the tree and compared instead of trusted.
+
+    Contract modules are covered deliberately: a contract exists to be the legal
+    cross-service dependency, so forgetting to classify it would make the extraction that
+    created it invisible in the very number it was supposed to move.
     """
     gate = "shared-kernel-classification"
-    provided = scan.lib_packages()
+    provided = scan.shared_kernel_packages()
     declared = set(scan.SHARED_KERNEL)
-    missing = sorted(provided - declared)
+    missing = sorted(set(provided) - declared)
     if missing:
+        where = ", ".join(f"{pkg} ({', '.join(provided[pkg])})" for pkg in missing)
         report(gate, False,
-               f"libs/ ships package(s) {missing} that SHARED_KERNEL does not list -- "
+               f"module(s) ship package(s) {where} that SHARED_KERNEL does not list -- "
                f"imports of them would be dropped from the cross-domain baseline without "
                f"any coupling being removed. Add them to SHARED_KERNEL in "
                f"scripts/migration/scan.py")
         return
-    in_app = sorted(declared - provided - set(scan.BUSINESS_DOMAINS))
-    detail = f"all {len(provided)} lib package(s) classified: {sorted(provided)}"
+    in_app = sorted(declared - set(provided) - set(scan.BUSINESS_DOMAINS))
+    detail = (f"all {len(provided)} module package(s) classified: "
+              + ", ".join(f"{pkg} <- {'/'.join(provided[pkg])}" for pkg in sorted(provided)))
     if in_app:
-        detail += (f"; SHARED_KERNEL also lists {in_app}, which no lib provides yet "
+        detail += (f"; SHARED_KERNEL also lists {in_app}, which no module provides yet "
                    f"(still in-app shared packages)")
     report(gate, True, detail)
+
+
+def gate_contract_dependency_boundary() -> None:
+    """A contract module must stay dependency-free (V9 §19 / §21).
+
+    V9 §18 gives ``contracts/*-api`` to the cross-service contracts, and §91 says Wave 0B
+    builds them. Their whole reason to exist is that *every* service may depend on them --
+    including the WebFlux Gateway, which §19 says fails to start the moment
+    ``spring-boot-starter-web`` reaches its classpath.
+
+    So the boundary is not a style preference, and it is also not self-enforcing: a
+    contract is the single most convenient place to "just put the shared helper", and a
+    contract that has grown a framework dependency has silently become the super-common.jar
+    §19 forbids. There is no compile error for that, and every existing test stays green.
+    Hence a gate.
+
+    Two criteria:
+
+    1. **Java sources import nothing but the JDK and their own package.** Any
+       ``com.xander.lab.<other>.*`` import would also mean the contract is reaching back
+       into a business domain, which reverses the dependency the contract exists to fix.
+    2. **The module POM declares no compile or runtime dependency.** ``test`` scope is
+       fine: a contract's normalisation behaviour is worth pinning (V9 §2.3), and test
+       scope does not reach consumers.
+
+    Widening the allow-list is allowed but must be deliberate: add to
+    ``CONTRACT_ALLOWED_IMPORT_PREFIXES`` and say why in the commit message.
+    """
+    gate = "contract-dependency-boundary"
+    if not scan.CONTRACTS_ROOT.is_dir():
+        report(gate, True, "no contracts/ directory yet")
+        return
+
+    problems: list[str] = []
+    modules = 0
+    sources = 0
+    for module_dir in sorted(path for path in scan.CONTRACTS_ROOT.iterdir() if path.is_dir()):
+        pom = module_dir / "pom.xml"
+        modules += 1
+        if not pom.is_file():
+            problems.append(f"{module_dir.name}: no pom.xml")
+            continue
+
+        text = pom.read_text(encoding="utf-8")
+        for match in re.finditer(r"<dependency>(.*?)</dependency>", text, re.S):
+            block = match.group(1)
+            scope = re.search(r"<scope>\s*([^<]+?)\s*</scope>", block)
+            if scope and scope.group(1) == "test":
+                continue
+            artifact = re.search(r"<artifactId>\s*([^<]+?)\s*</artifactId>", block)
+            problems.append(
+                f"{module_dir.name}/pom.xml: dependency "
+                f"{artifact.group(1) if artifact else '?'} is not test-scoped; a contract "
+                f"must not pull a framework onto every service's classpath")
+
+        source_root = module_dir / "src" / "main" / "java"
+        if not source_root.is_dir():
+            continue
+        own_package = None
+        for path in sorted(source_root.rglob("*.java")):
+            sources += 1
+            rel = path.relative_to(scan.REPO).as_posix()
+            body = path.read_text(encoding="utf-8", errors="replace")
+            if own_package is None:
+                pkg = re.search(r"^package\s+([\w.]+)\s*;", body, re.M)
+                own_package = pkg.group(1) if pkg else ""
+            for imported in re.findall(r"^import\s+(?:static\s+)?([\w.]+)\s*;", body, re.M):
+                if imported.startswith(scan.CONTRACT_ALLOWED_IMPORT_PREFIXES):
+                    continue
+                if own_package and (imported == own_package
+                                    or imported.startswith(own_package + ".")):
+                    continue
+                problems.append(f"{rel}: imports {imported}")
+
+    if problems:
+        report(gate, False,
+               f"{len(problems)} contract boundary violation(s): "
+               + "; ".join(problems[:5]) + (" ..." if len(problems) > 5 else ""))
+        return
+    report(gate, True,
+           f"{modules} contract module(s), {sources} source file(s): JDK-only imports, "
+           f"no compile/runtime dependency")
 
 
 def gate_cross_domain_import_baseline() -> None:
@@ -674,30 +763,46 @@ def gate_stream_ban_boundary_coverage() -> None:
 XML_COMMENT_RE = re.compile(r"<!--(.*?)-->", re.S)
 
 
-def gate_xml_comment_double_dash() -> None:
-    """XML comments may not contain ``--``, and Maven refuses to parse the file.
+def gate_xml_authoring_safety() -> None:
+    """Every ``*.xml`` in the repo must be well-formed, checked before Maven sees it.
 
-    This is not a style rule. ``--`` inside an XML comment makes the document
-    *non-parseable*: Maven stops with
+    Two criteria, because the repo has now been broken by both:
 
-        Non-parseable POM pom.xml: in comment after two dashes (--) next character
-        must be > not ...
+    1. **No ``--`` inside a comment.** This is not a style rule: it makes the
+       document *non-parseable*, and Maven stops with
 
-    and the whole reactor fails before a single class is compiled. It is easy to
-    write by accident because an em-dash or a range ("--") in a prose comment
-    looks perfectly harmless, and the file is only ever validated at build time.
+           Non-parseable POM pom.xml: in comment after two dashes (--) next
+           character must be > not ...
 
-    This has now been hit five times in this repository (twice in ``pom.xml``,
-    twice in ``libs/xander-model/pom.xml``, once more in ``pom.xml`` when the
-    MyBatis-Plus property was added). Five identical build-breaking mistakes is
-    past the point where "be careful" is an adequate control, so it becomes a
-    gate. The fix is always the same: reword the comment (use a comma, a colon,
-    or "to" instead of the dash pair).
+       and the whole reactor fails before a single class is compiled. Easy to
+       write by accident, because an em-dash or a range in a prose comment looks
+       harmless and the file is only validated at build time. Hit six times now
+       (twice in ``pom.xml``, twice in ``libs/xander-model/pom.xml``, once more
+       in ``pom.xml`` when the MyBatis-Plus property was added, once in
+       ``apps/core-host/pom.xml`` when the ``content-api`` dependency was added).
+       The fix is always the same: reword the comment, use a comma, a colon, or
+       "to" instead of the dash pair.
 
-    Scope is every ``*.xml`` outside ``target/`` -- not just POMs, because
-    mapper XML and any future module descriptor have the same rule.
+    2. **The file parses.** This is the catch-all, and it exists because a
+       *different* authoring hazard has the same blast radius: a POM
+       ``<description>`` is prose, so writing ``List<BlogPublisher>`` or a bare
+       ``&`` in it produces
+
+           Non-parseable POM ...: TEXT must be immediately followed by END_TAG
+           and not START_TAG
+
+       That one was hit while writing ``contracts/content-api/pom.xml``, whose
+       whole job is to document itself in prose. Criterion 1 does not catch it,
+       and the failure mode is identical: reactor down, zero classes compiled.
+
+    Criterion 1 is kept alongside criterion 2 even though a parse failure would
+    also be reported by 2, because the ``--`` message points straight at the
+    offending comment while a raw parse error just says "not well-formed".
+
+    Scope is every ``*.xml`` outside ``target/``, not just POMs: mapper XML and
+    any future module descriptor have the same rule.
     """
-    gate = "xml-comment-double-dash"
+    gate = "xml-authoring-safety"
     problems: list[str] = []
     scanned = 0
     for path in sorted(REPO.rglob("*.xml")):
@@ -711,15 +816,68 @@ def gate_xml_comment_double_dash() -> None:
                 continue
             line = text[:match.start()].count("\n") + 1
             snippet = " ".join(match.group(1).split())[:60]
-            problems.append(f"{rel}:{line} ({snippet!r})")
+            problems.append(f"{rel}:{line} comment contains '--' ({snippet!r})")
+        try:
+            xml.etree.ElementTree.fromstring(text)
+        except xml.etree.ElementTree.ParseError as exc:
+            problems.append(f"{rel} is not well-formed: {exc}")
 
     if problems:
         report(gate, False,
-               f"{len(problems)} XML comment(s) contain '--', which makes the file "
-               f"non-parseable: " + "; ".join(problems[:5])
+               f"{len(problems)} XML problem(s), each of which fails the Maven reactor "
+               f"before any class is compiled: " + "; ".join(problems[:5])
                + (" ..." if len(problems) > 5 else ""))
         return
-    report(gate, True, f"{scanned} XML file(s), no '--' inside a comment")
+    report(gate, True,
+           f"{scanned} XML file(s) well-formed, no '--' inside a comment")
+
+
+def gate_dockerfile_module_coverage() -> None:
+    """Every module in the root POM must be COPYed into the Docker build context.
+
+    The Dockerfile builds the reactor, so a module that exists on disk but is not copied
+    in fails the image build with "Child module ... does not exist" -- and nothing else in
+    this repo notices, because ``mvn test`` runs against the working tree and the Docker
+    build is not part of either the Maven or the gate run.
+
+    That makes it the same shape of bug as the ``.dockerignore`` secrets path: a change that
+    is correct locally and broken only in the artifact that ships. Adding a module means
+    editing the Dockerfile twice (its ``pom.xml`` for the cached dependency layer, its
+    sources for the build), and both halves are checked here.
+    """
+    gate = "dockerfile-module-coverage"
+    root_pom = REPO / "pom.xml"
+    dockerfile = REPO / "Dockerfile"
+    if not dockerfile.is_file():
+        report(gate, True, "no Dockerfile")
+        return
+
+    text = root_pom.read_text(encoding="utf-8")
+    block = re.search(r"<modules>(.*?)</modules>", text, re.S)
+    if not block:
+        report(gate, True, "root POM declares no <modules>")
+        return
+    modules = re.findall(r"<module>\s*([^<\s]+)\s*</module>", block.group(1))
+    docker = dockerfile.read_text(encoding="utf-8")
+
+    problems: list[str] = []
+    for module in modules:
+        if f"{module}/pom.xml" not in docker:
+            problems.append(f"{module}: its pom.xml is not COPYed (the cached dependency "
+                            f"layer cannot resolve it)")
+        top = module.split("/", 1)[0]
+        if not re.search(rf"^COPY\s+{re.escape(top)}\s+\./{re.escape(top)}\s*$",
+                         docker, re.M):
+            problems.append(f"{module}: sources are not COPYed (`COPY {top} ./{top}` "
+                            f"missing), so the reactor cannot build it")
+
+    if problems:
+        report(gate, False,
+               f"{len(problems)} module(s) missing from the Docker build: "
+               + "; ".join(problems[:5]) + (" ..." if len(problems) > 5 else ""))
+        return
+    report(gate, True,
+           f"{len(modules)} module(s) all COPYed into the Docker build context")
 
 
 # V9 section 80 bans the global ``classpath*:/mapper/*.xml`` swallow once services
@@ -1081,6 +1239,7 @@ GATES = {
     "config-ownership-drift": gate_config_ownership_drift,
     "shared-kernel-reverse-dependency": gate_shared_kernel_reverse_dependency,
     "shared-kernel-classification": gate_shared_kernel_classification,
+    "contract-dependency-boundary": gate_contract_dependency_boundary,
     "cross-domain-import-baseline": gate_cross_domain_import_baseline,
     "contract-changes-completeness": gate_contract_changes_completeness,
     "capability-baseline-diff": gate_capability_baseline_diff,
@@ -1089,7 +1248,8 @@ GATES = {
     "gateway-stream-proxy-config-check": gate_gateway_stream_proxy_config,
     "flyway-validation": gate_flyway_validation,
     "stream-ban-boundary-coverage": gate_stream_ban_boundary_coverage,
-    "xml-comment-double-dash": gate_xml_comment_double_dash,
+    "xml-authoring-safety": gate_xml_authoring_safety,
+    "dockerfile-module-coverage": gate_dockerfile_module_coverage,
     "mybatis-scan-scope": gate_mybatis_scan_scope,
 }
 

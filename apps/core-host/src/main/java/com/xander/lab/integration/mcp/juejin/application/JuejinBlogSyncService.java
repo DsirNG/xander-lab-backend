@@ -3,8 +3,8 @@ package com.xander.lab.integration.mcp.juejin.application;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
-import com.xander.lab.publishing.domain.PublishCommand;
-import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.content.api.PublishCommand;
+import com.xander.lab.content.api.PublishResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

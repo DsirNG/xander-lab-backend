@@ -29,7 +29,7 @@ import com.xander.lab.blogagent.infrastructure.BlogAgentMessageMapper;
 import com.xander.lab.publishing.application.BlogMediaService;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
-import com.xander.lab.publishing.domain.PublishCommand;
+import com.xander.lab.content.api.PublishCommand;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;

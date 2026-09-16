@@ -1,6 +1,6 @@
-# 共享库抽取（V9 §18 / §19 / §20 / §21 / §91）
+# 共享库与契约模块抽取（V9 §18 / §19 / §20 / §21 / §80 / §91）
 
-本文记录 Wave 0B「抽纯净技术库」的**实际进度与判断依据**。
+本文记录 Wave 0B「抽纯净技术库 + 建业务 Contract」的**实际进度与判断依据**。
 
 对应 V9 章节：§18（Monorepo 目标布局）、§19（禁止超级 common.jar）、
 §20（各 lib 边界）、§21（ArchUnit 门禁）、§80（MyBatis 配置分片）、§91（Wave 0B）。
@@ -16,9 +16,10 @@
 1 个是 MyBatis、2 个是运维型 Redis。**WebFlux Gateway 一旦依赖它就会启动失败**，
 所以 §19 必须拆。
 
-Wave 0B 已抽出 **3 个** lib（`xander-model`、`xander-mybatis-support`、`xander-auth-core`），
-`common` 从 12 类降到 6 类，另有 2 个类从**业务域包** `identity.security` 迁出。
-剩下 3 个 lib 未开始。
+Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`xander-auth-core`）
+与 **1 个契约模块**（`contracts/content-api`），`common` 从 12 类降到 6 类，
+另有 2 个类从**业务域包** `identity.security` 迁出、4 个类从 `publishing.domain` 迁出。
+剩下 3 个 lib 与 7 个契约模块未开始。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
 不是审美 —— 见 §5。
@@ -26,6 +27,8 @@ Wave 0B 已抽出 **3 个** lib（`xander-model`、`xander-mybatis-support`、`x
 ---
 
 ## 2. 目标清单与进度
+
+### 2.1 共享库（§20）
 
 | lib（§20） | 状态 | 内容 |
 |---|---|---|
@@ -35,6 +38,23 @@ Wave 0B 已抽出 **3 个** lib（`xander-model`、`xander-mybatis-support`、`x
 | `xander-webmvc-support` | 未开始 | 目标 `GlobalExceptionHandler` `ResultStatusResponseBodyAdvice` MVC 认证适配器 `WebMvcConfigurer` |
 | `xander-observability-core` | 未开始 | 目标 TraceId/requestId + MDC 约定 + 指标命名约定（不含具体 exporter） |
 | `xander-test-support` | 未开始 | — |
+
+### 2.2 业务契约（§18 `contracts/`，§91）
+
+| 契约模块 | 状态 | 内容 | 跨部署单元实现依赖的收益 |
+|---|---|---|---|
+| `content-api` | **已完成** | `BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits` | `integration → publishing` 22 → 5；总计 −18 条跨单元 import |
+| `core-api` | 未开始 | — | 按目标域聚合，`core-host` 相关边 |
+| `agent-api` | 未开始 | — | — |
+| `automation-api` | 未开始 | — | — |
+| `integration-api` | 未开始 | — | 最大的剩余目标域（7 个域指向它，共 17 条） |
+| `knowledge-api` | 未开始 | — | — |
+| `studio-api` | 未开始 | — | — |
+| `payment-api` | 未开始 | — | — |
+
+⚠️ **契约模块不是"共享库"**，但它的包名必须登记在 `SHARED_KERNEL` 里，
+理由见 §6 与 §10.3：否则把类型搬进契约之后，跨域基线**一点都不会动**，
+这次抽取在唯一的进度指标上完全隐形。
 
 `common` / `config` / `filter` 三个包**当前剩余 11 个类**，全部还在应用模块里：
 
@@ -54,7 +74,7 @@ filter/RequestLoggingFilter.java          ← 目标是 xander-observability-cor
 
 ---
 
-## 3. 两个已抽出的 lib
+## 3. 三个已抽出的 lib
 
 ### 3.1 `xander-model`
 
@@ -85,6 +105,84 @@ filter/RequestLoggingFilter.java          ← 目标是 xander-observability-cor
 ⚠️ **库自己拥有自己的测试**：`UserContextTest` / `JwtUtilTest` 跟着类一起进了
 `libs/xander-auth-core/src/test/java/`，而不是留在应用模块的测试树里。
 理由：测试留在应用模块等于"应用拥有它已经不再拥有的类的测试"，那不叫抽出来了。
+
+---
+
+## 3bis. 第一个业务契约：`contracts/content-api`
+
+### 3bis.1 抽的是哪 4 个类，为什么是它们
+
+`publishing.domain` 里的 `BlogPublisher` / `PublishCommand` / `PublishResult` /
+`PublishingLimits` 迁到 `contracts/content-api`，包名 `com.xander.lab.content.api`。
+
+判断依据不是"看起来像契约"，而是**它们的实现跨部署单元**：
+`BlogPublisher` 的实现有 `LocalBlogPublisher`（内容域）与 `CsdnPublisher` /
+`JuejinPublisher`（integration 域）。拆服务之后，integration 就变成"在实现一个内容域
+拥有的接口" —— **依赖方向反了**，所以端口和它的数据必须搬到双方都能依赖的中立模块。
+
+### 3bis.2 为什么 `BlogPostDTO` / `BlogPostVO` **不**跟着搬
+
+它们在 `publishing.api`，已经是 api 层，扫描器**本来就**把它们算作契约面而不是待还的债
+（`api_statements` 38 条，不计入 `implementation_statements`）。搬它们：
+
+- **不改变任何一个被度量的数字**（§3bis.4 的数字全部来自 domain 层那 4 个类）；
+- 却要改 26 个文件（含 `agent` / `blogagent` 的测试），把 diff 撑大。
+
+更重要的是它们**受众不同**：`BlogPostDTO` / `BlogPostVO` 是**前端**（Web / 小程序）的
+HTTP 契约，服务间契约是另一件事。
+
+⚠️ 而且 `BlogPostVO` 现在**同时**是 `BlogPostMapper` 的投影目标
+（`@JsonIgnore private String tagsRaw` 承接 `GROUP_CONCAT` 结果）。把它搬进契约模块之前，
+必须先把"上线的形状"与"持久化投影"分开 —— 否则契约模块会带着一个只对 MyBatis 有意义的字段。
+**搬它们的触发条件是内容域的 api 层自己拆分（Wave 2）**，不是"有空就搬"。
+
+### 3bis.3 硬约束：零依赖
+
+`contracts/content-api` 的 `<dependencies>` 里**没有任何编译期或运行期依赖**，
+只有 test-scope 的 `junit-jupiter`。
+
+这不是洁癖：契约要被**每个**服务依赖，包括 §19 里那个"被拖进 spring-webmvc 就启动失败"
+的 WebFlux Gateway。一个长胖了的契约就是 §19 禁止的超级 common.jar 换了个名字。
+新增编译期依赖不会有任何编译错误、所有测试照样绿，所以做成门禁
+`contract-dependency-boundary`（两条判据，都注入验证过）：
+
+1. 契约源码只允许 import JDK 与自己的包（`com.xander.lab.<其他>` 也不许 ——
+   那意味着契约反过来指回业务域）；
+2. 契约 POM 里除 test scope 外不得有依赖。
+
+### 3bis.4 收益（重新生成基线后实测，与事前预测完全一致）
+
+| 指标 | 抽之前 | 抽之后 |
+|---|---|---|
+| `implementation_statements` | 137 | **116**（−21） |
+| `cross_deployment_unit_statements` | 103 | **85**（−18） |
+| `cross_deployment_unit_edges` | 28 | 28（未变，没有边归零） |
+| `api_statements` | 38 | 38（未变，证明 DTO/VO 确实没动） |
+
+逐边变化（事前预测 22→5，实测一致）：
+
+| 边 | 前 | 后 | 跨部署单元 |
+|---|---|---|---|
+| `integration → publishing` | 22 | **5** | 是 |
+| `agent → publishing` | 10 | 9 | 是 |
+| `automation → publishing` | 4 | 2 | 否（同属内容域） |
+| `blogagent → publishing` | 6 | 5 | 否 |
+
+剩下那 5 条是 `BlogService` / `PublicationService` 两个 `application` 层类型的引用 ——
+它们是**实现**，不是契约，本来就该留到 Wave 2 按 §75 决定改成什么调用方式。
+
+### 3bis.5 ⚠️ 记录而不解决：`BlogPublisher` 是一个跨进程会失效的 SPI
+
+`PublicationService`（内容域）构造器注入 `List<BlogPublisher>`，按 `platform()` 收成 Map。
+单体里 Spring 能把两个域的 bean 一起注入；**拆成两个进程之后这不可能成立**。
+
+两条出路，都不改变接口形状，所以现在抽出来是安全的：
+
+1. 发布适配器跟着端口走，并入内容域（即 CSDN / 掘金适配器归属改为内容自动化）；
+2. 发布改成对外的 HTTP / 事件调用（integration 变成被调用方）。
+
+**必须在 Wave 2 之前决定**，否则拆到一半会发现 `integration` 的实现注不进内容域。
+另注意 §76 已经有一个同类未决问题（`/api/agent/mcp-servers` 的归属），两者应当一起裁。
 
 ---
 
@@ -180,20 +278,26 @@ Maven 直接拒绝：
 
 | 位置 | 改动 |
 |---|---|
-| `scripts/migration/scan.py` | 新增 `APP_ROOT` / `LIB_ROOT` / `java_roots()` / `java_files()` / `lib_packages()`；所有 `JAVA_ROOT.rglob("*.java")` 换成 `java_files()`；**新库的包名要加进 `SHARED_KERNEL`** |
-| `scripts/migration/ci_gates.py` | `gate_legacy_redis_reference_check` 的白名单路径 + **新增"白名单里的文件必须存在"判据** |
+| `scripts/migration/scan.py` | `APP_ROOT` / `LIB_ROOT` / **`CONTRACTS_ROOT`** / `java_roots()` / `java_files()` / **`shared_kernel_packages()`**（`libs/*` 与 `contracts/*` 都扫）；所有 `JAVA_ROOT.rglob("*.java")` 换成 `java_files()`；**新库或新契约的包名要加进 `SHARED_KERNEL`** |
+| `scripts/migration/ci_gates.py` | `gate_legacy_redis_reference_check` 的白名单路径 + **"白名单里的文件必须存在"判据**；`shared-kernel-classification` 改用 `shared_kernel_packages()` |
 | `scripts/migration/audit_legacy_sql.py` | `DB_DIR = scan.DB_DIR`，不再硬编码 `src/main/resources/db` |
-| `Dockerfile` | 多模块 `COPY`（先 COPY 各 POM 再 `dependency:go-offline`，最后 COPY 源码） |
+| `Dockerfile` | **每个模块两处**：先 COPY 它的 `pom.xml`（否则 `dependency:go-offline` 报 `Child module ... does not exist`），再 COPY 它的源码目录。由门禁 `dockerfile-module-coverage` 检查 |
 | `.gitignore` / `.dockerignore` | `application-local.yml` 的路径。**漏改会让本地密钥变成可提交文件，并被 `COPY apps ./apps` 打进镜像** |
 | `AGENTS.md` / `backend-norms` skill | 测试路径与物理布局说明 |
 
-⚠️ **`java_roots()` 必须同时扫 `apps/core-host/src/main/java` 和 `libs/*/src/main/java`。**
-只扫前者的话，搬进 lib 的类会从所有清单里消失，而清单的计数只是变小、不会报错。
+⚠️ **`java_roots()` 必须同时扫 `apps/core-host/src/main/java`、`libs/*/src/main/java`
+和 `contracts/*/src/main/java`。**
+只扫应用根的话，搬出去的类会从所有清单里消失，而清单的计数只是变小、不会报错。
 
-⚠️ **`SHARED_KERNEL` 漏加新库的包名，后果是"数字变好、耦合没变"**：扫描器按包名判定归属，
+⚠️ **`SHARED_KERNEL` 漏加新模块的包名，后果是"数字变好、耦合没变"**：扫描器按包名判定归属，
 包名不在 `SHARED_KERNEL` 也不在业务域时，指向它的 import 会被整条丢掉，跨域基线于是**下降**。
-这正是 §13 要防的静默漏计，所以 `lib_packages()` 从目录树推导、`shared-kernel-classification`
-门禁比对两者 —— 漏加就 FAIL，而不是悄悄少算。
+这正是 §13 要防的静默漏计，所以 `shared_kernel_packages()` 从目录树推导、
+`shared-kernel-classification` 门禁比对两者 —— 漏加就 FAIL，而不是悄悄少算。
+
+⚠️ **契约模块的包名尤其要登记。** 契约的存在意义就是"成为唯一合法的跨服务依赖"，
+如果 `content` 不在 `SHARED_KERNEL` 里，把 4 个类型搬进契约之后跨域基线**一条都不会少**，
+这次抽取在唯一的进度指标上完全隐形。这是本轮实测过的：`content` 登记后
+`shared_kernel_sources` 才从 `[auth, common, config, filter]` 变成含 `content`。
 
 ---
 
@@ -218,20 +322,40 @@ Wave 0B 的处置是**用门禁冻结现状**：`mybatis-scan-scope` 门禁有�
 ## 8. 怎么验证
 
 ```bash
-# 全量测试：应用模块 + 各 lib 模块的合计必须与搬动前一致（1059）
+# 全量测试：应用模块 + 各 lib / 契约模块的合计
 mvn -o test
 
-# 全部门禁（含 mybatis-scan-scope / xml-comment-double-dash / shared-kernel-classification）
+# 全部门禁（含 mybatis-scan-scope / xml-authoring-safety / shared-kernel-classification /
+# contract-dependency-boundary / dockerfile-module-coverage）
 python scripts/migration/ci_gates.py
 ```
 
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
-类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib 两处，
-只看最后那个 `Results:` 会以为"测试变少了"（本轮 1059 → 1055，少的 4 个在
-`xander-auth-core` 模块里）。**要核对的是各模块之和。**
+类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
+只看最后那个 `Results:` 会以为"测试变少了"。
+**要核对的是各模块之和**（本轮 `apps/core-host` 1055 + `xander-auth-core` 4 +
+`content-api` 4 = 1063；其中 content-api 的 4 条是**本轮新增**的 `PublishCommandTest`，
+不是搬过来的，所以总数比上一轮多 4 是预期的）。
 
-`shared-kernel-classification`：`libs/` 实际提供的每个 `com.xander.lab.<pkg>` 包
-都必须在 `SHARED_KERNEL` 里。见 §6 的说明与注入验证。
+⚠️ `target/surefire-reports/` **不会被自动清理**，里面会留下已经搬走的测试类的报告。
+用脚本按目录累加 `Tests run` 会把这部分算进去（本轮就出现了
+`apps/core-host` 累加得 1059、实际只跑 1055 的情况，差的 4 正是已迁出的
+`UserContextTest` / `JwtUtilTest`）。**以控制台输出为准，不要以报告目录为准。**
+
+`shared-kernel-classification`：`libs/` 与 `contracts/` 实际提供的每个
+`com.xander.lab.<pkg>` 包都必须在 `SHARED_KERNEL` 里。见 §6 的说明与注入验证。
+
+`contract-dependency-boundary` 的两条判据：契约源码只 import JDK 与自己的包；
+契约 POM 除 test scope 外无依赖。见 §3bis.3。
+
+`dockerfile-module-coverage`：根 POM 的每个 `<module>` 都必须在 Dockerfile 里
+既 COPY 了 `pom.xml`、又 COPY 了源码目录。见 §6 表格。
+
+`xml-authoring-safety` 的两条判据：注释里不得出现 `--`；文件必须能被 XML 解析器解析。
+第二条是本轮新增的 —— 写 `contracts/content-api/pom.xml` 的 `<description>` 时写了
+`List<BlogPublisher>`，裸 `<` 让 Maven 报
+`TEXT must be immediately followed by END_TAG and not START_TAG`，和 `--` 一样是
+**反应堆在编译任何类之前整体失败**。判据一抓不到它，所以补了判据二。
 
 `mybatis-scan-scope` 的三条判据：
 
@@ -251,6 +375,28 @@ python scripts/migration/ci_gates.py
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
+| ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
+| 7 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **85** 条（原 103）。`integration-api` 是下一个最大目标域（7 个域指向它，17 条） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
-| 8 个 `*-api` Contract 未建 | 跨域 import 基线（`cross-domain-imports.yaml`）还只能"只减不增" | Wave 0B 剩余 |
+| `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |
+
+### 9.1 ⚠️ `xander-observability-core`：§20 描述的东西在这份代码里不存在
+
+按 §20 去找它的落点，结果是：
+
+- `grep -rn "MDC\.\|TraceId\|traceId"` 全仓**零命中**（唯一叫 `requestId` 的是 MCP OAuth
+  的授权请求 id，与链路追踪无关）；
+- 无 micrometer、无 actuator、无 `logback-spring.xml`，`application.yml` 里没有任何
+  `logging.pattern` / `%X{`；
+- `filter/` 包里只有 1 个类 `RequestLoggingFilter`，而它
+  **`extends OncePerRequestFilter` + `import jakarta.servlet.*`** —— 是 Servlet 组件。
+
+也就是说 §20 说的"TraceId/requestId 生成与传播 + MDC 约定 + 指标命名约定"**整体不存在**；
+唯一看起来相关的文件还**不能**放进这个库 —— §20 要求 Gateway 可依赖它，而 Gateway 是
+WebFlux，把 Servlet 组件塞进去与"WebFlux 应用依赖 spring-boot-starter-web 启动失败"
+是同一类事故。
+
+这与 §4.2（"公共 TypeHandler 不存在"）同类，但更严重：**§20 的 Gateway 依赖清单里，
+三个库有一个目前是空的。** 处置方向（本轮未定）：要么在 Wave 1 引入 Actuator/Micrometer 时
+**新建**这个库，要么承认它是 §20 的一处过度设计并修订 §20。

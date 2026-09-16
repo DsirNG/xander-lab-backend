@@ -3,7 +3,7 @@ package com.xander.lab.integration.mcp.csdn.api;
 import com.xander.lab.common.Result;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
-import com.xander.lab.publishing.domain.PublishResult;
+import com.xander.lab.content.api.PublishResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
