@@ -83,7 +83,19 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
   在契约里新建一个接口，让原实现 `implements` 它，调用方改依赖接口。
   先例 `OssPort` / `OssService`。
 
-抽端口时的两条硬规矩：
+**抽端口的真正信号：两个域各自写了一遍同样的代码。** 只看"它是不是具体实现"会漏掉关键判断 ——
+`UserLookupPort` 那次，`BlogService.resolveAuthor` 与 `ComponentService.shareComponent`
+都在注入 `identity` 的 **MyBatis mapper** 去 `selectById` 然后拼作者名。
+**重复的查询 / 映射逻辑基本就是一个端口的位置**；而"另一个域直接用了你的 mapper"
+本身就是硬违规（identity 的 `package-info` 明文禁止），跨部署单元时更是拆分后
+"一个服务直连另一个服务的库表"。看到 mapper / entity 被别的域 import，先想端口。
+
+**端口只回答"问题"，不替调用方决定"显示策略"。** `UserLookupPort` 返回
+展示名或 `null`，**不返回兜底文案** —— 因为两个调用方的兜底不一样
+（`"User " + id` 与 `"匿名用户" + id`）。把兜底塞进端口会逼两个域接受同一种文案。
+格式、兜底、占位符留在调用方。
+
+抽端口时的三条硬规矩：
 
 1. **端口签名不得含框架类型。** 典型的坑是 Spring 的 `MultipartFile` —— 它是 spring-web 类型，
    放进契约会让 spring-web 出现在每个依赖契约的服务（含 WebFlux Gateway）的 classpath 上，
@@ -93,6 +105,22 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 2. **换签名会带来真实行为改动，必须留痕。** 从"把 `MultipartFile` 的输入流交给 SDK"改成
    "先 `getBytes()` 读进内存"是**流式 → 全量**的变化。可接受的前提是调用方上传前已经卡了大小上限；
    写进提交信息与 `docs/migration/lib-extraction.md`，别当成纯重构。
+3. **⚠️ 端口宽度是没有任何东西在守的不变量，必须用测试钉住。** 普通接口改签名会编译报错，
+   端口**变宽**不会：加一个 `default` 方法 → 编译通过、指标不动
+   （`api_statements` 数的是调用点的 import，不是方法数）、门禁不报
+   （`contract-dependency-boundary` 只看 import 与 POM 依赖）。
+   于是"用户查询端口"会慢慢长成所有人绕过边界的新入口。用反射钉住方法个数：
+
+   ```java
+   assertEquals(1, UserLookupPort.class.getDeclaredMethods().length,
+           "端口变宽了。它存在的意义是收窄暴露面……");
+   ```
+
+   注入验证方法：加一个 `default` 方法（这样实现类不用改，只有宽度测试会红）。
+
+**⚠️ 扩展现有契约不需要构建接线。** 新建 `contracts/<name>/` 要改四处（见下），
+但往**已存在**的契约里加类型是零成本：模块已接线、包已登记。
+`core-api` 承接 `identity` 的类型、`content-api` 承接 `publishing` 的类型，都是这一类。
 
 **`SHARED_KERNEL` 里契约的包名可能要带点。** §18 的 8 个契约里有 4 个
 （`agent-api` / `automation-api` / `integration-api` / `studio-api`）的名字同时是业务域，

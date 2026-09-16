@@ -18,6 +18,23 @@
         Members: ModelGateway (the runtime model-routing SPI) and its nested ModelEndpoint record,
         plus FeatureModelNotConfiguredException, which is the only failure the SPI may raise and
         which callers in other deployment units are required to propagate rather than swallow.
+        Plus UserLookupPort, the display-name lookup that stops other domains from reading the
+        user table.
+
+        Why UserLookupPort is here and not in a hypothetical identity-api. The section 18 module
+        list fixes eight contract names and identity is not one of them; core-api is the contract
+        for the dinqor-core-host deployment unit, which is exactly where identity lives, so the
+        same reasoning that put ModelGateway here applies. Two domains used to inject
+        identity.infrastructure.UserMapper (a MyBatis mapper) and identity.domain.User (the
+        sys_user entity) just to render an author name: publishing.application.BlogService, and
+        components.application.ComponentService. That is what identity's own package-info forbids
+        ("feature modules ... must not parse tokens or query the user table directly"), and for
+        publishing it crossed a deployment unit as well (dinqor-content-automation reaching into
+        dinqor-core-host). The port exposes exactly one method and returns null when it cannot
+        answer, because the two callers have *different* fallbacks ("User {id}" versus
+        "anonymous {id}") and a fallback is display policy, not identity data. Do not widen this
+        port: every method added is another way around the boundary, and widening breaks nothing,
+        so UserLookupPortTest pins the method count.
 
         Why these three and nothing else. ModelGateway is an interface whose *implementation*
         (ModelGatewayService, reading model_provider / model_feature_config) stays in the admin

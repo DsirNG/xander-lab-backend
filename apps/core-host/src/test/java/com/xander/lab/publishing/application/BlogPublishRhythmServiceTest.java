@@ -1,6 +1,6 @@
 package com.xander.lab.publishing.application;
 
-import com.xander.lab.identity.infrastructure.UserMapper;
+import com.xander.lab.core.api.UserLookupPort;
 import com.xander.lab.publishing.api.BlogPublishRhythmVO;
 import com.xander.lab.publishing.api.BlogManageStatsVO;
 import com.xander.lab.publishing.infrastructure.BlogCategoryMapper;
@@ -40,7 +40,7 @@ class BlogPublishRhythmServiceTest {
                 .thenReturn(List.of(LocalDate.parse("2026-08-27"), LocalDate.parse("2026-08-28")));
         when(viewMapper.selectDailyViews(eq(7L), any(), any())).thenReturn(List.of(views));
         BlogService service = new BlogService(postMapper, mock(BlogCategoryMapper.class),
-                mock(BlogTagMapper.class), viewMapper, mock(UserMapper.class), mock(StringRedisTemplate.class));
+                mock(BlogTagMapper.class), viewMapper, mock(UserLookupPort.class), mock(StringRedisTemplate.class));
 
         BlogManageStatsVO stats = service.getManageStats(7L, LocalDate.parse("2026-08-29"));
 
@@ -59,7 +59,7 @@ class BlogPublishRhythmServiceTest {
                 LocalDate.parse("2026-08-27"),
                 LocalDate.parse("2026-08-27")));
         BlogService service = new BlogService(postMapper, mock(BlogCategoryMapper.class),
-                mock(BlogTagMapper.class), mock(BlogPostViewMapper.class), mock(UserMapper.class),
+                mock(BlogTagMapper.class), mock(BlogPostViewMapper.class), mock(UserLookupPort.class),
                 mock(StringRedisTemplate.class));
 
         BlogPublishRhythmVO rhythm = service.getWeeklyPublishRhythm(7L, LocalDate.parse("2026-08-29"));

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.common.Constants;
 import com.xander.lab.auth.core.UserContext;
+import com.xander.lab.core.api.UserLookupPort;
 import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.api.BlogPublishRhythmVO;
@@ -14,14 +15,12 @@ import com.xander.lab.common.PageData;
 import com.xander.lab.publishing.domain.BlogPost;
 import com.xander.lab.publishing.domain.BlogPostView;
 import com.xander.lab.publishing.domain.BlogTag;
-import com.xander.lab.identity.domain.User;
 import com.xander.lab.publishing.infrastructure.BlogCategoryMapper;
 import com.xander.lab.publishing.infrastructure.BlogPostMapper;
 import com.xander.lab.publishing.infrastructure.BlogPostViewMapper;
 import com.xander.lab.publishing.infrastructure.BlogArticleStatusCounts;
 import com.xander.lab.publishing.infrastructure.BlogDailyViewCount;
 import com.xander.lab.publishing.infrastructure.BlogTagMapper;
-import com.xander.lab.identity.infrastructure.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -58,7 +57,7 @@ public class BlogService {
     private final BlogCategoryMapper blogCategoryMapper;
     private final BlogTagMapper blogTagMapper;
     private final BlogPostViewMapper blogPostViewMapper;
-    private final UserMapper userMapper;
+    private final UserLookupPort userLookupPort;
     private final StringRedisTemplate redisTemplate;
 
     public BlogManageStatsVO getManageStats(Long userId, LocalDate today) {
@@ -300,11 +299,8 @@ public class BlogService {
     /** Author is derived from the authenticated account, never from client or AI input. */
     private String resolveAuthor(Long userId) {
         if (userId == null) return "Anonymous";
-        User user = userMapper.selectById(userId);
-        if (user == null) return "User " + userId;
-        if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
-        if (user.getUsername() != null && !user.getUsername().isBlank()) return user.getUsername();
-        return "User " + userId;
+        String displayName = userLookupPort.displayName(userId);
+        return displayName != null ? displayName : "User " + userId;
     }
 
     public PageData<BlogPostVO> getMyBlogs(Integer status, String search, Integer page, Integer size) {

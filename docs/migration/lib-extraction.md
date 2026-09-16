@@ -45,7 +45,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 |---|---|---|---|
 | `content-api` | **已完成** | `BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits` | `integration → publishing` 22 → 5；总计 −18 条跨单元 import |
 | `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
-| `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException` | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；跨部署单元 **−6**；总计 **−10** |
+| `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；跨部署单元累计 **−8**；总计 **−14** |
 | `agent-api` | 未开始 | — | — |
 | `automation-api` | 未开始 | — | — |
 | `knowledge-api` | 未开始 | — | — |
@@ -479,6 +479,138 @@ FAIL  shared-kernel-classification  module(s) ship package(s) core.api (contract
 
 ---
 
+## 3septies. 扩展 `contracts/core-api`：`UserLookupPort`（用户展示名端口）
+
+### 3septies.1 第一次"扩展现有契约"，不是新建模块
+
+前四刀都是新建 `contracts/<name>/`，每次要改四处（根 POM `<modules>`、应用 POM 依赖、
+`Dockerfile` 的 `COPY`、`scan.py` 的 `SHARED_KERNEL`）。这次只是往已有的 `core-api`
+里加一个类型，**四处都不用动** —— 模块已存在、已接线、包已登记。
+
+**记下来**：后续几刀如果落在已建的 4 个契约里（`content-api` 承接 `publishing`、
+`core-api` 承接 `identity`、`payment-api` 承接 `billing` 的端口），构建接线是零成本。
+真正要新建的只有 `agent-api` / `automation-api` / `knowledge-api` / `studio-api`。
+
+### 3septies.2 判据：两个调用方在做**同一件事**
+
+抽端口的信号不是"这个类是具体实现"（那只是必要条件），而是
+**两个不同域各自写了一遍同样的代码**：
+
+```java
+// publishing.application.BlogService#resolveAuthor
+User user = userMapper.selectById(userId);
+if (user == null) return "User " + userId;
+if (user.getNickname() != null && !user.getNickname().isBlank()) return user.getNickname();
+if (user.getUsername() != null && !user.getUsername().isBlank()) return user.getUsername();
+return "User " + userId;
+
+// components.application.ComponentService#shareComponent
+User user = userMapper.selectById(userId);
+if (user != null) authorName = user.getNickname() != null ? user.getNickname() : user.getUsername();
+```
+
+两处都注入 `identity.infrastructure.UserMapper`（MyBatis mapper）和
+`identity.domain.User`（`sys_user` 实体），都只为了取一个展示名。
+这直接违反 identity 自己的 `package-info`（"feature modules ... must not parse tokens
+or query the user table directly"），而且 `publishing` 在 dinqor-content-automation、
+`identity` 在 dinqor-core-host —— **跨了部署单元**，拆分后就是"一个服务直连另一个服务的库表"。
+
+**判据补充（已进 skill）**：看见两个域各写一遍同样的查询/映射逻辑，
+那基本就是一个端口的位置；单看"它是不是具体实现"会漏掉这种。
+
+### 3septies.3 端口只回答**问题**，不替调用方决定**显示策略**
+
+两个调用方的兜底**不一样**：博客用 `"User " + userId`，组件库用 `"匿名用户" + userId`。
+所以端口不返回兜底文案，只返回"展示名或 `null`"：
+
+```java
+public interface UserLookupPort {
+    String displayName(Long userId);
+}
+```
+
+把兜底塞进端口会逼两个域接受同一种文案 —— 那是**显示策略**，不是 identity 的数据。
+**规矩**：端口回答数据问题；格式、兜底、占位符留在调用方。
+
+### 3septies.4 ⚠️ 抽取时发现一处行为差异，而且**没有任何测试覆盖**
+
+两个实现的判据其实不一样：
+
+| | 旧 `BlogService` | 旧 `ComponentService` |
+|---|---|---|
+| 判据 | `nickname != null && !nickname.isBlank()` | `nickname != null` |
+| `nickname = ""` 时 | 落到 `username` | **返回空串** |
+
+也就是说，昵称为空串时组件库会把**空作者名**显示出来 —— 一个真实缺陷。
+端口统一用"非空白"判据，所以这是**行为改动**（按 skill 规矩必须在提交信息里写明）。
+
+⚠️ 关键点：`ComponentService` **没有任何测试**，作者名也**没有任何断言**
+（已 grep 确认）。所以这个差异如果不去读代码，谁都不会发现；
+换判据也不会有任何测试变红。**这也是为什么要为端口本身补测试** ——
+新判据只此一份，必须被钉住，否则下一次有人"顺手简化"成 `!= null`，缺陷就悄悄回来了。
+
+### 3septies.5 ⚠️ 端口宽度是**没有任何东西在守**的不变量
+
+端口和普通接口的区别：普通接口改签名会编译报错，端口**变宽**不会。
+给 `UserLookupPort` 加一个 `findById` / `getEmail` / `listUsers`：
+
+- 编译**通过**（实现类不用改，加 `default` 就行；不加也可以只是实现类要补）；
+- 指标**不动**（`api_statements` 数的是调用点的 import，不是接口方法数）；
+- 门禁**不报**（`contract-dependency-boundary` 只看 import 和 POM 依赖）。
+
+于是"用户查询端口"会慢慢长成所有人绕过 identity 边界的新入口，全程无人报警。
+所以用反射把**方法个数**钉住：
+
+```java
+assertEquals(1, UserLookupPort.class.getDeclaredMethods().length,
+        "端口变宽了。它存在的意义是收窄 identity 的暴露面……");
+```
+
+**注入验证**：给端口加一个 `default String email(Long)` → 编译仍然通过、
+其余 9 条 `ModelGatewayTest` 全绿，**只有这一条红**。这证明它守的是别人守不住的东西。
+（已进 skill。）
+
+### 3septies.6 收益（重新生成基线后实测）
+
+```
+publishing -> identity   2 -> 0   （跨部署单元，边消失）
+components -> identity   2 -> 0   （同单元，边消失）
+
+implementation_statements          90 -> 86  (-4)
+cross_deployment_unit_statements   64 -> 62  (-2)
+implementation_edges               35 -> 33  （2 条边消失）
+cross_deployment_unit_edges        23 -> 22
+api_statements                     38 -> 38
+```
+
+⚠️ 4 条移除里只有 2 条是跨单元的（`components` 与 identity 同属 dinqor-core-host）。
+⚠️ **耦合图形状未变**：仍 10 条有向单元边、同一个 SCC，
+`content-automation -> core-host` 从 6 降到 4 但没有归零（`identity` 的入边还有
+`virtualpay` / `admin` / `agent` / `integration` / `profile` 撑着）。
+
+### 3septies.7 下一目标：`BlogMediaService` + `BlogMediaAsset`（需要决定）
+
+`publishing` 是剩余最大目标（24 条 / 17 跨单元），其中 **`agent -> publishing` 9 条是
+全仓最大的剩余跨单元边**。分类过一遍后确认：**`publishing` 的 4 个跨域类型没有一个是
+"能直接搬"的**（全是具体 `@Service` 或 MyBatis 实体），所以必须抽端口。
+
+最值得做的是 `BlogMediaService` + `BlogMediaAsset`（合计约 11 条）：
+
+- `BlogMediaAsset` 是 **MyBatis 实体**（`@TableName("blog_media_asset")`），却被
+  agent / blogagent / studio 三个域 import，主要用于接住 `BlogMediaService` 的返回值；
+- `BlogMediaService` 的 6 个跨域方法里，`uploadImage` 收 `MultipartFile`（spring-web）、
+  `saveAgentImage` 收 `BlogAgentImageClient.GeneratedImage`（**blogagent 的类型**）——
+  后者意味着 publishing 反过来 import blogagent，**这是一个环**：
+  `publishing.application.BlogMediaService` → `blogagent.infrastructure.BlogAgentImageClient`。
+
+**但它不能顺手做，因为有一处 §11 决定要做**：`BlogMediaAsset` 是**前端可见**的 ——
+`BlogMediaController` 的 `GET /images` 与 `POST /images` 直接返回
+`Result<BlogMediaAsset>`，`BlogAgentTaskVO.illustrations` 也是 `List<BlogMediaAsset>`
+（由 `BlogAgentService:396` 填充）。换成 DTO 会改 HTTP 响应形状，
+属于契约变更，要么把 DTO 的字段名与实体**逐一镜像**并用测试钉住序列化结果，
+要么走 §11 流程。**这是一个决定，不是重构的顺带产物。**
+
+
 ## 3sexies. 第四个业务契约：`contracts/payment-api`（计费词表）
 
 ### 3sexies.1 为什么是 `payment-api` 而不是 `billing-api`
@@ -839,7 +971,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 4 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **64** 条（原 103 → 85 → 77 → 71 → 64）。按被依赖目标排序：`publishing` 24（17 跨单元）、`identity` 15、`automation` 10、`blogagent` 10、`billing` 10（**卡在 Jackson 决策上**，见 §3quinquies.5）、`integration` 9。`agent-api` 同样卡在 Jackson | Wave 0B 剩余 |
+| 4 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **62** 条（原 103 → 85 → 77 → 71 → 64 → 62）。按被依赖目标排序（总数 / 跨单元）：`publishing` 24/17、`identity` 11/3、`automation` 10/10、`blogagent` 10/5、`billing` 10/7（**卡在 Jackson 决策上**，见 §3quinquies.5）、`integration` 9/9、`recitation` 6/6、`agent` 5/5。**最大剩余目标是 `publishing`**，其中 `agent → publishing` 9 条是全仓最大的剩余跨单元边（见 §3septies.7） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

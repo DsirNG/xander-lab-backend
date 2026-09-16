@@ -258,6 +258,28 @@ empty except for shared infrastructure:
     test would miss "a new charging item was added and nobody added an assertion",
     which is the likeliest change of all.
 
+11. `contracts/core-api` also holds `UserLookupPort`, a one-method port that answers
+    "what is this user's display name". Before it existed, two domains injected
+    `identity.infrastructure.UserMapper` — a MyBatis mapper — and
+    `identity.domain.User`, the `sys_user` entity, purely to render an author name:
+    `BlogService.resolveAuthor` and `ComponentService.shareComponent`. That is what
+    identity's own package-info forbids ("feature modules ... must not parse tokens
+    or query the user table directly"), and for `publishing` it crossed a deployment
+    unit as well — `dinqor-content-automation` reaching straight into
+    `dinqor-core-host`'s tables. The port returns `null` when it cannot answer rather
+    than a fallback string, because the two callers have *different* fallbacks
+    (`"User {id}"` versus `"匿名用户{id}"`) and a fallback is display policy, not
+    identity data. Two things about this port are worth remembering. First, it
+    replaced a *behavioural* difference nobody had noticed: the old `BlogService`
+    treated a blank nickname as absent, while the old `ComponentService` used
+    `nickname != null` and would display an **empty author name** — and neither path
+    had a single test, so nothing would have caught a change either way. Second, a
+    port's *width* is an invariant nothing else guards: adding a `default` method
+    compiles, moves no metric, and trips no gate, yet each method is another way
+    around the boundary. `UserLookupPortTest` therefore reflects over the declared
+    methods and asserts there is exactly one — verified by injection, where a second
+    `default` method left the build green and every other test passing.
+
 ## Agent HTTP, SSE, and WebSocket Contract
 
 Authenticated orchestration routes live under `/api/agent/conversations`.

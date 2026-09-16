@@ -1,8 +1,5 @@
 package com.xander.lab.components.application;
 
-import com.xander.lab.identity.infrastructure.UserMapper;
-import com.xander.lab.identity.domain.User;
-
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.components.api.ComponentCategoryVO;
@@ -19,6 +16,7 @@ import com.xander.lab.components.infrastructure.ComponentCategoryMapper;
 import com.xander.lab.components.infrastructure.ComponentDetailPageMapper;
 import com.xander.lab.components.infrastructure.ComponentItemMapper;
 import com.xander.lab.components.infrastructure.ComponentScenarioMapper;
+import com.xander.lab.core.api.UserLookupPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -37,7 +35,7 @@ public class ComponentService {
     private final ComponentItemMapper itemMapper;
     private final ComponentScenarioMapper scenarioMapper;
     private final ComponentDetailPageMapper detailPageMapper;
-    private final UserMapper userMapper;
+    private final UserLookupPort userLookupPort;
 
     /**
      * 获取侧边栏菜单结构
@@ -164,9 +162,11 @@ public class ComponentService {
         Long userId = UserContext.getUserId();
         String authorName = "匿名用户" + userId;
         if (userId != null) {
-            User user = userMapper.selectById(userId);
-            if (user != null) {
-                authorName = user.getNickname() != null ? user.getNickname() : user.getUsername();
+            // 展示名（昵称 → 用户名，都为空则 null）由 identity 通过端口提供，
+            // "匿名用户{id}" 这个兜底文案是组件库自己的显示策略，留在本地。
+            String displayName = userLookupPort.displayName(userId);
+            if (displayName != null) {
+                authorName = displayName;
             }
         }
 
