@@ -114,7 +114,7 @@ changes:
       frontend_backoff_ms: [500, 1000]
       network_scheduling_margin_seconds: 5
     formula: "grace >= refresh request timeout + 最大 retry backoff + 单程网络/调度余量 + clock/scheduler margin"
-    notes: "V9 §36：VITE_REQUEST_TIMEOUT / refresh retry count / refresh backoff / server grace 任何一项变化都必须同步复核。禁止单独改前端 timeout 而不复核 server grace。refreshAccessToken 走裸 axios.post，DEFAULT_TIMEOUT = 15000。"
+    notes: "V9 §36：VITE_REQUEST_TIMEOUT / refresh retry count / refresh backoff / server grace 任何一项变化都必须同步复核。禁止单独改前端 timeout 而不复核 server grace。⚠️ 实施期修正：refresh 请求的超时已与全局 DEFAULT_TIMEOUT 解耦，固定在 src/api/http.js 的 REFRESH_TIMEOUT = 15000。原因是 VITE_REQUEST_TIMEOUT 开发环境 15000、生产环境 30000，若 refresh 跟着全局走，生产环境会变成 grace(25s) < timeout(30s) —— 响应丢失后的重试落在 grace 之外，被判成 §39 分支 3 的 Reuse，整个会话族被撤销、用户被强制登出。前端的「refresh 超时必须固定在 15000」由 http.test.jsx 的 Contract 用例守护（mock 刻意用生产值 30000）。"
     capability_refs: [refresh-grace-idempotent-replay, refresh-failure-classification]
 
   - id: refresh-replay-retention

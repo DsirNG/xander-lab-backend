@@ -433,13 +433,20 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("§35：grace 必须大于前端 refresh timeout(15s) + 1 次退避重试 + 余量")
+    @DisplayName("§35：grace 必须覆盖 refresh timeout(15s) + 1 次退避重试 + 余量")
     void graceCoversFrontendTimeout() {
-        long frontendTimeoutSeconds = 15;
+        // ⚠️ 这里的 15 是前端 src/api/http.js 的 REFRESH_TIMEOUT，属于 Contract
+        // （docs/contract-changes.yaml → refresh-grace-window.frontend_refresh_timeout_ms）。
+        //
+        // 注意它**不是** VITE_REQUEST_TIMEOUT：后者开发 15000、生产 30000，
+        // 而 refresh 请求刻意与全局超时解耦（否则生产会 grace(25s) < timeout(30s)，
+        // 响应丢失后的重试落在 grace 之外 → 被判成 Reuse → 撤销整个会话族）。
+        // 前端侧由 http.test.jsx 的 Contract 用例守护这个 15000。
+        long frontendRefreshTimeoutSeconds = 15;
         long maxBackoffSeconds = 1;
         long networkMarginSeconds = 5;
         assertThat(properties.getGraceSeconds())
-                .isGreaterThan(frontendTimeoutSeconds + maxBackoffSeconds + networkMarginSeconds - 1);
+                .isGreaterThan(frontendRefreshTimeoutSeconds + maxBackoffSeconds + networkMarginSeconds - 1);
     }
 
     @Test

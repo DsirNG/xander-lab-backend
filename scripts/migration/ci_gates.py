@@ -406,7 +406,9 @@ def gate_legacy_redis_reference_check() -> None:
     """No NEW production code may depend on the legacy Redis key families.
 
     Wave 0A cannot remove them yet (they are the current session model), so the
-    gate counts the call sites and fails only when the count grows.
+    gate pins the set of files allowed to reference them: adding a fourth call
+    site fails. Retirement (V9 §57 T3) must shrink this set down to Constants.java
+    and then delete the constants -- see docs/migration/legacy-redis-retirement.md §9.
     """
     gate = "legacy-redis-reference-check"
     allowed = {
