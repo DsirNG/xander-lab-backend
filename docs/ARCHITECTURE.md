@@ -178,7 +178,13 @@ empty except for shared infrastructure:
 3. MCP, CSDN, model, OSS, file, and mail adapters moved into `integration`.
 4. Recurring content plans, durable runs, and the daily trigger pipeline live under `automation`; the poller claims due plans atomically and recovers stale claims so multiple instances cannot double-execute.
 5. FlowCraft and Img2Three live under `studio`; the UI component library lives under `components`.
-6. Shared cross-module contracts (`Result`, `PageData`, `HealthController`) live under `common`.
+6. Shared cross-module contracts live under `common`: `Result` and the model
+   call/usage types in `libs/xander-model`, the pagination response `PageData`
+   and the MyBatis-Plus interceptor in `libs/xander-mybatis-support`, and the
+   operational health endpoints still on the application module
+   (`apps/core-host`). The split is deliberate, not cosmetic: a WebFlux gateway
+   can depend on `xander-model` but must never pull in MyBatis, so the two
+   cannot share one jar.
 
 ## Agent HTTP, SSE, and WebSocket Contract
 

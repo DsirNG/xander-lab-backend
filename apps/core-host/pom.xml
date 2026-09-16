@@ -26,6 +26,12 @@
             <artifactId>xander-model</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- MyBatis / MyBatis-Plus support: MybatisPlusConfig + PageData (V9 §20). -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>xander-mybatis-support</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>

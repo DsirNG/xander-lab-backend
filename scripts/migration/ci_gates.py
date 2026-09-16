@@ -640,6 +640,198 @@ def gate_stream_ban_boundary_coverage() -> None:
            + (f", {len(unregistered)} explicitly unregistered" if unregistered else ""))
 
 
+XML_COMMENT_RE = re.compile(r"<!--(.*?)-->", re.S)
+
+
+def gate_xml_comment_double_dash() -> None:
+    """XML comments may not contain ``--``, and Maven refuses to parse the file.
+
+    This is not a style rule. ``--`` inside an XML comment makes the document
+    *non-parseable*: Maven stops with
+
+        Non-parseable POM pom.xml: in comment after two dashes (--) next character
+        must be > not ...
+
+    and the whole reactor fails before a single class is compiled. It is easy to
+    write by accident because an em-dash or a range ("--") in a prose comment
+    looks perfectly harmless, and the file is only ever validated at build time.
+
+    This has now been hit five times in this repository (twice in ``pom.xml``,
+    twice in ``libs/xander-model/pom.xml``, once more in ``pom.xml`` when the
+    MyBatis-Plus property was added). Five identical build-breaking mistakes is
+    past the point where "be careful" is an adequate control, so it becomes a
+    gate. The fix is always the same: reword the comment (use a comma, a colon,
+    or "to" instead of the dash pair).
+
+    Scope is every ``*.xml`` outside ``target/`` -- not just POMs, because
+    mapper XML and any future module descriptor have the same rule.
+    """
+    gate = "xml-comment-double-dash"
+    problems: list[str] = []
+    scanned = 0
+    for path in sorted(REPO.rglob("*.xml")):
+        rel = path.relative_to(REPO).as_posix()
+        if "/target/" in rel or rel.startswith("target/"):
+            continue
+        scanned += 1
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for match in XML_COMMENT_RE.finditer(text):
+            if "--" not in match.group(1):
+                continue
+            line = text[:match.start()].count("\n") + 1
+            snippet = " ".join(match.group(1).split())[:60]
+            problems.append(f"{rel}:{line} ({snippet!r})")
+
+    if problems:
+        report(gate, False,
+               f"{len(problems)} XML comment(s) contain '--', which makes the file "
+               f"non-parseable: " + "; ".join(problems[:5])
+               + (" ..." if len(problems) > 5 else ""))
+        return
+    report(gate, True, f"{scanned} XML file(s), no '--' inside a comment")
+
+
+# V9 section 80 bans the global ``classpath*:/mapper/*.xml`` swallow once services
+# are split. It is still *correct* today: there is exactly one application module,
+# so there is nothing else on the classpath for it to swallow. And changing it now
+# would be an unverifiable config change -- the five ``@SpringBootTest`` classes
+# are all sliced (explicit ``classes = {...}``) and never boot MyBatis-Plus, so a
+# broken ``mapper-locations`` would be caught by production, not by CI.
+#
+# Wave 0B therefore freezes the current state instead of editing it: this gate
+# fails if a NEW config file introduces the pattern, and reports the surviving one
+# so it cannot be forgotten. Wave 1 moves MyBatis config into Nacos Service Private
+# DataId, which is the natural moment to narrow it.
+KNOWN_MYBATIS_GLOBAL_SCAN = {
+    "apps/core-host/src/main/resources/application.yml",
+}
+
+MAPPED_LOCATIONS_RE = re.compile(r"^\s*mapper-locations:\s*(\S+)", re.M)
+CLASSPATH_PREFIX_RE = re.compile(r"^classpath\*?:")
+
+
+def ant_to_regex(pattern: str) -> str:
+    """Translate an Ant-style resource pattern to an anchored regex."""
+    out = []
+    index = 0
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "*":
+            if pattern[index:index + 2] == "**":
+                out.append(".*")
+                index += 2
+                continue
+            out.append("[^/]*")
+        elif char == "?":
+            out.append("[^/]")
+        else:
+            out.append(re.escape(char))
+        index += 1
+    return "^" + "".join(out) + "$"
+
+
+def mapper_xml_files() -> list[Path]:
+    """Every mapper XML in the tree, keyed by its classpath path."""
+    found = []
+    for path in sorted(REPO.rglob("*.xml")):
+        rel = path.relative_to(REPO).as_posix()
+        if "/target/" in rel or rel.startswith("target/"):
+            continue
+        if "/resources/mapper/" in rel:
+            found.append(path)
+    return found
+
+
+def gate_mybatis_scan_scope() -> None:
+    """V9 section 80: per-service mapper ownership, and no new global swallow.
+
+    Three criteria, in the order the failure would hurt:
+
+    1. A mapper XML must live under ``apps/<module>/src/main/resources/mapper/``.
+       A mapper XML inside ``libs/`` is the global swallow expressed as a file: a
+       shared jar is on every service's classpath, so every service would load it
+       and silently own another domain's SQL.
+    2. Every mapper XML must actually be reachable from its module's
+       ``mapper-locations``. A mapper XML that nothing loads is a dead file -- the
+       queries in it would fail at runtime with "Invalid bound statement", which
+       reads like a code bug rather than a config bug.
+    3. The ``classpath*:/mapper/`` global swallow must not spread to a new config
+       file (see ``KNOWN_MYBATIS_GLOBAL_SCAN``).
+    """
+    gate = "mybatis-scan-scope"
+    problems: list[str] = []
+
+    # --- criterion 1: ownership -------------------------------------------
+    owned: dict[str, list[Path]] = {}
+    for path in mapper_xml_files():
+        rel = path.relative_to(REPO).as_posix()
+        parts = rel.split("/")
+        if parts[0] != "apps" or len(parts) < 3:
+            problems.append(
+                f"{rel} is a mapper XML outside apps/<module>/src/main/resources/mapper/ "
+                f"-- a mapper XML in a shared lib is loaded by every service (section 80)")
+            continue
+        owned.setdefault(parts[1], []).append(path)
+
+    # --- criterion 2: reachable from the module's own config ---------------
+    for module, paths in sorted(owned.items()):
+        resources = REPO / "apps" / module / "src" / "main" / "resources"
+        patterns: list[str] = []
+        for config in sorted(resources.rglob("application*.y*ml")):
+            text = config.read_text(encoding="utf-8", errors="replace")
+            for raw in MAPPED_LOCATIONS_RE.findall(text):
+                patterns.append(CLASSPATH_PREFIX_RE.sub("", raw.strip().strip('"\'')))
+        if not patterns:
+            problems.append(
+                f"apps/{module} ships {len(paths)} mapper XML but declares no "
+                f"mapper-locations, so nothing loads them: "
+                + ", ".join(p.name for p in paths))
+            continue
+        regexes = [re.compile(ant_to_regex(pattern)) for pattern in patterns]
+        for path in paths:
+            classpath_path = "/" + path.relative_to(resources).as_posix()
+            if not any(regex.match(classpath_path) for regex in regexes):
+                problems.append(
+                    f"{path.relative_to(REPO).as_posix()} is not matched by any "
+                    f"mapper-locations in apps/{module} ({patterns}) -- the file "
+                    f"would never be loaded")
+
+    # --- criterion 3: the global swallow must not spread -------------------
+    offenders: list[str] = []
+    survivors: list[str] = []
+    for config in sorted(list((REPO / "apps").rglob("*.y*ml"))
+                         + list((REPO / "libs").rglob("*.y*ml"))):
+        rel = config.relative_to(REPO).as_posix()
+        if "/target/" in rel:
+            continue
+        text = config.read_text(encoding="utf-8", errors="replace")
+        has_swallow = any("classpath*:/mapper/" in raw
+                          for raw in MAPPED_LOCATIONS_RE.findall(text))
+        if has_swallow:
+            if rel in KNOWN_MYBATIS_GLOBAL_SCAN:
+                survivors.append(rel)
+            else:
+                offenders.append(rel)
+    if offenders:
+        problems.append(
+            f"new classpath*:/mapper/ global swallow in {offenders} -- section 80 "
+            f"forbids adding one; narrow it to the module's own mapper directory")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+
+    detail = (f"{len(owned)} module(s) own {len(mapper_xml_files())} mapper XML, "
+              f"all reachable from their own config")
+    stale = sorted(KNOWN_MYBATIS_GLOBAL_SCAN - set(survivors))
+    if stale:
+        detail += (f"; {stale} no longer use the global swallow, remove from "
+                   f"KNOWN_MYBATIS_GLOBAL_SCAN")
+    if survivors:
+        detail += (f"; global swallow still present in {survivors} "
+                   f"(deliberate until Wave 1 moves MyBatis config to Nacos)")
+    report(gate, True, detail)
+
+
 # ``@SchedulerLock`` and ``@net.javacrumbs...SchedulerLock`` must both be caught:
 # a fully-qualified annotation is legal Java, and a gate that only matches the short
 # form would let a per_instance task carry a global lock straight through (§69).
@@ -865,6 +1057,8 @@ GATES = {
     "gateway-stream-proxy-config-check": gate_gateway_stream_proxy_config,
     "flyway-validation": gate_flyway_validation,
     "stream-ban-boundary-coverage": gate_stream_ban_boundary_coverage,
+    "xml-comment-double-dash": gate_xml_comment_double_dash,
+    "mybatis-scan-scope": gate_mybatis_scan_scope,
 }
 
 

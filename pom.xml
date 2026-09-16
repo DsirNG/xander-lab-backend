@@ -33,12 +33,19 @@
     <modules>
         <!-- Built first: the reactor sorts by inter-module dependency. -->
         <module>libs/xander-model</module>
+        <module>libs/xander-mybatis-support</module>
         <module>apps/core-host</module>
     </modules>
 
     <properties>
         <java.version>17</java.version>
         <mcp.sdk.version>2.0.0</mcp.sdk.version>
+        <!--
+            Single source of truth for MyBatis-Plus. Declared here rather than inline in each
+            POM, so the library and the application cannot end up on two different versions.
+            Two MyBatis-Plus versions on one classpath is a genuinely confusing failure.
+        -->
+        <mybatis.plus.version>3.5.5</mybatis.plus.version>
     </properties>
 
 </project>

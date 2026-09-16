@@ -102,12 +102,25 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
 
+# V9 §80「MyBatis 配置分片」的当前状态与 Wave 0B 的处置：
+#
+#   mapper-locations 用的是 classpath*:/mapper/*.xml，正是 §80 明令禁止的「全局吞入」。
+#   今天它是对的：全仓只有一个应用模块，classpath 上没有别人的 mapper 可吞。§80 的禁令
+#   写在「拆分后」的语境里，真正生效的时点是各服务独立成 jar 之后（Wave 2）。
+#   本轮刻意【不改】：五个 @SpringBootTest 都是切片上下文（显式 classes = {...}），
+#   没有任何测试会启动 MyBatis-Plus 并解析 mapper-locations，所以改这一行属于
+#   「改完无法验证」的行为变更。Wave 0B 改为用门禁冻结现状（ci_gates.py 的
+#   mybatis-scan-scope），Wave 1 把配置搬进 Nacos Service Private DataId 时一并收窄。
+#
+#   type-aliases-package 原本第一项是 com.xander.lab.entity，该包并不存在（旧式分层
+#   遗留的空目录），已删除。剩下三项是真实域包，但当前唯一一份 mapper XML
+#   （mapper/BlogPostMapper.xml）通篇使用全限定类名，因此这个属性目前整体未被使用。
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   mapper-locations: classpath*:/mapper/*.xml
-  type-aliases-package: com.xander.lab.entity,com.xander.lab.automation.domain,com.xander.lab.studio.domain,com.xander.lab.billing.domain
+  type-aliases-package: com.xander.lab.automation.domain,com.xander.lab.studio.domain,com.xander.lab.billing.domain
 
 # JWT配置
 jwt:

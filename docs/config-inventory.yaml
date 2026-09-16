@@ -462,7 +462,7 @@ config:
     logical_owner: shared
   - key: mybatis-plus.type-aliases-package
     source: application.yml
-    value: "com.xander.lab.entity,com.xander.lab.automation.domain,com.xander.lab.studio.domain,com.xander.lab.billing.domain"
+    value: "com.xander.lab.automation.domain,com.xander.lab.studio.domain,com.xander.lab.billing.domain"
     leaf: true
     logical_owner: shared
   - key: jwt

@@ -62,9 +62,15 @@ apps/core-host/src/main/java/com/xander/lab/
   publishing/  recitation/  studio/  virtualpay/
 ```
 
-⚠️ 仓库里还有 `controller/` `dto/` `entity/` `mapper/` `service/` `util/`
-六个**空目录**（旧式分层的残留，0 个文件）。它们不属于任何域，
-在 Wave 0B 的共享库拆分时应删除，不要因为"看起来像基础设施"而给它分配 Owner。
+⚠️ 旧式分层还留下 `controller/` `dto/` `entity/` `mapper/` `service/` `util/`
+六个**空目录**（`dto/` 下另有 6 个空子目录，合计 0 个文件）。它们不属于任何域，
+**不要**因为"看起来像基础设施"而给它分配 Owner。
+
+⚠️ 更要紧的是：**这六个目录 Git 从来没跟踪过** —— Git 不跟踪空目录，
+所以"删除它们"从来不是一个可提交的动作，它们只存在于本地工作区。
+Wave 0B 已从工作区清理；`type-aliases-package` 里指向 `com.xander.lab.entity`
+的那一项也一并删除（该包并不存在）。详见
+[`lib-extraction.md`](./lib-extraction.md) §7。
 
 ---
 
@@ -170,7 +176,7 @@ Wave 2：core-host 允许 2 实例（滚动发布需要）
 |---|---|---|
 | 映射未进入机器门禁 | 本文是 §3 的人工转写。三份清单各自有门禁，但**没有门禁校验"清单里的部署单元名是否都在 §3 的集合里"** —— 写错一个单元名（如 `dinqor-content` 写成 `dinqor-contents`）不会失败 | Wave 0B |
 | `bloghtml` 的 Wave 1 拆分细节未定 | §3 只说它 Wave 1 搬到 `dinqor-bloghtml-preview`，没有对应的长连接/表/调度影响分析（它不持有 SSE，表归属已在 `table-ownership.yaml`） | Wave 1 设计 |
-| 空目录未清理 | 见 §2 的六个空包，属 Wave 0B 共享库拆分范围 | Wave 0B |
+| 空目录已清理（不可提交） | 见 §2 的六个空包。Git 不跟踪空目录，所以仓库里本就没有它们，清理只影响本地工作区 | 已处理 |
 | `components` 前缀嵌套 | 见 §3，Gateway 路由 `order` 需要在 Wave 1 实际配置时验证 | Wave 1 |
 
 ---

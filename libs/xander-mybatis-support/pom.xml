@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>xander-mybatis-support</artifactId>
+    <name>xander-mybatis-support</name>
+    <description>
+        MyBatis / MyBatis-Plus support (V9 §20). Only DB services depend on this; it is the
+        reason the old "one common.jar for everything" had to be split, because carrying this
+        module is what a WebFlux Gateway must not do.
+
+        Contents:
+        - MybatisPlusConfig  -- the pagination interceptor bean.
+        - PageData           -- the unified pagination response body.
+
+        Why PageData is here and not in xander-model: V9 §19 lists it as "purely shared" and
+        V9 §20 puts it in xander-model while also requiring that module to have "no MyBatis".
+        Both cannot hold: PageData's entire content is an adapter over
+        com.baomidou.mybatisplus.core.metadata.IPage. The "no MyBatis" rule wins, so it lives
+        here, with the technology it actually depends on.
+
+        V9 §20 also mentions "公共 TypeHandler". There are none in this codebase -- the grep for
+        TypeHandler over the whole application returns nothing -- so nothing was moved for it.
+        If one is ever added it belongs in this module.
+    </description>
+
+    <dependencies>
+        <!--
+            mybatis-plus-extension pulls in mybatis-plus-core (IPage) and mybatis itself.
+            Version comes from the parent property so the library and the application can never
+            drift onto two different MyBatis-Plus versions, which would put two copies of
+            MyBatis-Plus classes on one classpath.
+        -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-extension</artifactId>
+            <version>${mybatis.plus.version}</version>
+        </dependency>
+        <!-- @Configuration / @Bean. Version managed by the Spring Boot BOM. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+</project>
