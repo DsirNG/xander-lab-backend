@@ -4,7 +4,7 @@ import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.domain.User;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.components.api.ComponentCategoryVO;
 import com.xander.lab.components.api.ComponentDetailPageVO;
 import com.xander.lab.components.api.ComponentDetailVO;

@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.csdn.api;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;

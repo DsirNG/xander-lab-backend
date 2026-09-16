@@ -3,7 +3,7 @@ package com.xander.lab.agent.api;
 import com.xander.lab.agent.application.AgentUserSkillService;
 import com.xander.lab.agent.domain.AgentUserSkill;
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;

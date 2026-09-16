@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.billing.domain.BillingBiz;
 import com.xander.lab.blogagent.application.BlogAgentService;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.publishing.api.BlogPostVO;

@@ -32,6 +32,16 @@
             <artifactId>xander-mybatis-support</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!--
+            Auth core: UserContext (trusted identity model) + JwtUtil (token verifier), V9 §20.
+            This is the lib the WebFlux Gateway will share with us, which is why it must stay
+            free of MVC, WebFlux implementation and Redis.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>xander-auth-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
@@ -91,7 +101,7 @@
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-api</artifactId>
-            <version>0.12.6</version>
+            <version>${jjwt.version}</version>
         </dependency>
         <!-- BCrypt 密码哈希 -->
         <dependency>
@@ -101,13 +111,13 @@
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-impl</artifactId>
-            <version>0.12.6</version>
+            <version>${jjwt.version}</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
             <artifactId>jjwt-jackson</artifactId>
-            <version>0.12.6</version>
+            <version>${jjwt.version}</version>
             <scope>runtime</scope>
         </dependency>
         <dependency>

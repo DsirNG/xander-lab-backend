@@ -1,7 +1,7 @@
 package com.xander.lab.profile.api;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.profile.application.ProfileOverviewService;
 import com.xander.lab.profile.application.ProfileOverviewService.ProfileOverview;
 import lombok.RequiredArgsConstructor;

@@ -2,7 +2,7 @@ package com.xander.lab.publishing.api;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.common.PageData;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.publishing.application.AgentImageVO;
 import com.xander.lab.publishing.application.BlogMediaService;
 import org.junit.jupiter.api.AfterEach;

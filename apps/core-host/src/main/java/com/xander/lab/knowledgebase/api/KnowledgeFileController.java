@@ -1,7 +1,7 @@
 package com.xander.lab.knowledgebase.api;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.knowledgebase.application.KnowledgeFileService;
 import com.xander.lab.knowledgebase.application.KnowledgeStructureService;
 import com.xander.lab.knowledgebase.application.KnowledgeTagService;

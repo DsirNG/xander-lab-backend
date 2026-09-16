@@ -339,6 +339,37 @@ def gate_shared_kernel_reverse_dependency() -> None:
     report(gate, True, detail)
 
 
+def gate_shared_kernel_classification() -> None:
+    """Every package shipped by ``libs/`` must be listed in ``SHARED_KERNEL``.
+
+    ``SHARED_KERNEL`` is a hardcoded package-name list and the cross-domain scanner
+    classifies imports by package name. So a library whose package is missing from that
+    list is misfiled *silently*: its classes are still scanned, but an import of one is
+    neither a business-domain edge nor a shared-kernel source, so every edge pointing at
+    it is dropped. The backlog number then goes DOWN while the coupling is unchanged.
+
+    That is the silent-omission failure V9 section 13 exists to prevent, so the key set is
+    derived from the tree and compared instead of trusted.
+    """
+    gate = "shared-kernel-classification"
+    provided = scan.lib_packages()
+    declared = set(scan.SHARED_KERNEL)
+    missing = sorted(provided - declared)
+    if missing:
+        report(gate, False,
+               f"libs/ ships package(s) {missing} that SHARED_KERNEL does not list -- "
+               f"imports of them would be dropped from the cross-domain baseline without "
+               f"any coupling being removed. Add them to SHARED_KERNEL in "
+               f"scripts/migration/scan.py")
+        return
+    in_app = sorted(declared - provided - set(scan.BUSINESS_DOMAINS))
+    detail = f"all {len(provided)} lib package(s) classified: {sorted(provided)}"
+    if in_app:
+        detail += (f"; SHARED_KERNEL also lists {in_app}, which no lib provides yet "
+                   f"(still in-app shared packages)")
+    report(gate, True, detail)
+
+
 def gate_cross_domain_import_baseline() -> None:
     """V9 section 81: the cross-domain implementation-import backlog must shrink.
 
@@ -1049,6 +1080,7 @@ GATES = {
     "table-ownership-drift": gate_table_ownership_drift,
     "config-ownership-drift": gate_config_ownership_drift,
     "shared-kernel-reverse-dependency": gate_shared_kernel_reverse_dependency,
+    "shared-kernel-classification": gate_shared_kernel_classification,
     "cross-domain-import-baseline": gate_cross_domain_import_baseline,
     "contract-changes-completeness": gate_contract_changes_completeness,
     "capability-baseline-diff": gate_capability_baseline_diff,

@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.client.api;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.client.application.AgentMcpServerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

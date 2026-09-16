@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.juejin.api;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.publishing.domain.PublishResult;
 import lombok.RequiredArgsConstructor;

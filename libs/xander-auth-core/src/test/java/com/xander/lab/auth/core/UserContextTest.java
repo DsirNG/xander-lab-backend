@@ -1,4 +1,4 @@
-package com.xander.lab.identity.security;
+package com.xander.lab.auth.core;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

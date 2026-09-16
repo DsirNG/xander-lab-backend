@@ -1,7 +1,7 @@
 package com.xander.lab.virtualpay.api;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.virtualpay.application.VirtualPayService;
 import com.xander.lab.virtualpay.infrastructure.VirtualPayProperties;
 import com.xander.lab.virtualpay.infrastructure.VirtualPaySigner;

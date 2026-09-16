@@ -2,7 +2,7 @@ package com.xander.lab.bloghtml.api;
 
 import com.xander.lab.bloghtml.application.BlogHtmlPreviewService;
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;

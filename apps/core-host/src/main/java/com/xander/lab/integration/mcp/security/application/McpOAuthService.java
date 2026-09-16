@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.identity.application.AuthService;
-import com.xander.lab.identity.security.JwtUtil;
+import com.xander.lab.auth.core.JwtUtil;
 import com.xander.lab.integration.mcp.security.McpOAuthException;
 import com.xander.lab.integration.mcp.security.McpOAuthProperties;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;

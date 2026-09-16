@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>xander-auth-core</artifactId>
+    <name>xander-auth-core</name>
+    <description>
+        Auth core (V9 §20): the trusted-identity model and the access-token verifier, shared by
+        every service including the WebFlux Gateway.
+
+        Contents:
+        - UserContext : the request-scoped identity holder (userId + client IP).
+        - JwtUtil     : access / refresh / bind token generation and verification.
+
+        Allowed here (V9 §20): JWT claim model, access token verifier, auth policy model,
+        trusted identity model.
+        Forbidden here (V9 §20): HandlerInterceptor, WebMvcConfigurer, Gateway Filter,
+        RedisHealthMonitor. Must stay Servlet / Reactive neutral.
+
+        Deliberate non-members, and why:
+        - AuthInterceptor
+                        -> xander-webmvc-support. It is a HandlerInterceptor, which V9 §20
+                           forbids here by name. It is also not extractable yet: it reads the
+                           long-connection security plane (Redis) and the account security
+                           state table, which V9 §49 to §51 put on the application side.
+        - PasswordEncoderConfig
+                        -> stays on the application. It is a @Configuration wiring
+                           spring-security-crypto's BCrypt bean, i.e. MVC-side infrastructure,
+                           and V9 §20 does not list it.
+
+        Warning, recorded rather than resolved: UserContext is a ThreadLocal holder. It has
+        zero framework dependencies, so it is neutral in the dependency sense, but a
+        ThreadLocal is a Servlet way to carry request identity and does NOT work under
+        WebFlux, where a request can move between threads. A reactive consumer must not use
+        it and needs the identity threaded through the Reactor context instead. V9 §20 names
+        "trusted identity model" as belonging in this lib and this is the existing model, so
+        the caveat is documented here for whoever builds the Wave 1 Gateway rather than
+        hidden by leaving the class in a business domain package.
+    </description>
+
+    <dependencies>
+        <!--
+            @Component / @Value. Not MVC and not WebFlux, so both stacks may depend on it.
+            Version managed by the Spring Boot BOM.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <!-- @PostConstruct on JwtUtil.validateSecret. -->
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+            <version>${jjwt.version}</version>
+        </dependency>
+        <!--
+            Runtime-only, exactly as in the application: jjwt-api is the compile surface and
+            the implementation must not leak into callers. The version comes from the parent
+            property so the library and the application cannot drift onto two jjwt versions.
+        -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <version>${jjwt.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!--
+            The library owns its own tests. spring-boot-starter-test is test-scoped so it does
+            not reach consumers, and the version is managed by spring-boot-starter-parent.
+            A library whose tests live in the application module is not really extracted: the
+            application would own the tests for classes it no longer owns.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- No spring-boot-maven-plugin: see libs/xander-model/pom.xml for why. -->
+        </plugins>
+    </build>
+
+</project>

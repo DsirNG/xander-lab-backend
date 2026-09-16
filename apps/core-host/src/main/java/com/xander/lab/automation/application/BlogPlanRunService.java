@@ -18,7 +18,7 @@ import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.publishing.domain.PublishCommand;

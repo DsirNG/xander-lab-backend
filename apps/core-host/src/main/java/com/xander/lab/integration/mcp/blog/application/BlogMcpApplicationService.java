@@ -3,7 +3,7 @@ package com.xander.lab.integration.mcp.blog.application;
 import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.common.PageData;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.publishing.application.BlogService;
 import lombok.RequiredArgsConstructor;

@@ -3,7 +3,7 @@ package com.xander.lab.blogagent.api;
 import com.xander.lab.blogagent.application.BlogAgentEventService;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.common.security.ConnectionRegistry;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

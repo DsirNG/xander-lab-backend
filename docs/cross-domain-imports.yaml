@@ -7,13 +7,14 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 172
-  implementation_edges: 49
-  cross_deployment_unit_statements: 125
-  cross_deployment_unit_edges: 31
+  implementation_statements: 137
+  implementation_edges: 42
+  cross_deployment_unit_statements: 103
+  cross_deployment_unit_edges: 28
   api_statements: 38
   api_edges: 11
   shared_kernel_sources:
+    - auth
     - common
     - config
     - filter
@@ -53,37 +54,6 @@ edges:
       - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryPostsTool.java
       - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryUnsyncedPostsTool.java
       - apps/core-host/src/main/java/com/xander/lab/agent/application/RememberTool.java
-  - from: integration
-    to: identity
-    from_unit: dinqor-platform-integration
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 9
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/blog/application/BlogMcpApplicationService.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnBlogSyncController.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinBlogSyncController.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinCatalogController.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/application/McpOAuthService.java
-  - from: agent
-    to: identity
-    from_unit: dinqor-agent
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 7
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentStreamAuthHandshakeInterceptor.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentWebSocketConfig.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryPostsTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryUnsyncedPostsTool.java
   - from: agent
     to: automation
     from_unit: dinqor-agent
@@ -130,18 +100,6 @@ edges:
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentTaskVO.java
       - apps/core-host/src/main/java/com/xander/lab/blogagent/application/BlogAgentService.java
-  - from: virtualpay
-    to: identity
-    from_unit: dinqor-core-host
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 6
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/virtualpay/api/VirtualPayController.java
-      - apps/core-host/src/main/java/com/xander/lab/virtualpay/application/VirtualPayService.java
-      - apps/core-host/src/main/java/com/xander/lab/virtualpay/application/VirtualPaySettingsService.java
-      - apps/core-host/src/main/java/com/xander/lab/virtualpay/infrastructure/WechatVirtualPayClient.java
   - from: integration
     to: agent
     from_unit: dinqor-platform-integration
@@ -153,17 +111,17 @@ edges:
       - apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/application/AgentMcpServerService.java
       - apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/application/McpToolSource.java
       - apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/application/RemoteMcpTool.java
-  - from: publishing
+  - from: virtualpay
     to: identity
-    from_unit: dinqor-content-automation
+    from_unit: dinqor-core-host
     to_unit: dinqor-core-host
-    crosses_deployment_unit: true
+    crosses_deployment_unit: false
     api_statements: 0
     implementation_statements: 5
     implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-      - apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
-      - apps/core-host/src/main/java/com/xander/lab/publishing/application/BlogService.java
+      - apps/core-host/src/main/java/com/xander/lab/virtualpay/application/VirtualPayService.java
+      - apps/core-host/src/main/java/com/xander/lab/virtualpay/application/VirtualPaySettingsService.java
+      - apps/core-host/src/main/java/com/xander/lab/virtualpay/infrastructure/WechatVirtualPayClient.java
   - from: agent
     to: blogagent
     from_unit: dinqor-agent
@@ -208,18 +166,6 @@ edges:
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogContentPlanService.java
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogPlanRunService.java
   - from: automation
-    to: identity
-    from_unit: dinqor-content-automation
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 4
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-      - apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
-      - apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
-      - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogPlanRunService.java
-  - from: automation
     to: publishing
     from_unit: dinqor-content-automation
     to_unit: dinqor-content-automation
@@ -248,48 +194,16 @@ edges:
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/application/CsdnMcpApplicationService.java
       - apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/application/JuejinMcpApplicationService.java
-  - from: knowledgebase
-    to: identity
-    from_unit: dinqor-core-host
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 4
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFileController.java
-      - apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeFolderController.java
-      - apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeTagController.java
-      - apps/core-host/src/main/java/com/xander/lab/knowledgebase/api/KnowledgeUploadController.java
   - from: admin
     to: identity
     from_unit: dinqor-core-host
     to_unit: dinqor-core-host
     crosses_deployment_unit: false
     api_statements: 2
-    implementation_statements: 3
+    implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminUserController.java
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
-  - from: components
-    to: identity
-    from_unit: dinqor-core-host
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 3
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/components/application/ComponentService.java
-  - from: studio
-    to: identity
-    from_unit: dinqor-core-host
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 3
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/studio/api/FlowCanvasController.java
-      - apps/core-host/src/main/java/com/xander/lab/studio/api/FlowProjectController.java
-      - apps/core-host/src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
   - from: agent
     to: admin
     from_unit: dinqor-agent
@@ -299,6 +213,16 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelClient.java
+  - from: agent
+    to: identity
+    from_unit: dinqor-agent
+    to_unit: dinqor-core-host
+    crosses_deployment_unit: true
+    api_statements: 0
+    implementation_statements: 2
+    implementation_files:
+      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentStreamAuthHandshakeInterceptor.java
+      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentWebSocketConfig.java
   - from: automation
     to: billing
     from_unit: dinqor-content-automation
@@ -327,6 +251,15 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/blogagent/application/BlogAgentService.java
+  - from: components
+    to: identity
+    from_unit: dinqor-core-host
+    to_unit: dinqor-core-host
+    crosses_deployment_unit: false
+    api_statements: 0
+    implementation_statements: 2
+    implementation_files:
+      - apps/core-host/src/main/java/com/xander/lab/components/application/ComponentService.java
   - from: knowledgebase
     to: automation
     from_unit: dinqor-core-host
@@ -345,16 +278,15 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/knowledgebase/application/KnowledgeFileService.java
-  - from: profile
+  - from: publishing
     to: identity
-    from_unit: dinqor-core-host
+    from_unit: dinqor-content-automation
     to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 1
+    crosses_deployment_unit: true
+    api_statements: 0
     implementation_statements: 2
     implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/profile/api/ProfileOverviewController.java
-      - apps/core-host/src/main/java/com/xander/lab/profile/application/ProfileOverviewService.java
+      - apps/core-host/src/main/java/com/xander/lab/publishing/application/BlogService.java
   - from: publishing
     to: integration
     from_unit: dinqor-content-automation
@@ -427,33 +359,6 @@ edges:
     implementation_statements: 1
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminVirtualPaySettingsController.java
-  - from: billing
-    to: identity
-    from_unit: dinqor-core-host
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 1
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/billing/api/PointsController.java
-  - from: blogagent
-    to: identity
-    from_unit: dinqor-content-automation
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 1
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-  - from: bloghtml
-    to: identity
-    from_unit: dinqor-bloghtml-preview
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 1
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
   - from: identity
     to: billing
     from_unit: dinqor-core-host
@@ -481,12 +386,30 @@ edges:
     implementation_statements: 1
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/integration/mail/MailService.java
+  - from: integration
+    to: identity
+    from_unit: dinqor-platform-integration
+    to_unit: dinqor-core-host
+    crosses_deployment_unit: true
+    api_statements: 0
+    implementation_statements: 1
+    implementation_files:
+      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/application/McpOAuthService.java
   - from: profile
     to: billing
     from_unit: dinqor-core-host
     to_unit: dinqor-core-host
     crosses_deployment_unit: false
     api_statements: 0
+    implementation_statements: 1
+    implementation_files:
+      - apps/core-host/src/main/java/com/xander/lab/profile/application/ProfileOverviewService.java
+  - from: profile
+    to: identity
+    from_unit: dinqor-core-host
+    to_unit: dinqor-core-host
+    crosses_deployment_unit: false
+    api_statements: 1
     implementation_statements: 1
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/profile/application/ProfileOverviewService.java
@@ -508,15 +431,6 @@ edges:
     implementation_statements: 1
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/publishing/application/BlogMediaService.java
-  - from: recitation
-    to: identity
-    from_unit: dinqor-core-host
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 1
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/recitation/api/RecitationController.java
   - from: studio
     to: blogagent
     from_unit: dinqor-core-host

@@ -3,7 +3,7 @@ package com.xander.lab.automation.api;
 import com.xander.lab.automation.application.BlogNotificationService;
 import com.xander.lab.automation.infrastructure.BlogPlanSseService;
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;

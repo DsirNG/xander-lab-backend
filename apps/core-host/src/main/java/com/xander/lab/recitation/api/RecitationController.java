@@ -1,7 +1,7 @@
 package com.xander.lab.recitation.api;
 
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.recitation.application.KnowledgeQuizService;
 import com.xander.lab.recitation.application.RecitationService;
 import com.xander.lab.recitation.domain.ArchiveFilter;

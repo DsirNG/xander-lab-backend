@@ -22,7 +22,11 @@
         piece every service may use.
 
         Forbidden here (V9 §20): Spring MVC, WebFlux, MyBatis, Redis, any business domain.
-        Enforced by ArchUnitModelBoundaryTest in this module.
+        There is no ArchUnit test in this module yet. V9 §21's dependency rules are currently
+        enforced by the Python gates in scripts/migration/ci_gates.py; ArchUnit needs the
+        modules to actually exist before it has a place to run. (An earlier revision of this
+        description claimed an ArchUnitModelBoundaryTest that was never written. Removed
+        rather than left as a claim the code does not back.)
 
         Deliberate non-members, and why:
         - PageData      -> xander-mybatis-support. Its only content is a MyBatis-Plus IPage

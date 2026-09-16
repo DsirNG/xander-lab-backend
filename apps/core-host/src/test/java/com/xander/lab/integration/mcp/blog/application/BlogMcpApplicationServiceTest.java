@@ -1,6 +1,6 @@
 package com.xander.lab.integration.mcp.blog.application;
 
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.publishing.application.BlogService;
 import org.junit.jupiter.api.AfterEach;

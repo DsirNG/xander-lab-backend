@@ -3,7 +3,7 @@ package com.xander.lab.studio.api;
 import com.xander.lab.common.Result;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.studio.api.Img2ThreeTaskSummaryVO;
 import com.xander.lab.studio.api.Img2ThreeTaskVO;
 import com.xander.lab.studio.application.Img2ThreeService;

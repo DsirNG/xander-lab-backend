@@ -9,7 +9,7 @@ import com.xander.lab.identity.infrastructure.AccountMergeMapper;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient.WechatSession;
-import com.xander.lab.identity.security.JwtUtil;
+import com.xander.lab.auth.core.JwtUtil;
 import com.xander.lab.integration.mail.MailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

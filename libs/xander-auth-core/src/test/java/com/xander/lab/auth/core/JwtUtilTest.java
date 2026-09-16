@@ -1,4 +1,4 @@
-package com.xander.lab.identity.security;
+package com.xander.lab.auth.core;
 
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.BeforeEach;

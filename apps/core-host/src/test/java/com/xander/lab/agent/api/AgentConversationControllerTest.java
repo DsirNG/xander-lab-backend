@@ -6,7 +6,7 @@ import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.agent.application.AgentApprovalService;
 import com.xander.lab.agent.domain.AgentApproval;
 import com.xander.lab.agent.domain.AgentConversation;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.TaskExecutor;

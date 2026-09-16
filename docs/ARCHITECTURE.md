@@ -180,11 +180,14 @@ empty except for shared infrastructure:
 5. FlowCraft and Img2Three live under `studio`; the UI component library lives under `components`.
 6. Shared cross-module contracts live under `common`: `Result` and the model
    call/usage types in `libs/xander-model`, the pagination response `PageData`
-   and the MyBatis-Plus interceptor in `libs/xander-mybatis-support`, and the
-   operational health endpoints still on the application module
-   (`apps/core-host`). The split is deliberate, not cosmetic: a WebFlux gateway
-   can depend on `xander-model` but must never pull in MyBatis, so the two
-   cannot share one jar.
+   and the MyBatis-Plus interceptor in `libs/xander-mybatis-support`, the
+   trusted identity model (`UserContext`) and token verifier (`JwtUtil`) in
+   `libs/xander-auth-core`, and the operational health endpoints still on the
+   application module (`apps/core-host`). The split is deliberate, not cosmetic:
+   a WebFlux gateway can depend on `xander-model` and `xander-auth-core` but must
+   never pull in MyBatis, so they cannot share one jar. The auth lib also keeps
+   `HandlerInterceptor` out on purpose — `AuthInterceptor` stays in
+   `identity.security`, where the Servlet-side wiring lives.
 
 ## Agent HTTP, SSE, and WebSocket Contract
 

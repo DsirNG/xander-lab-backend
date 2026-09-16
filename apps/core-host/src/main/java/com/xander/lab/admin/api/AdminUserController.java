@@ -4,7 +4,7 @@ import com.xander.lab.common.PageData;
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.api.UserAdminView;
 import com.xander.lab.identity.application.UserAdminService;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;

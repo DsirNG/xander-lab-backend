@@ -26,6 +26,21 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 **不要**把它写死回单根 —— 否则一旦有类被移进 libs，它会从所有机器清单里静默消失
 （包括遗留 Redis 键清单，那正是"常量被搬走就没人管了"的成因）。
 
+⚠️ **把类移进 libs 时，新库的包名必须加进 `scan.py` 的 `SHARED_KERNEL`。**
+扫描器按包名判定归属：包名不在 `SHARED_KERNEL` 也不是业务域时，指向它的 import 会被整条
+丢掉，跨域基线于是**下降** —— 数字变好而耦合没变，是最坏的一种"通过"。
+门禁 `shared-kernel-classification` 会比对 `libs/` 实际提供的包与 `SHARED_KERNEL`，漏加即 FAIL。
+
+⚠️ **包名要跟着归属走**：`common` / `config` 这类通用名可以跟着类一起搬（保 rename 检测），
+但**业务域名不能**。`UserContext` 从 `identity.security` 搬到 `xander-auth-core` 时改成了
+`auth.core` —— 共享库的类挂在业务域包下，一是架构上撒谎，二是扫描器仍按业务域算跨域依赖，
+抽取的价值在清单上完全看不到。
+
+⚠️ **库自己拥有自己的测试**：类搬进 libs，它的测试也跟着进 `libs/<name>/src/test/java`，
+并在 lib 的 POM 里加 test-scope 依赖。测试留在应用模块等于应用拥有它不再拥有的类。
+核对测试总数时要**各模块相加** —— `mvn -o test` 的 `Results:` 是逐模块打印的，
+只看最后一个会误判成"测试变少了"。
+
 ## API 与异常契约
 
 - 所有错误响应：`{ "code", "message", "data" }`；code 必须与真实 HTTP 语义一致（400/401/403/404/5xx 不被 HTTP 200 包装）。

@@ -2,7 +2,7 @@ package com.xander.lab.automation.api;
 
 import com.xander.lab.automation.application.EmailReminderService;
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;

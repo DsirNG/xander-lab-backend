@@ -5,7 +5,7 @@ import com.xander.lab.automation.application.BlogPlanRunDispatcher;
 import com.xander.lab.automation.application.BlogPlanRunService;
 import com.xander.lab.automation.domain.BlogPlanRun;
 import com.xander.lab.common.Result;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;

@@ -3,7 +3,7 @@ package com.xander.lab.blogagent.api;
 import com.xander.lab.common.Result;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentMessageRequest;

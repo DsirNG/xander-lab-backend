@@ -34,6 +34,7 @@
         <!-- Built first: the reactor sorts by inter-module dependency. -->
         <module>libs/xander-model</module>
         <module>libs/xander-mybatis-support</module>
+        <module>libs/xander-auth-core</module>
         <module>apps/core-host</module>
     </modules>
 
@@ -46,6 +47,12 @@
             Two MyBatis-Plus versions on one classpath is a genuinely confusing failure.
         -->
         <mybatis.plus.version>3.5.5</mybatis.plus.version>
+        <!--
+            Same reason as MyBatis-Plus above: xander-auth-core and the application both
+            depend on jjwt, so the version lives in one place. Two jjwt versions on one
+            classpath is a signature-verification failure that reads like a bad token.
+        -->
+        <jjwt.version>0.12.6</jjwt.version>
     </properties>
 
 </project>

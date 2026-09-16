@@ -63,6 +63,23 @@ def java_roots() -> list[Path]:
 def java_files() -> list[Path]:
     return sorted(path for root in java_roots() for path in root.rglob("*.java"))
 
+
+def lib_packages() -> set[str]:
+    """Top-level ``com.xander.lab.<pkg>`` packages actually provided by ``libs/``.
+
+    Used by the ``shared-kernel-classification`` gate to check that ``SHARED_KERNEL``
+    lists every package a library ships. See the comment above ``SHARED_KERNEL`` for why
+    a missing entry is worse than a loud failure: the coupling stays, the count drops.
+    """
+    packages: set[str] = set()
+    for root in sorted(path for path in LIB_ROOT.glob("*/src/main/java") if path.is_dir()):
+        for path in root.rglob("*.java"):
+            parts = path.relative_to(root).as_posix().split("/")
+            if len(parts) >= 4 and parts[:3] == ["com", "xander", "lab"]:
+                packages.add(parts[3])
+    return packages
+
+
 # ---------------------------------------------------------------------------
 # Domain model
 # ---------------------------------------------------------------------------
@@ -85,7 +102,19 @@ BUSINESS_DOMAINS = [
     "integration",
     "profile",
 ]
-SHARED_KERNEL = ["common", "config", "filter", "util"]
+# Packages that belong to the shared kernel rather than to a business domain.
+#
+# ``common`` / ``config`` / ``filter`` / ``util`` are the in-app shared packages; ``auth``
+# is the package provided by ``libs/xander-auth-core`` (V9 §20).
+#
+# This is a hardcoded list and that is a real hazard: a new lib whose package is missing
+# here is *silently* misfiled. Its classes are still scanned, but the cross-domain scanner
+# treats the package as neither a domain nor shared kernel and drops every edge pointing at
+# it -- so the backlog number goes DOWN while the coupling is unchanged. That is exactly the
+# silent-omission failure V9 section 13 exists to prevent, so ``lib_packages()`` below
+# derives the set from the tree and the ``shared-kernel-classification`` gate compares the
+# two. Adding a lib means adding its package here; the gate fails until you do.
+SHARED_KERNEL = ["auth", "common", "config", "filter", "util"]
 
 # V9 section 3 / section 89: domain -> deployment unit.
 DEPLOYMENT_UNIT = {

@@ -1,9 +1,9 @@
 package com.xander.lab.identity.security;
 
 import com.xander.lab.common.Constants;
-import com.xander.lab.identity.security.UserContext;
+import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.identity.application.AuthService;
-import com.xander.lab.identity.security.JwtUtil;
+import com.xander.lab.auth.core.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
