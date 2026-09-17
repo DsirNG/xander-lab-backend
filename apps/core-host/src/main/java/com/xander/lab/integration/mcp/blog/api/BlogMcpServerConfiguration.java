@@ -5,7 +5,7 @@ import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.McpScopeErrors;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
-import io.modelcontextprotocol.json.McpJsonDefaults;
+import com.xander.lab.integration.mcp.McpJsonMapperFactory;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -31,7 +31,7 @@ public class BlogMcpServerConfiguration {
     @Bean
     HttpServletStreamableServerTransportProvider mcpTransport() {
         return HttpServletStreamableServerTransportProvider.builder()
-                .jsonMapper(McpJsonDefaults.getMapper()).mcpEndpoint("/api/mcp").build();
+                .jsonMapper(McpJsonMapperFactory.jsonMapper()).mcpEndpoint("/api/mcp").build();
     }
 
     @Bean

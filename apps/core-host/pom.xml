@@ -116,6 +116,16 @@
             <artifactId>mcp-json-jackson2</artifactId>
             <version>${mcp.sdk.version}</version>
         </dependency>
+        <!--
+            MCP SDK 的默认 mapper 是裸 new ObjectMapper()，不带 JSR-310；
+            带 LocalDate 的工具返回值会在传输层序列化时抛 InvalidDefinitionException。
+            McpJsonMapperFactory 显式注册 JavaTimeModule，所以这里也显式声明依赖
+            （此前只靠 spring-boot-starter-json 传递进来，版本仍由 spring-boot-dependencies 管理）。
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>

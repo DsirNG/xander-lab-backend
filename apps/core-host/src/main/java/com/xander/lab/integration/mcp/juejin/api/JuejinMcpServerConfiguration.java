@@ -3,7 +3,7 @@ package com.xander.lab.integration.mcp.juejin.api;
 import com.xander.lab.integration.mcp.juejin.application.JuejinMcpApplicationService;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.McpScopeErrors;
-import io.modelcontextprotocol.json.McpJsonDefaults;
+import com.xander.lab.integration.mcp.McpJsonMapperFactory;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -30,7 +30,7 @@ public class JuejinMcpServerConfiguration {
     @Bean
     HttpServletStreamableServerTransportProvider juejinMcpTransport() {
         return HttpServletStreamableServerTransportProvider.builder()
-                .jsonMapper(McpJsonDefaults.getMapper()).mcpEndpoint("/api/mcp/juejin").build();
+                .jsonMapper(McpJsonMapperFactory.jsonMapper()).mcpEndpoint("/api/mcp/juejin").build();
     }
 
     @Bean

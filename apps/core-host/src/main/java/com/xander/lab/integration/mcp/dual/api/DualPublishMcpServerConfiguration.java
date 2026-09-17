@@ -4,7 +4,7 @@ import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.integration.mcp.dual.application.DualPublishMcpApplicationService;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.McpScopeErrors;
-import io.modelcontextprotocol.json.McpJsonDefaults;
+import com.xander.lab.integration.mcp.McpJsonMapperFactory;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -29,7 +29,7 @@ public class DualPublishMcpServerConfiguration {
     @Bean
     HttpServletStreamableServerTransportProvider dualMcpTransport() {
         return HttpServletStreamableServerTransportProvider.builder()
-                .jsonMapper(McpJsonDefaults.getMapper()).mcpEndpoint("/api/mcp/dual").build();
+                .jsonMapper(McpJsonMapperFactory.jsonMapper()).mcpEndpoint("/api/mcp/dual").build();
     }
 
     @Bean

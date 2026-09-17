@@ -3,7 +3,7 @@ package com.xander.lab.integration.mcp.csdn.api;
 import com.xander.lab.integration.mcp.csdn.application.CsdnMcpApplicationService;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.McpScopeErrors;
-import io.modelcontextprotocol.json.McpJsonDefaults;
+import com.xander.lab.integration.mcp.McpJsonMapperFactory;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;
@@ -27,7 +27,7 @@ public class CsdnMcpServerConfiguration {
     @Bean
     HttpServletStreamableServerTransportProvider csdnMcpTransport() {
         return HttpServletStreamableServerTransportProvider.builder()
-                .jsonMapper(McpJsonDefaults.getMapper()).mcpEndpoint("/api/mcp/csdn").build();
+                .jsonMapper(McpJsonMapperFactory.jsonMapper()).mcpEndpoint("/api/mcp/csdn").build();
     }
 
     @Bean

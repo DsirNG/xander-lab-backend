@@ -15,7 +15,7 @@ import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
-import io.modelcontextprotocol.json.McpJsonDefaults;
+import com.xander.lab.integration.mcp.McpJsonMapperFactory;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -119,7 +119,7 @@ public class McpConnectionFactory {
         Duration connectTimeout = Duration.ofSeconds(Math.max(1, properties.getConnectTimeoutSeconds()));
 
         HttpClientStreamableHttpTransport transport = HttpClientStreamableHttpTransport.builder(endpoint.toString())
-                .jsonMapper(McpJsonDefaults.getMapper())
+                .jsonMapper(McpJsonMapperFactory.jsonMapper())
                 .connectTimeout(connectTimeout)
                 .httpRequestCustomizer(new HeaderCustomizer(headers))
                 .build();
