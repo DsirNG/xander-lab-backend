@@ -3,7 +3,7 @@ package com.xander.lab.profile.application;
 import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.application.AuthService;
-import com.xander.lab.publishing.application.BlogService;
+import com.xander.lab.content.api.ContentPostPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -14,13 +14,13 @@ public class ProfileOverviewService {
 
     private final AuthService authService;
     private final BillingPort billingPort;
-    private final BlogService blogService;
+    private final ContentPostPort contentPostPort;
 
     /** 聚合当前用户信息、积分余额和可管理博客数量。 */
     public ProfileOverview getOverview(Long userId) {
         TokenResponse.UserInfo user = authService.getUserInfo(userId);
         long points = billingPort.balance(userId);
-        long blogCount = blogService.countManagedBlogs(userId);
+        long blogCount = contentPostPort.countManaged(userId);
         return new ProfileOverview(user, points, blogCount);
     }
 

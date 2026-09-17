@@ -1,8 +1,8 @@
 package com.xander.lab.integration.mcp.juejin.application;
 
-import com.xander.lab.publishing.api.BlogPostVO;
-import com.xander.lab.publishing.application.BlogService;
-import com.xander.lab.publishing.application.PublicationService;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostPort;
+import com.xander.lab.content.api.PublicationPort;
 import com.xander.lab.content.api.PublishCommand;
 import com.xander.lab.content.api.PublishResult;
 import lombok.RequiredArgsConstructor;
@@ -19,24 +19,24 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class JuejinBlogSyncService {
-    private final BlogService blogService;
-    private final PublicationService publicationService;
+    private final ContentPostPort contentPostPort;
+    private final PublicationPort publicationPort;
 
     public PublishResult sync(Long userId, Long postId, String juejinCategoryId, List<String> juejinTagIds) {
-        BlogPostVO post = blogService.getManagedBlogById(userId, postId);
-        if (post == null || Integer.valueOf(-1).equals(post.getStatus())) {
+        ContentPost post = contentPostPort.findOwned(userId, postId);
+        if (post == null || Integer.valueOf(-1).equals(post.status())) {
             throw new IllegalArgumentException("Blog post does not exist");
         }
         // 未显式指定掘金标签 ID 时，复用本地文章的标签（名称），由发布器解析为掘金 tag_id。
-        List<String> tags = juejinTagIds != null && !juejinTagIds.isEmpty() ? juejinTagIds : post.getTags();
+        List<String> tags = juejinTagIds != null && !juejinTagIds.isEmpty() ? juejinTagIds : post.tags();
         PublishCommand command = new PublishCommand(
-                -postId, userId, post.getTitle(), post.getSummary(), post.getContent(),
-                juejinCategoryId, post.getCoverImage(), tags);
-        return publicationService.publish(command, "juejin");
+                -postId, userId, post.title(), post.summary(), post.content(),
+                juejinCategoryId, post.coverImage(), tags);
+        return publicationPort.publish(command, "juejin");
     }
 
     /** Looks up a completed Juejin synchronization without issuing another external request. */
     public PublishResult findSucceeded(Long userId, Long postId) {
-        return postId == null ? null : publicationService.findSucceeded(userId, -postId, "juejin");
+        return postId == null ? null : publicationPort.findSucceeded(userId, -postId, "juejin");
     }
 }

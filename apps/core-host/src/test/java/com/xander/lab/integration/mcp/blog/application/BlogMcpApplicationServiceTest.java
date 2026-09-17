@@ -2,7 +2,8 @@ package com.xander.lab.integration.mcp.blog.application;
 
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
-import com.xander.lab.publishing.application.BlogService;
+import com.xander.lab.content.api.ContentPostPort;
+import com.xander.lab.content.api.ContentPostQuery;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -17,7 +18,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class BlogMcpApplicationServiceTest {
-    @Mock BlogService blogs;
+    @Mock ContentPostPort contentPostPort;
     @InjectMocks BlogMcpApplicationService service;
 
     @AfterEach void clearContext() { UserContext.clear(); McpOAuthRequestContext.clear(); }
@@ -27,12 +28,13 @@ class BlogMcpApplicationServiceTest {
 
         service.list(1, 10, "java");
 
-        verify(blogs).getMyBlogs(null, "java", 1, 10);
+        verify(contentPostPort).listMyPosts(42L,
+                new ContentPostQuery(null, "java", null, null), 1, 10);
         assertNull(UserContext.getUserId());
     }
 
     @Test void missingClientAuthorizationIsRejected() {
         assertThrows(BlogMcpApplicationService.McpAuthorizationRequiredException.class, () -> service.get(1L));
-        verifyNoInteractions(blogs);
+        verifyNoInteractions(contentPostPort);
     }
 }

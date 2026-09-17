@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.dual.application;
 
-import com.xander.lab.publishing.api.BlogPostDTO;
-import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostInput;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnMcpApplicationService;
 import com.xander.lab.content.api.PublishResult;
@@ -20,13 +20,13 @@ public class DualPublishMcpApplicationService {
      * Uses durable local publication as the first step. A CSDN failure leaves the local article intact
      * and returns its ID so the caller can retry the CSDN synchronization safely.
      */
-    public DualPublishResult publish(BlogPostDTO request) {
-        BlogPostVO localPost = blogMcpService.create(request, true);
+    public DualPublishResult publish(ContentPostInput request) {
+        ContentPost localPost = blogMcpService.create(request, true);
         try {
-            PublishResult csdn = csdnMcpService.syncOwnedPost(localPost.getId());
-            return new DualPublishResult(localPost.getId(), true, csdn.externalId(), csdn.url(), null);
+            PublishResult csdn = csdnMcpService.syncOwnedPost(localPost.id());
+            return new DualPublishResult(localPost.id(), true, csdn.externalId(), csdn.url(), null);
         } catch (RuntimeException exception) {
-            return new DualPublishResult(localPost.getId(), false, null, null,
+            return new DualPublishResult(localPost.id(), false, null, null,
                     exception.getMessage() == null ? "CSDN publication failed" : exception.getMessage());
         }
     }

@@ -9,7 +9,7 @@ feature; deployment and database topology stay unchanged.
 - `virtualpay` (new): owns personal-entity Mini Program virtual-payment products, orders, XPay signing, delivery notifications, and active order reconciliation. It uses a fresh `wx.login` code per checkout; `identity` exchanges and verifies the resulting openid/session_key, and session_key is never persisted. Delivery changes `sys_user` subscription fields only through `SubscriptionEntitlementService`; client payment callbacks never grant benefits. Apply `virtual_pay_migration.sql` and configure the MP delivery URL before enabling it.
 - `agent` (new): owns durable orchestration conversations, messages, replayable SSE events, model decisions, execution journals (`agent_run`, `agent_step`, `agent_tool_invocation`), and the registry of user-scoped tools. `AgentRunLifecycle` owns fenced run claims, cancellation, lease renewal, terminal transitions and stale-run recovery; `AgentEventProjector` owns active-run message fencing and legacy event projection; `AgentTurnCoordinator` owns claimed-turn lease and terminal-failure coordination. The compatibility conversation facade delegates these boundaries. A `done=true` model decision is delivered directly: the module does not run a generic plan/card/failure self-check loop that issues hidden retry calls. The module does not own the business state created by a tool.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions.
-- `publishing` (migrated): owns blog posts, categories, tags, view records, publication commands, generic publication contracts, durable publication records, and blog media uploads. The media library implements `content.api.MediaAssetPort`; its MyBatis entity `BlogMediaAsset` stays inside `publishing.domain` and is mapped to `content.api.MediaAssetRef` at the port boundary, so `agent`/`blogagent`/`studio` no longer import it.
+- `publishing` (migrated): owns blog posts, categories, tags, view records, publication commands, generic publication contracts, durable publication records, and blog media uploads. The media library implements `content.api.MediaAssetPort`; its MyBatis entity `BlogMediaAsset` stays inside `publishing.domain` and is mapped to `content.api.MediaAssetRef` at the port boundary, so `agent`/`blogagent`/`studio` no longer import it. `BlogService` implements `content.api.ContentPostPort` and `PublicationService` implements `content.api.PublicationPort`, so the three deployment units that used to import the concrete `@Service` classes (`agent`, `integration`, `profile`) now depend on the contract instead; `BlogService` keeps its old public signatures as thin shells that read `UserContext` and delegate to private overloads that take the caller id explicitly, which leaves all 17 same-domain call sites in `BlogController` untouched. `publishing.api.BlogPostVO` / `BlogPostDTO` stay here: they are the frontend HTTP contract, a different audience from the service-to-service one, and `BlogPostVO` is simultaneously the MyBatis projection target of `BlogPostMapper`.
 - `automation` (migrated): owns email reminders, recurring content plans (`blog_content_plan`), durable plan runs (`blog_plan_run`), the plan poller with atomic claiming and stale-claim recovery, and user notifications (`blog_notification`). Runs a headless pipeline: generation via `blogagent`, a fail-closed compliance gate, local/CSDN publication via `publishing`/`integration`, then reschedules the plan. Per-user SSE pushes live updates; the notification table is the durable fallback for offline users.
 - `integration` (migrated): owns MCP protocol adapters, OSS/file/mail delivery adapters, and vendor-specific integrations such as the complete CSDN MCP flow and the Juejin MCP flow.
 - `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
@@ -105,13 +105,15 @@ the owning modules without duplicating their state: `image_generate` renders an
 illustration through the blog-agent image client and persists it via the
 `content-api` `MediaAssetPort` implemented by `publishing`; `publish_post` hands a task or post to the
 `publishing`/`integration` sync services and charges the platform flat rate;
-`query_posts` reads the user's own posts through `publishing`; `schedule_plan`
-and `email_reminder` create durable records in `automation`. Agent tools never
+`query_posts` and `query_unsynced_posts` read the user's own posts through the
+`content-api` `ContentPostPort` implemented by `publishing`; `schedule_plan` and
+`email_reminder` create durable records in `automation`. Agent tools never
 own schedules, platform credentials, or publication records, and they must not
-rely on a request thread context: every tool receives an explicit user id, and
-tools that cross into `publishing`/`automation` services establish the
-`UserContext` explicitly when the underlying service still reads it from the
-thread. The orchestration UI may link to a tool result for review, but the blog
+rely on a request thread context: every tool receives an explicit user id, which
+is why the `content-api` ports take the caller id as a parameter — a
+`ThreadLocal` cannot cross a process. Tools that still reach a service which
+reads the thread (`automation`, and `blogagent`'s publish path) establish the
+`UserContext` explicitly. The orchestration UI may link to a tool result for review, but the blog
 generation workflow is not a second agent or a source of orchestration
 conversation state.
 
@@ -218,8 +220,17 @@ empty except for shared infrastructure:
    the CSDN and Juejin adapters implement that port from the `integration` domain
    while `PublicationService` consumes it from `publishing`. Leaving the port in
    `publishing.domain` would make `integration` implement an interface owned by
-   another service once the split happens. Contract modules are **dependency
-   free** (JDK imports only, no compile/runtime dependency): every service depends
+   another service once the split happens. The same module also holds the
+   media-library port (`MediaAssetPort` / `MediaAssetRef` / `StoredImage`) and the
+   post-read/write ports (`ContentPostPort` / `PublicationPort`) with their data
+   (`ContentPost` / `ContentPostPage` / `ContentPostInput` / `ContentPostQuery` /
+   `ContentPostStatus`). `ContentPost` and `ContentPostPage` are *mirrors* of
+   `publishing.api.BlogPostVO` and `common.PageData` — same names, types and
+   order — so that swapping the type leaves the wire JSON byte-identical and the
+   extraction is provably a pure refactor; the mirror is pinned by
+   `ContentPostShapeTest` in `apps/core-host`, which the contract module itself
+   cannot host because it cannot see `BlogPostVO`. Contract modules are
+   **dependency free** (JDK imports only, no compile/runtime dependency): every service depends
    on them, including the WebFlux gateway, so a contract that grows a framework
    dependency has become the super-`common` jar in a different folder. The
    frontend-facing DTOs (`publishing.api.BlogPostDTO` / `BlogPostVO`) deliberately

@@ -7,10 +7,11 @@ import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.auth.core.UserContext;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostPort;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.publishing.api.BlogPostVO;
-import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.content.api.PublishResult;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -23,22 +24,27 @@ import java.util.Optional;
  * publish to the local site or synchronize to the owner's CSDN / Juejin
  * accounts. Local publishing first, then platform sync, keeps every attempt
  * durable: a platform failure leaves the local post intact for a safe retry.
+ *
+ * <p>读本地文章改走 {@link ContentPostPort}（跨部署单元：agent 在 {@code dinqor-agent}、
+ * 内容域在 {@code dinqor-content-automation}）。另一条来源 {@code BlogAgentService} 仍然
+ * 返回内容域的 {@code BlogPostVO}，两条来源在本类里归一成 {@link LocalPost} —— 本工具只读 5 个字段，
+ * 不需要把整个 VO 搬上端口。</p>
  */
 @Component
 public class PublishPostTool implements AgentTool {
 
     private final BlogAgentService blogAgentService;
-    private final BlogService blogService;
+    private final ContentPostPort contentPostPort;
     private final CsdnBlogSyncService csdnBlogSyncService;
     private final JuejinBlogSyncService juejinBlogSyncService;
     private final BillingPort billingPort;
 
-    public PublishPostTool(BlogAgentService blogAgentService, BlogService blogService,
+    public PublishPostTool(BlogAgentService blogAgentService, ContentPostPort contentPostPort,
                            CsdnBlogSyncService csdnBlogSyncService,
                            JuejinBlogSyncService juejinBlogSyncService,
                            BillingPort billingPort) {
         this.blogAgentService = blogAgentService;
-        this.blogService = blogService;
+        this.contentPostPort = contentPostPort;
         this.csdnBlogSyncService = csdnBlogSyncService;
         this.juejinBlogSyncService = juejinBlogSyncService;
         this.billingPort = billingPort;
@@ -96,25 +102,25 @@ public class PublishPostTool implements AgentTool {
         long taskId = args.path("taskId").asLong(-1L);
         long postId = args.path("postId").asLong(-1L);
         String platform = normalizePlatform(args.path("platform").asText("local"));
-        BlogPostVO local = taskId > 0
-                ? blogAgentService.findPublishedPost(taskId, context.userId())
-                : postId > 0 ? blogService.getManagedBlogById(context.userId(), postId) : null;
-        if (local == null || local.getId() == null) return Optional.empty();
+        LocalPost local = taskId > 0
+                ? fromGenerated(blogAgentService.findPublishedPost(taskId, context.userId()))
+                : postId > 0 ? fromContract(contentPostPort.findOwned(context.userId(), postId)) : null;
+        if (local == null || local.id() == null) return Optional.empty();
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode()
                 .put("ok", true)
-                .put("postId", local.getId())
-                .put("title", defaultText(local.getTitle(), ""))
+                .put("postId", local.id())
+                .put("title", defaultText(local.title(), ""))
                 .put("platform", platform);
         if ("csdn".equals(platform)) {
-            PublishResult result = csdnBlogSyncService.findSucceeded(context.userId(), local.getId());
+            PublishResult result = csdnBlogSyncService.findSucceeded(context.userId(), local.id());
             if (result == null) return Optional.empty();
             fillPlatformResult(outcome, result);
         } else if ("juejin".equals(platform)) {
-            PublishResult result = juejinBlogSyncService.findSucceeded(context.userId(), local.getId());
+            PublishResult result = juejinBlogSyncService.findSucceeded(context.userId(), local.id());
             if (result == null) return Optional.empty();
             fillPlatformResult(outcome, result);
-        } else if (local.getStatus() == null || local.getStatus() != 1) {
+        } else if (local.status() == null || local.status() != 1) {
             return Optional.empty();
         } else {
             outcome.put("hint", "文章已发布到本站");
@@ -134,37 +140,38 @@ public class PublishPostTool implements AgentTool {
         onProgress.onProgress("正在准备发布文章…");
 
         // 智能体轮次在线程池线程上执行，请求线程的 UserContext 不会自动传递；
-        // 本站发布链路（createBlog 等）依赖 UserContext 归属文章，需在此显式恢复并清理。
+        // 本站发布链路（PublicationService -> LocalBlogPublisher -> BlogService.createBlog）
+        // 仍然读 UserContext 来归属文章，需在此显式恢复并清理。
         try {
             UserContext.setUserId(userId);
-            BlogPostVO local = resolveLocalPost(userId, taskId, postId);
-            if (local == null || local.getId() == null) {
+            LocalPost local = resolveLocalPost(userId, taskId, postId);
+            if (local == null || local.id() == null) {
                 throw new IllegalStateException("未找到可发布的文章，请先完成文章生成");
             }
             onProgress.checkCancellation();
 
             ObjectNode outcome = JsonNodeFactory.instance.objectNode();
             outcome.put("ok", true);
-            outcome.put("postId", local.getId());
-            outcome.put("title", defaultText(local.getTitle(), ""));
+            outcome.put("postId", local.id());
+            outcome.put("title", defaultText(local.title(), ""));
             outcome.put("platform", platform);
             if ("csdn".equals(platform)) {
-                if (postId > 0 && Boolean.TRUE.equals(local.getCsdnSynced())) {
+                if (postId > 0 && Boolean.TRUE.equals(local.csdnSynced())) {
                     outcome.put("hint", "该文章已同步过 CSDN，未重复发布。");
                     return outcome;
                 }
                 onProgress.onProgress("正在同步到 CSDN…");
-                PublishResult result = csdnBlogSyncService.sync(userId, local.getId());
-                chargePlatformPublish(userId, BillingBiz.CSDN_PUBLISH, local.getId(), "CSDN 发布成功");
+                PublishResult result = csdnBlogSyncService.sync(userId, local.id());
+                chargePlatformPublish(userId, BillingBiz.CSDN_PUBLISH, local.id(), "CSDN 发布成功");
                 fillPlatformResult(outcome, result);
             } else if ("juejin".equals(platform)) {
-                if (postId > 0 && Boolean.TRUE.equals(local.getJuejinSynced())) {
+                if (postId > 0 && Boolean.TRUE.equals(local.juejinSynced())) {
                     outcome.put("hint", "该文章已同步过掘金，未重复发布。");
                     return outcome;
                 }
                 onProgress.onProgress("正在同步到掘金…");
-                PublishResult result = juejinBlogSyncService.sync(userId, local.getId(), null, null);
-                chargePlatformPublish(userId, BillingBiz.JUEJIN_PUBLISH, local.getId(), "掘金发布成功");
+                PublishResult result = juejinBlogSyncService.sync(userId, local.id(), null, null);
+                chargePlatformPublish(userId, BillingBiz.JUEJIN_PUBLISH, local.id(), "掘金发布成功");
                 fillPlatformResult(outcome, result);
             } else {
                 outcome.put("hint", "文章已发布到本站。");
@@ -175,11 +182,34 @@ public class PublishPostTool implements AgentTool {
         }
     }
 
-    private BlogPostVO resolveLocalPost(Long userId, long taskId, long postId) {
+    private LocalPost resolveLocalPost(Long userId, long taskId, long postId) {
         if (taskId > 0) {
-            return blogAgentService.publish(taskId, userId);
+            return fromGenerated(blogAgentService.publish(taskId, userId));
         }
-        return blogService.getManagedBlogById(userId, postId);
+        return fromContract(contentPostPort.findOwned(userId, postId));
+    }
+
+    /**
+     * 本地文章的两种来源归一成的形状。
+     *
+     * <p>一条来自 {@code blogagent} 的生成结果（返回内容域的 {@code BlogPostVO}），一条来自
+     * 内容域端口（返回契约类型 {@link ContentPost}）。本工具只读这 5 个字段，所以在这里归一，
+     * 而不是为了统一返回类型把整个 {@code BlogPostVO} 搬上端口 ——
+     * 端口只收调用方真正用到的字段，这也是断环的手段。</p>
+     */
+    private record LocalPost(Long id, String title, Integer status, Boolean csdnSynced, Boolean juejinSynced) {
+    }
+
+    /** blogagent 的生成结果 → 本工具用的形状。 */
+    private static LocalPost fromGenerated(BlogPostVO vo) {
+        return vo == null ? null : new LocalPost(vo.getId(), vo.getTitle(), vo.getStatus(),
+                vo.getCsdnSynced(), vo.getJuejinSynced());
+    }
+
+    /** 内容域端口 → 本工具用的形状。 */
+    private static LocalPost fromContract(ContentPost post) {
+        return post == null ? null : new LocalPost(post.id(), post.title(), post.status(),
+                post.csdnSynced(), post.juejinSynced());
     }
 
     private void fillPlatformResult(ObjectNode outcome, PublishResult result) {

@@ -3,8 +3,8 @@ package com.xander.lab.integration.mcp.juejin.application;
 import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
-import com.xander.lab.publishing.api.BlogPostDTO;
-import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostInput;
 import com.xander.lab.content.api.PublishResult;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import lombok.RequiredArgsConstructor;
@@ -40,18 +40,15 @@ public class JuejinMcpApplicationService {
     public PublishResult publishArticle(String title, String content, String summary,
                                         String juejinCategoryId, List<String> juejinTagIds) {
         Long userId = requireUserId();
-        BlogPostDTO request = new BlogPostDTO();
-        request.setTitle(title);
-        request.setContent(content);
-        request.setSummary(summary);
-        BlogPostVO localDraft = blogMcpService.create(request, false);
+        ContentPostInput request = new ContentPostInput(title, summary, content, null, null, null);
+        ContentPost localDraft = blogMcpService.create(request, false);
         try {
-            PublishResult result = juejinBlogSyncService.sync(userId, localDraft.getId(), juejinCategoryId, juejinTagIds);
-            billingPort.chargeFlat(userId, BillingBiz.JUEJIN_PUBLISH, "juejin:" + localDraft.getId(),
-                    "post:" + localDraft.getId(), billingPort.flatPoints(BillingBiz.JUEJIN_PUBLISH), "掘金发布成功");
+            PublishResult result = juejinBlogSyncService.sync(userId, localDraft.id(), juejinCategoryId, juejinTagIds);
+            billingPort.chargeFlat(userId, BillingBiz.JUEJIN_PUBLISH, "juejin:" + localDraft.id(),
+                    "post:" + localDraft.id(), billingPort.flatPoints(BillingBiz.JUEJIN_PUBLISH), "掘金发布成功");
             return result;
         } catch (RuntimeException exception) {
-            throw new JuejinPublishException(localDraft.getId(), exception.getMessage());
+            throw new JuejinPublishException(localDraft.id(), exception.getMessage());
         }
     }
 

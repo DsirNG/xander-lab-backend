@@ -7,12 +7,12 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 64
-  implementation_edges: 24
-  cross_deployment_unit_statements: 47
-  cross_deployment_unit_edges: 17
-  api_statements: 38
-  api_edges: 11
+  implementation_statements: 55
+  implementation_edges: 21
+  cross_deployment_unit_statements: 38
+  cross_deployment_unit_edges: 14
+  api_statements: 25
+  api_edges: 10
   shared_kernel_sources:
     - auth
     - common
@@ -61,17 +61,6 @@ edges:
       - apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/application/AgentMcpServerService.java
       - apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/application/McpToolSource.java
       - apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/application/RemoteMcpTool.java
-  - from: integration
-    to: publishing
-    from_unit: dinqor-platform-integration
-    to_unit: dinqor-content-automation
-    crosses_deployment_unit: true
-    api_statements: 11
-    implementation_statements: 5
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/blog/application/BlogMcpApplicationService.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/application/CsdnBlogSyncService.java
-      - apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/application/JuejinBlogSyncService.java
   - from: virtualpay
     to: identity
     from_unit: dinqor-core-host
@@ -116,17 +105,6 @@ edges:
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogContentPlanService.java
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogPlanRunService.java
-  - from: agent
-    to: publishing
-    from_unit: dinqor-agent
-    to_unit: dinqor-content-automation
-    crosses_deployment_unit: true
-    api_statements: 3
-    implementation_statements: 3
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryPostsTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryUnsyncedPostsTool.java
   - from: admin
     to: identity
     from_unit: dinqor-core-host
@@ -247,15 +225,6 @@ edges:
     implementation_statements: 1
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/profile/application/ProfileOverviewService.java
-  - from: profile
-    to: publishing
-    from_unit: dinqor-core-host
-    to_unit: dinqor-content-automation
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 1
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/profile/application/ProfileOverviewService.java
   - from: studio
     to: blogagent
     from_unit: dinqor-core-host
@@ -265,6 +234,14 @@ edges:
     implementation_statements: 1
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/studio/infrastructure/Img2ThreeModelClient.java
+  - from: agent
+    to: publishing
+    from_unit: dinqor-agent
+    to_unit: dinqor-content-automation
+    crosses_deployment_unit: true
+    api_statements: 1
+    implementation_statements: 0
+    implementation_files: []
   - from: virtualpay
     to: admin
     from_unit: dinqor-core-host

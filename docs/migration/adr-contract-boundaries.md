@@ -89,7 +89,7 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
 - `contracts/` 下 4 个模块（`core-api` / `content-api` / `integration-api` /
   `payment-api`）目前**零 Jackson 依赖**，由门禁
   `contract-dependency-boundary` 守着（JDK-only import + 无 compile/runtime 依赖）。
-- 尚未清理的是**边界路径上的 Jackson 泄漏**（见 §4 待办），不是契约模块本身。
+- 尚未清理的是**边界路径上的 Jackson 泄漏**（见 §7 待办），不是契约模块本身。
 
 ---
 
@@ -180,7 +180,7 @@ blogagent ───→ content-api ←─── agent
 **所以它不构成一次 §11 契约变更，不该进登记表。** 这一点写在这里，
 是为了让后来的人知道"没登记"是判断，不是漏掉。
 
-> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§5 待办第 3 项），
+> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§7 待办第 3 项），
 > 那**必须**进 `contract-changes.yaml` 并走 §11 流程 —— 因为它会真的删掉
 > 前端能看到 10 个字段。
 
@@ -262,7 +262,7 @@ MediaAssetRef findReusableGenerated(Long userId, String title);
 
 > **这暴露了一个仍未拍板的问题**：契约能不能依赖契约？今天答案是**不能**
 > （Maven 无法编排 test-only 的跨契约依赖，所以门禁干脆全禁）。
-> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §5 待办。
+> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §7 待办。
 
 ### 3.5 `byte[]` 而不是 `MultipartFile`，以及 `MAX_IMAGE_BYTES`
 
@@ -499,11 +499,212 @@ api_statements / api_edges         38 / 11 (不变)
 
 **但这笔账要在拆分后重新算**：一旦 `payment-api` 作为独立版本化的 jar 发布，
 `TokenUsage` 的分量顺序就变成了跨进程的线上格式，届时任何重排都必须走 §11
-（见 §6 第 7 项）。
+（见 §7 第 7 项）。
 
 ---
 
-## 5. 这两条 ADR 与既有规则的交叉
+## 5. 落地记录（三）：`ContentPostPort / PublicationPort` —— 消掉 `BlogService` 的跨单元直连
+
+### 5.1 卡点：`BlogService` 是具体实现，不是接口
+
+`publishing.application.BlogService` 是 `@Service` + `@RequiredArgsConstructor`，注入四个
+MyBatis mapper（`BlogPostMapper` / `BlogCategoryMapper` / `BlogTagMapper` / `BlogPostViewMapper`）、
+`UserLookupPort` 与 `StringRedisTemplate`。按 §3.2 的判据这是**具体实现**，所以走"抽端口"而不是"搬类型"。
+搬进契约等于把 MyBatis 与 Redis 拖进每个消费者 —— V9 §19 第一个就否。
+
+### 5.2 这一刀的难点不在端口，在"同域调用点比跨域调用点多得多"
+
+实测：`BlogController` 有 **17 个** `blogService.` 调用点，全部同域；跨部署单元的实现依赖只有
+**9 条语句 / 3 条边**：
+
+| 调用方 | 单元 | impl 语句 | api 语句 |
+|---|---|---|---|
+| `integration`（`BlogMcpApplicationService` / `CsdnBlogSyncService` / `JuejinBlogSyncService`） | `dinqor-platform-integration` | 5 | 11 |
+| `agent`（`PublishPostTool` / `QueryPostsTool` / `QueryUnsyncedPostsTool`） | `dinqor-agent` | 3 | 3 |
+| `profile`（`ProfileOverviewService`） | `dinqor-core-host` | 1 | 0 |
+
+所以设计目标不是"改签名"，而是**让 17 个同域调用点一行都不改**：
+
+- `BlogService` 实现 `ContentPostPort`；
+- 旧的公开方法**签名全部不变**，退化成"读 `UserContext` → 转调私有重载"的薄壳；
+- 端口方法显式收 `userId`。
+
+这是 §3.8 / §4.8 同一手法的第三次应用（同域便捷入口 + 跨域端口，两者共用一个私有实现体），
+但方向是**反向**的：前两次是"跨域调用点少，把域方法留在原地"，这次是"同域调用点多，把域方法留成壳"。
+判断依据是同一句 —— **同域调用点不算跨域边界，不该为了端口去改它们**。
+
+### 5.3 ⚠️ 端口必须显式收 `userId`，这不是风格问题
+
+改造前 `BlogService` 有 7 个方法内部读 `auth.core.UserContext`（一个 `ThreadLocal`），
+身份由调用方在调用前 `setUserId` 传进来。同进程里这能工作，但**跨进程没有 `ThreadLocal` 可传** ——
+不收 `userId` 的端口只是在描述一个无法跨进程的调用，等于没抽。
+
+顺带发现：`getPublishedPostId(String requestId)` 在一次请求里读了 **3 次** `UserContext`。
+收 `userId` 之后自然收敛成 1 次。这是"把隐式依赖显式化"的附带收益，不是本次刻意优化的目标。
+
+### 5.4 镜像而不是收窄（第三次，也是最需要证明的一次）
+
+`ContentPost`（17 个分量）镜像 `BlogPostVO` 的可序列化表面，`ContentPostPage`（6 个分量）
+镜像 `PageData`。理由与 §2.5 完全一致：**换类型后线上 JSON 逐字节不变**，这次抽取才是可证明的纯重构。
+
+`PageData` 不能直接用，有两个各自足以否决的原因：
+
+1. **契约依赖不到它。** 它住在 `libs/xander-mybatis-support`，那个模块为它声明了 MyBatis-Plus
+   （构造器直接收 `IPage`），门禁 `contract-dependency-boundary` 会拦；
+2. **它自己也跨不了进程。** 它的存在理由是"简化 `IPage`，只保留前端需要的字段" ——
+   那是**前端**分页返回体。V9 §19 的教训就是别让一个类型同时服务两个受众。
+
+⚠️ 与前两次不同的是，这次的镜像关系**可以机器证明**，而且证明了。`ContentPostShapeTest`
+（住在 `apps/core-host`，因为契约侧看不见 `BlogPostVO`）用三条独立断言钉住：
+
+1. 两侧的可序列化属性名集合相同（不需要实例，直接看类型）；
+2. 同样的值在两侧序列化成同一棵 JSON 树；
+3. **生产代码里那条转换**（`BlogService.toContract`，反射调用）的输出与源对象同树。
+
+第 3 条是前两次没有的：它证明的不只是"两个类型长得一样"，而是"实现真的按镜像逐字段搬了"。
+`toContract` 刻意**不用** `BeanUtils.copyProperties` —— 名字对不上时它会静默留 `null`，
+而 `category` 与 `categoryName` 是前缀关系，会互相污染。
+
+⚠️ 写这个测试时踩到了 `McpJsonMapperFactory` 那个缺陷的**同一个根因**：裸 `new ObjectMapper()`
+序列化 `LocalDate` 会抛 `InvalidDefinitionException`。测试里显式注册了 `JavaTimeModule` 才通过 ——
+这说明"注册模块"这件事在每个自建 mapper 的地方都躲不掉，不是 MCP 特有的。
+
+### 5.5 `tagsRaw` 为什么必须"根本不存在"
+
+`BlogPostVO.tagsRaw` 是 `BlogPostMapper` 的 `GROUP_CONCAT` 承接字段，靠 `@JsonIgnore`
+挡在线上 JSON 之外。契约不能带 Jackson 注解（ADR-1），**所以契约里没有这个字段**。
+
+这是镜像能成立的前提，方向也容易搞反：不是"因为 `@JsonIgnore` 所以可以漏掉"，
+而是"**漏掉一个被忽略的字段，等于把它加回线上形状**"。
+`ContentPostTest.tagsRawIsDeliberatelyAbsentSoItCannotComeBackOnTheWire` 钉住它。
+
+### 5.6 这一刀真正消灭的是"相邻同类型参数"
+
+§4.6 记过一次真实的换位（`TokenUsage` 的分量顺序与 `recordAndDeduct` 的相反）。
+这一刀有三个地方是同一类风险，而且**旧签名全是位置参数**：
+
+| 旧签名 | 危险 | 新类型 |
+|---|---|---|
+| `updateBlog(Long, String, String, String, String, String, List)` | **五个相邻 `String`**：`summary` 与 `content` 写反 → 摘要列拿到整篇正文，而摘要只影响列表页一行字，测试不专门覆盖就发现不了 | `ContentPostInput` |
+| `listMyPosts(Integer, String, Boolean, Boolean, Integer)` | **两个相邻 `Boolean`**：`juejinSynced` 与 `csdnSynced` 写反 → "哪些还没同步到掘金"静默变成"哪些还没同步到 CSDN"，而**两条 SQL 都返回非空结果** | `ContentPostQuery` |
+| `getBlogs` / `getMyBlogs(Integer, String, int, int)` | 两个相邻 `int`（page/size） | **保留位置参数**：分页是通用形状，且只有同域在用 |
+
+换成具名分量之后，写错名字**编译期就红**。每个 DTO 的测试都额外断言"那几个相邻同类型分量的
+字面量必须两两不同" —— 否则把它们对调测试仍然全绿，顺序就白钉了。
+
+`ContentPostStatus` 进契约是另一回事：`QueryPostsTool` 与 `QueryUnsyncedPostsTool` 各自把
+`"draft" ⇄ 0` 这段映射写了一遍。状态词表是内容域的事实，抄成几份之后改一处就漏几处。
+`BlogService.STATUS_*` 保留为**别名**（前端 HTTP 契约与 `BlogPlanRunService` 都在用，
+删了会把一次契约抽取变成一次前端可见的改名），别名仍是常量表达式，`switch` 的 `case` 标签照旧可用。
+
+⚠️ 它**不能改成枚举** —— `blog_post.status` 是 `int` 列，MyBatis 投影与线上 JSON 都按数字走。
+`ContentPostStatusTest` 用 `case ContentPostStatus.DRAFT ->` 把"能当 case 标签用"变成一条可执行断言。
+
+### 5.7 `PublicationPort`：零改动的端口形状是设计出来的
+
+`PublicationService` 的两个方法（`publish(PublishCommand, String)` /
+`findSucceeded(Long, Long, String)`）**签名已经只含 `content-api` 类型**，所以端口形状照抄它，
+实现侧只需要加 `implements` + `@Override`，**类体一行未改**。
+
+这不是运气，是选形状时的判据：**优先选与现有实现同形的端口**（访问器同名 ⇒ 实现侧退化成类型替换）。
+§4.5 的"实现侧几乎没改：一次类型替换"是同一件事的另一种表现。端口形状是设计自由度，
+不要为了"看起来更像端口"去重构签名。
+
+顺带把一个容易看反的分工写进了 `PublicationPort` 的注释：
+
+- `BlogPublisher` 是**出站 SPI**，内容域**定义**、integration **实现**
+  （平台适配器在 `dinqor-platform-integration`），无状态、不管幂等、不碰数据库；
+- `PublicationPort` 是**编排**，内容域实现也由内容域拥有：查 `blog_publish_record` 判幂等、
+  按 `platform` 选发布器、落 PENDING / SUCCEEDED / FAILED、对 CSDN 加限流。
+
+所以 integration 要绕回来调内容域 —— 它需要的是"发过没有 + 别再发一次"，那是内容域的账，
+不是适配器的事。
+
+### 5.8 端口"变宽"依然没人守（第三次确认）
+
+与 §3.6 / §4.7 同一手法，`ContentPostPortTest` / `PublicationPortTest` 钉住**完整签名**而不只是
+方法名。理由在 §4.7 已述，这次再补一个：`update(Long userId, Long postId, ContentPostInput input)`
+把两个 `Long` 对调，方法名不变、类型全对、编译通过，只会变成"用文章 id 当用户 id 去查归属" ——
+结果是永远查不到，或更糟：查到别人的。
+
+**注入验证（2026-09-17 实测）**：给 `ContentPostPort` 加
+`default String debugPort() { return ""; }` 之后，反应堆**编译仍然通过**，`content-api` 其余
+65 条测试全绿（`MediaAssetPortTest` / `PublicationPortTest` / 四个新 DTO 测试都照常），
+**只有 `ContentPostPortTest` 红 2 条**（方法数 7→8、`default` 检查）。
+
+⚠️ 这次注入还暴露了一个**测试组织的教训**：反应堆在 `content-api` 失败后**直接中断**，
+`apps/core-host` 的 1074 条测试根本没跑。所以"注入只影响一个测试类"这句话，只能靠
+**单独跑 `-pl contracts/content-api`** 来证明；在反应堆里跑只能证明"没有别的模块先炸"。
+
+### 5.9 实测收益
+
+```text
+agent       -> publishing   3 -> 0   (跨单元，impl)
+integration -> publishing   5 -> 0   (跨单元，impl；api 11 -> 0)
+profile     -> publishing   1 -> 0   (跨单元，impl)
+
+implementation_statements          64 -> 55   (-9)
+implementation_edges               24 -> 21   (-3)
+cross_deployment_unit_statements   47 -> 38   (-9)
+cross_deployment_unit_edges        17 -> 14   (-3)
+api_statements                     38 -> 25   (-13)
+api_edges                          11 -> 10   (-1)
+```
+
+3 条边**归零**，`integration → publishing` 连 11 条 api 语句一起消失。
+
+⚠️ 与 §3.7 / §4.9 同样的提醒：**耦合图形状没变**。`deployment-unit-coupling` 仍报 4 个单元
+在一个 SCC 里、4 对互相依赖。这一刀减的是**存量**，不是形状。
+
+### 5.10 ⚠️ 残留：1 条 api statement，`agent → publishing` 这条边还在
+
+`cross-domain-imports.yaml` 里还留着：
+
+```yaml
+- from: agent
+  to: publishing
+  crosses_deployment_unit: true
+  api_statements: 1
+  implementation_statements: 0
+  implementation_files: []
+```
+
+来源是**唯一一处**：`PublishPostTool` 仍然 `import com.xander.lab.publishing.api.BlogPostVO`，
+因为 `BlogAgentService.publish(Long, Long)` 与 `findPublishedPost(Long, Long)` 返回的是它。
+（`PublishPostTool` 只读其中 5 个字段，所以本类内部把两条来源归一成私有 `LocalPost`。）
+
+**为什么这一刀不顺手做掉**：
+
+- 它的 `implementation_statements` 是 **0**，而按本仓库自己的判据
+  （`cross-domain-imports.yaml` 的 `note`：*Only implementation_statements counts*），
+  这条边已经不算存量；
+- 要消掉它得改 `BlogAgentService` 的公开返回类型 **和** `BlogAgentController` 的返回类型 ——
+  那是 **blogagent ↔ publishing** 这条边界的事，不是 `BlogService` 端口的事。
+  混在一起会让这次提交的边界变模糊，也会让"这次到底动了什么"需要额外解释；
+- `publishing.api` 是整个遗留 api 包（`BlogPostDTO` / `BlogPostVO`），它会被后续某一刀整体处理，
+  不值得单独为这 1 条语句开一刀。
+
+**⚠️ 一个容易误读的指标细节**：`cross_deployment_unit_edges` 数的是
+**至少有一条 implementation statement** 的跨单元边（`scan.py`：
+`crossing = [e for e in implementation if e["crosses_deployment_unit"]]`，
+而 `implementation = [e for e in ordered if e["implementation_statements"]]`）。
+所以 `docs/cross-domain-imports.yaml` 的 `edges` 列表里现在有 **15** 条跨单元边，
+而 `counts.cross_deployment_unit_edges` 是 **14** —— 差值就是上面这条 impl=0 的边。
+**数边数时不要只看列表长度。**
+
+### 5.11 为什么没有加 `contract-changes.yaml` 条目
+
+理由与 §2.6 / §4.10 相同，而且这次有机器证明：`ContentPostShapeTest` 的三条断言直接证明了
+"换类型后线上 JSON 不变"。门禁 `capability-baseline-diff` 与 `contract-changes-completeness`
+也确认（28 个能力 0 增 0 退；14 条变更全部可解析）。
+
+**⚠️ 但这笔账要在拆分后重新算**：`ContentPost` 的 17 个分量顺序与 `ContentPostPage` 的 6 个分量顺序，
+与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §7 第 7 项）。
+今天不登记，契约 jar 独立版本化时必须补。
+
+---
+
+## 6. 这两条 ADR 与既有规则的交叉
 
 | 既有规则 | 与 ADR 的关系 |
 |---|---|
@@ -525,19 +726,21 @@ api_statements / api_edges         38 / 11 (不变)
 
 ---
 
-## 6. 待办
+## 7. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
 | 1 | 边界路径上的 Jackson 泄漏：`billing` 端口 | **已做**（§4）。`agent-api` 仍未做，见第 6 项 |
 | 2 | 契约能否依赖契约 | **未拍板**。今天禁止，代价是 `StoredImage` / `TokenUsage` 这类重复类型 |
 | 3 | `MediaAssetRef` 收窄到前端真正读的 3 个字段 | **未做**，独立 §11 变更 |
-| 4 | `agent -> publishing` 剩余 3 条（`BlogService`） | **未做**，需要为 `BlogService` 另抽端口 |
+| 4 | `agent -> publishing` 的 9 条 impl 语句（`BlogService`） | **已做**（§5）。边归零，只剩 1 条 api（§5.10） |
 | 5 | `@JsonIgnoreProperties` 存量清单与清理时点 | **未清点** |
 | 6 | `agent-api`（`AgentTool.parametersSchema()` 返回 `JsonNode`） | **未做**，50 个实现 / 41 个覆写，是下一刀 |
-| 7 | `TokenUsage` 分量顺序是否要登记为 §11 契约变更 | **未定**。今天不登记（理由同 §2.6），但拆分后契约 jar 独立版本化时它会变成线上格式 |
+| 7 | `TokenUsage` / `ContentPost` / `ContentPostPage` 分量顺序是否要登记为 §11 契约变更 | **未定**。今天不登记（理由同 §2.6），但拆分后契约 jar 独立版本化时它们会变成线上格式 |
+| 8 | `blogagent → publishing` 的 1 条 api 语句（`BlogPostVO`） | **未做**，独立一刀（§5.10） |
+| 9 | `ContentPostPort` 的 16 个不上端口方法，拆分后是否需要新的端口 | **未定**。`automation` / `blogagent` 与内容域同单元，拆完还在一个进程里 |
 
-### 6.1 第 1 项的边界（明确不许顺手放宽）
+### 7.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -548,7 +751,7 @@ api_statements / api_edges         38 / 11 (不变)
 
 ---
 
-## 7. 一句话记法
+## 8. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

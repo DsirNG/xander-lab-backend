@@ -12,6 +12,21 @@
  * {@link com.xander.lab.content.api.StoredImage}。调用方在 agent / blogagent / studio
  * 三个部署单元里。</p>
  *
+ * <p><b>文章读写与发布编排（§22 之后的第三刀）</b>：端口
+ * {@link com.xander.lab.content.api.ContentPostPort}（7 个方法，读 / 写 / 软删）与
+ * {@link com.xander.lab.content.api.PublicationPort}（2 个方法，发布与查证），
+ * 加上它们的输入输出 {@link com.xander.lab.content.api.ContentPost} /
+ * {@link com.xander.lab.content.api.ContentPostPage} /
+ * {@link com.xander.lab.content.api.ContentPostInput} /
+ * {@link com.xander.lab.content.api.ContentPostQuery}，以及状态词表
+ * {@link com.xander.lab.content.api.ContentPostStatus}。调用方在 agent /
+ * integration / profile 三个部署单元里。</p>
+ *
+ * <p>注意 {@code PublicationPort} 与 {@link com.xander.lab.content.api.BlogPublisher}
+ * 的分工容易看反：前者是<b>编排</b>（查幂等记录、选发布器、落状态、限流），由内容域实现
+ * 也由内容域拥有；后者是<b>出站 SPI</b>（"把这段内容推到那个平台"），由内容域定义、
+ * 由 integration 域实现。</p>
+ *
  * <h2>硬约束</h2>
  * <ul>
  *   <li><b>零依赖。</b>只允许 JDK 类型。任何框架（Spring MVC / WebFlux / MyBatis / Redis）
@@ -46,5 +61,17 @@
  * {@code BlogPostVO} 同时是 {@code BlogPostMapper} 的投影目标（{@code tagsRaw} 承接
  * {@code GROUP_CONCAT}），拆分前必须先把它在线形态与持久化投影分开。详见
  * {@code docs/migration/lib-extraction.md}。</p>
+ *
+ * <p>⚠️ 但要区分清楚：{@link com.xander.lab.content.api.ContentPost} <b>不是</b>
+ * {@code BlogPostVO} 的替代，而是它的<b>镜像</b> —— 同名、同类型、同顺序，只少了
+ * {@code tagsRaw}（那个字段靠 {@code @JsonIgnore} 挡在线上 JSON 之外，而契约不能带
+ * Jackson 注解，所以只能不声明）。镜像的全部价值在于"换类型后线上 JSON 逐字节不变"，
+ * 从而这次抽取可以被证明是纯重构、不进 {@code docs/contract-changes.yaml}。
+ * 收窄到"前端真正读的字段"是可行的，但那是独立的 §11 契约变更。</p>
+ *
+ * <p>残留一处：{@code agent.application.PublishPostTool} 仍然 import
+ * {@code publishing.api.BlogPostVO}（因为 {@code BlogAgentService.publish} 返回它），
+ * 所以 {@code agent -> publishing} 这条边还挂着 1 条 api statement、0 条实现语句。
+ * 理由见 {@code docs/migration/adr-contract-boundaries.md} §5.10。</p>
  */
 package com.xander.lab.content.api;

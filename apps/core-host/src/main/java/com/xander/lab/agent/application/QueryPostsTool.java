@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.common.PageData;
 import com.xander.lab.auth.core.UserContext;
-import com.xander.lab.publishing.api.BlogPostVO;
-import com.xander.lab.publishing.application.BlogService;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostPage;
+import com.xander.lab.content.api.ContentPostPort;
+import com.xander.lab.content.api.ContentPostQuery;
+import com.xander.lab.content.api.ContentPostStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -23,10 +25,10 @@ import java.util.List;
 @Component
 public class QueryPostsTool implements AgentTool {
 
-    private final BlogService blogService;
+    private final ContentPostPort contentPostPort;
 
-    public QueryPostsTool(BlogService blogService) {
-        this.blogService = blogService;
+    public QueryPostsTool(ContentPostPort contentPostPort) {
+        this.contentPostPort = contentPostPort;
     }
 
     @Override
@@ -91,20 +93,22 @@ public class QueryPostsTool implements AgentTool {
         try {
             UserContext.setUserId(userId);
             if (limit != null || juejinSynced != null || csdnSynced != null) {
-                List<BlogPostVO> posts = blogService.listMyPosts(status, search, juejinSynced, csdnSynced, limit);
+                List<ContentPost> posts = contentPostPort.listAllMyPosts(userId,
+                        new ContentPostQuery(status, search, juejinSynced, csdnSynced), limit);
                 return buildListOutcome(posts);
             }
             int page = Math.max(1, args.path("page").asInt(1));
             int size = Math.min(Math.max(1, args.path("size").asInt(10)), 50);
-            PageData<BlogPostVO> result = blogService.getMyBlogs(status, search, page, size);
+            ContentPostPage result = contentPostPort.listMyPosts(userId,
+                    new ContentPostQuery(status, search, null, null), page, size);
             ObjectNode outcome = JsonNodeFactory.instance.objectNode();
             outcome.put("ok", true);
-            outcome.put("total", result.getTotal());
-            outcome.put("page", result.getCurrent());
-            outcome.put("size", result.getSize());
-            outcome.put("hasMore", result.isHasMore());
+            outcome.put("total", result.total());
+            outcome.put("page", result.current());
+            outcome.put("size", result.size());
+            outcome.put("hasMore", result.hasMore());
             ArrayNode records = outcome.putArray("posts");
-            for (BlogPostVO post : result.getRecords()) {
+            for (ContentPost post : result.records()) {
                 appendPost(records, post);
             }
             return outcome;
@@ -113,38 +117,38 @@ public class QueryPostsTool implements AgentTool {
         }
     }
 
-    private ObjectNode buildListOutcome(List<BlogPostVO> posts) {
+    private ObjectNode buildListOutcome(List<ContentPost> posts) {
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("total", posts.size());
         ArrayNode records = outcome.putArray("posts");
-        for (BlogPostVO post : posts) {
+        for (ContentPost post : posts) {
             appendPost(records, post);
         }
         return outcome;
     }
 
-    private void appendPost(ArrayNode records, BlogPostVO post) {
+    private void appendPost(ArrayNode records, ContentPost post) {
         ObjectNode item = records.addObject();
-        item.put("id", post.getId());
-        item.put("title", defaultText(post.getTitle(), ""));
-        item.put("summary", defaultText(post.getSummary(), ""));
-        item.put("status", statusText(post.getStatus()));
-        item.put("date", post.getDate() == null ? "" : post.getDate().toString());
-        item.put("category", defaultText(post.getCategoryName(), ""));
-        item.put("url", "/blog/" + post.getId() + "/");
-        item.put("juejinSynced", Boolean.TRUE.equals(post.getJuejinSynced()));
-        item.put("csdnSynced", Boolean.TRUE.equals(post.getCsdnSynced()));
+        item.put("id", post.id());
+        item.put("title", defaultText(post.title(), ""));
+        item.put("summary", defaultText(post.summary(), ""));
+        item.put("status", statusText(post.status()));
+        item.put("date", post.date() == null ? "" : post.date().toString());
+        item.put("category", defaultText(post.categoryName(), ""));
+        item.put("url", "/blog/" + post.id() + "/");
+        item.put("juejinSynced", Boolean.TRUE.equals(post.juejinSynced()));
+        item.put("csdnSynced", Boolean.TRUE.equals(post.csdnSynced()));
         ArrayNode tags = item.putArray("tags");
-        if (post.getTags() != null) post.getTags().forEach(tags::add);
+        if (post.tags() != null) post.tags().forEach(tags::add);
     }
 
     private Integer normalizeStatus(String raw) {
         if (!StringUtils.hasText(raw)) return null;
         return switch (raw.trim().toLowerCase()) {
-            case "draft" -> BlogService.STATUS_DRAFT;
-            case "published", "publish" -> BlogService.STATUS_PUBLISHED;
-            case "trashed", "trash", "deleted" -> BlogService.STATUS_TRASHED;
+            case "draft" -> ContentPostStatus.DRAFT;
+            case "published", "publish" -> ContentPostStatus.PUBLISHED;
+            case "trashed", "trash", "deleted" -> ContentPostStatus.TRASHED;
             default -> null;
         };
     }
@@ -152,9 +156,9 @@ public class QueryPostsTool implements AgentTool {
     private String statusText(Integer status) {
         if (status == null) return "unknown";
         return switch (status) {
-            case BlogService.STATUS_DRAFT -> "draft";
-            case BlogService.STATUS_PUBLISHED -> "published";
-            case BlogService.STATUS_TRASHED -> "trashed";
+            case ContentPostStatus.DRAFT -> "draft";
+            case ContentPostStatus.PUBLISHED -> "published";
+            case ContentPostStatus.TRASHED -> "trashed";
             default -> "unknown";
         };
     }

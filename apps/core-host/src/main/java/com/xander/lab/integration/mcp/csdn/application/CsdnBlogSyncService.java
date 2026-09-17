@@ -1,10 +1,10 @@
 package com.xander.lab.integration.mcp.csdn.application;
 
-import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostPort;
+import com.xander.lab.content.api.PublicationPort;
 import com.xander.lab.content.api.PublishCommand;
 import com.xander.lab.content.api.PublishResult;
-import com.xander.lab.publishing.application.PublicationService;
-import com.xander.lab.publishing.application.BlogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -12,22 +12,22 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class CsdnBlogSyncService {
-    private final BlogService blogService;
-    private final PublicationService publicationService;
+    private final ContentPostPort contentPostPort;
+    private final PublicationPort publicationPort;
 
     public PublishResult sync(Long userId, Long postId) {
-        BlogPostVO post = blogService.getManagedBlogById(userId, postId);
-        if (post == null || Integer.valueOf(-1).equals(post.getStatus())) {
+        ContentPost post = contentPostPort.findOwned(userId, postId);
+        if (post == null || Integer.valueOf(-1).equals(post.status())) {
             throw new IllegalArgumentException("Blog post does not exist");
         }
         PublishCommand command = new PublishCommand(
-                -postId, userId, post.getTitle(), post.getSummary(), post.getContent(),
-                post.getCategoryName(), post.getCoverImage(), post.getTags());
-        return publicationService.publish(command, "csdn");
+                -postId, userId, post.title(), post.summary(), post.content(),
+                post.categoryName(), post.coverImage(), post.tags());
+        return publicationPort.publish(command, "csdn");
     }
 
     /** Looks up a completed CSDN synchronization without issuing another external request. */
     public PublishResult findSucceeded(Long userId, Long postId) {
-        return postId == null ? null : publicationService.findSucceeded(userId, -postId, "csdn");
+        return postId == null ? null : publicationPort.findSucceeded(userId, -postId, "csdn");
     }
 }

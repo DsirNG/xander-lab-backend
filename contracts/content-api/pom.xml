@@ -36,6 +36,34 @@
         GeneratedImage itself could not move here -- it carries com.xander.lab.common.ModelUsage,
         which is Jackson-bearing.
 
+        Members added in the post cut: ContentPostPort, PublicationPort, ContentPost,
+        ContentPostPage, ContentPostInput, ContentPostQuery, ContentPostStatus.
+        Before it, three deployment units imported publishing.application.BlogService directly
+        (integration 5 impl + 11 api, agent 3 + 3, profile 1). BlogService cannot move here:
+        it is a @Service holding four MyBatis mappers, UserLookupPort and StringRedisTemplate.
+        So it keeps its old public signatures as thin ThreadLocal-reading shells -- the 17
+        same-domain call sites in BlogController are untouched -- and implements the port.
+        Every port method takes userId explicitly, because a ThreadLocal cannot cross a process.
+
+        ContentPost / ContentPostPage are mirrors, not narrowings: same names, same types, same
+        order as BlogPostVO / PageData, minus tagsRaw. That makes the cut provably a pure
+        refactor (the wire JSON is byte-identical), which is what keeps it out of
+        docs/contract-changes.yaml. The mirror is proven by ContentPostShapeTest in apps/core-host
+        (the contract cannot see BlogPostVO), including the production mapping itself.
+
+        Three DTOs exist here solely to kill adjacent same-typed positional parameters, which
+        the compiler cannot protect: ContentPostInput replaced five adjacent Strings
+        (summary/content swap silently puts the article body in the summary column),
+        ContentPostQuery replaced two adjacent Booleans (juejin/csdn swap is silent, both SQLs
+        return non-empty results), and ContentPostStatus replaced a string-to-int vocabulary that
+        two agent tools had each written out. Component order in all of them is a positional
+        contract; every one is pinned by reflection plus "the adjacent literals must differ".
+
+        PublicationPort was shaped to be isomorphic to PublicationService, so the implementation
+        needed implements + @Override and zero body edits. Choosing a port shape is a design
+        freedom -- prefer the one that makes the implementation change degenerate into a type
+        substitution.
+
         Two architectural decisions are frozen here and enforced by this module's package-info:
         ADR-1, contracts stay serialization-framework agnostic (no Jackson, no annotations on
         DTOs, no JsonNode); ADR-2, cross-domain traffic uses consumer-owned contracts and domain
@@ -57,6 +85,13 @@
           Note BlogPostVO is simultaneously the MyBatis projection target of BlogPostMapper
           (@JsonIgnore tagsRaw = GROUP_CONCAT result), so that split has to separate the wire
           shape from the persistence projection first.
+
+        Known residual after the post cut (recorded, not fixed): PublishPostTool still imports
+        publishing.api.BlogPostVO, because BlogAgentService.publish / findPublishedPost return
+        it. That keeps one api statement on the agent -> publishing edge with zero
+        implementation statements. Closing it means changing BlogAgentService's public return
+        type and BlogAgentController's -- a blogagent-vs-publishing decision, not a BlogService
+        one. See docs/migration/adr-contract-boundaries.md section 5.10.
 
         What is NOT a defect but is a real decision point: BlogPublisher is collected by Spring
         as a plain List and its implementations live in another future deployment unit.

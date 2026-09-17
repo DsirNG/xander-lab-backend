@@ -2,6 +2,7 @@ package com.xander.lab.publishing.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xander.lab.content.api.BlogPublisher;
+import com.xander.lab.content.api.PublicationPort;
 import com.xander.lab.content.api.PublishCommand;
 import com.xander.lab.content.api.PublishResult;
 import com.xander.lab.publishing.infrastructure.BlogPublishRecord;
@@ -20,8 +21,19 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 发布编排：幂等判重、平台选路、落 {@code blog_publish_record}、CSDN 限流。
+ *
+ * <p><b>同时是 {@link PublicationPort} 的实现。</b>这一刀是零换算的：两个端口方法的参数与返回值
+ * 本来就已经全是 {@code content-api} 里的类型（{@link PublishCommand} / {@link PublishResult}），
+ * 所以类体一行没动，只是多了一个 {@code implements} —— 与 {@code BillingPort} 那次
+ * “选与现有实现同形的端口形状”是同一个手法。</p>
+ *
+ * <p>同域的 {@code BlogPlanRunService} 与 {@code BlogAgentService} 仍然注入本具体类：
+ * 它们与内容域同在 {@code dinqor-content-automation}，拆完还在一个进程里，不必绕端口。</p>
+ */
 @Service
-public class PublicationService {
+public class PublicationService implements PublicationPort {
     /** 每用户每日 CSDN 同步上限（按成功发布记录计数） */
     static final int CSDN_DAILY_SYNC_LIMIT = 5;
     /** 连续同步防抖窗口：CSDN 对短时间重复发布会拒绝，提前拦截并以 429 提示而非 500 */
@@ -73,6 +85,7 @@ public class PublicationService {
     }
 
     /** Returns a proven durable publication result without contacting the target platform. */
+    @Override
     @Transactional(readOnly = true)
     public PublishResult findSucceeded(Long userId, Long taskId, String platform) {
         if (userId == null || taskId == null || platform == null || platform.isBlank()) {

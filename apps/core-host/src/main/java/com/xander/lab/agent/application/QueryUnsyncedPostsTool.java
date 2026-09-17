@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.auth.core.UserContext;
-import com.xander.lab.publishing.api.BlogPostVO;
-import com.xander.lab.publishing.application.BlogService;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostPort;
+import com.xander.lab.content.api.ContentPostQuery;
+import com.xander.lab.content.api.ContentPostStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -21,10 +23,10 @@ import java.util.List;
 @Component
 public class QueryUnsyncedPostsTool implements AgentTool {
 
-    private final BlogService blogService;
+    private final ContentPostPort contentPostPort;
 
-    public QueryUnsyncedPostsTool(BlogService blogService) {
-        this.blogService = blogService;
+    public QueryUnsyncedPostsTool(ContentPostPort contentPostPort) {
+        this.contentPostPort = contentPostPort;
     }
 
     @Override
@@ -74,23 +76,26 @@ public class QueryUnsyncedPostsTool implements AgentTool {
         try {
             UserContext.setUserId(userId);
             boolean juejin = "juejin".equals(platform);
-            List<BlogPostVO> unsynced = blogService.listMyPosts(status, search, juejin ? Boolean.FALSE : null, juejin ? null : Boolean.FALSE, null);
+            List<ContentPost> unsynced = contentPostPort.listAllMyPosts(userId,
+                    new ContentPostQuery(status, search, juejin ? Boolean.FALSE : null,
+                            juejin ? null : Boolean.FALSE),
+                    null);
             ObjectNode outcome = JsonNodeFactory.instance.objectNode();
             outcome.put("ok", true);
             outcome.put("platform", platform);
             outcome.put("total", unsynced.size());
             ArrayNode posts = outcome.putArray("posts");
-            for (BlogPostVO post : unsynced) {
+            for (ContentPost post : unsynced) {
                 ObjectNode item = posts.addObject();
-                item.put("id", post.getId());
-                item.put("title", defaultText(post.getTitle(), ""));
-                item.put("summary", defaultText(post.getSummary(), ""));
-                item.put("status", statusText(post.getStatus()));
-                item.put("date", post.getDate() == null ? "" : post.getDate().toString());
-                item.put("category", defaultText(post.getCategoryName(), ""));
-                item.put("url", "/blog/" + post.getId() + "/");
+                item.put("id", post.id());
+                item.put("title", defaultText(post.title(), ""));
+                item.put("summary", defaultText(post.summary(), ""));
+                item.put("status", statusText(post.status()));
+                item.put("date", post.date() == null ? "" : post.date().toString());
+                item.put("category", defaultText(post.categoryName(), ""));
+                item.put("url", "/blog/" + post.id() + "/");
                 ArrayNode tags = item.putArray("tags");
-                if (post.getTags() != null) post.getTags().forEach(tags::add);
+                if (post.tags() != null) post.tags().forEach(tags::add);
             }
             return outcome;
         } finally {
@@ -108,9 +113,9 @@ public class QueryUnsyncedPostsTool implements AgentTool {
     private Integer normalizeStatus(String raw) {
         if (!StringUtils.hasText(raw)) return null;
         return switch (raw.trim().toLowerCase()) {
-            case "draft" -> BlogService.STATUS_DRAFT;
-            case "published", "publish" -> BlogService.STATUS_PUBLISHED;
-            case "trashed", "trash", "deleted" -> BlogService.STATUS_TRASHED;
+            case "draft" -> ContentPostStatus.DRAFT;
+            case "published", "publish" -> ContentPostStatus.PUBLISHED;
+            case "trashed", "trash", "deleted" -> ContentPostStatus.TRASHED;
             default -> null;
         };
     }
@@ -118,9 +123,9 @@ public class QueryUnsyncedPostsTool implements AgentTool {
     private String statusText(Integer status) {
         if (status == null) return "unknown";
         return switch (status) {
-            case BlogService.STATUS_DRAFT -> "draft";
-            case BlogService.STATUS_PUBLISHED -> "published";
-            case BlogService.STATUS_TRASHED -> "trashed";
+            case ContentPostStatus.DRAFT -> "draft";
+            case ContentPostStatus.PUBLISHED -> "published";
+            case ContentPostStatus.TRASHED -> "trashed";
             default -> "unknown";
         };
     }

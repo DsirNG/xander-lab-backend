@@ -1,6 +1,6 @@
 package com.xander.lab.integration.mcp.dual.api;
 
-import com.xander.lab.publishing.api.BlogPostDTO;
+import com.xander.lab.content.api.ContentPostInput;
 import com.xander.lab.integration.mcp.dual.application.DualPublishMcpApplicationService;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.McpScopeErrors;
@@ -62,12 +62,14 @@ public class DualPublishMcpServerConfiguration {
             McpOAuthRequestContext.requireScope("publish:dual");
             McpOAuthRequestContext.requireScope("blog:write");
             McpOAuthRequestContext.requireScope("csdn:publish");
-            BlogPostDTO request = new BlogPostDTO();
-            request.setTitle(String.valueOf(args.get("title")));
-            request.setContent(String.valueOf(args.get("content")));
-            request.setSummary(args.get("summary") == null ? null : String.valueOf(args.get("summary")));
-            request.setCategoryId(args.get("categoryId") == null ? "backend" : String.valueOf(args.get("categoryId")));
-            if (args.get("tags") instanceof List<?> tags) request.setTags(tags.stream().map(String::valueOf).toList());
+            ContentPostInput request = new ContentPostInput(
+                    String.valueOf(args.get("title")),
+                    args.get("summary") == null ? null : String.valueOf(args.get("summary")),
+                    String.valueOf(args.get("content")),
+                    args.get("categoryId") == null ? "backend" : String.valueOf(args.get("categoryId")),
+                    null,
+                    args.get("tags") instanceof List<?> tags
+                            ? tags.stream().map(String::valueOf).toList() : null);
             var publication = dualService.publish(request);
             return result(Map.of("ok", publication.csdnPublished(), "localPostId", publication.localPostId(),
                     "csdnPublished", publication.csdnPublished(), "csdnExternalId", String.valueOf(publication.csdnExternalId()),

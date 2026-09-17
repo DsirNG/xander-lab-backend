@@ -143,6 +143,69 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
    `IllegalStateException` 与 `IllegalArgumentException` 会互换，HTTP 状态码跟着变 ——
    而编译器不会告诉你。
 
+**⚠️ 端口方法必须显式收调用方 id —— `ThreadLocal` 跨不了进程。**
+`BlogService` 原本有 7 个方法内部读 `auth.core.UserContext`，身份靠调用方 `setUserId` 传。
+同进程里这能工作，但**跨进程根本没有 ThreadLocal 可传** —— 不收 `userId` 的端口只是在描述
+一个无法跨进程的调用，等于没抽。附带收益：`getPublishedPostId(requestId)` 一次请求里读了
+**3 次** `UserContext`，收 `userId` 之后自然收敛成 1 次。
+
+**⚠️ 同域调用点比跨域多得多时，把旧公开方法留成"薄壳"，不要改它们的签名。**
+判断依据：**同域调用点不算跨域边界**。实测 `BlogService`：`BlogController` 有 17 个调用点
+（全部同域），跨部署单元只有 9 条语句 / 3 条边。按"改签名 + 改所有调用点"去做，
+等于为了 9 条语句去动 17 个不该动的调用点。正确做法：
+
+```java
+public BlogPostVO createBlog(BlogPostDTO dto, boolean publish, String requestId) {  // 签名不变
+    return createBlog(UserContext.getUserId(), toInput(dto), publish, requestId);   // 薄壳
+}
+private BlogPostVO createBlog(Long userId, ContentPostInput input, ...) { ... }     // 真实现
+@Override public ContentPost create(Long userId, ContentPostInput input, boolean publish) {
+    return createBlog(userId, input, publish, null);                                 // 端口转调
+}
+```
+
+薄壳里**只做取 id 与类型转换**，一行业务逻辑都不要动；顺手把 `switch case` 里的裸数字
+（`publish ? 1 : 0`）换成常量，其余照抄。这样同域调用点、`@Transactional` 边界、
+异常类型与 HTTP 状态码全部不变。**注意别把异常类型"顺手统一"** ——
+`requireUser` 抛的是 `IllegalArgumentException`（不是 `IllegalStateException`），
+换类型会改 HTTP 状态码。
+
+**⚠️ 镜像关系可以"机器证明"，而且应该证明。** 换类型（`BlogPostVO` → `ContentPost`）
+之所以能宣称是纯重构，判据是"序列化 JSON 逐字节不变"。三条独立断言，
+**必须住在应用模块**（契约侧看不见 `BlogPostVO` / `PageData`）：
+
+1. 两侧的可序列化属性名集合相同 —— 用 Jackson 的
+   `mapper.getSerializationConfig().introspect(javaType).findProperties()`，
+   不需要造实例，直接看类型；
+2. 同一组值在两侧 `valueToTree(...)` 得到**同一棵树** —— 能抓到"同名但序列化行为不同"
+   （比如某一侧加了 `@JsonFormat`、或把 `List` 换成了别的集合类型）；
+3. **生产代码里那条转换**（`BlogService.toContract`，反射调用私有静态方法）的输出与源对象同树
+   —— 前两条只证明"两个类型长得一样"，这一条才证明"实现真的按镜像搬了"。
+
+⚠️ 写这个测试会踩到 `McpJsonMapperFactory` 那个缺陷的**同一个根因**：裸 `new ObjectMapper()`
+序列化 `LocalDate` 直接抛 `InvalidDefinitionException`。测试里的 mapper 要
+`registerModule(new JavaTimeModule()).disable(WRITE_DATES_AS_TIMESTAMPS)`。
+
+**⚠️ 消灭"相邻同类型位置参数"要抽具名 DTO，并且测试要断言"字面量两两不同"。**
+三个真实风险（旧签名全是位置参数）：
+
+| 旧签名 | 危险 | 新类型 |
+|---|---|---|
+| `updateBlog(Long, String×5, List)` | `summary`/`content` 写反 → 摘要列拿到整篇正文 | `ContentPostInput` |
+| `listMyPosts(Integer, String, Boolean, Boolean, Integer)` | `juejin`/`csdn` 写反 → 两条 SQL 都返回非空结果，静默错 | `ContentPostQuery` |
+| `getBlogs(Integer, String, int, int)` | page/size 两个相邻 `int` | 保留位置参数（通用形状 + 只同域在用） |
+
+**测试里那组相邻同类型分量必须给互不相同的字面量** —— 都给同一个值的话，
+把它们对调测试仍然全绿，顺序就白钉了。这条比"分量名列表"更关键。
+
+**⚠️ 词表类进契约，但不要改成枚举。** `ContentPostStatus`（`DRAFT=0` / `PUBLISHED=1` /
+`TRASHED=-1`）进契约是因为两个 agent 工具各自把 `"draft" ⇄ 0` 写了一遍。
+但 `blog_post.status` 是 **`int` 列**，MyBatis 投影与线上 JSON 都按数字走，换枚举会同时改
+数据库列类型与前端契约。保留 `BlogService.STATUS_*` 作为**别名**
+（前端 HTTP 契约与同域服务都在用，删了会把一次契约抽取变成一次前端可见的改名）；
+别名仍是常量表达式，`switch` 的 `case` 标签照旧可用 —— 用
+`case ContentPostStatus.DRAFT -> ...` 把"能当 case 标签用"变成一条可执行断言。
+
 **⚠️ 扩展现有契约不需要构建接线。** 新建 `contracts/<name>/` 要改四处（见下），
 但往**已存在**的契约里加类型是零成本：模块已接线、包已登记。
 `core-api` 承接 `identity` 的类型、`content-api` 承接 `publishing` 的类型，都是这一类。
@@ -389,6 +452,30 @@ mvn -q -DskipTests compile
   org.codehaus.plexus.classworlds.launcher.Launcher -o test
 ```
 
+⚠️ **`boot/plexus-classworlds-*.jar` 的版本必须与 maven 版本配套**（3.9.6 → 2.7.0，
+3.9.9 → 2.8.0）。机器上两个 maven 都在（`/d/soft/apache-maven-3.9.6`、`/c/apache-maven-3.9.9`），
+**混搭 `-classpath` 与 `-Dmaven.home` 会报 classworlds 相关的怪错**。先 `ls <maven>/boot/` 确认。
+
+⚠️ **`-Dtest=X` 会让整个反应堆失败。** 没有匹配测试的模块会报
+`No tests matching pattern ... were executed!` 并把 BUILD 打成 FAILURE ——
+看起来像"你的测试没跑起来"，其实是别的模块在抗议。必须同时加：
+
+```bash
+... Launcher -o -Dtest='A,B' -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+⚠️ **`-pl <module>` 必须配 `-am`。** 否则兄弟模块的 SNAPSHOT jar 不在本地仓库里，
+报 `Could not find artifact com.xander:xander-model:jar:0.0.1-SNAPSHOT`：
+
+```bash
+... Launcher -o -pl apps/core-host -am -Dtest=X -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+⚠️ **注入验证要单独跑被测模块，不能在反应堆里跑。** 反应堆在**第一个失败模块处直接中断**，
+后面的模块根本不跑。所以"注入只影响那一个测试类"这句话，只能靠
+`-pl contracts/content-api test`（不带 `-am` 也行，依赖已在本地仓库）单独证明；
+在反应堆里跑只能证明"没有别的模块先炸"。
+
 迁移相关的机器门禁（清单一致性 / 依赖方向 / 配置归属等）另有一套，改动后也要跑：
 
 ```bash
@@ -462,6 +549,32 @@ detail = f"{recomputed} implementation statements across {len(base_edges)} edges
 **规矩：门禁的 pass 消息里所有数字必须取自同一时刻。**
 要对比就显式写成两个字段（`X; baseline was Y`），不要在一个句子里混。
 验证方法同上：临时把基线改成一个"看起来缩了"的值，跑一次看 pass 消息是否如实。
+
+### ⚠️ `cross_deployment_unit_edges` 只数 impl > 0 的边，与列表长度不等
+
+`docs/cross-domain-imports.yaml` 的 `counts` 是从**过滤后**的列表算的（`scan.py`）：
+
+```python
+implementation = [e for e in ordered if e["implementation_statements"]]   # 丢掉 impl=0 的边
+crossing = [e for e in implementation if e["crosses_deployment_unit"]]
+```
+
+后果：**`edges` 列表里的跨单元条目数 ≠ `counts.cross_deployment_unit_edges`。**
+2026-09-17 实测：列表 15 条，计数 14 —— 差的是一条 `api_statements: 1,
+implementation_statements: 0` 的边（`agent -> publishing`，由 `PublishPostTool` 还
+import 着 `publishing.api.BlogPostVO` 造成）。
+
+所以**核对收益时不要数列表长度**，要按字段算：
+
+```python
+e = [x for x in d['edges'] if x['crosses_deployment_unit']]
+print(len(e),                                      # 列表里的跨单元边
+      sum(1 for x in e if x['implementation_statements'] > 0),   # 门禁报的那个数
+      sum(x['implementation_statements'] for x in e))
+```
+
+一条边"归零"的判断也要分开看：`implementation_statements` 归零 ≠ 边消失。
+`api_statements` 还可能挂着（那是"契约面"，按本仓库自己的判据不算待还的债）。
 
 ### 门禁校验「生成物清单」时：算法要与生成方一致，判据要查双向
 

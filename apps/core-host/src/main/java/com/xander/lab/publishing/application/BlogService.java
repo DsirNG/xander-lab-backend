@@ -12,6 +12,12 @@ import com.xander.lab.publishing.api.BlogManageStatsVO;
 import com.xander.lab.publishing.api.CategoryVO;
 import com.xander.lab.publishing.api.TagVO;
 import com.xander.lab.common.PageData;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostInput;
+import com.xander.lab.content.api.ContentPostPage;
+import com.xander.lab.content.api.ContentPostPort;
+import com.xander.lab.content.api.ContentPostQuery;
+import com.xander.lab.content.api.ContentPostStatus;
 import com.xander.lab.publishing.domain.BlogPost;
 import com.xander.lab.publishing.domain.BlogPostView;
 import com.xander.lab.publishing.domain.BlogTag;
@@ -42,14 +48,26 @@ import java.util.stream.Collectors;
 /**
  * 博客服务
  * 提供博客的CRUD、分类、标签和阅读记录功能
+ *
+ * <p><b>同时是 {@link ContentPostPort} 的实现。</b>端口上的 7 个方法显式收 {@code userId}，
+ * 类上的旧公开方法保持签名不变、仍然是“读 {@code UserContext} 再转调同一个私有实现体”的薄壳 ——
+ * 这样 {@code BlogController} 的 17 个调用点与同域的 {@code LocalBlogPublisher} /
+ * {@code BlogPlanRunService} / {@code BlogAgentService} 一行都不用改。
+ * 身份从 ThreadLocal 变成参数是拆服务的前提：跨进程没有 ThreadLocal 可传。
+ * 端口只收跨部署单元真正调到的 7 个方法，其余 16 个留在这里（见 {@link ContentPostPort}）。</p>
+ *
+ * <p>端口出参是契约类型 {@link ContentPost} / {@link ContentPostPage}，类内实现体仍然用
+ * {@code BlogPostVO} / {@code PageData}（MyBatis 的投影目标就是前者），换算只在端口边界
+ * 用 {@link #toContract} / {@link #toContractPage} 做一次，不在实现体里来回转。</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class BlogService {
-    public static final int STATUS_DRAFT = 0;
-    public static final int STATUS_PUBLISHED = 1;
-    public static final int STATUS_TRASHED = -1;
+public class BlogService implements ContentPostPort {
+    /** 见 {@link ContentPostStatus}：三个常量现在是契约词表的别名，不是副本。 */
+    public static final int STATUS_DRAFT = ContentPostStatus.DRAFT;
+    public static final int STATUS_PUBLISHED = ContentPostStatus.PUBLISHED;
+    public static final int STATUS_TRASHED = ContentPostStatus.TRASHED;
 
     private static final String PUBLISH_REQUEST_PREFIX = "blog:publish:request:";
 
@@ -152,28 +170,46 @@ public class BlogService {
     /** Reuses a completed publish request so a client retry cannot create a duplicate post. */
     @Transactional
     public BlogPostVO createBlog(BlogPostDTO dto, boolean publish, String requestId) {
+        return createBlog(UserContext.getUserId(), toInput(dto), publish, requestId);
+    }
+
+    @Override
+    @Transactional
+    public ContentPost create(Long userId, ContentPostInput input, boolean publish) {
+        requireUser(userId);
+        return toContract(createBlog(userId, input, publish, null));
+    }
+
+    /**
+     * 创建的核心：身份由参数传入，不读 {@code UserContext}。
+     *
+     * <p>端口侧对 {@code userId} 有非空校验，旧侧没有 —— 旧的 {@code createBlog} 假定调用方已经过
+     * {@code AuthInterceptor}，而端口不能这么假定：跨进程后没有那层兜底，而写出一篇
+     * {@code user_id = NULL} 的文章是任何归属查询都捞不回来的数据。</p>
+     */
+    private BlogPostVO createBlog(Long userId, ContentPostInput input, boolean publish, String requestId) {
         String requestKey = publish && requestId != null && !requestId.isBlank()
-                ? PUBLISH_REQUEST_PREFIX + UserContext.getUserId() + ":" + requestId.trim() : null;
+                ? PUBLISH_REQUEST_PREFIX + userId + ":" + requestId.trim() : null;
         if (requestKey != null) {
-            Long existingId = getPublishedPostId(requestId);
+            Long existingId = getPublishedPostId(userId, requestId);
             if (existingId != null) return getBlogById(existingId);
         }
         BlogPost post = new BlogPost();
-        post.setTitle(dto.getTitle());
-        post.setSummary(dto.getSummary());
-        post.setContent(dto.getContent());
-        post.setCategoryId(dto.getCategoryId());
-        post.setCoverImage(dto.getCoverImage());
-        post.setUserId(UserContext.getUserId());
-        post.setAuthor(resolveAuthor(UserContext.getUserId()));
-        post.setReadTime(Math.max(1, dto.getContent().length() / 500) + " min");
-        post.setStatus(publish ? 1 : 0);
+        post.setTitle(input.title());
+        post.setSummary(input.summary());
+        post.setContent(input.content());
+        post.setCategoryId(input.categoryId());
+        post.setCoverImage(input.coverImage());
+        post.setUserId(userId);
+        post.setAuthor(resolveAuthor(userId));
+        post.setReadTime(Math.max(1, input.content().length() / 500) + " min");
+        post.setStatus(publish ? STATUS_PUBLISHED : STATUS_DRAFT);
         post.setPublishedAt(publish ? LocalDate.now() : null);
         blogPostMapper.insert(post);
 
         // 处理标签
-        if (dto.getTags() != null && !dto.getTags().isEmpty()) {
-            for (String tagName : dto.getTags()) {
+        if (input.tags() != null && !input.tags().isEmpty()) {
+            for (String tagName : input.tags()) {
                 BlogTag tag = blogTagMapper.selectOne(
                         new LambdaQueryWrapper<BlogTag>().eq(BlogTag::getName, tagName));
                 if (tag == null) {
@@ -188,18 +224,23 @@ public class BlogService {
         if (requestKey != null) {
             redisTemplate.opsForValue().set(requestKey, post.getId().toString(), 24, TimeUnit.HOURS);
         }
-        return getManagedBlogById(UserContext.getUserId(), post.getId());
+        return getManagedBlogById(userId, post.getId());
     }
 
     /** Returns the post created by this user's publish request, if it has committed. */
     public Long getPublishedPostId(String requestId) {
-        if (requestId == null || requestId.isBlank() || UserContext.getUserId() == null) return null;
-        String key = PUBLISH_REQUEST_PREFIX + UserContext.getUserId() + ":" + requestId.trim();
+        return getPublishedPostId(UserContext.getUserId(), requestId);
+    }
+
+    /** 核心：身份由参数传入。原来三次读 {@code UserContext} 的写法在一次请求内是同一个值，改成一次读取。 */
+    private Long getPublishedPostId(Long userId, String requestId) {
+        if (requestId == null || requestId.isBlank() || userId == null) return null;
+        String key = PUBLISH_REQUEST_PREFIX + userId + ":" + requestId.trim();
         String postId = redisTemplate.opsForValue().get(key);
         if (postId == null) return null;
         try {
             BlogPost post = blogPostMapper.selectById(Long.parseLong(postId));
-            if (post != null && UserContext.getUserId().equals(post.getUserId())) return post.getId();
+            if (post != null && userId.equals(post.getUserId())) return post.getId();
         } catch (NumberFormatException ignored) { }
         redisTemplate.delete(key);
         return null;
@@ -209,7 +250,26 @@ public class BlogService {
     @Transactional
     public BlogPostVO updateBlog(Long id, String title, String summary, String content,
                                  String categoryId, String coverImage, List<String> tags) {
-        BlogPost existing = requireOwnedPost(id, UserContext.getUserId());
+        return updateBlog(UserContext.getUserId(), id, title, summary, content, categoryId, coverImage, tags);
+    }
+
+    @Override
+    @Transactional
+    public ContentPost update(Long userId, Long postId, ContentPostInput input) {
+        return toContract(updateBlog(userId, postId, input.title(), input.summary(), input.content(),
+                input.categoryId(), input.coverImage(), input.tags()));
+    }
+
+    /**
+     * 更新的核心：身份由参数传入。
+     *
+     * <p>“{@code null} 表示不改这一项、{@code tags} 非 {@code null} 表示整体替换”这套规则原样保留 ——
+     * 注意<b>空字符串不是 {@code null} 的同义词</b>：{@code title = ""} 是“改成空”，
+     * 这里按 {@code null} 判定，不要顺手换成 {@code StringUtils.hasText}。</p>
+     */
+    private BlogPostVO updateBlog(Long userId, Long id, String title, String summary, String content,
+                                  String categoryId, String coverImage, List<String> tags) {
+        BlogPost existing = requireOwnedPost(id, userId);
         if (title == null && summary == null && content == null && categoryId == null && coverImage == null && tags == null) {
             throw new IllegalArgumentException("至少提供一个需要更新的字段");
         }
@@ -223,8 +283,8 @@ public class BlogService {
         if (content != null && !content.isBlank()) {
             update.setReadTime(Math.max(1, content.length() / 500) + " min");
         }
-        if (UserContext.getUserId() != null) {
-            update.setAuthor(resolveAuthor(UserContext.getUserId()));
+        if (userId != null) {
+            update.setAuthor(resolveAuthor(userId));
         }
         blogPostMapper.updateById(update);
 
@@ -275,10 +335,15 @@ public class BlogService {
     /** Soft-delete: move post to recycle bin (status=-1). */
     @Transactional
     public void deleteBlog(Long id) {
-        Long userId = UserContext.getUserId();
-        requireOwnedPost(id, userId);
+        moveToTrash(UserContext.getUserId(), id);
+    }
+
+    @Override
+    @Transactional
+    public void moveToTrash(Long userId, Long postId) {
+        requireOwnedPost(postId, userId);
         BlogPost update = new BlogPost();
-        update.setId(id);
+        update.setId(postId);
         update.setStatus(STATUS_TRASHED);
         blogPostMapper.updateById(update);
     }
@@ -305,9 +370,22 @@ public class BlogService {
 
     public PageData<BlogPostVO> getMyBlogs(Integer status, String search, Integer page, Integer size) {
         Long userId = UserContext.getUserId();
-        if (userId == null) {
-            throw new IllegalArgumentException("未登录或登录已过期");
+        requireUser(userId);
+        return getMyBlogs(userId, status, search, page, size);
+    }
+
+    @Override
+    public ContentPostPage listMyPosts(Long userId, ContentPostQuery query, int page, int size) {
+        requireUser(userId);
+        if (query.juejinSynced() != null || query.csdnSynced() != null) {
+            throw new IllegalArgumentException(
+                    "分页读取不支持按同步状态过滤（分页 SQL 没有这两个条件），请用 listAllMyPosts");
         }
+        return toContractPage(getMyBlogs(userId, query.status(), query.search(), page, size));
+    }
+
+    /** 分页读取的核心：身份由参数传入。 */
+    private PageData<BlogPostVO> getMyBlogs(Long userId, Integer status, String search, Integer page, Integer size) {
         int safePage = page == null || page < 1 ? 1 : page;
         int safeSize = size == null || size < 1 ? 10 : Math.min(size, 50);
         Integer statusFilter = null;
@@ -332,12 +410,15 @@ public class BlogService {
     /** 返回用户当前可管理的博客总数，不包含回收站文章。 */
     @Transactional(readOnly = true)
     public long countManagedBlogs(Long userId) {
-        if (userId == null) {
-            throw new IllegalArgumentException("未登录或登录已过期");
-        }
+        requireUser(userId);
         return blogPostMapper.selectCount(new LambdaQueryWrapper<BlogPost>()
                 .eq(BlogPost::getUserId, userId)
                 .in(BlogPost::getStatus, STATUS_DRAFT, STATUS_PUBLISHED));
+    }
+
+    @Override
+    public long countManaged(Long userId) {
+        return countManagedBlogs(userId);
     }
 
     /**
@@ -345,12 +426,26 @@ public class BlogService {
      * status 限定草稿/已发布/回收站；search 标题摘要关键词；
      * juejinSynced / csdnSynced：true 仅已成功同步、false 仅未同步、null 不限；
      * limit 非空时仅返回最新前 N 条。供智能体一次调用拿全量，无需逐页聚合。
+     *
+     * <p>跨部署单元的调用方（agent 的 {@code QueryPostsTool} / {@code QueryUnsyncedPostsTool}）
+     * 已改走 {@link ContentPostPort#listAllMyPosts}；这个入口保留，签名与行为都不变。</p>
      */
     public List<BlogPostVO> listMyPosts(Integer status, String search, Boolean juejinSynced, Boolean csdnSynced, Integer limit) {
         Long userId = UserContext.getUserId();
-        if (userId == null) {
-            throw new IllegalArgumentException("未登录或登录已过期");
-        }
+        requireUser(userId);
+        return listMyPosts(userId, status, search, juejinSynced, csdnSynced, limit);
+    }
+
+    @Override
+    public List<ContentPost> listAllMyPosts(Long userId, ContentPostQuery query, Integer limit) {
+        requireUser(userId);
+        return listMyPosts(userId, query.status(), query.search(), query.juejinSynced(),
+                query.csdnSynced(), limit).stream().map(BlogService::toContract).toList();
+    }
+
+    /** 全量读取的核心：身份由参数传入。 */
+    private List<BlogPostVO> listMyPosts(Long userId, Integer status, String search,
+                                         Boolean juejinSynced, Boolean csdnSynced, Integer limit) {
         Integer statusFilter = null;
         if (status != null) {
             statusFilter = normalizeManagedStatus(status);
@@ -381,6 +476,11 @@ public class BlogService {
         }
         post.setTags(blogTagMapper.selectTagNamesByPostId(post.getId()));
         return post;
+    }
+
+    @Override
+    public ContentPost findOwned(Long userId, Long postId) {
+        return toContract(getManagedBlogById(userId, postId));
     }
 
     private BlogPost requireOwnedPost(Long id, Long userId) {
@@ -523,5 +623,57 @@ public class BlogService {
      */
     public List<TagVO> getPopularTags(int limit) {
         return blogTagMapper.selectPopularTags(limit);
+    }
+
+    // ------------------------------------------------------------------
+    // 端口边界：共用校验与契约换算
+    // ------------------------------------------------------------------
+
+    /** 未登录的判定文案与 HTTP 状态都靠这一句，改造前分散在 7 处，文案必须逐字一致。 */
+    private static void requireUser(Long userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+    }
+
+    /**
+     * 前端 DTO → 契约输入。
+     *
+     * <p>{@code BlogPostDTO.publish} 刻意不映射：端口把“发不发”作为 {@code create} 的独立参数，
+     * 同一个语义不该有两个来源（{@code BlogController} 读 DTO 上的 {@code publish}，
+     * 那是前端 HTTP 契约的事）。</p>
+     */
+    private static ContentPostInput toInput(BlogPostDTO dto) {
+        return new ContentPostInput(dto.getTitle(), dto.getSummary(), dto.getContent(),
+                dto.getCategoryId(), dto.getCoverImage(), dto.getTags());
+    }
+
+    /**
+     * {@code BlogPostVO} → {@link ContentPost}。
+     *
+     * <p><b>逐字段手写，不要换成 {@code BeanUtils.copyProperties} 或反射。</b>字段名对不上时
+     * 反射版本静默留 {@code null}（而且它按名匹配，{@code category} 与 {@code categoryName}
+     * 这种前缀关系还会互相污染），手写版本编译期就红。{@code tagsRaw} 刻意不映射 ——
+     * 它是 {@code @JsonIgnore} 的持久化承接字段，不属于线上形状。</p>
+     *
+     * <p>{@code null} 原样透传，不做归一：镜像的判据是“换类型后序列化逐字节不变”，
+     * 见 {@link ContentPost}。</p>
+     */
+    private static ContentPost toContract(BlogPostVO vo) {
+        if (vo == null) return null;
+        return new ContentPost(vo.getId(), vo.getTitle(), vo.getSummary(), vo.getContent(),
+                vo.getCategory(), vo.getCategoryName(), vo.getCoverImage(), vo.getTags(),
+                vo.getUserId(), vo.getAuthor(), vo.getDate(), vo.getReadTime(), vo.getTips(),
+                vo.getViews(), vo.getStatus(), vo.getCsdnSynced(), vo.getJuejinSynced());
+    }
+
+    /** {@code PageData} → {@link ContentPostPage}，同样逐字段手写、同样不做归一。 */
+    private static ContentPostPage toContractPage(PageData<BlogPostVO> page) {
+        if (page == null) return null;
+        List<ContentPost> records = page.getRecords() == null
+                ? null
+                : page.getRecords().stream().map(BlogService::toContract).toList();
+        return new ContentPostPage(records, page.getTotal(), page.getCurrent(),
+                page.getPages(), page.getSize(), page.isHasMore());
     }
 }

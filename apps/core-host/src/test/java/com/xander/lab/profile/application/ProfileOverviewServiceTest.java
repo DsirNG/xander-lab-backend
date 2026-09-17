@@ -4,7 +4,7 @@ import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.application.AuthService;
 import com.xander.lab.profile.application.ProfileOverviewService.ProfileOverview;
-import com.xander.lab.publishing.application.BlogService;
+import com.xander.lab.content.api.ContentPostPort;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -17,16 +17,16 @@ class ProfileOverviewServiceTest {
     void aggregatesIdentityPointsAndManagedBlogCount() {
         AuthService authService = mock(AuthService.class);
         BillingPort billingPort = mock(BillingPort.class);
-        BlogService blogService = mock(BlogService.class);
+        ContentPostPort contentPostPort = mock(ContentPostPort.class);
         ProfileOverviewService service = new ProfileOverviewService(
-                authService, billingPort, blogService);
+                authService, billingPort, contentPostPort);
         TokenResponse.UserInfo user = TokenResponse.UserInfo.builder()
                 .username("xander")
                 .nickname("XanderDING")
                 .build();
         when(authService.getUserInfo(42L)).thenReturn(user);
         when(billingPort.balance(42L)).thenReturn(9_992L);
-        when(blogService.countManagedBlogs(42L)).thenReturn(12L);
+        when(contentPostPort.countManaged(42L)).thenReturn(12L);
 
         ProfileOverview result = service.getOverview(42L);
 

@@ -80,21 +80,19 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 Counted from `import com.xander.lab.<other domain>.<layer>...`. Only the
 implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 
-- implementation statements: **64** across 24 edges
-- of which cross a deployment unit (the real backlog): **47** across 17 edges
-- api-layer statements (contract surface): **38**
+- implementation statements: **55** across 21 edges
+- of which cross a deployment unit (the real backlog): **38** across 14 edges
+- api-layer statements (contract surface): **25**
 
 | from | to | impl | api | crosses unit | from unit -> to unit |
 |---|---|---|---|---|---|
 | agent | automation | 6 | 9 | yes | dinqor-agent -> dinqor-content-automation |
 | automation | integration | 6 | 0 | yes | dinqor-content-automation -> dinqor-platform-integration |
 | integration | agent | 5 | 0 | yes | dinqor-platform-integration -> dinqor-agent |
-| integration | publishing | 5 | 11 | yes | dinqor-platform-integration -> dinqor-content-automation |
 | virtualpay | identity | 5 | 0 | no | dinqor-core-host -> dinqor-core-host |
 | agent | blogagent | 4 | 2 | yes | dinqor-agent -> dinqor-content-automation |
 | agent | recitation | 4 | 4 | yes | dinqor-agent -> dinqor-core-host |
 | automation | blogagent | 4 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
-| agent | publishing | 3 | 3 | yes | dinqor-agent -> dinqor-content-automation |
 | admin | identity | 2 | 2 | no | dinqor-core-host -> dinqor-core-host |
 | agent | identity | 2 | 0 | yes | dinqor-agent -> dinqor-core-host |
 | agent | integration | 2 | 0 | yes | dinqor-agent -> dinqor-platform-integration |
@@ -108,8 +106,8 @@ implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 | integration | automation | 1 | 0 | yes | dinqor-platform-integration -> dinqor-content-automation |
 | integration | identity | 1 | 0 | yes | dinqor-platform-integration -> dinqor-core-host |
 | profile | identity | 1 | 1 | no | dinqor-core-host -> dinqor-core-host |
-| profile | publishing | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | studio | blogagent | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
+| agent | publishing | 0 | 1 | yes | dinqor-agent -> dinqor-content-automation |
 | virtualpay | admin | 0 | 1 | no | dinqor-core-host -> dinqor-core-host |
 
 ## Shared kernel reverse dependencies (V9 section 21 gate)

@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.blog.api;
 
-import com.xander.lab.publishing.api.BlogPostDTO;
-import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostInput;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.McpScopeErrors;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
@@ -26,7 +26,7 @@ import java.util.*;
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "mcp.blog", name = "enabled", havingValue = "true")
 public class BlogMcpServerConfiguration {
-    private final BlogMcpApplicationService blogService;
+    private final BlogMcpApplicationService blogMcpService;
 
     @Bean
     HttpServletStreamableServerTransportProvider mcpTransport() {
@@ -51,7 +51,7 @@ public class BlogMcpServerConfiguration {
     private McpServerFeatures.SyncToolSpecification listPostsTool() {
         return tool("list_posts", "Lists the authorized user's blog posts for topic deduplication and context selection.", listSchema(), args -> {
             McpOAuthRequestContext.requireScope("blog:read");
-            var posts = blogService.list(integerValue(args, "page", 1), integerValue(args, "size", 10), optionalValue(args, "search", null));
+            var posts = blogMcpService.list(integerValue(args, "page", 1), integerValue(args, "size", 10), optionalValue(args, "search", null));
             return result(Map.of("ok", true, "posts", posts));
         });
     }
@@ -61,7 +61,7 @@ public class BlogMcpServerConfiguration {
                 "type", "object", "properties", Map.of("postId", Map.of("type", "integer")),
                 "required", List.of("postId")), args -> {
             McpOAuthRequestContext.requireScope("blog:read");
-            BlogPostVO post = blogService.get(longValue(args, "postId"));
+            ContentPost post = blogMcpService.get(longValue(args, "postId"));
             return result(Map.of("ok", true, "post", post));
         });
     }
@@ -69,15 +69,16 @@ public class BlogMcpServerConfiguration {
     private McpServerFeatures.SyncToolSpecification postTool(String name, boolean publish) {
         return tool(name, publish ? "Publishes a blog post." : "Creates an unpublished blog draft.", postSchema(), args -> {
             McpOAuthRequestContext.requireScope("blog:write");
-            BlogPostDTO dto = new BlogPostDTO();
-            dto.setTitle(value(args, "title"));
-            dto.setContent(content(args));
-            dto.setSummary(optionalValue(args, "summary", summarize(dto.getContent())));
-            dto.setCategoryId(optionalValue(args, "categoryId", "backend"));
+            String title = value(args, "title");
+            String content = content(args);
+            String summary = optionalValue(args, "summary", summarize(content));
+            String categoryId = optionalValue(args, "categoryId", "backend");
             Object rawTags = args.get("tags");
-            if (rawTags instanceof List<?> tags) dto.setTags(tags.stream().map(String::valueOf).toList());
-            BlogPostVO post = blogService.create(dto, publish);
-            return result(Map.of("ok", true, "postId", post.getId(), "published", publish));
+            List<String> tags = rawTags instanceof List<?> tagValues
+                    ? tagValues.stream().map(String::valueOf).toList() : null;
+            ContentPost post = blogMcpService.create(
+                    new ContentPostInput(title, summary, content, categoryId, null, tags), publish);
+            return result(Map.of("ok", true, "postId", post.id(), "published", publish));
         });
     }
 
@@ -90,8 +91,8 @@ public class BlogMcpServerConfiguration {
             String content = hasAny(args, "content", "contentBase64") ? content(args) : null;
             String categoryId = optionalValue(args, "categoryId", null);
             List<String> tags = tags(args);
-            BlogPostVO post = blogService.update(postId, title, summary, content, categoryId, tags);
-            return result(Map.of("ok", true, "postId", post.getId(), "updated", true));
+            ContentPost post = blogMcpService.update(postId, title, summary, content, categoryId, tags);
+            return result(Map.of("ok", true, "postId", post.id(), "updated", true));
         });
     }
 
@@ -102,7 +103,7 @@ public class BlogMcpServerConfiguration {
                 return McpSchema.CallToolResult.builder().isError(true).structuredContent(Map.of("ok", false, "error", "CONFIRMATION_REQUIRED", "message", "Set confirm=true to permanently delete this post.")).addTextContent("CONFIRMATION_REQUIRED").build();
             }
             Long postId = longValue(args, "postId");
-            blogService.delete(postId);
+            blogMcpService.delete(postId);
             return result(Map.of("ok", true, "postId", postId, "deleted", true));
         });
     }

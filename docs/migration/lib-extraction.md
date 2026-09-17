@@ -43,7 +43,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 
 | 契约模块 | 状态 | 内容 | 跨部署单元实现依赖的收益 |
 |---|---|---|---|
-| `content-api` | **已完成** | `BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits` | `integration → publishing` 22 → 5；总计 −18 条跨单元 import |
+| `content-api` | **已完成** | 第一刀：`BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits`。第二刀：`MediaAssetPort` `MediaAssetRef` `StoredImage`。第三刀：`ContentPostPort` `PublicationPort` `ContentPost` `ContentPostPage` `ContentPostInput` `ContentPostQuery` `ContentPostStatus` | 第一刀：`integration → publishing` 22 → 5；总计 −18 条跨单元 import。第二刀：`publishing ↔ blogagent` 环拆成单向；跨单元 −8。第三刀：`integration → publishing` 5 → 0（api 11 → 0）、`agent → publishing` 3 → 0、`profile → publishing` 1 → 0 —— **`publishing` 跨单元入边归零**；总计 **−9**（跨单元 −9） |
 | `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
 | `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；跨部署单元累计 **−8**；总计 **−14** |
 | `agent-api` | 未开始 | — | — |
@@ -898,6 +898,130 @@ api_statements / api_edges         38 / 11 (不变)
 
 ---
 
+## 3nonies. 第六刀：`BlogService` → `content.api.ContentPostPort / PublicationPort`
+
+完整论证在 `docs/migration/adr-contract-boundaries.md` §5，这里只记与"抽库"直接相关的部分。
+
+### 3nonies.1 又是一次"抽端口"，而且这次的**判据最清楚**
+
+`BlogService` 是 `@Service` + `@RequiredArgsConstructor`，注入四个 MyBatis mapper
+（`BlogPostMapper` / `BlogCategoryMapper` / `BlogTagMapper` / `BlogPostViewMapper`）、
+`UserLookupPort` 与 `StringRedisTemplate`。搬进契约 = 把 MyBatis 与 Redis 拖进每个消费者，
+V9 §19 第一个就否。所以只在契约里描述接口，实现留在内容域。
+
+### 3nonies.2 ⚠️ 难点不在端口，在"同域调用点比跨域多得多"
+
+这是与前三刀**方向相反**的一次：
+
+| | 同域调用点 | 跨部署单元语句 |
+|---|---|---|
+| `BlogService` | `BlogController` **17 个** | **9 条 / 3 条边** |
+
+前几刀都是"跨域调用点少，把域方法留在原地"。这次如果按老办法"改签名 + 改所有调用点"，
+就会为了 9 条语句去动 17 个同域调用点 —— 而**同域调用点根本不算跨域边界**。
+所以做法反过来：
+
+- `BlogService implements ContentPostPort`；
+- 旧公开方法**签名全部不变**，退化成"读 `UserContext` → 转调私有重载"的薄壳；
+- 端口方法显式收 `userId`。
+
+结果：`BlogController` 17 个调用点、`LocalBlogPublisher`、`BlogPlanRunService`、
+`BlogAgentService` **一行未改**。
+
+### 3nonies.3 镜像而不是收窄 —— 而且这次**能证明**
+
+`ContentPost`（17 个分量）镜像 `BlogPostVO` 的可序列化表面；`ContentPostPage`（6 个分量）
+镜像 `PageData`。理由与 §3bis.2 相同：换类型后线上 JSON 逐字节不变 ⇒ 可证明是纯重构
+⇒ 不进 `docs/contract-changes.yaml`。
+
+`PageData` 不能直接用还有第二个原因：它是**前端**分页返回体（存在理由就是"简化 `IPage`，
+只留前端要的字段"），与服务间分页是两个受众 —— V9 §19 的教训就是别让一个类型服务两个受众。
+另外它住在 `libs/xander-mybatis-support`，那个模块为它声明了 MyBatis-Plus，契约依赖不到。
+
+**这次镜像关系是可验证的**：`ContentPostShapeTest`（住在 `apps/core-host`，契约侧看不见
+`BlogPostVO`）用三条独立断言钉住 —— 属性名集合相同、同值序列化成同一棵 JSON 树、
+以及**生产代码里那条转换**（`BlogService.toContract`，反射调用）的输出与源对象同树。
+第三条是前几刀没有的：它证明的不只是"两个类型长得一样"，而是"实现真的按镜像搬了"。
+
+⚠️ 写这个测试时踩到了 `McpJsonMapperFactory` 那个缺陷的**同一个根因**：裸 `new ObjectMapper()`
+序列化 `LocalDate` 直接抛 `InvalidDefinitionException`。测试里显式注册 `JavaTimeModule` 才通过。
+
+### 3nonies.4 这一刀真正消灭的是"相邻同类型位置参数"
+
+| 旧签名 | 危险 | 新类型 |
+|---|---|---|
+| `updateBlog(Long, String, String, String, String, String, List)` | **五个相邻 `String`**：`summary`/`content` 写反 → 摘要列拿到整篇正文 | `ContentPostInput` |
+| `listMyPosts(Integer, String, Boolean, Boolean, Integer)` | **两个相邻 `Boolean`**：`juejin`/`csdn` 写反 → 两条 SQL 都返回非空结果，静默错结果 | `ContentPostQuery` |
+| `getMyBlogs(Integer, String, int, int)` | 两个相邻 `int`（page/size） | **保留位置参数**（分页是通用形状，且只有同域在用） |
+
+`ContentPostStatus` 进契约是另一件事：`QueryPostsTool` 与 `QueryUnsyncedPostsTool` 各自把
+`"draft" ⇄ 0` 写了一遍。⚠️ 它**不能改成枚举**（`blog_post.status` 是 `int` 列）。
+`BlogService.STATUS_*` 保留为**别名**，仍是常量表达式，`switch` 的 `case` 标签照旧可用。
+
+### 3nonies.5 `PublicationPort`：零改动的端口形状是**设计出来的**
+
+`PublicationService` 的两个方法签名已经只含 `content-api` 类型，端口照抄它，
+实现侧只加 `implements` + `@Override`，**类体一行未改**。
+
+判据：**优先选与现有实现同形的端口**（访问器同名 ⇒ 实现侧退化成类型替换）。
+端口形状是设计自由度，不要为了"看起来更像端口"去重构签名。
+
+### 3nonies.6 收益（重新生成基线后实测）
+
+```text
+agent       -> publishing   3 -> 0   (跨单元，impl)
+integration -> publishing   5 -> 0   (跨单元，impl；api 11 -> 0)
+profile     -> publishing   1 -> 0   (跨单元，impl)
+
+implementation_statements          64 -> 55   (-9)
+implementation_edges               24 -> 21   (-3)
+cross_deployment_unit_statements   47 -> 38   (-9)
+cross_deployment_unit_edges        17 -> 14   (-3)
+api_statements                     38 -> 25   (-13)
+api_edges                          11 -> 10   (-1)
+```
+
+**`publishing` 的跨单元入边归零**（13/9 → 4/0）：剩下 4 条全是同单元的
+（`automation` 2 条、`blogagent` 2 条），它们拆完还在 `dinqor-content-automation` 一个进程里。
+这与 §3octies.6 的 `billing` 10/7 → 0/0 是同一类结果。
+
+⚠️ **耦合图形状依然没变**：`deployment-unit-coupling` 仍报 4 个单元在一个 SCC 里、4 对互相依赖。
+
+### 3nonies.7 ⚠️ 残留：1 条 api statement（`agent -> publishing` 这条边还在）
+
+`PublishPostTool` 仍 `import com.xander.lab.publishing.api.BlogPostVO`，因为
+`BlogAgentService.publish` / `findPublishedPost` 返回它。这条边现在是
+`api_statements: 1, implementation_statements: 0` —— 按本仓库自己的判据
+（`cross-domain-imports.yaml` 的 `note`：*Only implementation_statements counts*）**已不算存量**。
+
+不顺手做掉的理由：要消掉它得改 `BlogAgentService` 的公开返回类型 **和**
+`BlogAgentController` 的返回类型，那是 **blogagent ↔ publishing** 这条边界的事；
+而且 `publishing.api` 整个遗留 api 包（`BlogPostDTO` / `BlogPostVO`）会被后续某一刀整体处理。
+
+**⚠️ 一个容易误读的指标细节**：`counts.cross_deployment_unit_edges` 数的是
+**至少有一条 implementation statement** 的跨单元边。所以 `edges` 列表里现在有 **15** 条跨单元边，
+而计数是 **14**。数边数时不要只看列表长度。
+
+### 3nonies.8 下一刀
+
+按剩余跨单元实现语句排序（当前基线）：
+
+| 目标域 | 总数 / 跨单元 | 说明 |
+|---|---|---|
+| `automation` | 10 / 10 | 最大的跨单元目标，入边来自 `agent` 6 / `knowledgebase` 2 / `admin` 1 / `integration` 1 |
+| `integration` | 9 / 9 | `automation -> integration` 6 条是最大的一条边 |
+| `recitation` | 6 / 6 | `agent -> recitation` 4 + `automation -> recitation` 2 |
+| `agent` | 5 / 5 | 就是 `agent-api` 那一刀（`parametersSchema()` 返回 `JsonNode`） |
+| `blogagent` | 9 / 5 | `agent -> blogagent` 4 + `studio -> blogagent` 1 |
+| `identity` | 11 / 3 | 11 条里 8 条同单元 |
+| `publishing` | 4 / **0** | **已归零**（本刀） |
+| `virtualpay` | 1 / 0 | 同单元 |
+
+当前最大的跨单元边是 `agent -> automation`（6）与 `automation -> integration`（6）。
+`agent-api` 那一刀目标仍是 `integration -> agent` 的 5 条（§3octies.7）。
+
+---
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`
@@ -1082,14 +1206,32 @@ python scripts/migration/ci_gates.py
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
 类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
 只看最后那个 `Results:` 会以为"测试变少了"。
-**要核对的是各模块之和**（本轮 `apps/core-host` 1055 + `xander-auth-core` 4 +
-`content-api` 4 = 1063；其中 content-api 的 4 条是**本轮新增**的 `PublishCommandTest`，
-不是搬过来的，所以总数比上一轮多 4 是预期的）。
+**要核对的是各模块之和。**最新一轮（§3nonies 之后，2026-09-17）：
+
+| 模块 | Tests run |
+|---|---|
+| `xander-auth-core` | 4 |
+| `contracts/content-api` | 67 |
+| `contracts/integration-api` | 3 |
+| `contracts/core-api` | 12 |
+| `contracts/payment-api` | 21 |
+| `apps/core-host` | 1074 |
+| **合计** | **1181**（0 failures / 0 errors） |
 
 ⚠️ `target/surefire-reports/` **不会被自动清理**，里面会留下已经搬走的测试类的报告。
-用脚本按目录累加 `Tests run` 会把这部分算进去（本轮就出现了
+用脚本按目录累加 `Tests run` 会把这部分算进去（曾出现
 `apps/core-host` 累加得 1059、实际只跑 1055 的情况，差的 4 正是已迁出的
 `UserContextTest` / `JwtUtilTest`）。**以控制台输出为准，不要以报告目录为准。**
+
+⚠️ **另一个坑：`-Dtest=X` 会让整个反应堆失败。** 没有匹配测试的模块会报
+`No tests matching pattern ... were executed!` 并把 BUILD 打成 FAILURE。
+必须同时加 `-Dsurefire.failIfNoSpecifiedTests=false`。
+另外 `-pl <module>` 需要配 `-am`，否则兄弟模块的 SNAPSHOT jar 不在本地仓库里，
+报 `Could not find artifact com.xander:xander-model:jar:0.0.1-SNAPSHOT`。
+
+⚠️ **注入验证要单独跑被测模块。** 反应堆在第一个失败模块处**直接中断**，
+后面的模块根本不跑。所以在反应堆里跑注入验证，只能证明"没有别的模块先炸"，
+不能证明"只有那个测试类红" —— 得用 `-pl contracts/content-api test` 单独跑一次。
 
 `shared-kernel-classification`：`libs/` 与 `contracts/` 实际提供的每个
 `com.xander.lab.<pkg>` 包都必须在 `SHARED_KERNEL` 里。见 §6 的说明与注入验证。
@@ -1129,7 +1271,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 4 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **47** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47）。按被依赖目标排序（总数 / 跨单元）：`publishing` 13/9、`identity` 11/3、`automation` 10/10、`integration` 9/9、`blogagent` 9/5、`recitation` 6/6、`agent` 5/5、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）。当前最大的跨单元边是 `agent -> automation` 与 `automation -> integration`，各 6 条；`agent -> publishing` 已从 9 降到 3（见 §3septies.8） | Wave 0B 剩余 |
+| 4 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **38** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → **38**）。按被依赖目标排序（总数 / 跨单元）：`automation` 10/10、`integration` 9/9、`recitation` 6/6、`agent` 5/5、`blogagent` 9/5、`identity` 11/3、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies），**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）。当前最大的跨单元边是 `agent -> automation` 与 `automation -> integration`，各 6 条；`agent -> publishing` 已从 9 降到 3（§3septies.8）再到 **0**（§3nonies） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |
