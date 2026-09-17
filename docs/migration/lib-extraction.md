@@ -17,14 +17,15 @@
 所以 §19 必须拆。
 
 Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`xander-auth-core`）
-与 **6 个契约模块**（`content-api`、`integration-api`、`core-api`、`payment-api`、
-`agent-api`、`automation-api`），`common` 从 12 类降到 6 类，
+与 **7 个契约模块**（`content-api`、`integration-api`、`core-api`、`payment-api`、
+`agent-api`、`automation-api`、`recitation-api`），`common` 从 12 类降到 6 类，
 另有 2 个类从**业务域包** `identity.security` 迁出、4 个类从 `publishing.domain` 迁出。
 剩下 3 个 lib 与 2 个契约模块（`knowledge-api`、`studio-api`）未开始。
 
-⚠️ **"6 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过两轮：
+⚠️ **"7 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过两轮：
 `core-api` 加过 `UserLookupPort`（§3septies），`automation-api` 加过 `NotificationPort`（§3duodecies）。
 扩展是**零构建接线**的 —— 不新增模块，四处构建接线一处都不用改。
+`recitation-api` 是**第十刀**（§3terdecies），也是第一个"建新模块"的刀自 `automation-api` 之后。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
 不是审美 —— 见 §5。
@@ -53,6 +54,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；跨部署单元累计 **−8**；总计 **−14** |
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
 | `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。**第九刀再加 `NotificationPort`（写一条持久化用户通知）+ 两个从实体搬来的常量**。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | 第八刀：`agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元。**第九刀（零接线扩展，§3duodecies）**：`knowledgebase → automation` 2 → **0（边整条消失）**，总计再 **−2**（跨单元 −2）；`api_statements` **16 → 16 不变**（消费方 import 的是 `.application` / `.domain`，从没碰过 `.api`）。图形状：`knowledgebase` 变成**纯汇点**（整个域从清单里消失）；`automation` 扇入只剩 `admin`（SSE，要框架类型）与 `integration`（模板真环） |
+| `recitation-api` | **已完成** | 第十刀（§3terdecies）：`RecitationMaterialPort`（背诵材料能力端口，4 个方法）+ `MaterialView`（收窄的读模型，9 分量）/ `MaterialDraft`（4）/ `MaterialFilter`（4）。包是 `com.xander.lab.recitation.spi`，**不是** `.recitation.api`（同因：那个包是 6 个前端 HTTP 文件的家）。**只做材料能力**，测验能力（`KnowledgeQuizService` 的嵌套 record + `items` 是 `Object`）另开一刀 | `automation → recitation` 2 → **0（边整条消失）**、`agent → recitation` 4 → **2**；总计 **−4**（跨单元 −4）。另外 `api_statements` 16 → 13（−3）：三个 `recitation.api.*` import 换成 `recitation.spi.*`。图形状：**`content-automation ↔ core-host` 不再是互依对**（`automation → recitation` 是最后一条边），互依对 3 → 2；`MUTUAL_UNIT_PAIRS` 删掉那对（门禁主动报出过期条目） |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
 | `payment-api` | **已完成** | `BillingBiz`（`points_ledger.biz_type` 词表）；**`BillingPort`（积分账本端口）+ `TokenUsage`（用量 DTO）** | 词表那一刀：`agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7）。端口那一刀：`agent 3→0`、`integration 2→0`、`automation 1→0`、`blogagent 1→0`、`identity 1→0`、`profile 1→0`、`studio 1→0` —— **7 条边全部归零**，总计再 **−10**（跨单元 −7）。两刀合计 **−18**（跨单元 −14） |
@@ -1407,6 +1409,240 @@ api_statements                    25 → 16      (-9)
 （`agent` 还剩 `identity` 2 与 `integration` 2，所以"出边归零"要连这两条一起，
 共 12 条；得再分两刀。）
 
+> 实际执行时**只做了这一半**，而且理由变了 —— 见 §3terdecies：`recitation` 有**两个**
+> 跨域消费方（`agent` + `automation`），而 `automation → recitation` 是 content-automation
+> 指向 core-host 的**最后一条**实现边。做 recitation 的边际收益因此远大于"清 agent 出边"。
+
+---
+
+## 3terdecies. 第十刀：`contracts/recitation-api`（材料能力）—— 逮到一处自调用失事务
+
+### 3terdecies.1 目标边：`recitation` 是第一个有**两个**跨域消费方的目标域
+
+前九刀的目标域都只有一个方向的扇入。侦察时发现 `recitation` 有两条：
+
+| from → to | impl | api | 文件 |
+|---|---|---|---|
+| `agent → recitation` | 4 | 4 | `CreateKnowledgeTool` `GradeAnswerTool` `QueryKnowledgeTool` `QuizKnowledgeTool` |
+| `automation → recitation` | 2 | 0 | `BlogContentPlanService` `BlogPlanRunService` |
+
+两条都是 `RecitationService`，都调 `getMaterial` / `searchMaterials` / `countMaterials` /
+`createMaterial`。**消费方并集就是端口的宽度** —— 这正是 §2.5 那条判据的用法。
+
+⚠️ 但 `automation → recitation` 只有 2 条却是**关键的一条**：它是 content-automation
+指向 core-host 的**最后一条**实现边。做 recitation 的边际收益因此远大于"清 agent 出边"
+（后者要 12 条才归零）。**按边数排序选刀会选错。**
+
+### 3terdecies.2 这一刀只做材料能力，测验能力另开一刀
+
+四个工具里两个只用材料（`CreateKnowledgeTool` / `QueryKnowledgeTool`），
+另两个只用测验（`QuizKnowledgeTool` / `GradeAnswerTool`）。后者要碰
+`KnowledgeQuizService` 的四个嵌套 record，其中 `KnowledgeQuizAttemptView.items`
+的类型是 **`Object`** —— 一个**没有形状**的字段。
+
+一个没有形状的字段没法搬进契约（搬过去等于把"随便什么"写进契约），
+也没法收窄（消费方读的就是里面任意结构）。**这需要一个形状决定，不是一个搬家决定。**
+所以这一刀只做材料，测验单独一刀 —— 与 §3quinquies 里"邮件模板真环要改 `MailService` 的 API"
+同一种处理：**卡在一个决定上，就不在这一刀里顺手做。**
+
+### 3terdecies.3 包名：`recitation.api` 已被前端 HTTP 层占用 → 走 `recitation.spi`
+
+`apps/core-host/src/main/java/com/xander/lab/recitation/api/` 下有 6 个文件
+（`RecitationController` `CreateRecitationMaterialRequest` `RecitationMaterialView` 等）。
+硬塞契约进这个包会（a）一个包进两个 jar，（b）把 controller 判成共享内核 ⇒
+几十条假 `recitation.api -> recitation` 边 + 每条一个 `shared-kernel-reverse-dependency` 违规。
+
+这是**第四次**撞上同一个坑（前三次：`agent.spi` §3decies.2、`automation.spi` §3undecies.2、
+`studio.spi` 待做）。**新增契约前必做**：
+
+```bash
+ls apps/core-host/src/main/java/com/xander/lab/<domain>/
+```
+
+### 3terdecies.4 筛选条件收窄：`MaterialQuery`（5 分量）→ `MaterialFilter`（4 分量）
+
+域侧 `RecitationService.MaterialQuery` 是 `(search, masteryLevel, dueOnly, limit, archiveFilter)`。
+跨域消费方**全部只用 4 参数构造器** —— 它们**从不写 `ArchiveFilter`**：
+
+```bash
+grep -rn "MaterialQuery(" apps/core-host/src/main/java --include=*.java | grep -v "/recitation/"
+```
+
+⇒ `archiveFilter` 是**提供方的策略**（"归档的要不要算"），不是消费方的数据。
+契约侧只收前 4 个，`toQuery()` 换算时补 `ArchiveFilter.ACTIVE`（域侧的默认）。
+
+⚠️ **这不是"少一个字段"，是"少一个维度"。** 换算层必须显式写出补什么值，
+不能靠域侧的默认参数 —— 否则以后域侧改默认，契约侧的行为会静默跟着变。
+
+`MaterialFilter.all()` 是静态工厂（`(null, null, false, 100)`），
+让 `QueryKnowledgeTool` 的 `MASTERED_FILTER` / `DUE_FILTER` / `all()` 三处常量构造
+有地方落脚。**端口上的常量要跟着端口搬（§3duodecies.4），但静态工厂不用搬 —— 它没有实现依赖。**
+
+### 3terdecies.5 收窄而不是镜像：`MaterialView` 14 → 9
+
+域侧 `recitation.api.RecitationMaterialView` 有 14 个分量。消费方读取点并集是 9 个：
+
+| 消费方 | 读的字段 |
+|---|---|
+| `CreateKnowledgeTool` | `id` `title` `knowledgeType` `testMode` |
+| `QueryKnowledgeTool` | 上述 + `masteryScore` `masteryLevel` `reviewCount` `nextReviewAt` `content` |
+| `BlogContentPlanService` / `BlogPlanRunService` | `id` `title` `content`（当归属检查 + 正文） |
+
+**不带的 5 个**：`normalizedContentLength` `lastReviewAt` `archivedAt` `createdAt` `updatedAt`。
+前两个是**前端展示用**的派生量（`normalizedContent` 的码点数），后三个是审计列。
+
+⚠️ **`normalizedContentLength` 尤其不能带**：它要求契约侧能算码点数，也就是要求契约知道
+`normalizedContent` 的存在 —— 而 `normalizedContent` 本身**不该跨边界**（它是域侧的规范化中间产物）。
+
+### 3terdecies.6 `MaterialDraft`：去掉 `jakarta.validation` 注解的那一份
+
+域侧 `CreateRecitationMaterialRequest` 带 `@NotBlank` / `@Size` 等注解 ⇒
+**按 ADR-1 不能进契约**（契约不许有框架注解，`jakarta.validation` 也是框架）。
+`MaterialDraft(title, content, knowledgeType, testMode)` 是它的无注解等价物，
+4 个分量逐字段同名同序。
+
+`toRequest(MaterialDraft)` 是**纯换算、不兜底**：
+`testMode` 缺省必须落成 `null`（域侧用 `null` 表示"用默认的 AI_QA"），
+**不能**在换算层写 `draft.testMode() == null ? "AI_QA" : draft.testMode()`
+—— 那就是 §3undecies.4 那条"没传 ≠ 传了空"的重犯。这条由注入 C 专门守。
+
+### 3terdecies.7 `getMaterial` 同名同参 → 富方法改名 `getMaterialForView`
+
+端口要 `MaterialView getMaterial(Long, Long)`，域侧富方法返回
+`recitation.api.RecitationMaterialView`。**Java 不允许同名同参只差返回值** ⇒
+沿用 §3undecies.5 的先例（`updateStatus` / `updateStatusForView`），
+富方法加 `ForView` 后缀，端口拿规范名。
+
+调用点只有一处（`RecitationController` 一行），blast radius 极小 ——
+**改名成本要实测，不能凭"这个名字很常用"的印象判断**：
+
+```bash
+grep -rn "\.getMaterial(" apps/core-host/src/main/java --include=*.java
+```
+
+### 3terdecies.8 ⚠️ 这一刀逮到一处**既有缺陷**：端口方法自调用失事务
+
+写端口方法时对照上一刀的写法，发现 §3undecies 的两个端口实现方法**都少了 `@Transactional`**：
+
+```java
+@Override
+public EmailReminderView create(Long userId, EmailReminderDraft draft) {
+    return toView(create(userId, toRequest(draft)));   // 自调用！
+}
+```
+
+`create(Long, EmailReminderRequest)` 上**有** `@Transactional`，但
+**Spring 的 `@Transactional` 走代理，自调用绕过代理** ⇒ 走端口路径时事务**不存在**。
+
+为什么是**实质缺陷**而不是洁癖：`EmailReminderService#create` 第一行是
+`reminderMapper.lockUserForReminderCreation(userId)`，实现是
+`SELECT ... FOR UPDATE` —— **它的全部作用就是串行化并发创建**。
+没有事务 ⇒ 锁在语句结束就释放 ⇒ 幂等检查与插入之间**有窗口** ⇒
+两个并发请求可以各插一条。
+
+`BlogContentPlanService` 的 `create` / `update` / `updateStatus` 三处同病，
+`lockUserForPlanCreation` 同理。**共 5 个方法。**
+
+修法：端口方法上加与富方法**一致**的 `@Transactional`（含 `readOnly` / `REQUIRES_NEW` 等属性）。
+⚠️ 不能只写 `@Transactional` —— 富方法上写的是
+`@Transactional(propagation = Propagation.REQUIRES_NEW)` 的，端口方法也必须一样。
+
+### 3terdecies.9 `PortDelegationTransactionTest`：把这条不变量交给机器守
+
+**这条规则没有门禁守**（`scan.py` 只看 import 边，看不见注解）。所以写了
+`apps/core-host/src/test/java/com/xander/lab/migration/PortDelegationTransactionTest.java`：
+
+1. **完整性**：扫描 `com.xander.lab` 下所有实现 `*Port` / `*Gateway` 的具体类，
+   与测试里手工维护的清单**双向比对**。这条**立刻就还了本钱** ——
+   我加 `RecitationService` 时忘了把它列进清单，全量跑时正是这条断言变红。
+2. **委托必须带注解**：对每个端口方法，若它的方法体**只**由"转调同类的富方法 + 换算"构成，
+   则它必须有 `@Transactional`（且属性与富方法一致）。
+3. **反向 sanity**：确认扫描真的扫到了类（否则"0 违规"可能是因为什么都没扫到）。
+
+**判据写成"方法体是否只有一次同类自调用"** —— 而不是"方法名是否出现在某张表里"。
+后者会随重构漂移，前者是结构性事实。
+
+⚠️ 这条测试的**价值在注入验证里被证实**：去掉 `@Transactional` 后
+**只有它变红**，完整性与反向 sanity 两条保持绿 —— 说明三条断言互不干扰。
+
+### 3terdecies.10 一条不变量的**搬家**：工具侧写不出来的断言，挪到换算层
+
+`QueryKnowledgeToolTest` 原来有一条断言：搜索 SQL 必须含 `archived_at IS NULL`。
+但**契约侧的 `MaterialFilter` 没有归档维度**（§3terdecies.4）⇒ 工具侧**再也写不出**这条断言。
+
+处理：把它**搬**到提供方（`RecitationServiceTest`），并改成从端口路径进
+（`service.searchMaterials(userId, new MaterialFilter(...))`），断言 `capturedSql()`
+含 `archived_at IS NULL` 与 `next_review_at <= ?`。
+
+⚠️ **搬家的风险是"两边都没了"**：删掉工具侧那条时，新家还没写 ⇒ 不变量在两次编辑之间**无人看守**。
+所以顺序是**先写新家、再删旧家**，然后用注入 B 证明新家真的会红。
+
+> **教训**：端口收窄会**删掉消费方的表达力**。收窄时必须问"这条断言以后谁来写"。
+> 答案要么是"提供方的测试"（搬家），要么是"契约侧的换算测试"（换形状），
+> **不能是"没人写"**。
+
+### 3terdecies.11 端口"变宽"依然没人守（第七次确认）
+
+给 `RecitationMaterialPort` 加一个 `default` 方法 ⇒ 编译通过、26 条门禁**全 PASS**、
+五个指标**一个不动**，**只有反射测试红**（3 条）。这是第七次同样的结论。
+
+### 3terdecies.12 实测收益（重新生成基线后）
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 42 | **38** |
+| `implementation_edges` | 18 | **17** |
+| `cross_deployment_unit_statements` | 25 | **21** |
+| `cross_deployment_unit_edges` | 11 | **10** |
+| `api_statements` | 16 | **13** |
+
+`api_statements` 掉 3 的原因是三个 `recitation.api.*` import 换成了 `recitation.spi.*`，
+而**契约包在 `SHARED_KERNEL` 里不计任何指标**。§3undecies 掉 9、§3duodecies 掉 0、
+本刀掉 3 —— **看收益必须两列都看。**
+
+### 3terdecies.13 图形状：`content-automation ↔ core-host` 不再是互依对
+
+`automation → recitation` 消失后，content-automation 到 core-host 的实现依赖**归零**
+（它仍被 core-host 反向依赖两次：`studio → blogagent` 与 `admin → automation`）。
+
+`MUTUAL_UNIT_PAIRS` 里那对**必须删掉**，否则门禁报
+"1 pair(s) no longer mutual, delete both directions"。
+**这是 `deployment-unit-coupling` 双向判据的价值** —— 过期条目会让图看起来比实际更乱。
+（对比 §3undecies.7 那处**单**向判据空转：同一个门禁里，双向的那条救了它。）
+
+Wave 2 强连通分量仍是 {content-automation, core-host, platform-integration}，
+但环里**已经不需要 content-automation → core-host 这条腿**。
+
+### 3terdecies.14 为什么没有加 `contract-changes.yaml` 条目
+
+同 §3bis / §3nonies / §3undecies / §3duodecies：`contract-changes.yaml` 记的是
+**前端可见**的契约变更。`MaterialView` / `MaterialDraft` / `MaterialFilter` 都是新类型、
+前端永远看不到；`recitation.api.RecitationMaterialView` 与 `RecitationController`
+的响应形状一个字没变（`getMaterial` → `getMaterialForView` 是同域改名，路由/形状/错误码均未变）。
+
+### 3terdecies.15 注入验证：五次注入，每次变红的都正好是预期的那些
+
+| # | 注入 | 期望 | 实测 |
+|---|---|---|---|
+| A | 端口加 `default` 方法 | 3 条 | **3 条**（`RecordShapeTest` 保持绿） |
+| B | `toQuery` 补 `ArchiveFilter.ALL` | 3 条 | **3 条** |
+| C | `toRequest` 给 `testMode` 兜底 | 1 条 | **1 条** |
+| D | `toNarrowView` 对调 `title`/`content` | 1 条 | **1 条** |
+| E | 去掉 `EmailReminderService#updateStatus` 的 `@Transactional` | 1 条 | **1 条** |
+
+注入 A 顺带确认 §3duodecies.9 修的测试缺陷有效：无参方法让"首参是调用方 id"的断言
+**给出的是有意义的失败**（"端口方法必须显式收方 id"），不是 `ArrayIndexOutOfBounds`。
+
+### 3terdecies.16 下一刀
+
+`agent → recitation` 还剩 2 条（测验能力，卡在 `items` 是 `Object` 的形状决定上）。
+真正该做的是**测验能力那一刀**，因为它同时清掉 `agent` 的 2 条**出边**与
+`QuizKnowledgeTool` / `GradeAnswerTool` 两个工具的全部 `recitation.api.*` import。
+
+⚠️ 做之前必须先定 `items` 的形状 —— 这是一个**设计决定**，不是搬家决定。
+候选：①把它收窄成一个新的契约 record（要反推所有读点）；②让契约侧的
+`AttemptView` 干脆不带 `items`，让消费方自己按需查。
+
 ---
 
 ## 4. 必须留痕的判断
@@ -1603,7 +1839,7 @@ python scripts/migration/ci_gates.py
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
 类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
 只看最后那个 `Results:` 会以为"测试变少了"。
-**要核对的是各模块之和。**最新一轮（§3undecies 之后，2026-09-17）：
+**要核对的是各模块之和。**最新一轮（§3terdecies 之后，2026-09-17）：
 
 | 模块 | Tests run |
 |---|---|
@@ -1613,14 +1849,20 @@ python scripts/migration/ci_gates.py
 | `contracts/core-api` | 12 |
 | `contracts/payment-api` | 21 |
 | `contracts/agent-api` | 21 |
-| `contracts/automation-api` | 22 |
-| `apps/core-host` | 1151 |
-| **合计** | **1301**（0 failures / 0 errors） |
+| `contracts/automation-api` | 31 |
+| `contracts/recitation-api` | 16 |
+| `apps/core-host` | 1161 |
+| **合计** | **1336**（0 failures / 0 errors） |
 
-`apps/core-host` 单模块的增量是 **+7**（1144 → 1151），来源是两处新测试：
-`EmailReminderPortMappingTest`(2) + `ContentPlanPortMappingTest`(3) —— 钉换算落点；
-`UpdatePlanToolTest` 的 `editLeavesUnspecifiedFieldsNull` /
-`editCarriesExplicitFalseBooleans`(2) —— 钉"没传 ≠ 传了空"。
+三处增量（1310 → 1336）：
+
+* `contracts/recitation-api` **+16**（新模块）：`RecitationMaterialPortTest`(10) +
+  `RecordShapeTest`(6)。
+* `contracts/automation-api` 22 → **31**（+9）：§3duodecies 的 `NotificationPortTest`。
+* `apps/core-host` 1151 → **1161**（+10）：`RecitationMaterialPortMappingTest`(4) ——
+  钉 `toNarrowView` 的 9 个分量与两个纯换算；`PortDelegationTransactionTest`(3) ——
+  §3terdecies.9 的委托事务守卫；`RecitationServiceTest` 的归档不变量从工具侧**搬来**(1)；
+  `QueryKnowledgeToolTest` / `CreateKnowledgeToolTest` 改 mock 端口后净增 2。
 
 ⚠️ `target/surefire-reports/` **不会被自动清理**，里面会留下已经搬走的测试类的报告。
 用脚本按目录累加 `Tests run` 会把这部分算进去（曾出现

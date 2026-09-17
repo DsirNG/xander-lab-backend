@@ -18,6 +18,7 @@ import com.xander.lab.recitation.infrastructure.KnowledgeQuizSessionMapper;
 import com.xander.lab.recitation.infrastructure.RecitationAttemptMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import com.xander.lab.recitation.infrastructure.RecitationProperties;
+import com.xander.lab.recitation.spi.MaterialFilter;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -218,6 +219,25 @@ class RecitationServiceTest {
         service.searchMaterials(42L, new RecitationService.MaterialQuery(null, null, true, 10));
 
         assertThat(capturedSql()).contains("archived_at IS NULL").contains("next_review_at <= ?");
+    }
+
+    /**
+     * "智能体看不到归档知识"这条不变量的<b>新家</b>。
+     *
+     * <p>它原来住在 {@code QueryKnowledgeToolTest}：抓取工具构造的 {@code MaterialQuery}，
+     * 断言 {@code archive()} 是 {@code ACTIVE}。抽契约时筛选条件收窄成
+     * {@code MaterialFilter}（四个分量，不带归档维度），工具连"把归档的也查出来"都表达不出来，
+     * 那条断言在工具层已无处可写。不变量没有消失，只是整体落到了这次换算上 ——
+     * 若这里改成五参数构造器并传 {@code ALL}，智能体就会开始看见用户归档掉的知识，
+     * 而其他测试<b>一条都不会红</b>。</p>
+     */
+    @Test
+    void thePortSearchLandsOnTheSameActiveOnlyPredicateAsThePagesDefaultList() {
+        when(materialMapper.selectList(any())).thenReturn(List.of());
+
+        service.searchMaterials(42L, MaterialFilter.all());
+
+        assertThat(capturedSql()).contains("archived_at IS NULL");
     }
 
     @Test

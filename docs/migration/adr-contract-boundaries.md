@@ -86,9 +86,9 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
 
 ### 1.5 当前状态
 
-- `contracts/` 下 6 个模块（`core-api` / `content-api` / `integration-api` /
-  `payment-api` / `agent-api` / `automation-api`）目前**零 Jackson 依赖**，由门禁
-  `contract-dependency-boundary` 守着（JDK-only import + 无 compile/runtime 依赖）。
+- `contracts/` 下 7 个模块（`core-api` / `content-api` / `integration-api` /
+  `payment-api` / `agent-api` / `automation-api` / `recitation-api`）目前**零 Jackson 依赖**，
+  由门禁 `contract-dependency-boundary` 守着（JDK-only import + 无 compile/runtime 依赖）。
 - `agent-api` 是这条 ADR 最难的一次应用：要抽的端口属于 agent 的工具体系，而
   `AgentTool.parametersSchema()` 返回 `JsonNode`。**没有**放宽门禁，也没有搬 `AgentTool`，
   而是让 JSON 以文本出入端口（见 §6）。
@@ -96,6 +96,8 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
   `EmailReminderTaskVO` / `BlogContentPlanVO`（本身是干净的 DTO，但它们住在
   `automation.api`，也就是**前端 HTTP 层**）。同样是**收窄出一份新的读模型**，
   而不是把前端类型搬进契约（见 §7）。
+- `recitation-api` 是第三次：`CreateRecitationMaterialRequest` 带 `jakarta.validation` 注解，
+  按 ADR-1 不能进契约，所以契约自带一份去掉注解的四字段入参（见 §9.6）。
 
 ---
 
@@ -186,7 +188,7 @@ blogagent ───→ content-api ←─── agent
 **所以它不构成一次 §11 契约变更，不该进登记表。** 这一点写在这里，
 是为了让后来的人知道"没登记"是判断，不是漏掉。
 
-> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§10 待办第 3 项），
+> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§11 待办第 3 项），
 > 那**必须**进 `contract-changes.yaml` 并走 §11 流程 —— 因为它会真的删掉
 > 前端能看到 10 个字段。
 
@@ -302,7 +304,7 @@ MediaAssetRef findReusableGenerated(Long userId, String title);
 
 > **这暴露了一个仍未拍板的问题**：契约能不能依赖契约？今天答案是**不能**
 > （Maven 无法编排 test-only 的跨契约依赖，所以门禁干脆全禁）。
-> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §10 待办。
+> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §11 待办。
 
 ### 3.5 `byte[]` 而不是 `MultipartFile`，以及 `MAX_IMAGE_BYTES`
 
@@ -539,7 +541,7 @@ api_statements / api_edges         38 / 11 (不变)
 
 **但这笔账要在拆分后重新算**：一旦 `payment-api` 作为独立版本化的 jar 发布，
 `TokenUsage` 的分量顺序就变成了跨进程的线上格式，届时任何重排都必须走 §11
-（见 §10 第 7 项）。
+（见 §11 第 7 项）。
 
 ---
 
@@ -739,7 +741,7 @@ api_edges                          11 -> 10   (-1)
 也确认（28 个能力 0 增 0 退；14 条变更全部可解析）。
 
 **⚠️ 但这笔账要在拆分后重新算**：`ContentPost` 的 17 个分量顺序与 `ContentPostPage` 的 6 个分量顺序，
-与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §10 第 7 项）。
+与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §11 第 7 项）。
 今天不登记，契约 jar 独立版本化时必须补。
 
 ---
@@ -769,7 +771,7 @@ SPI，所以看起来理所当然。问题在方向：`AgentTool` / `AgentDynami
 
 1. **`parametersSchema()` 返回 `com.fasterxml.jackson.databind.JsonNode`。** ADR-1 说契约
    必须与序列化框架无关，`CONTRACT_ALLOWED_IMPORT_PREFIXES` 只有 `java.`。搬它就必须放宽
-   门禁——而 §10.1 明写"不许为了过门禁而放宽"。
+   门禁——而 §11.1 明写"不许为了过门禁而放宽"。
 2. **它有 6 个 `default` 成员**（`promptSection` / `execute(AgentToolContext,…)` /
    `reconcile` / `approvalReason` / `readOnly`），外加嵌套的 `ProgressListener` 又有 5 个。
    搬过去等于把 agent 的整套工具词汇表塞进每个依赖方。
@@ -1247,7 +1249,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
   不跨域，不上端口。
 - **`RESOURCE_KNOWLEDGE_FILE` 的归属**：它语义上更像"knowledgebase 的资源类型"而不是
   "通知表的词表"。这次按"跟着端口搬"处理（纯搬家，可证）；真要改归属是**另一个决定**，
-  记在 §10 待办里。
+  记在 §11 待办里。
 
 ### 8.11 注入验证：四次注入，逮到三个缺陷（其中两个在测试里）
 
@@ -1284,7 +1286,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
 **没修但必须记下来的一处**：第 5 次注入（把常量放回实体、让 `knowledgebase` 重新 import）
 **没有让 `cross-domain-import-baseline` 变红** —— 扫描器如实报了 42 → 43 条语句、边 18 → 19，
 门禁却报 PASS。原因是该门禁拿 `scan.py` 的产物当自己的基线，在"先 scan 后 gates"的既定流程下
-基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §10 待办第 16 项；
+基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §11 待办第 16 项；
 本刀只先把门禁 docstring 里那句"任何边增长就 FAIL"的失实保证改成实情。
 
 > 教训与 §7.10、`util` 死条目同源：**一个判据的"基线"必须来自判据之外。**
@@ -1292,7 +1294,245 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
 
 ---
 
-## 9. 这两条 ADR 与既有规则的交叉
+## 9. 落地记录（七）：`recitation-api`（材料能力）—— 逮到一处自调用失事务，以及一条不变量的搬家
+
+### 9.1 侦察：第一个有**两个**跨域消费方的目标域
+
+前面几刀的目标域都只有一个消费方（或消费方都在同一个部署单元里）。`recitation` 不一样：
+
+| 方向 | 文件 | 原来 import |
+|---|---|---|
+| `agent → recitation` | `CreateKnowledgeTool` | `recitation.api.CreateRecitationMaterialRequest` + `.RecitationMaterialView` + `recitation.application.RecitationService` |
+| `agent → recitation` | `QueryKnowledgeTool` | `recitation.api.RecitationMaterialView` + `recitation.application.RecitationService` |
+| `agent → recitation` | `QuizKnowledgeTool` | `recitation.api.KnowledgeQuizAttemptView` + `recitation.application.KnowledgeQuizService` |
+| `agent → recitation` | `GradeAnswerTool` | `recitation.application.KnowledgeQuizService` |
+| `automation → recitation` | `BlogContentPlanService` | `recitation.application.RecitationService` |
+| `automation → recitation` | `BlogPlanRunService` | `recitation.application.RecitationService` |
+
+**侦察的第一个产出是一条纠正。** 上一刀留下的候选表把 `agent → recitation` 记成 4 条、
+`automation → recitation` 记成 2 条，但没有指出它们指向同一个域、而且分属**两个不同的服务类**。
+一条缝还是两条缝，取决于目标是**哪个服务**，而不是哪个域 —— 这次是 `RecitationService`
+（材料）与 `KnowledgeQuizService`（测验）两条独立的缝。
+
+**第二个产出是归档维度不跨域。** `RecitationService` 的公开面里最容易被顺手搬走的是嵌套的
+`MaterialQuery`，它有五个分量，第五个是 `ArchiveFilter`（在用的 / 已归档的 / 都看）。
+两个消费方**都没有**碰过它：四处调用用的全是四参数构造器（把归档维度默认成 `ACTIVE`）
+与 `all()` 工厂。所以它属于"提供方自己的策略"，按 §2.6 的端口宽度规则留在原地。
+
+### 9.2 这一刀只做材料能力，测验能力另开一刀
+
+`agent → recitation` 的四条语句其实横跨两个能力。只做材料这一半，能同时拿到两个结果：
+
+* `automation → recitation` **整条边消失**（两条语句都走材料端口）；
+* `agent → recitation` 从 4 条降到 2 条（剩下的是测验工具）。
+
+不把测验一起做，是因为它的面明显更大：要 `QuizSession`（15 个分量，**内嵌一个
+`List<KnowledgeQuizAttemptView>`**）、`GradedItem`、`QuizOutcome`，还要一个测验记录读模型
+（它有个 `Object items` 的**无形状字段**，需要单独判断怎么收）。合成一刀会让"这次是纯重构"
+这句话变得难以核对 —— 而这条性质是每一刀最贵的东西。
+
+### 9.3 包名：`recitation.api` 已被前端 HTTP 层占用 → 走 `recitation.spi`
+
+与 `agent` / `automation` / `studio` 同一个坑：`com.xander.lab.recitation.api` 是 recitation
+自己的前端 HTTP 层（5 个控制器 / VO / 请求体）。声明在那里会让一个包进两个 jar，
+并把那些控制器判成共享内核，于是"控制器 import 自己的 application 层"变成几十条
+`recitation.api → recitation` 存量边，每条再带一个 `shared-kernel-reverse-dependency` 违规。
+
+`SHARED_KERNEL` 里加的是 `recitation.spi`（带点、最长匹配优先，所以不会连带吞掉
+`recitation.application` / `recitation.domain`）。这一刀的**新增条目是第 11 条**，
+`shared-kernel-classification` 门禁的 "10 module package(s) classified" 随之变成 10 个模块包。
+
+### 9.4 筛选条件收窄：`MaterialQuery`（5）→ `MaterialFilter`（4）
+
+契约侧只带消费方用到的四个分量（`search` / `masteryLevel` / `dueOnly` / `limit`），
+换算走四参数构造器 ⇒ 归档维度落回 `ACTIVE` ⇒ 生成的谓词与消费方今天拿到的**逐字相同**
+（`archived_at IS NULL`）。
+
+两个细节值得单独记：
+
+* **名字故意不叫 `MaterialQuery`。** 提供方的那个是 `RecitationService` 的**嵌套类型**，
+  实现类里两个类型会同时在作用域内，而 `searchMaterials` 会有两个重载各收一个 ——
+  同名会让人分不清谁收谁。`MaterialFilter` 同时更贴切：提供方自己的 Javadoc 就把它称作"筛选条件"。
+* **`all()` 工厂的 `limit` 给 `Integer.MAX_VALUE`，不是硬编码提供方的分页上限。**
+  统计路径根本不看 `limit`；检索路径提供方会把上限夹到自己的页大小，所以两种写法结果相同 ——
+  但硬编码 100 会在提供方把页大小改成 50 的那天，与提供方自己的 `all()` 悄悄分家。
+  契约里不该出现提供方可以改的策略常量。
+
+### 9.5 收窄而不是镜像：`MaterialView` 14 → 9
+
+`recitation.api.RecitationMaterialView` **原地不动**，仍然由 `RecitationController` 原样返回给前端。
+`MaterialView` 是新缝上的新类型，前端永远看不到，所以只带跨域消费方真正读的九个分量。
+
+字段集是从**消费方读取点**机械反推再与视图对账得到的（方法见 §7.4）：
+
+| 消费方 | 读到的分量 |
+|---|---|
+| `CreateKnowledgeTool` | `id` / `title` / `knowledgeType` / `testMode` / `masteryScore` / `masteryLevel` |
+| `QueryKnowledgeTool` | 上述 + `content` / `reviewCount` / `nextReviewAt` |
+| `BlogPlanRunService` | `title` / `content` |
+| `BlogContentPlanService` | **一个都不读** —— 只借这个方法确认"这条知识存在且属于当前用户"（不存在由提供方抛 404） |
+
+故意**不是**分量的五个：`characterCount` / `lastReviewAt` / `archivedAt` / `createdAt` /
+`updatedAt`。其中 `archivedAt` 尤其值得点名：归档维度**根本不跨域**（§9.1），
+所以它在契约侧连"带着但不看"都不该出现。
+
+### 9.6 `MaterialDraft`：去掉 `jakarta.validation` 注解的那一份
+
+`recitation.api.CreateRecitationMaterialRequest` 带 `@NotBlank` / `@Size`，而它们生效
+只是因为 `RecitationController` 在参数上标了 `@Valid`。契约不许带注解（ADR-1），
+而且这条缝上的调用方**本来就没有那层校验**：工具从 JSON 取值、手工校验后才调进来，
+提供方自己也在 `validateMaterialRequest` 里校验一遍。所以契约带的是同一个四字段、
+去掉注解的一份，域侧那个 request 类型原样保留、继续做 HTTP 调用方的校验入口。
+
+⚠️ `testMode` 为 `null` 是**有语义的**（"按 `knowledgeType` 自动匹配考法"），
+换算层不许兜底（§7.7 的同一条纪律，这一刀把它写成两条互补断言：缺省必须 `null` +
+显式给了值必须原样带过去）。
+
+### 9.7 `getMaterial` 同名同参 → 富方法改名 `getMaterialForView`
+
+端口要 `MaterialView getMaterial(Long, Long)`，而提供方原本有
+`RecitationMaterialView getMaterial(Long, Long)` 给控制器 —— **同名同参只差返回值在 Java 里
+编译不过**。按既有先例（`OssService.uploadImage`、`EmailReminderService#updateStatusForView`）
+**端口占规范名、同域富方法加一个说明受众的后缀**。
+
+另外三个方法参数类型不同（`MaterialDraft` vs `CreateRecitationMaterialRequest`、
+`MaterialFilter` vs `MaterialQuery`），可以同名重载，**不需要**加后缀。
+判据是"参数表是否完全相同"，不是"名字是否一样"。
+
+改名的影响面很小：控制器 1 行 + automation 2 处（那两处本来就要改成端口调用）。
+
+### 9.8 ⚠️ 这一刀逮到一处**既有缺陷**：端口方法自调用失事务
+
+写端口方法时顺手给新方法标了 `@Transactional`，然后意识到：**上一刀的端口方法没有标。**
+
+Spring 的事务是**代理**实现的，而同类自调用（`this.create(...)`）不走代理 ——
+被调方法上的注解根本不生效。端口方法的标准写法恰好是"薄壳 + 换算 + 转调同域富方法"，
+于是第九刀（`automation-api`）的五个端口方法全部落在无事务状态下执行：
+
+| 方法 | 富方法上的注解 | 后果 |
+|---|---|---|
+| `EmailReminderService#create` | `@Transactional` | 富方法第一句是 `SELECT id FROM sys_user WHERE id = #{userId} FOR UPDATE` —— 行锁的全部意义是串行化同一用户的并发创建，无事务时它**锁不住任何东西**；后面的"先查幂等键再插入"与"先数配额再插入"一起退化成 TOCTOU |
+| `EmailReminderService#updateStatus` | `@Transactional` | 条件更新的原子性丢失（单语句，实际影响小） |
+| `BlogContentPlanService#create` | `@Transactional` | 同上，且富方法第一句同样是 `SELECT id FROM sys_user ... FOR UPDATE` |
+| `BlogContentPlanService#updateStatus` | `@Transactional` | 同上 |
+| `BlogContentPlanService#update` | `@Transactional` | 同上 |
+
+**为什么所有防线都没响**：编译通过；耦合指标一动不动；26 条门禁全绿；
+单元测试也全绿 —— 单元测试里没有代理，`@Transactional` 本来就不生效。
+这是"静默回归"的教科书样本，而且它**恰恰是被这次抽取引入的**：
+抽取之前那两条路径走的是控制器 → 代理 → 富方法，事务是有的。
+
+**修法**：五个方法各补一个与被调富方法一致的注解（读方法补 `readOnly = true`）。
+这不是"顺手重构"，是一处**行为修复**，单独在提交信息里点名。
+
+### 9.9 `PortDelegationTransactionTest`：把这条不变量交给机器守
+
+只修一次不够 —— 这个坑**每次抽端口都会重新出现一次**，因为端口方法的标准写法就是转调。
+所以新增了一个守卫测试（`apps/core-host/src/test/java/com/xander/lab/migration/`），判据：
+
+> 对每个实现了端口接口的类：若某个端口方法 M **没有** `@Transactional`，
+> 而同类上存在同名的重载、或 `<M>ForView` 方法且它**带** `@Transactional`，就报缺陷。
+
+三个设计点：
+
+1. **保守近似。** 它不解析方法体去证明 M 真的转调了那个兄弟方法，只检查"危险区"里有没有缺注解。
+   宁可要求一个用不上的注解，也不漏掉一个真的转调。实测在全仓 11 个端口实现上**零误报**
+   （`OssService.upload` / `DashScopeRecitationAsrClient` 这类不碰库的端口方法本来就不该有注解，
+   它们也没有同名的 `@Transactional` 兄弟，所以不会被误报）。
+2. **`@Override` 不能用来判"这是端口方法"**：`java.lang.Override` 是 `SOURCE` 保留，反射看不见。
+   改为拿方法签名去比它实现的那组接口方法。
+3. **加了一条完整性判据**：用类路径扫描（`ClassPathScanningCandidateComponentProvider`）
+   找出所有 `*Port` / `*Gateway` 的实现，断言与显式清单**双向相等**。
+   没有这条，新抽一个端口之后清单会悄悄漏掉它，于是"每个端口方法都审过"这句话就是假的 ——
+   与 `shared-kernel-classification` 缺反向判据、`util` 变成死条目是**同一类错误：
+   判据只朝一个方向看，另一个方向没人看。**
+
+**这条完整性判据第一次运行就逮到了作者自己的漏项**：本刀让 `RecitationService` 实现了端口，
+但忘了把它加进清单，测试直接报出"类路径上多出来的是没被审到的"。这不是演示，是实测。
+
+### 9.10 一条不变量的**搬家**：工具侧写不出来的断言，挪到换算层
+
+`QueryKnowledgeToolTest` 原来有一个 `archivedKnowledgeStaysOutOfWhatTheAgentCanSee`：
+抓取工具构造的 `MaterialQuery`，断言它的 `archive()` 是 `ACTIVE`。
+
+契约筛选条件收窄之后，工具**连"把归档的也查出来"都表达不出来**（`MaterialFilter` 只有四个分量），
+这个断言在工具层已经无处可写。处理办法不是删掉它，而是把它挪到它真正能被破坏的那一层：
+
+* **换算层**：`RecitationMaterialPortMappingTest` 断言 `MaterialFilter → MaterialQuery`
+  之后 `archive()` 是 `ACTIVE`；
+* **端到端**：`RecitationServiceTest#thePortSearchLandsOnTheSameActiveOnlyPredicateAsThePagesDefaultList`
+  断言端口查询生成出来的 SQL 仍带 `archived_at IS NULL`。
+
+§9.15 的注入验证证明这条搬家是**等价**的：把换算改成五参数构造器 + `ArchiveFilter.ALL`，
+变红的正好是这三条，不多不少。**"某条断言写不出来了"和"某条不变量没人守了"是两件事，
+必须分别确认。**
+
+### 9.11 端口"变宽"依然没人守（第七次确认）
+
+照例：给 `RecitationMaterialPort` 加一个 `default` 方法 ⇒ 编译通过、耦合指标一动不动、
+26 条门禁全绿、应用模块测试全绿。只有本模块的反射测试会红（§9.15 注入 A，3 条）。
+
+这已经是第七次确认同一件事。结论不变：**端口的宽度只能靠反射测试守。**
+
+### 9.12 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 42 | **38** |
+| `implementation_edges` | 18 | **17** |
+| `cross_deployment_unit_statements` | 25 | **21** |
+| `cross_deployment_unit_edges` | 11 | **10** |
+| `api_statements` | 16 | **13** |
+
+* `implementation_statements` −4：`automation → recitation` 2 条（整条边消失）+ `agent → recitation` 2 条。
+* `api_statements` **也掉 3**（16 → 13）：三个被换掉的 `recitation.api.*` import
+  （`CreateRecitationMaterialRequest`、`RecitationMaterialView` ×2）变成了 `recitation.spi.*`，
+  而**契约包在 `SHARED_KERNEL` 里不计任何指标**。§7 掉 9、§8 掉 0、本刀掉 3 ——
+  **看收益必须两列都看**，只盯一列会得出完全相反的结论。
+
+### 9.13 图形状：`content-automation ↔ core-host` 不再是互依对
+
+`automation → recitation` 是 content-automation 指向 core-host 的**最后一条**实现边。
+它消失之后：
+
+* content-automation 到 core-host 的实现依赖**归零**（它仍然被 core-host 反向依赖两次：
+  `studio → blogagent` 与 `admin → automation`）；
+* 互依对从 3 对降到 **2 对**：`content-automation ↔ platform-integration` 与
+  `core-host ↔ platform-integration`；
+* `MUTUAL_UNIT_PAIRS` 里那对**必须删掉**。`deployment-unit-coupling` 门禁会主动报出
+  "1 pair(s) no longer mutual, delete both directions"—— 这是它**双向判据**的价值：
+  过期条目会让图看起来比实际更乱。
+
+Wave 2 强连通分量仍是 {content-automation, core-host, platform-integration}，
+但注意**环里已经不需要 content-automation → core-host 这条腿**：content-automation
+只通过 platform-integration 留在环里，而那条单向的 core-host → content-automation
+已经不构成任何环。
+
+### 9.14 为什么没有加 `contract-changes.yaml` 条目
+
+同 §2.6 / §7.11 / §8.9：`contract-changes.yaml` 记的是**前端可见**的契约变更。
+`MaterialView` / `MaterialDraft` / `MaterialFilter` 都是新类型、前端永远看不到；
+`recitation.api.RecitationMaterialView` 与 `RecitationController` 的响应形状一个字没变。
+
+`RecitationController#getMaterial` 那一行改成调 `getMaterialForView`，路由、响应形状、
+错误码都未变 —— 纯粹是同域方法改名。
+
+### 9.15 注入验证：四次注入，每次变红的都正好是预期的那些
+
+| # | 注入 | 期望变红 | 实测 |
+|---|---|---|---|
+| A | 给端口加一个 `default` 方法 | 3 条（签名清单 / 参数个数守卫 / 无 default） | **3 条**，`RecordShapeTest` 保持绿 |
+| B | `toQuery` 改成五参数构造器 + `ArchiveFilter.ALL` | 3 条（换算层 2 + SQL 端到端 1） | **3 条**，其余全绿 |
+| C | `toRequest` 给 `testMode` 兜底成 `"AI_QA"` | 1 条（缺省必须 `null`） | **1 条**；显式给值那条保持绿 |
+| D | `toNarrowView` 把 `title` 与 `content` 对调 | 1 条（逐字段落点） | **1 条** |
+| E | 去掉 `EmailReminderService#updateStatus` 上的 `@Transactional` | 1 条（委托守卫） | **1 条**，完整性/反向 sanity 两条保持绿 |
+
+注入 A 还顺带确认了上一刀修的那处测试缺陷是有效的：无参方法让"首参是调用方 id"的断言
+**给出的是有意义的失败**（"端口方法必须显式收方 id"），而不是 `ArrayIndexOutOfBounds`。
+
+---
+
+## 10. 这两条 ADR 与既有规则的交叉
 
 | 既有规则 | 与 ADR 的关系 |
 |---|---|
@@ -1314,7 +1554,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
 
 ---
 
-## 10. 待办
+## 11. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -1335,8 +1575,12 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
 | 15 | `automation` 剩两条扇入：`admin`（SSE，要 `SseEmitter`）与 `integration`（邮件模板真环） | **未做**，两条都卡在别的决定上（§8.10 / §7.12） |
 | 16 | **⚠️ `cross-domain-import-baseline` 在"先 scan 后 gates"的既定流程下不可能变红** —— 它把 `docs/cross-domain-imports.yaml`（`scan.py` 的产物）当作自己的基线，于是基线 == 实时值 | **未修**（高优先）。2026-09-17 实测：把 `RESOURCE_KNOWLEDGE_FILE` 放回实体并让 `knowledgebase` 重新 import 它 ⇒ 扫描器如实报 42 → **43** 条、边从 18 → **19**，而该门禁仍报 **PASS**。它今天实际只检测"改了代码没重跑 scan"。修法二选一：加人工基线文件（照 `capability-baseline.yaml` + `.lock` 的模式），或从上次提交读基线。已先改掉门禁 docstring 里那句失实的保证（§8.11） |
 | 17 | 契约测试里按下标反射取方法的写法（`getDeclaredMethods()[0]`） | **已修**（§8.11）。`NotificationPortTest` 与既有的 `UserLookupPortTest` 各一处；`getDeclaredMethods()` 的顺序 JVM 不保证，加一个方法就会静默换检查对象 |
+| 18 | **⚠️ 端口方法同类自调用失事务**：Spring 事务是代理实现的，`this.富方法(...)` 不走代理，被调方法上的 `@Transactional` 不生效。第九刀的 5 个端口方法因此全部在无事务下执行（其中两处的富方法第一句是 `SELECT ... FOR UPDATE`，锁不住任何东西） | **已修**（§9.8）：5 个方法各补注解；新增 `PortDelegationTransactionTest` 把这条不变量交给机器守（§9.9），并带一条**双向**完整性判据 |
+| 19 | `recitation` 的**测验能力**（`KnowledgeQuizService` 的 `openQuiz` / `recordQuiz`） | **未做**，`agent → recitation` 剩下的 2 条。要 `QuizSession` / `GradedItem` / `QuizOutcome` + 测验记录读模型（§9.2） |
+| 20 | `KnowledgeQuizAttemptView.items` 的类型是 `Object`（**无形状字段**） | **未定**。收窄时它无法用一个契约类型表达；要么定义 `QuizItemView` 并让提供方换算，要么让契约带 `List<Map<...>>`（那就带进了集合类型，需要单独判断）。是 §19 那一刀的前置决定 |
+| 21 | `PortDelegationTransactionTest` 的端口实现清单靠人工维护 | **已知代价**，由 `theAuditedClassListIsComplete` 的类路径扫描**双向**兜住：漏加会直接变红（本刀实测，见 §9.9）。新增端口实现时把类加进 `PORT_IMPLEMENTATIONS` |
 
-### 10.1 第 1 项的边界（明确不许顺手放宽）
+### 11.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -1347,7 +1591,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
 
 ---
 
-## 11. 一句话记法
+## 12. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

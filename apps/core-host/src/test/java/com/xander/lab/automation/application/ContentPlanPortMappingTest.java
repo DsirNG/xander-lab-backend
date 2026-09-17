@@ -8,7 +8,7 @@ import com.xander.lab.automation.spi.ContentPlanView;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
-import com.xander.lab.recitation.application.RecitationService;
+import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -47,11 +47,11 @@ class ContentPlanPortMappingTest {
     @Mock private CsdnCredentialService csdnCredentialService;
     @Mock private JuejinCredentialService juejinCredentialService;
     @Mock private BlogAgentService agentService;
-    @Mock private RecitationService recitationService;
+    @Mock private RecitationMaterialPort materialPort;
 
     private BlogContentPlanService newService() {
         return new BlogContentPlanService(planMapper, runMapper, runService,
-                csdnCredentialService, juejinCredentialService, agentService, recitationService);
+                csdnCredentialService, juejinCredentialService, agentService, materialPort);
     }
 
     @Test

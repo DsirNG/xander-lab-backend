@@ -23,7 +23,7 @@ import com.xander.lab.automation.spi.ContentPlanView;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
-import com.xander.lab.recitation.application.RecitationService;
+import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -89,7 +89,7 @@ public class BlogContentPlanService implements ContentPlanPort {
     private final CsdnCredentialService csdnCredentialService;
     private final JuejinCredentialService juejinCredentialService;
     private final BlogAgentService agentService;
-    private final RecitationService recitationService;
+    private final RecitationMaterialPort materialPort;
 
     @Value("${blog-content-plan.max-active-per-user:50}")
     private long maxActivePerUser;
@@ -141,7 +141,7 @@ public class BlogContentPlanService implements ContentPlanPort {
                 scheduleType, zone, times, request.getScheduledDate(), now);
         List<String> topics = normalizeTopics(request.getTopics());
         if (request.getKnowledgeMaterialId() != null) {
-            recitationService.getMaterial(userId, request.getKnowledgeMaterialId());
+            materialPort.getMaterial(userId, request.getKnowledgeMaterialId());
         }
 
         BlogContentPlan plan = new BlogContentPlan();
@@ -178,6 +178,7 @@ public class BlogContentPlanService implements ContentPlanPort {
      * 而且不会有任何编译错误提醒。</p>
      */
     @Override
+    @Transactional
     public ContentPlanView create(Long userId, ContentPlanDraft draft) {
         return toView(create(userId, toCreateRequest(draft)));
     }
@@ -364,7 +365,7 @@ public class BlogContentPlanService implements ContentPlanPort {
             plan.setAiOption(request.getAiOption());
         }
         if (request.getKnowledgeMaterialId() != null) {
-            recitationService.getMaterial(userId, request.getKnowledgeMaterialId());
+            materialPort.getMaterial(userId, request.getKnowledgeMaterialId());
             plan.setKnowledgeMaterialId(request.getKnowledgeMaterialId());
         }
         if (request.getAutoPublish() != null) {
@@ -475,6 +476,7 @@ public class BlogContentPlanService implements ContentPlanPort {
      * <p>与 {@link #updateStatusForView} 同一实现体，只换返回类型。</p>
      */
     @Override
+    @Transactional
     public ContentPlanView updateStatus(Long userId, Long planId, String action) {
         return toView(updateStatusForView(userId, planId, action));
     }
@@ -487,6 +489,7 @@ public class BlogContentPlanService implements ContentPlanPort {
      * 这是本类"同名不同参"的第二个实例：域请求体有 15 个字段，契约草稿只有 8 个。</p>
      */
     @Override
+    @Transactional
     public ContentPlanView update(Long userId, Long planId, ContentPlanEdit edit) {
         return toView(update(userId, planId, toUpdateRequest(edit)));
     }

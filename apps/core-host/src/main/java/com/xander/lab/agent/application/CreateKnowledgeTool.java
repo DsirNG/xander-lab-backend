@@ -3,9 +3,9 @@ package com.xander.lab.agent.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.recitation.api.CreateRecitationMaterialRequest;
-import com.xander.lab.recitation.api.RecitationMaterialView;
-import com.xander.lab.recitation.application.RecitationService;
+import com.xander.lab.recitation.spi.MaterialDraft;
+import com.xander.lab.recitation.spi.MaterialView;
+import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -13,10 +13,10 @@ import org.springframework.util.StringUtils;
 @Component
 public class CreateKnowledgeTool implements AgentTool {
 
-    private final RecitationService recitationService;
+    private final RecitationMaterialPort materialPort;
 
-    public CreateKnowledgeTool(RecitationService recitationService) {
-        this.recitationService = recitationService;
+    public CreateKnowledgeTool(RecitationMaterialPort materialPort) {
+        this.materialPort = materialPort;
     }
 
     @Override
@@ -62,8 +62,8 @@ public class CreateKnowledgeTool implements AgentTool {
             throw new IllegalArgumentException("创建知识需要 title 和 content");
         }
 
-        RecitationMaterialView created = recitationService.createMaterial(userId,
-                new CreateRecitationMaterialRequest(title, content, knowledgeType, null));
+        MaterialView created = materialPort.createMaterial(userId,
+                new MaterialDraft(title, content, knowledgeType, null));
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("id", created.id());

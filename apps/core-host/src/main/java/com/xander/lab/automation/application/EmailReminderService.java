@@ -280,8 +280,17 @@ public class EmailReminderService implements EmailReminderPort {
      * <p>换算而不是另写一份实现：把草稿装回域请求体，转调上面那个方法，再把 VO 收窄。
      * 校验、幂等、限流、时区解析全都在那一个实现体里，只有一份 ——
      * 复制一份到这里意味着以后改限流规则要改两处，而且不会有任何编译错误提醒。</p>
+     *
+     * <p>⚠️ {@code @Transactional} <b>必须在这里再标一次</b>，不能靠被调方法上那个。
+     * 同类自调用（{@code this.create(...)}）不走代理，被调方法上的注解不会生效 ——
+     * 于是这条路径会变成"无事务执行"。而富方法第一句就是
+     * {@code SELECT id FROM sys_user WHERE id = #{userId} FOR UPDATE}：
+     * 那个行锁的全部意义就是串行化同一用户的并发创建，没有事务时它<b>锁不住任何东西</b>，
+     * 后面的"先查幂等键再插入"与"先数配额再插入"都退化成 TOCTOU。
+     * 这个注解是被补上的：本方法最初漏标，靠 {@code PortDelegationTransactionTest} 才发现。</p>
      */
     @Override
+    @Transactional
     public EmailReminderView create(Long userId, EmailReminderDraft draft) {
         return toView(create(userId, toRequest(draft)));
     }
@@ -358,6 +367,7 @@ public class EmailReminderService implements EmailReminderPort {
      * 那个方法上的注释：HTTP 层要全字段 VO，智能体只要 10 个字段的读模型。</p>
      */
     @Override
+    @Transactional
     public EmailReminderView updateStatus(Long userId, Long taskId, String requestedStatus) {
         return toView(updateStatusForView(userId, taskId, requestedStatus));
     }

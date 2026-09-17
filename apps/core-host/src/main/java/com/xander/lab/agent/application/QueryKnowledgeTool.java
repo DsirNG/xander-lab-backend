@@ -4,8 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.recitation.api.RecitationMaterialView;
-import com.xander.lab.recitation.application.RecitationService;
+import com.xander.lab.recitation.spi.MaterialFilter;
+import com.xander.lab.recitation.spi.MaterialView;
+import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -27,15 +28,15 @@ public class QueryKnowledgeTool implements AgentTool {
     /** 合法掌握等级；模型给了别的值就当没传过滤条件，而不是拿它去查出空结果。 */
     private static final Set<String> LEVELS =
             Set.of("NEW", "FAMILIAR", "RECALLING", "APPLYING", "MASTERED");
-    private static final RecitationService.MaterialQuery MASTERED_FILTER =
-            new RecitationService.MaterialQuery(null, "MASTERED", false, 1);
-    private static final RecitationService.MaterialQuery DUE_FILTER =
-            new RecitationService.MaterialQuery(null, null, true, 1);
+    private static final MaterialFilter MASTERED_FILTER =
+            new MaterialFilter(null, "MASTERED", false, 1);
+    private static final MaterialFilter DUE_FILTER =
+            new MaterialFilter(null, null, true, 1);
 
-    private final RecitationService recitationService;
+    private final RecitationMaterialPort materialPort;
 
-    public QueryKnowledgeTool(RecitationService recitationService) {
-        this.recitationService = recitationService;
+    public QueryKnowledgeTool(RecitationMaterialPort materialPort) {
+        this.materialPort = materialPort;
     }
 
     @Override
@@ -98,13 +99,12 @@ public class QueryKnowledgeTool implements AgentTool {
 
         // 过滤条件下推到 SQL。曾经的做法是取"最近 100 条"再在内存里筛，
         // 知识超过 100 条之后智能体是查不到也不报错，只会退回凭印象作答。
-        RecitationService.MaterialQuery filter =
-                new RecitationService.MaterialQuery(search, level, dueOnly, limit);
-        List<RecitationMaterialView> matched = recitationService.searchMaterials(userId, filter);
-        long matchedTotal = recitationService.countMaterials(userId, filter);
-        long total = recitationService.countMaterials(userId, RecitationService.MaterialQuery.all());
-        long mastered = recitationService.countMaterials(userId, MASTERED_FILTER);
-        long due = recitationService.countMaterials(userId, DUE_FILTER);
+        MaterialFilter filter = new MaterialFilter(search, level, dueOnly, limit);
+        List<MaterialView> matched = materialPort.searchMaterials(userId, filter);
+        long matchedTotal = materialPort.countMaterials(userId, filter);
+        long total = materialPort.countMaterials(userId, MaterialFilter.all());
+        long mastered = materialPort.countMaterials(userId, MASTERED_FILTER);
+        long due = materialPort.countMaterials(userId, DUE_FILTER);
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
@@ -134,11 +134,11 @@ public class QueryKnowledgeTool implements AgentTool {
         return LEVELS.contains(normalized) ? normalized : "";
     }
 
-    private boolean isDue(RecitationMaterialView item, LocalDateTime now) {
+    private boolean isDue(MaterialView item, LocalDateTime now) {
         return item.nextReviewAt() != null && !item.nextReviewAt().isAfter(now);
     }
 
-    private void appendItem(ArrayNode records, RecitationMaterialView item, LocalDateTime now,
+    private void appendItem(ArrayNode records, MaterialView item, LocalDateTime now,
                             String search, int excerptChars) {
         ObjectNode record = records.addObject();
         record.put("id", item.id());

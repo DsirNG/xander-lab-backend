@@ -598,14 +598,14 @@ WAVE2_UNITS = (
 )
 
 # The unit pairs that depend on each other in *implementation* terms, measured 2026-09-16
-# and re-measured 2026-09-17 after the agent-api and automation-api cuts.
+# and re-measured 2026-09-17 after the agent-api, automation-api and recitation-api cuts.
 # Stored as ordered pairs so the baseline records direction, not just adjacency.
 #
 # Shape of the graph, and why it matters for Wave 2:
 #
-#   * Three pairs are mutual: content-automation <-> core-host, content-automation <->
-#     platform-integration, core-host <-> platform-integration.
-#   * agent <-> platform-integration WAS the fourth, and the agent-api cut ended it:
+#   * Two pairs are mutual: content-automation <-> platform-integration and
+#     core-host <-> platform-integration.
+#   * agent <-> platform-integration WAS one of them, and the agent-api cut ended it:
 #     integration used to implement agent's AgentTool / AgentDynamicToolSource and call
 #     AgentToolRegistry, which was 5 implementation statements one way. They now go through
 #     the agent.spi contract, so integration -> agent is zero and the pair is no longer
@@ -616,12 +616,23 @@ WAVE2_UNITS = (
 #     BlogContentPlanService and their VOs) now go through the automation.spi contract.
 #     agent is left with outgoing edges only -- 4 to content-automation, 6 to core-host,
 #     2 to platform-integration -- and nothing points back at it.
+#   * The recitation-api cut (materials capability only) then removed
+#     content-automation's *only* remaining implementation edge to core-host: automation's
+#     BlogContentPlanService and BlogPlanRunService called recitation's RecitationService,
+#     2 statements, now going through recitation.spi. So content-automation <-> core-host is
+#     no longer mutual either -- content-automation now reaches core-host in no way at all,
+#     while core-host still reaches content-automation twice (studio -> blogagent and
+#     admin -> automation). Both directions are deleted from this baseline for the same
+#     reason as the agent pair.
 #   * Consequence: agent is no longer in the Wave 2 strongly-connected component. The old
 #     chord cycle closed through the platform-integration -> agent leg, so removing that
 #     leg is exactly what broke it. agent is now a singleton component, which is the same
 #     precondition bloghtml has and the reason it can be extracted on its own.
 #   * The remaining component is {content-automation, core-host, platform-integration}:
-#     three mutually-dependent pairs, so none of those three is a leaf.
+#     two mutually-dependent pairs, so none of those three is a leaf. Note the cycle no
+#     longer needs a content-automation -> core-host leg: content-automation is held in it
+#     only through platform-integration, and the one-way core-host -> content-automation
+#     edges are no longer part of any cycle.
 #
 # This is NOT itself a defect. After the split these become ordinary service-to-service
 # calls, and A calling B while B calls A is normal. What it does mean is that the remaining
@@ -637,10 +648,8 @@ WAVE2_UNITS = (
 # member, so `joined` would always be empty and a new unit joining the *real* component
 # would go unreported.
 MUTUAL_UNIT_PAIRS = frozenset({
-    ("dinqor-content-automation", "dinqor-core-host"),
     ("dinqor-content-automation", "dinqor-platform-integration"),
     ("dinqor-core-host", "dinqor-platform-integration"),
-    ("dinqor-core-host", "dinqor-content-automation"),
     ("dinqor-platform-integration", "dinqor-content-automation"),
     ("dinqor-platform-integration", "dinqor-core-host"),
 })

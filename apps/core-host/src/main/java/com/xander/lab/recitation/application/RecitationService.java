@@ -22,6 +22,10 @@ import com.xander.lab.recitation.infrastructure.KnowledgeQuizSessionMapper;
 import com.xander.lab.recitation.infrastructure.RecitationAttemptMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
 import com.xander.lab.recitation.infrastructure.RecitationProperties;
+import com.xander.lab.recitation.spi.MaterialDraft;
+import com.xander.lab.recitation.spi.MaterialFilter;
+import com.xander.lab.recitation.spi.MaterialView;
+import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -40,11 +44,28 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
-/** 背诵材料、录音上传和用户侧任务查询用例。 */
+/**
+ * 背诵材料、录音上传和用户侧任务查询用例。
+ *
+ * <h2>为什么 implements {@link RecitationMaterialPort}</h2>
+ * <p>跨域消费方（{@code agent} 的两个知识工具、{@code automation} 的两个发文服务）原来直接
+ * import 本类，于是它们离了本类的实现就无法构建，也被绑在本类给控制器用的那十几个公开方法上。
+ * 本类实现端口之后，跨域那四条路径走端口，同域的控制器继续走下面那些富方法。</p>
+ *
+ * <h2>端口方法为什么是"薄壳 + 换算 + 转调富方法"</h2>
+ * <p>实现体一行没动：端口方法调同类的富方法，再把 {@link RecitationMaterialView} 收窄成
+ * {@link MaterialView}。多一次内存里的对象构造，换来的是"这次抽取不改变任何行为"可以被直接
+ * 看出来 —— 而这次改动要证明的正是这一点。</p>
+ *
+ * <p>⚠️ 代价是：端口方法上的 {@code @Transactional} <b>必须自己标一份</b>。同类自调用不走代理，
+ * 富方法上的注解不会生效。四个端口方法都标了与富方法一致的注解，并由
+ * {@code PortDelegationTransactionTest} 守着 —— 第九刀就是因为漏了这件事，
+ * 让 {@code SELECT ... FOR UPDATE} 在无事务下执行、锁不住任何东西。</p>
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class RecitationService {
+public class RecitationService implements RecitationMaterialPort {
     private static final Set<String> AUDIO_EXTENSIONS = Set.of("mp3", "aac", "wav", "m4a", "ogg", "opus", "amr");
     /** 单次列表返回上限；总量另有 {@link #countMaterials(Long)}，避免把截断后的条数当成总数。 */
     private static final int LIST_LIMIT = 100;
@@ -80,6 +101,22 @@ public class RecitationService {
         material.setReviewCount(0);
         materialMapper.insert(material);
         return toView(material);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>把契约草稿装回域请求体后转调上面那个方法，再把视图收窄。校验、归一化、掌握度初始化
+     * 都在那一个实现体里，只有一份 —— 复制一份到这里意味着以后改校验规则要改两处，
+     * 而且不会有任何编译错误提醒。</p>
+     *
+     * <p>⚠️ {@code @Transactional} 必须在这里再标一次：同类自调用不走代理，
+     * 上面那个方法上的注解不会生效。理由见类注释。</p>
+     */
+    @Override
+    @Transactional
+    public MaterialView createMaterial(Long userId, MaterialDraft draft) {
+        return toNarrowView(createMaterial(userId, toRequest(draft)));
     }
 
     /**
@@ -143,6 +180,32 @@ public class RecitationService {
         return total == null ? 0L : total;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>参数类型不同（{@code MaterialFilter} vs {@code MaterialQuery}），所以这里可以同名重载，
+     * 不需要像 {@link #getMaterial} 那样给富方法加后缀。</p>
+     *
+     * <p>⚠️ {@code @Transactional(readOnly = true)} 必须在这里再标一次：同类自调用不走代理。</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<MaterialView> searchMaterials(Long userId, MaterialFilter filter) {
+        return searchMaterials(userId, toQuery(filter)).stream()
+                .map(RecitationService::toNarrowView).toList();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>⚠️ {@code @Transactional(readOnly = true)} 必须在这里再标一次：同类自调用不走代理。</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public long countMaterials(Long userId, MaterialFilter filter) {
+        return countMaterials(userId, toQuery(filter));
+    }
+
     private LambdaQueryWrapper<RecitationMaterial> materialFilter(Long userId, MaterialQuery query) {
         LambdaQueryWrapper<RecitationMaterial> wrapper = new LambdaQueryWrapper<RecitationMaterial>()
                 .eq(RecitationMaterial::getUserId, userId);
@@ -168,10 +231,34 @@ public class RecitationService {
         return wrapper;
     }
 
-    /** 返回一份属于当前用户的材料。 */
+    /**
+     * 返回一份属于当前用户的材料，给前端要的<b>全字段视图</b>；同域调用方是
+     * {@code RecitationController}。
+     *
+     * <p>名字带 {@code ForView} 后缀，是因为端口方法 {@link #getMaterial(Long, Long)}
+     * 已经占用了规范名 {@code getMaterial}：两者参数表完全相同、只差返回类型，
+     * 而 Java 不允许只靠返回类型重载。按本仓库既有的做法（{@code OssService.uploadImage}、
+     * {@code EmailReminderService#updateStatusForView}）——
+     * <b>端口方法拿规范名，同域的富方法加后缀说明它服务谁</b>。</p>
+     */
     @Transactional(readOnly = true)
-    public RecitationMaterialView getMaterial(Long userId, Long materialId) {
+    public RecitationMaterialView getMaterialForView(Long userId, Long materialId) {
         return toView(requireMaterial(userId, materialId));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>转调 {@link #getMaterialForView} 再收窄。404 的语义在 {@code requireMaterial} 里，
+     * 端口只是不遮住它 —— {@code BlogContentPlanService} 正是靠这个把"引用了别人的知识 id"
+     * 挡在创建计划之前。</p>
+     *
+     * <p>⚠️ {@code @Transactional(readOnly = true)} 必须在这里再标一次：同类自调用不走代理。</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public MaterialView getMaterial(Long userId, Long materialId) {
+        return toNarrowView(getMaterialForView(userId, materialId));
     }
 
     /**
@@ -481,6 +568,50 @@ public class RecitationService {
                 material.getMasteryLevel(), material.getReviewCount() == null ? 0 : material.getReviewCount(),
                 material.getLastReviewAt(), material.getNextReviewAt(), material.getArchivedAt(),
                 material.getCreatedAt(), material.getUpdatedAt());
+    }
+
+    // ------------------------------------------------------------------
+    // 契约换算。三个都是纯直线赋值，唯一的作用是让端口方法不改变任何行为。
+    // 落点由应用侧的 RecitationMaterialPortMappingTest 用互不相同的字面量逐字段钉住。
+    // ------------------------------------------------------------------
+
+    /**
+     * 域侧全字段视图 → 跨域收窄视图（14 → 9 个分量）。
+     *
+     * <p>刻意丢掉 {@code characterCount} / {@code lastReviewAt} / {@code archivedAt} /
+     * {@code createdAt} / {@code updatedAt}：跨域这一侧一个读取点都没有。要加回来，
+     * 先给出具名消费方。</p>
+     */
+    private static MaterialView toNarrowView(RecitationMaterialView view) {
+        if (view == null) return null;
+        return new MaterialView(view.id(), view.title(), view.content(), view.knowledgeType(),
+                view.testMode(), view.masteryScore(), view.masteryLevel(), view.reviewCount(),
+                view.nextReviewAt());
+    }
+
+    /**
+     * 契约创建草稿 → 域侧请求体。
+     *
+     * <p><b>刻意不给任何字段兜底</b>：{@code testMode} 为 {@code null} 是有语义的，
+     * 表示"按 knowledgeType 自动匹配考法"。给它补一个默认字符串会让"自动匹配"退化成
+     * "固定一种考法"，而且不报错。</p>
+     */
+    private static CreateRecitationMaterialRequest toRequest(MaterialDraft draft) {
+        if (draft == null) return null;
+        return new CreateRecitationMaterialRequest(draft.title(), draft.content(),
+                draft.knowledgeType(), draft.testMode());
+    }
+
+    /**
+     * 契约筛选条件 → 域侧筛选条件。
+     *
+     * <p>走的是**四参数**构造器，归档维度落回它自己的默认值 {@code ACTIVE}
+     * （{@code archivedAt IS NULL}）—— 与两个消费方今天用四参数构造器时落到的谓词逐字相同。
+     * 契约侧不带归档维度是刻意的：没有跨域消费方参与那个维度。</p>
+     */
+    private static MaterialQuery toQuery(MaterialFilter filter) {
+        return new MaterialQuery(filter.search(), filter.masteryLevel(),
+                filter.dueOnly(), filter.limit());
     }
 
     private RecitationAttemptView toView(RecitationAttempt attempt) {

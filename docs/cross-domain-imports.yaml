@@ -7,11 +7,11 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 42
-  implementation_edges: 18
-  cross_deployment_unit_statements: 25
-  cross_deployment_unit_edges: 11
-  api_statements: 16
+  implementation_statements: 38
+  implementation_edges: 17
+  cross_deployment_unit_statements: 21
+  cross_deployment_unit_edges: 10
+  api_statements: 13
   api_edges: 9
   shared_kernel_sources:
     - agent.spi
@@ -24,6 +24,7 @@ counts:
     - filter
     - integration.api
     - payment.api
+    - recitation.spi
   unclassified_sources:
     - DinQorAIApplication.java
 edges:
@@ -60,18 +61,6 @@ edges:
       - apps/core-host/src/main/java/com/xander/lab/agent/application/BlogGenerationTool.java
       - apps/core-host/src/main/java/com/xander/lab/agent/application/ImageGenerationTool.java
       - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
-  - from: agent
-    to: recitation
-    from_unit: dinqor-agent
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 4
-    implementation_statements: 4
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/CreateKnowledgeTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/GradeAnswerTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryKnowledgeTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/QuizKnowledgeTool.java
   - from: automation
     to: blogagent
     from_unit: dinqor-content-automation
@@ -111,6 +100,16 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
+  - from: agent
+    to: recitation
+    from_unit: dinqor-agent
+    to_unit: dinqor-core-host
+    crosses_deployment_unit: true
+    api_statements: 1
+    implementation_statements: 2
+    implementation_files:
+      - apps/core-host/src/main/java/com/xander/lab/agent/application/GradeAnswerTool.java
+      - apps/core-host/src/main/java/com/xander/lab/agent/application/QuizKnowledgeTool.java
   - from: automation
     to: publishing
     from_unit: dinqor-content-automation
@@ -119,16 +118,6 @@ edges:
     api_statements: 0
     implementation_statements: 2
     implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogPlanRunService.java
-  - from: automation
-    to: recitation
-    from_unit: dinqor-content-automation
-    to_unit: dinqor-core-host
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogContentPlanService.java
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogPlanRunService.java
   - from: blogagent
     to: publishing

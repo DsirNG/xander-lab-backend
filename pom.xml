@@ -41,6 +41,7 @@
         <module>contracts/payment-api</module>
         <module>contracts/agent-api</module>
         <module>contracts/automation-api</module>
+        <module>contracts/recitation-api</module>
         <module>apps/core-host</module>
     </modules>
 

@@ -77,7 +77,7 @@ public class RecitationController {
 
     @GetMapping("/materials/{materialId}")
     public Result<RecitationMaterialView> getMaterial(@PathVariable Long materialId) {
-        return Result.success(service.getMaterial(UserContext.getUserId(), materialId));
+        return Result.success(service.getMaterialForView(UserContext.getUserId(), materialId));
     }
 
     @PostMapping(value = "/materials/{materialId}/attempts", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

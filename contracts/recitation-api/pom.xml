@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>recitation-api</artifactId>
+    <name>recitation-api</name>
+    <description>
+        Service-to-service contract for the recitation capability (V9 §18 / §91).
+
+        Members (this cut): RecitationMaterialPort (the port), plus the read model and write
+        inputs it carries (MaterialView / MaterialDraft / MaterialFilter).
+
+        Why the module exists. Six statements in four files reached into recitation's
+        application layer, across two different consumers and two different deployment units:
+
+          agent      -> recitation  (4)  CreateKnowledgeTool, QueryKnowledgeTool,
+                                         QuizKnowledgeTool, GradeAnswerTool
+          automation -> recitation  (2)  BlogContentPlanService, BlogPlanRunService
+
+        Every one of them imported either recitation.application.RecitationService /
+        KnowledgeQuizService or recitation.api.*. After the split the agent and
+        content-automation services could not be built without recitation's implementation
+        classes.
+
+        This cut takes the MATERIALS capability only -- RecitationMaterialPort. It clears
+        automation -&gt; recitation completely (that edge disappears) and halves
+        agent -&gt; recitation, whose remaining two statements are the quiz tools reaching for
+        KnowledgeQuizService. The quiz capability is a second cut: it needs QuizSession,
+        GradedItem, QuizOutcome and the attempt read model, and QuizSession carries a nested
+        list of that read model, so it is a materially larger surface than this one.
+
+        Why the filter is NOT recitation.application.RecitationService.MaterialQuery. That
+        nested record's fifth component is an ArchiveFilter -- recitation's own
+        active/archived/all vocabulary. No cross-domain consumer ever names it: both
+        consumers use the four-argument constructor (which defaults the archive dimension to
+        ACTIVE) and the all() factory. So the port takes a four-component filter and the
+        provider maps it onto the four-argument constructor, which lands on exactly the same
+        SQL predicate. Taking the archive dimension across would have been a provider policy
+        the consumers do not participate in, which is precisely what the port-width rule
+        says to leave behind (see docs/migration/adr-contract-boundaries.md §2.6).
+
+        Why the DTOs are NARROWED, not mirrored. The mirror rule (§2.5) exists for a type
+        that *replaces* a frontend-visible one: mirroring then makes "serialization is
+        byte-identical" provable, which is what keeps the cut a pure refactor. Nothing here
+        replaces anything. recitation.api.RecitationMaterialView stays exactly where it is
+        and keeps going to the frontend unchanged from recitation.api.RecitationController.
+        MaterialView is new, on a new seam the frontend never sees, so it carries exactly the
+        nine components its consumers read -- id, title, content, knowledgeType, testMode,
+        masteryScore, masteryLevel, reviewCount, nextReviewAt -- out of the view's fourteen.
+        characterCount, lastReviewAt, archivedAt, createdAt and updatedAt have no
+        cross-domain reader. What IS pinned is the component order, by reflection, and the
+        mapping VO -> record, by an app-module test using mutually distinct literals.
+
+        Why jakarta.validation annotations are NOT here.
+        recitation.api.CreateRecitationMaterialRequest carries @NotBlank / @Size, and those
+        fire only because RecitationController annotates the parameter @Valid. A contract may
+        not carry them anyway (they would add a dependency, and ADR-1 keeps this module
+        framework-free). Nothing is lost on the agent path, which never had them: the tools
+        build their arguments from JSON, and RecitationService validates the fields itself in
+        validateMaterialRequest. MaterialDraft mirrors the request's four fields without the
+        annotations, and the domain-side request type stays the validated front door for the
+        HTTP callers.
+
+        Package note: this module's package is com.xander.lab.recitation.spi, NOT
+        com.xander.lab.recitation.api. recitation already owns
+        com.xander.lab.recitation.api as its *frontend HTTP* layer (CreateRecitationMaterialRequest,
+        RecitationMaterialView, RecitationAttemptView, UpdateRecitationMaterialRequest,
+        KnowledgeQuizAttemptView). Declaring the contract there would put one package in two
+        jars, and would make the scanner classify those controllers as shared kernel, turning
+        "a controller imports its own application layer" into dozens of
+        recitation.api -&gt; recitation backlog edges plus a shared-kernel-reverse-dependency
+        violation each. Same collision as agent-api, automation-api and studio-api; same
+        answer. SHARED_KERNEL lists recitation.spi (dotted, matched longest-first, so it does
+        not swallow recitation.application or recitation.domain).
+
+        What is deliberately NOT here yet:
+        - The quiz capability (KnowledgeQuizService: openQuiz / recordQuiz). It is the
+          remaining agent -&gt; recitation pair and the next cut.
+        - Any of recitation's own api layer (com.xander.lab.recitation.api.*). It is the
+          frontend HTTP contract, a different audience, and it joins a contract module only
+          when that layer itself is split in Wave 2.
+
+        Zero dependencies, and that is the point. A contract that drags in a framework
+        cannot be depended on by every service, and V9 §19 is explicit that the WebFlux
+        Gateway must stay free of spring-webmvc. Nothing here may gain a compile dependency
+        without a deliberate decision; test scope is fine.
+    </description>
+
+    <dependencies>
+        <!--
+            No compile or runtime dependency by design. junit-jupiter is test-scoped: the
+            port's width and its full signature are pinned by reflection, because widening a
+            port trips no other defence. It compiles, the coupling metrics do not move, and
+            no gate reports it. Adding a default method is the silent form of widening.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class".
+            -->
+        </plugins>
+    </build>
+
+</project>

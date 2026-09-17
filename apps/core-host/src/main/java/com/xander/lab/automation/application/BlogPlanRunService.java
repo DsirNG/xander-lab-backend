@@ -23,7 +23,7 @@ import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.content.api.PublishCommand;
 import com.xander.lab.content.api.PublishResult;
-import com.xander.lab.recitation.application.RecitationService;
+import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -53,7 +53,7 @@ public class BlogPlanRunService {
     private final JuejinCredentialService juejinCredentialService;
     private final JuejinBlogSyncService juejinBlogSyncService;
     private final BlogPlanSseService sseService;
-    private final RecitationService recitationService;
+    private final RecitationMaterialPort materialPort;
     private final TransactionTemplate transactionTemplate;
 
     /** Creates the run row for a due trigger and reschedules the plan atomically.
@@ -167,7 +167,7 @@ public class BlogPlanRunService {
             });
         }
         if (plan.getKnowledgeMaterialId() != null) {
-            var material = recitationService.getMaterial(userId, plan.getKnowledgeMaterialId());
+            var material = materialPort.getMaterial(userId, plan.getKnowledgeMaterialId());
             input.append("\n请优先依据以下个人知识材料进行创作：\n")
                     .append(material.title()).append("\n")
                     .append(limit(material.content(), 8000));

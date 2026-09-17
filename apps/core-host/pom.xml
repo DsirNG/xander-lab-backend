@@ -126,6 +126,21 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            recitation's service-to-service contract, for the agent tools and the automation
+            services that read the user's knowledge materials. The package is
+            com.xander.lab.recitation.spi, not .recitation.api, because that domain already owns
+            .recitation.api as its frontend HTTP layer (CreateRecitationMaterialRequest,
+            RecitationMaterialView, RecitationAttemptView, UpdateRecitationMaterialRequest,
+            KnowledgeQuizAttemptView).
+            Zero transitive dependencies by design; see contracts/recitation-api/pom.xml.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>recitation-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>

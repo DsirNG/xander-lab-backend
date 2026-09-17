@@ -1,0 +1,78 @@
+/**
+ * {@code recitation} 域对外的服务间契约（V9 §18 / §91）。
+ *
+ * <h2>这一刀拆掉了什么</h2>
+ * <table>
+ *   <caption>6 条语句 / 6 个文件，来自两个消费方、两个部署单元</caption>
+ *   <tr><th>方向</th><th>文件</th><th>原来 import</th></tr>
+ *   <tr><td rowspan="2">{@code agent -> recitation}</td>
+ *       <td>{@code CreateKnowledgeTool}</td>
+ *       <td>{@code recitation.api.CreateRecitationMaterialRequest} +
+ *           {@code recitation.api.RecitationMaterialView} +
+ *           {@code recitation.application.RecitationService}</td></tr>
+ *   <tr><td>{@code QueryKnowledgeTool}</td>
+ *       <td>{@code recitation.api.RecitationMaterialView} +
+ *           {@code recitation.application.RecitationService}</td></tr>
+ *   <tr><td rowspan="2">{@code agent -> recitation}</td>
+ *       <td>{@code QuizKnowledgeTool}</td>
+ *       <td>{@code recitation.api.KnowledgeQuizAttemptView} +
+ *           {@code recitation.application.KnowledgeQuizService}</td></tr>
+ *   <tr><td>{@code GradeAnswerTool}</td>
+ *       <td>{@code recitation.application.KnowledgeQuizService}</td></tr>
+ *   <tr><td rowspan="2">{@code automation -> recitation}</td>
+ *       <td>{@code BlogContentPlanService}</td>
+ *       <td>{@code recitation.application.RecitationService}</td></tr>
+ *   <tr><td>{@code BlogPlanRunService}</td>
+ *       <td>{@code recitation.application.RecitationService}</td></tr>
+ * </table>
+ *
+ * <p><b>本模块只装材料能力。</b>它清掉的是 {@code automation -> recitation} 两条
+ * （整条边消失）与 {@code agent -> recitation} 两条（CreateKnowledgeTool、QueryKnowledgeTool），
+ * 后者剩两条是测验工具在够 {@code KnowledgeQuizService}。测验能力是下一刀：它要
+ * {@code QuizSession} / {@code GradedItem} / {@code QuizOutcome} 与测验记录读模型，
+ * 而 {@code QuizSession} 还内嵌那个读模型的列表，面比这一刀大一截。</p>
+ *
+ * <h2>包名为什么是 {@code .spi} 而不是 {@code .api}</h2>
+ * <p>{@code com.xander.lab.recitation.api} 已经被 recitation 自己的**前端 HTTP 层**占用
+ * （{@code CreateRecitationMaterialRequest}、{@code RecitationMaterialView}、
+ * {@code RecitationAttemptView}、{@code UpdateRecitationMaterialRequest}、
+ * {@code KnowledgeQuizAttemptView}）。把契约声明在那里会有两个后果：一个包进两个 jar；
+ * 扫描器会把那些控制器判成共享内核，于是"控制器 import 自己的 application 层"变成
+ * 几十条 {@code recitation.api -> recitation} 的存量边，每条再带一个
+ * {@code shared-kernel-reverse-dependency} 违规。与 {@code agent-api}、{@code automation-api}、
+ * {@code studio-api} 同一个坑，同一个答案。{@code SHARED_KERNEL} 里写的是
+ * {@code recitation.spi}（带点、最长匹配优先，所以不会连带吞掉
+ * {@code recitation.application} 或 {@code recitation.domain}）。</p>
+ *
+ * <h2>成员</h2>
+ * <ul>
+ *   <li>{@link com.xander.lab.recitation.spi.RecitationMaterialPort} —— 背诵材料能力（4 条方法）</li>
+ *   <li>{@link com.xander.lab.recitation.spi.MaterialView} —— 收窄的只读视图（14 → 9 个分量）</li>
+ *   <li>{@link com.xander.lab.recitation.spi.MaterialDraft} —— 创建入参（去掉 {@code jakarta.validation} 注解）</li>
+ *   <li>{@link com.xander.lab.recitation.spi.MaterialFilter} —— 筛选条件（5 → 4 个分量，不带归档维度）</li>
+ * </ul>
+ *
+ * <h2>硬约束</h2>
+ * <ul>
+ *   <li><b>零依赖</b>。只允许 {@code java.}（{@code CONTRACT_ALLOWED_IMPORT_PREFIXES}），
+ *       不许 Jackson、不许注解、不许 {@code JsonNode}。见 ADR-1。</li>
+ *   <li><b>不含实现</b>。这里只有类型与端口，任何一段业务逻辑都不属于本模块。</li>
+ *   <li><b>契约不能依赖契约</b>。只允许 JDK + 本包；需要别域的等价类型就各写一份。</li>
+ *   <li><b>不许 {@code default} 方法</b>。加一个就能悄悄把端口变宽，而门禁与指标都看不见。</li>
+ *   <li><b>前端可见的类型改形状走 §11</b>。本模块的类型都不是前端可见的（前端看的是
+ *       {@code recitation.api} 那套），所以收窄不需要登记 {@code contract-changes.yaml}；
+ *       但分量顺序仍由反射测试钉住。</li>
+ * </ul>
+ *
+ * <h2>有意不在这次改动里的</h2>
+ * <ul>
+ *   <li>测验能力（{@code KnowledgeQuizService} 的 {@code openQuiz} / {@code recordQuiz}），
+ *       即 {@code agent -> recitation} 剩下的两条。它要四个类型，其中
+ *       {@code QuizSession} 内嵌 {@code List<KnowledgeQuizAttemptView>}。</li>
+ *   <li>{@code recitation.api} 那一层本身。它是前端 HTTP 契约，受众不同，
+ *       要到 Wave 2 拆它自己的时候才进契约模块。</li>
+ *   <li>录音任务（{@code RecitationAttemptView}）与材料的更新/归档/删除。
+ *       跨域这一侧没有调用方——它们只服务控制器。</li>
+ * </ul>
+ */
+package com.xander.lab.recitation.spi;

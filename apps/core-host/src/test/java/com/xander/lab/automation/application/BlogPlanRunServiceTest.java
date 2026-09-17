@@ -18,7 +18,7 @@ import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.content.api.PublishCommand;
 import com.xander.lab.content.api.PublishResult;
-import com.xander.lab.recitation.application.RecitationService;
+import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -52,14 +52,14 @@ class BlogPlanRunServiceTest {
     @Mock private JuejinBlogSyncService juejinBlogSyncService;
     @Mock private BlogContentPlanMapper planMapper;
     @Mock private com.xander.lab.automation.infrastructure.BlogPlanSseService sseService;
-    @Mock private RecitationService recitationService;
+    @Mock private RecitationMaterialPort materialPort;
     @Mock private TransactionTemplate transactionTemplate;
 
     private BlogPlanRunService newService() {
         wireTransactionTemplate();
         return new BlogPlanRunService(runMapper, planMapper, notificationMapper, agentService,
                 publicationService, blogService, csdnCredentialService, juejinCredentialService,
-                juejinBlogSyncService, sseService, recitationService, transactionTemplate);
+                juejinBlogSyncService, sseService, materialPort, transactionTemplate);
     }
 
     private void wireTransactionTemplate() {

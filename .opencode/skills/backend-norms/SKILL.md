@@ -391,6 +391,19 @@ for f in <消费方文件…>; do grep -oE "\.(get|is)[A-Z][A-Za-z0-9]*\(" "$f" 
 > **Javadoc 里列了消费方字段清单 ≠ record 里有那些分量。** 两者是分开手写的，就会分开漂移。
 > 而且**不能沿用上一次抽取的结果** —— 消费方的读取点会变，字段集就得跟着重推。
 
+**⚠️ 收窄的可以是"一个字段"，也可以是"一个维度" —— 后者要在换算层显式补值。**
+2026-09-17 的 `recitation-api`：域侧 `MaterialQuery` 是
+`(search, masteryLevel, dueOnly, limit, archiveFilter)`，但跨域消费方**从不写 `ArchiveFilter`**
+（全部用 4 参数构造器）⇒ 归档维度是**提供方的策略**，不进契约。
+换算层于是要显式写 `ArchiveFilter.ACTIVE`。
+
+> **"少一个维度"不是"少一个字段"**：字段收窄只是不带过去，
+> 维度收窄要求在**换算层补一个策略值**，而那个值以后会跟着域侧默认值变。
+> 所以换算层的这一行必须被测试钉住（注入验证：把它改成 `ArchiveFilter.ALL`，3 条测试变红）。
+
+⚠️ **静态工厂（`MaterialFilter.all()`）不用跟着端口搬** —— 它没有实现依赖，
+只是给消费方的常量构造提供落脚点。要搬的是**常量**（见"常量必须跟着端口搬"）。
+
 收窄比镜像更容易出错，因为它没有"序列化逐字节不变"这个可证明的命题兜底：
 镜像时字段集是照抄的，收窄时字段集是**判断**出来的，判断就会错。
 所以收窄**必须**配一对互补的测试：契约侧 `RecordShapeTest` 钉形状，
@@ -596,6 +609,52 @@ Java **不允许**同名同参只差返回值，所以把 `Long notifyResource(.
 可证明行为不变。返回值是 JDK 类型、又是操作的自然结果（"写一条通知，得到它的 id"）时，
 这点富余是**惰性**的，不必急着砍。（先例：`NotificationPort`；对照：`PublicationPort`
 也是零改动形状，见 `lib-extraction.md` §3nonies.5。）
+
+**⚠️ 端口方法"转调同类富方法"时，必须自己带 `@Transactional` —— 属性要与富方法完全一致。**
+这是抽端口最容易埋的**语义**缺陷，而且**编译通过、26 条门禁全 PASS、指标一个不动**。
+
+```java
+// 富方法：事务在这里
+@Transactional(propagation = Propagation.REQUIRES_NEW)
+public EmailReminderView create(Long userId, EmailReminderRequest request) {
+    reminderMapper.lockUserForReminderCreation(userId);   // SELECT ... FOR UPDATE
+    ...
+}
+
+// 端口方法：自调用绕过代理 ⇒ 上面那个事务根本不存在
+@Override
+@Transactional(propagation = Propagation.REQUIRES_NEW)   // ← 必须补上，且属性要一致
+public EmailReminderView create(Long userId, EmailReminderDraft draft) {
+    return toView(create(userId, toRequest(draft)));
+}
+```
+
+**Spring 的 `@Transactional` 走代理，`this.xxx()` 不经过代理。**
+所以"端口方法只是转调"这句话在事务上**不成立** —— 转调的那一层**自己就是一个事务边界**。
+
+为什么是实质缺陷而不是洁癖：`lockUserForReminderCreation` 的实现是 `SELECT ... FOR UPDATE`，
+**它的全部作用就是串行化并发创建**。没有事务 ⇒ 锁在语句结束就释放 ⇒
+幂等检查与插入之间出现窗口 ⇒ 两个并发请求各插一条。
+**症状是"偶尔重复"**，比崩溃难查得多。
+
+⚠️ **不能只写 `@Transactional`**：富方法写的是 `REQUIRES_NEW` / `readOnly = true` 时，
+端口方法写裸 `@Transactional` 会**静默改变传播语义**。
+
+**这条规则没有门禁守**（`scan.py` 只看 import 边，看不见注解）⇒ 由
+`apps/core-host/src/test/java/com/xander/lab/migration/PortDelegationTransactionTest.java` 守，
+三条断言：①**完整性**（扫描到的端口实现 ↔ 手工清单双向比对）；
+②**委托必须带注解**（判据是"方法体是否只有一次同类自调用"，不是"名字是否在某张表里"）；
+③**反向 sanity**（确认真的扫到了类）。
+⚠️ 完整性那条**当场就还了本钱**：加 `RecitationService` 时忘了列进清单，全量跑时正是它变红。
+
+（先例：2026-09-17 第十刀，`EmailReminderService` 2 处 + `BlogContentPlanService` 3 处共 5 个方法缺注解。
+详见 `adr-contract-boundaries.md` §9.8 / §9.9。）
+
+**⚠️ 端口收窄会删掉消费方的表达力 —— 收窄时必须问"这条断言以后谁来写"。**
+本项目实例：`QueryKnowledgeToolTest` 原来断言搜索 SQL 含 `archived_at IS NULL`，
+但契约侧 `MaterialFilter` **没有归档维度**（那是提供方的策略）⇒ 工具侧再也写不出这条断言。
+答案只能是"提供方的测试"（**搬家**）或"契约侧的换算测试"（换形状），**不能是"没人写"**。
+⚠️ 搬家时**先写新家、再删旧家** —— 反过来会让不变量在两次编辑之间**无人看守**。
 
 ## API 与异常契约
 
@@ -896,6 +955,19 @@ NEW  joined = ['dinqor-newbie'] -> FAIL      ← 抓到了
   会把"agent 已脱离"这个**进度**盖掉。改成实测，并新增"哪些单元已可单独抽取"的提示。
 - 失败消息原本指向 `components[WAVE2_UNITS[0]]`，而那个根可能已经是单元素，
   会把读者引到一个和新增边无关的单元上。改成指向**真正获得了新成员**的那个分量。
+
+**⚠️ 同一门禁里的「互依对基线」必须双向检查：新出现的要拦，消失的也要拦。**
+`deployment-unit-coupling` 的 `MUTUAL_UNIT_PAIRS` 是手工维护的**有向对**集合。
+2026-09-17 第十刀把 `automation → recitation`（content-automation 指向 core-host 的**最后一条**边）
+消掉之后，那对不再互依 —— 门禁主动报
+`1 pair(s) no longer mutual, delete both directions`。
+
+> **这是双向判据的价值，而且正好是 §"判据的根"那处的反面。**
+> 同一个门禁里，判据 2 是**单**向的（只看"有没有新成员加入"，于是空转），
+> `MUTUAL_UNIT_PAIRS` 是**双**向的（多了要报、少了也要报），所以它救了自己。
+> **过期条目会让图看起来比实际更乱** —— 于是"还剩几对互依"这个进度数字会失真。
+
+⚠️ 删条目时**两个方向都要删**（`(A,B)` 与 `(B,A)` 各一条），否则剩下的那条会继续被当成互依。
 
 ⚠️ 还原后**不要**用"原始字节 sha256 相等"证明还原成功：本仓库 `core.autocrlf=true`，
 `git checkout -- <file>` 会把 LF 重写成 CRLF，字节数会变（实测 `scan.py` 差 1347 字节

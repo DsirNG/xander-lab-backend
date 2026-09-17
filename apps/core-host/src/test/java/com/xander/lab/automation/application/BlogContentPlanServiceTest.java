@@ -11,7 +11,7 @@ import com.xander.lab.automation.infrastructure.BlogPlanRunMapper;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
-import com.xander.lab.recitation.application.RecitationService;
+import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -44,11 +44,11 @@ class BlogContentPlanServiceTest {
     @Mock private CsdnCredentialService csdnCredentialService;
     @Mock private JuejinCredentialService juejinCredentialService;
     @Mock private BlogAgentService agentService;
-    @Mock private RecitationService recitationService;
+    @Mock private RecitationMaterialPort materialPort;
 
     private BlogContentPlanService newService() {
         BlogContentPlanService service = new BlogContentPlanService(planMapper, runMapper, runService,
-                csdnCredentialService, juejinCredentialService, agentService, recitationService);
+                csdnCredentialService, juejinCredentialService, agentService, materialPort);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "maxActivePerUser", 50L);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "maxCreatedPerDay", 20L);
         return service;
