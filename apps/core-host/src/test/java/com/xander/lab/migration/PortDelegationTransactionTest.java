@@ -10,6 +10,7 @@ import com.xander.lab.integration.oss.OssService;
 import com.xander.lab.publishing.application.BlogMediaService;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
+import com.xander.lab.recitation.application.KnowledgeQuizService;
 import com.xander.lab.recitation.application.RecitationService;
 import com.xander.lab.recitation.infrastructure.DashScopeRecitationAsrClient;
 import org.junit.jupiter.api.Test;
@@ -83,6 +84,7 @@ class PortDelegationTransactionTest {
             BlogService.class,
             PublicationService.class,
             RecitationService.class,
+            KnowledgeQuizService.class,
             DashScopeRecitationAsrClient.class);
 
     @Test

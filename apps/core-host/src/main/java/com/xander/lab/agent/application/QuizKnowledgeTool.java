@@ -5,8 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.recitation.api.KnowledgeQuizAttemptView;
-import com.xander.lab.recitation.application.KnowledgeQuizService;
+import com.xander.lab.recitation.spi.QuizAttemptView;
+import com.xander.lab.recitation.spi.QuizSessionView;
+import com.xander.lab.recitation.spi.RecitationQuizPort;
 import org.springframework.stereotype.Component;
 
 /**
@@ -24,11 +25,11 @@ public class QuizKnowledgeTool implements AgentTool {
 
     public static final String NAME = "quiz_knowledge";
 
-    private final KnowledgeQuizService quizService;
+    private final RecitationQuizPort quizPort;
     private final ObjectMapper objectMapper;
 
-    public QuizKnowledgeTool(KnowledgeQuizService quizService, ObjectMapper objectMapper) {
-        this.quizService = quizService;
+    public QuizKnowledgeTool(RecitationQuizPort quizPort, ObjectMapper objectMapper) {
+        this.quizPort = quizPort;
         this.objectMapper = objectMapper;
     }
 
@@ -72,7 +73,7 @@ public class QuizKnowledgeTool implements AgentTool {
     public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         Long materialId = args.path("materialId").isNumber() ? args.path("materialId").asLong() : null;
-        KnowledgeQuizService.QuizSession session = quizService.openQuiz(
+        QuizSessionView session = quizPort.openQuiz(
                 context.userId(), materialId, context.conversationId());
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
@@ -97,8 +98,8 @@ public class QuizKnowledgeTool implements AgentTool {
         return outcome;
     }
 
-    private void appendHistory(ArrayNode history, KnowledgeQuizService.QuizSession session) {
-        for (KnowledgeQuizAttemptView quiz : session.recentQuizzes()) {
+    private void appendHistory(ArrayNode history, QuizSessionView session) {
+        for (QuizAttemptView quiz : session.recentQuizzes()) {
             ObjectNode record = history.addObject();
             record.put("score", quiz.score());
             record.put("questionCount", quiz.questionCount());
@@ -106,12 +107,34 @@ public class QuizKnowledgeTool implements AgentTool {
             record.put("verdict", quiz.verdict() == null ? "" : quiz.verdict());
             record.put("createdAt", text(quiz.createdAt()));
             // 逐题证据原样带回：智能体据此知道上次问过什么、用户在哪一题上栽了。
-            record.set("items", quiz.items() == null
-                    ? JsonNodeFactory.instance.arrayNode() : objectMapper.valueToTree(quiz.items()));
+            record.set("items", parseItems(quiz.itemsJson()));
         }
     }
 
-    private String hint(KnowledgeQuizService.QuizSession session) {
+    /**
+     * 把历史证据的 JSON 文本解析成节点。
+     *
+     * <p>契约侧只给文本（域侧那个字段的类型是 {@code Object}，没有形状可描述），
+     * 所以解析与容错都在这一侧。三条分支合起来与旧行为逐字等价：</p>
+     * <ul>
+     *   <li>空 / {@code null} ⇒ 空数组。旧路径里 {@code items} 是 {@code null}，
+     *       {@code valueToTree(null)} 也产出空数组。</li>
+     *   <li>非法 JSON ⇒ 空数组。旧路径里域侧反序列化失败会吞掉异常留 {@code null}，
+     *       结果同样是空数组。</li>
+     *   <li>合法 JSON ⇒ 原样解析。**注意必须走 {@code readTree} 而不是任何 toString** ——
+     *       智能体拿到的必须是真的 JSON，不是某个对象的字符串形式。</li>
+     * </ul>
+     */
+    private JsonNode parseItems(String itemsJson) {
+        if (itemsJson == null || itemsJson.isBlank()) return JsonNodeFactory.instance.arrayNode();
+        try {
+            return objectMapper.readTree(itemsJson);
+        } catch (Exception error) {
+            return JsonNodeFactory.instance.arrayNode();
+        }
+    }
+
+    private String hint(QuizSessionView session) {
         StringBuilder hint = new StringBuilder();
         hint.append("content 是用户自己存下的原文，出题和判分都以它为准，不要考原文里没有的内容。");
         if (session.contentTruncated()) {

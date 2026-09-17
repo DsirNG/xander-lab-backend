@@ -98,6 +98,12 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
   而不是把前端类型搬进契约（见 §7）。
 - `recitation-api` 是第三次：`CreateRecitationMaterialRequest` 带 `jakarta.validation` 注解，
   按 ADR-1 不能进契约，所以契约自带一份去掉注解的四字段入参（见 §9.6）。
+- **第四次是最有意思的一次**：`KnowledgeQuizAttemptView.items` 的类型是 `Object`（一个**没有形状**
+  的字段，因为它反序列化自 `items_json` 列，而那一列里可能有旧版本写下的任意内容）。
+  契约**没法**解析它 —— 因为 ADR-1 禁止契约带 JSON 库 —— 于是契约只能带**文本**
+  （`QuizAttemptView.itemsJson`），解析上移到工具里。
+  **这一次 ADR-1 不是代价，而是直接给出了正确答案**：一个"什么都不知道"的契约
+  恰好是唯一不会对历史行撒谎的契约（见 §10.3）。
 
 ---
 
@@ -188,7 +194,7 @@ blogagent ───→ content-api ←─── agent
 **所以它不构成一次 §11 契约变更，不该进登记表。** 这一点写在这里，
 是为了让后来的人知道"没登记"是判断，不是漏掉。
 
-> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§11 待办第 3 项），
+> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§12 待办第 3 项），
 > 那**必须**进 `contract-changes.yaml` 并走 §11 流程 —— 因为它会真的删掉
 > 前端能看到 10 个字段。
 
@@ -304,7 +310,7 @@ MediaAssetRef findReusableGenerated(Long userId, String title);
 
 > **这暴露了一个仍未拍板的问题**：契约能不能依赖契约？今天答案是**不能**
 > （Maven 无法编排 test-only 的跨契约依赖，所以门禁干脆全禁）。
-> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §11 待办。
+> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §12 待办。
 
 ### 3.5 `byte[]` 而不是 `MultipartFile`，以及 `MAX_IMAGE_BYTES`
 
@@ -771,7 +777,7 @@ SPI，所以看起来理所当然。问题在方向：`AgentTool` / `AgentDynami
 
 1. **`parametersSchema()` 返回 `com.fasterxml.jackson.databind.JsonNode`。** ADR-1 说契约
    必须与序列化框架无关，`CONTRACT_ALLOWED_IMPORT_PREFIXES` 只有 `java.`。搬它就必须放宽
-   门禁——而 §11.1 明写"不许为了过门禁而放宽"。
+   门禁——而 §12.1 明写"不许为了过门禁而放宽"。
 2. **它有 6 个 `default` 成员**（`promptSection` / `execute(AgentToolContext,…)` /
    `reconcile` / `approvalReason` / `readOnly`），外加嵌套的 `ProgressListener` 又有 5 个。
    搬过去等于把 agent 的整套工具词汇表塞进每个依赖方。
@@ -1249,7 +1255,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
   不跨域，不上端口。
 - **`RESOURCE_KNOWLEDGE_FILE` 的归属**：它语义上更像"knowledgebase 的资源类型"而不是
   "通知表的词表"。这次按"跟着端口搬"处理（纯搬家，可证）；真要改归属是**另一个决定**，
-  记在 §11 待办里。
+  记在 §12 待办里。
 
 ### 8.11 注入验证：四次注入，逮到三个缺陷（其中两个在测试里）
 
@@ -1286,7 +1292,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
 **没修但必须记下来的一处**：第 5 次注入（把常量放回实体、让 `knowledgebase` 重新 import）
 **没有让 `cross-domain-import-baseline` 变红** —— 扫描器如实报了 42 → 43 条语句、边 18 → 19，
 门禁却报 PASS。原因是该门禁拿 `scan.py` 的产物当自己的基线，在"先 scan 后 gates"的既定流程下
-基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §11 待办第 16 项；
+基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §12 待办第 16 项；
 本刀只先把门禁 docstring 里那句"任何边增长就 FAIL"的失实保证改成实情。
 
 > 教训与 §7.10、`util` 死条目同源：**一个判据的"基线"必须来自判据之外。**
@@ -1532,7 +1538,202 @@ Wave 2 强连通分量仍是 {content-automation, core-host, platform-integratio
 
 ---
 
-## 10. 这两条 ADR 与既有规则的交叉
+## 10. 落地记录（八）：`recitation-api`（测验能力）—— 一个无形状字段，以及两份投影的一致性
+
+### 10.1 这一刀是 §9 早就写下的待办
+
+§9.2 把 `recitation` 拆成两半，只做了材料能力，理由写在当时：
+
+> 四个工具两两分工：`CreateKnowledgeTool`/`QueryKnowledgeTool` 只用材料；
+> `QuizKnowledgeTool`/`GradeAnswerTool` 只用测验。后者要碰 `KnowledgeQuizService` 的
+> 四个嵌套 record，其中 `KnowledgeQuizAttemptView.items` 的类型是 `Object`。
+
+这一刀做剩下的那一半：`agent → recitation` 的 2 条语句（`QuizKnowledgeTool` 与
+`GradeAnswerTool` 各 1 条 `KnowledgeQuizService` 实现 import，外加
+`QuizKnowledgeTool` 的 1 条 `recitation.api.KnowledgeQuizAttemptView` api import）。
+
+### 10.2 侦察：一条边整条消失，`agent` 的出边进一步收窄
+
+| from → to | impl | api | 文件 |
+|---|---|---|---|
+| `agent → recitation` | 2 | 1 | `QuizKnowledgeTool`、`GradeAnswerTool` |
+
+`recitation` 的**跨域消费方只有 `agent`** —— 材料那一刀已经把 `automation` 那两条清掉了
+（§9.13）。所以这一刀做完，`recitation` 与 `agent` 之间的**双向**依赖都不存在了：
+
+```
+grep -rn "^import com\.xander\.lab\.recitation\." apps/core-host/src/main/java --include=*.java | grep -v "/recitation/"
+```
+
+改完之后只剩 `agent` 下三个工具的 `recitation.spi.*`，没有一条指向 `.api` / `.application` / `.domain`。
+
+### 10.3 ⚠️ 无形状字段：`items` 是 `Object`，这是这一刀唯一的设计决定
+
+域侧 `KnowledgeQuizAttemptView` 的分量里有一个：
+
+```java
+/** 逐题证据，反序列化自 items_json 列。 */
+private final Object items;
+```
+
+它的运行时类型是"从 `items_json` 那一列反序列化出来的任意 JSON"，因为**那一列里可能有
+旧版本写下的内容**。三种做法，只有第三种是对的：
+
+| 做法 | 结果 |
+|---|---|
+| 把 `Object` 搬进契约 | 等于把"随便什么"写进契约。契约要能回答"这个分量是什么形状"，`Object` 回答不了 |
+| 收窄成一个新的契约 record（`QuizItemView`） | 契约会开始**假装知道**历史行里存的是什么形状。旧行可能没有 `comment`，也可能多一个字段 —— 契约一旦钉了形状，读取端就必须做兼容，而它没有做兼容的地方 |
+| **契约带文本（`itemsJson`），解析留给消费方** | ✅ 契约只承诺"这是一串 JSON 文本"，不承诺它的内部形状 |
+
+所以 `QuizAttemptView.itemsJson` 是 `String`。**解析因此上移到工具里**
+（`QuizKnowledgeTool.parseItems`），前端那条路径继续用原来的解析版。
+
+> **这条与 ADR-1 是同一件事的两面**：契约不带 JSON 库 ⇒ 契约**没法**解析 ⇒
+> 只能带文本。而"契约没法解析"正是 ADR-1 想要的。ADR-1 在这里第一次不是"代价"，
+> 而是**直接给出了正确答案**。
+
+### 10.4 ⚠️ 一份实体、两份投影：新增一条"它们必须一致"的测试
+
+`KnowledgeQuizAttempt` 这一张表现在被投影成两个类型：
+
+| 投影 | 类型 | 受众 | `items` 形态 |
+|---|---|---|---|
+| 前端 | `recitation.api.KnowledgeQuizAttemptView` | `RecitationController` | **已解析**（`Object`） |
+| 契约 | `recitation.spi.QuizAttemptView` | `agent` 的两个工具 | **文本**（`String`） |
+
+两个投影各写一份最危险的地方是**它们会悄悄漂移**，而两边各自的测试都不会红：
+前端的测试只断言解析后的结构，契约的测试只断言文本，谁都不看"这两个投影在共享字段上是否一致"。
+
+`RecitationQuizPortMappingTest.theContractProjectionAndTheFrontendProjectionAgreeOnTheFieldsTheyShare`
+把这条补上：同一条历史行，两个投影的 `questionCount` / `correctCount` / `score` / `verdict` /
+`createdAt` 必须相等。**注入 D 证明它有独立价值**（见 §10.9）——
+把 `toAttemptView` 的 `questionCount` 与 `correctCount` 对调时，它和逐字段落点测试**同时**变红，
+而工具侧与前端侧的测试全绿。
+
+### 10.5 端口形状：2 个方法，没有 `default`，没有多余重载
+
+```java
+int MAX_ITEMS = 20;
+int MAX_VERDICT_CHARS = 1000;
+
+QuizSessionView openQuiz(Long userId, Long materialId, Long conversationId);
+QuizOutcomeView recordQuiz(Long userId, Long quizSessionId, Long conversationId,
+                           String verdict, List<GradedItemDraft> items);
+```
+
+域侧 `KnowledgeQuizService` 有 7 个公开方法，端口只收 2 个。**没收进来的**：
+
+| 域侧方法 | 为什么不上端口 |
+|---|---|
+| `openQuiz(Long, Long)` | 两参重载，**没有任何生产调用方**（只有服务自己的测试在用） |
+| `listQuizzes(Long, Long)` | 只有 `RecitationController` 在用 —— 前端 HTTP 契约，受众不同 |
+| `recentQuizzes(...)` 等私有方法 | 实现细节 |
+
+`openQuiz` 的两参重载这次**保留在服务上**（不像 §7.5 那样改名）：它不冲突，只是端口不收它。
+端口只要三参那一个，两参重载继续服务控制器路径。
+
+### 10.6 同名不同签名这次没出现：端口方法就是实现本身
+
+§7.5 / §9.7 两次遇到"端口方法要拿规范名，但域侧富方法同名同参只差返回值"，
+于是富方法加了 `ForView` 后缀。这一刀**没有这个问题**，因为：
+
+```java
+@Override
+@Transactional
+public QuizSessionView openQuiz(Long userId, Long materialId, Long conversationId) { ... }
+```
+
+`openQuiz` 与 `recordQuiz` 的**调用方只有 agent 的两个工具**（加上服务自己的测试），
+所以按 §7.5 的判据，它们**直接换返回类型**即可，不需要保留富方法。
+
+> **判据是"这个方法还有没有别的调用方"，不是"它看起来像不像一个富方法"。**
+> 判据的输入要实测：`grep -rn "\.openQuiz(\|\.recordQuiz(" apps/core-host/src --include=*.java`。
+> 结果里除了 `KnowledgeQuizService.java` 自己，只有那两个工具与 `RecitationControllerTest`。
+
+### 10.7 两个域内 record 被**删掉**（不是搬走）
+
+`KnowledgeQuizService.QuizSession` 与 `KnowledgeQuizService.QuizOutcome` 是服务里的嵌套 record，
+它们的**同域生产消费方为零** —— 只有这两个工具在用，加上服务自己的测试。
+所以它们不是"搬进契约"，而是**被契约类型取代后删除**：
+
+| 原类型 | 取代者 | 分量变化 |
+|---|---|---|
+| `KnowledgeQuizService.QuizSession` | `QuizSessionView` | 15 → 15（全带） |
+| `KnowledgeQuizService.QuizOutcome` | `QuizOutcomeView` | 11 → 10（去掉 `lastReviewAt`） |
+| `KnowledgeQuizService.GradedItem` | `GradedItemDraft` | 4 → 4 |
+| `KnowledgeQuizAttemptView`（前端可见） | `QuizAttemptView`（新增，**收窄**） | 8 → 6 |
+
+> **"删掉它不会有别的症状"的约束必须有专门测试**（`backend-norms` 里的推演法）。
+> 这里的验证是：删掉两个 record 后全反应堆 1362 个测试绿，
+> 且 `RecitationControllerTest` 一行没改 —— 说明它们真的只有那两个工具在依赖。
+
+`QuizOutcomeView` 去掉 `lastReviewAt` 是**收窄**（按 §2.5 的分支判断）：
+`GradeAnswerTool` 只读 `masteryLevel` / `previousMasteryLevel` / `reviewCount` / `nextReviewAt`，
+从不读"上次复习时间"。`QuizSessionView` 则是**全带** —— 工具 15 个分量全读。
+
+### 10.8 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 38 | **36** |
+| `implementation_edges` | 17 | **16** |
+| `cross_deployment_unit_statements` | 21 | **19** |
+| `cross_deployment_unit_edges` | 10 | **9** |
+| `api_statements` | 13 | **12** |
+
+**`agent → recitation` 整条边从清单里消失。** `api_statements` 掉 1（`QuizKnowledgeTool` 那条
+`recitation.api.KnowledgeQuizAttemptView` import 换成了 `recitation.spi.QuizAttemptView`）——
+`api` 与 `impl` 的降幅这次是 1 比 2，因为 `GradeAnswerTool` 原本只 import 了实现类。
+**又一次印证：看收益必须两列都看，比例没有规律。**
+
+**`recitation` 现在是一个"零跨域消费方"的域** —— 材料与测验两条能力都在契约上，
+且没有任何域 import `recitation.*` 的实现包。
+
+### 10.9 注入验证：五次注入，每次变红的都正好是预期的那些
+
+| # | 注入 | 期望变红 | 实测 |
+|---|---|---|---|
+| A | 给端口加一个 `default` 方法 | 3 条（签名清单 / 参数个数守卫 / 无 default） | **3 条**，`RecordShapeTest` 与材料端口测试保持绿 |
+| B | `MAX_ITEMS` 从 20 改成 10 | 1 条（常量值） | **1 条** |
+| C | `openQuiz` 里 `title` 与 `knowledgeType` 对调 | 1 条（会话逐字段落点） | **1 条**；工具测试与服务测试保持绿 |
+| D | `toAttemptView` 里 `questionCount` 与 `correctCount` 对调 | 2 条（历史落点 + 两份投影一致） | **2 条** |
+| E | 把 `KnowledgeQuizService` 从守卫的 `PORT_IMPLEMENTATIONS` 里删掉 | 1 条（完整性） | **1 条**，消息点名缺的是哪个类 |
+
+注入 A 里的"参数个数守卫"给出的是**有意义的失败**
+（"injectedWidening 没有参数：端口方法必须显式收调用方 id"），
+不是 `ArrayIndexOutOfBounds` —— 这是 §8.11 修掉的那处测试缺陷在连续两刀里的第二次生效。
+
+**注入 D 是本轮信息量最大的一次**：它证明 §10.4 那条"两份投影必须一致"的测试
+不是重复劳动。没有它，`toAttemptView` 的换位只有逐字段落点测试会红；
+而一旦哪天有人把逐字段落点测试当成"太琐碎"删掉，两份投影就会静默漂移。
+
+### 10.10 为什么没有加 `contract-changes.yaml` 条目
+
+理由同 §2.6 / §7.11 / §8.9 / §9.14：**这一刀没有改变任何前端可见的形状**。
+
+- `RecitationController` 的四个端点路由、响应形状、错误码一行未变。
+- 前端可见的 `KnowledgeQuizAttemptView` **原样保留**（它继续被控制器使用），
+  契约侧的 `QuizAttemptView` 是**新增的另一个类型**，不是它的替代品。
+- 唯一改动的前端可见面是 `openQuiz` 的返回类型 —— 但 `openQuiz` **不是 HTTP 端点**，
+  它是服务方法；控制器走的是 `RecitationController` 自己那条路径。
+
+所以这是一次可证明的纯重构。
+
+### 10.11 刻意没做的事
+
+- **`listQuizzes` 不上端口**。它只服务控制器。上端口等于把"前端 HTTP 契约"塞进跨域契约，
+  而 §2.7 已经把这条线划过一次。
+- **`openQuiz(Long, Long)` 两参重载不上端口**。它没有生产调用方，上端口只会让端口变宽。
+- **`items` 的解析没有下沉到契约侧**。见 §10.3：契约不带 JSON 库，这是 ADR-1 的直接后果。
+- **`RecitationMaterialPort` 与 `RecitationQuizPort` 没有合并**。它们服务两组不同的工具、
+  两组不同的能力，合起来只会得到一个更宽的端口 —— 而端口宽度是这一系列 ADR 里
+  唯一"没人守"的量（§6.6 / §7.8 / §8.6 / §9.11）。
+- **`KnowledgeQuizAttemptView` 没有被收窄**。它仍是前端可见类型，收窄它是一次 §11 契约变更
+  （§2.5），与这一刀无关。
+
+---
+
+## 11. 这两条 ADR 与既有规则的交叉
 
 | 既有规则 | 与 ADR 的关系 |
 |---|---|
@@ -1554,7 +1755,7 @@ Wave 2 强连通分量仍是 {content-automation, core-host, platform-integratio
 
 ---
 
-## 11. 待办
+## 12. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -1576,11 +1777,13 @@ Wave 2 强连通分量仍是 {content-automation, core-host, platform-integratio
 | 16 | **⚠️ `cross-domain-import-baseline` 在"先 scan 后 gates"的既定流程下不可能变红** —— 它把 `docs/cross-domain-imports.yaml`（`scan.py` 的产物）当作自己的基线，于是基线 == 实时值 | **未修**（高优先）。2026-09-17 实测：把 `RESOURCE_KNOWLEDGE_FILE` 放回实体并让 `knowledgebase` 重新 import 它 ⇒ 扫描器如实报 42 → **43** 条、边从 18 → **19**，而该门禁仍报 **PASS**。它今天实际只检测"改了代码没重跑 scan"。修法二选一：加人工基线文件（照 `capability-baseline.yaml` + `.lock` 的模式），或从上次提交读基线。已先改掉门禁 docstring 里那句失实的保证（§8.11） |
 | 17 | 契约测试里按下标反射取方法的写法（`getDeclaredMethods()[0]`） | **已修**（§8.11）。`NotificationPortTest` 与既有的 `UserLookupPortTest` 各一处；`getDeclaredMethods()` 的顺序 JVM 不保证，加一个方法就会静默换检查对象 |
 | 18 | **⚠️ 端口方法同类自调用失事务**：Spring 事务是代理实现的，`this.富方法(...)` 不走代理，被调方法上的 `@Transactional` 不生效。第九刀的 5 个端口方法因此全部在无事务下执行（其中两处的富方法第一句是 `SELECT ... FOR UPDATE`，锁不住任何东西） | **已修**（§9.8）：5 个方法各补注解；新增 `PortDelegationTransactionTest` 把这条不变量交给机器守（§9.9），并带一条**双向**完整性判据 |
-| 19 | `recitation` 的**测验能力**（`KnowledgeQuizService` 的 `openQuiz` / `recordQuiz`） | **未做**，`agent → recitation` 剩下的 2 条。要 `QuizSession` / `GradedItem` / `QuizOutcome` + 测验记录读模型（§9.2） |
-| 20 | `KnowledgeQuizAttemptView.items` 的类型是 `Object`（**无形状字段**） | **未定**。收窄时它无法用一个契约类型表达；要么定义 `QuizItemView` 并让提供方换算，要么让契约带 `List<Map<...>>`（那就带进了集合类型，需要单独判断）。是 §19 那一刀的前置决定 |
+| 19 | `recitation` 的**测验能力**（`KnowledgeQuizService` 的 `openQuiz` / `recordQuiz`） | **已做**（§10）。`RecitationQuizPort` + 4 个契约类型；`agent → recitation` 整条边消失。两个域内 record（`QuizSession` / `QuizOutcome`）**被删掉**而不是搬走 —— 它们的同域生产消费方为零（§10.7） |
+| 20 | `KnowledgeQuizAttemptView.items` 的类型是 `Object`（**无形状字段**） | **已定**（§10.3）：契约带**文本**（`QuizAttemptView.itemsJson`），解析上移到工具。三种做法里只有这一种不假装知道历史行的形状；而"契约没法解析"正是 ADR-1 的直接后果，这次 ADR-1 不是代价而是答案 |
 | 21 | `PortDelegationTransactionTest` 的端口实现清单靠人工维护 | **已知代价**，由 `theAuditedClassListIsComplete` 的类路径扫描**双向**兜住：漏加会直接变红（本刀实测，见 §9.9）。新增端口实现时把类加进 `PORT_IMPLEMENTATIONS` |
+| 22 | **⚠️ 一份实体被投影成两份类型时，两个投影必须被测试钉成一致** —— 两边各自的测试都不会红，只有一条跨投影的断言能抓到漂移 | **已建立**（§10.4）：`RecitationQuizPortMappingTest` 里那条"契约投影与前端投影在共享字段上相等"。注入 D 证明它有独立价值。**后续凡新增一份投影（`ContentPost` / `MediaAssetRef` 收窄时也会遇到）都要配一条同款断言** |
+| 23 | `agent` 的剩余出边：`blogagent` 4/2、`identity` 2/0、`integration` 2/0、`publishing` 0/1（api） | **未做**。**四条全部跨部署单元**（`agent` 在 `dinqor-agent`；`blogagent`/`publishing` 在 `dinqor-content-automation`，`identity` 在 `dinqor-core-host`，`integration` 在 `dinqor-platform-integration`）。要"出边归零"需 8 条 impl + 3 条 api，至少两刀。`agent → blogagent`（4 impl / 2 api，三个工具）最大，且它同时清掉 `agent → publishing` 那 1 条 api（`PublishPostTool` 一个文件同时贡献两条边）⇒ **建议下一刀做它**。⚠️ `agent → identity` 那 2 条在 `agent/api/` 下（WebSocket 握手鉴权），形状与工具类完全不同，要单独判断 |
 
-### 11.1 第 1 项的边界（明确不许顺手放宽）
+### 12.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -1591,7 +1794,7 @@ Wave 2 强连通分量仍是 {content-automation, core-host, platform-integratio
 
 ---
 
-## 12. 一句话记法
+## 13. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

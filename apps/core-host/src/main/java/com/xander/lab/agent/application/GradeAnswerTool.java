@@ -3,7 +3,9 @@ package com.xander.lab.agent.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.recitation.application.KnowledgeQuizService;
+import com.xander.lab.recitation.spi.GradedItemDraft;
+import com.xander.lab.recitation.spi.QuizOutcomeView;
+import com.xander.lab.recitation.spi.RecitationQuizPort;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -23,10 +25,10 @@ public class GradeAnswerTool implements AgentTool {
 
     public static final String NAME = "grade_answer";
 
-    private final KnowledgeQuizService quizService;
+    private final RecitationQuizPort quizPort;
 
-    public GradeAnswerTool(KnowledgeQuizService quizService) {
-        this.quizService = quizService;
+    public GradeAnswerTool(RecitationQuizPort quizPort) {
+        this.quizPort = quizPort;
     }
 
     @Override
@@ -65,10 +67,10 @@ public class GradeAnswerTool implements AgentTool {
                 .put("description", "quiz_knowledge 返回的测验会话 id，必须原样传回");
         properties.putObject("verdict")
                 .put("type", "string")
-                .put("description", "面向用户的总体讲评，最多 " + KnowledgeQuizService.MAX_VERDICT_CHARS + " 个字符，可选");
+                .put("description", "面向用户的总体讲评，最多 " + RecitationQuizPort.MAX_VERDICT_CHARS + " 个字符，可选");
         ObjectNode items = properties.putObject("items");
         items.put("type", "array");
-        items.put("description", "逐题判分，最多 " + KnowledgeQuizService.MAX_ITEMS + " 题；每题都必须给 credit");
+        items.put("description", "逐题判分，最多 " + RecitationQuizPort.MAX_ITEMS + " 题；每题都必须给 credit");
         ObjectNode item = items.putObject("items");
         item.put("type", "object");
         ObjectNode itemProperties = item.putObject("properties");
@@ -103,7 +105,7 @@ public class GradeAnswerTool implements AgentTool {
     private JsonNode grade(Long userId, Long conversationId, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         Long quizSessionId = args.path("quizSessionId").isNumber() ? args.path("quizSessionId").asLong() : null;
-        KnowledgeQuizService.QuizOutcome result = quizService.recordQuiz(userId, quizSessionId, conversationId,
+        QuizOutcomeView result = quizPort.recordQuiz(userId, quizSessionId, conversationId,
                 args.path("verdict").asText(""), readItems(args.path("items")));
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
@@ -131,12 +133,12 @@ public class GradeAnswerTool implements AgentTool {
     }
 
     /** 读取逐题证据。缺 credit 的题保持为 null 交给服务端拒绝，这里不替智能体补 0 分。 */
-    private List<KnowledgeQuizService.GradedItem> readItems(JsonNode items) {
-        List<KnowledgeQuizService.GradedItem> parsed = new ArrayList<>();
+    private List<GradedItemDraft> readItems(JsonNode items) {
+        List<GradedItemDraft> parsed = new ArrayList<>();
         if (!items.isArray()) return parsed;
         for (JsonNode item : items) {
             if (!item.isObject()) continue;
-            parsed.add(new KnowledgeQuizService.GradedItem(
+            parsed.add(new GradedItemDraft(
                     item.path("question").asText(""),
                     item.path("userAnswer").asText(""),
                     item.path("comment").asText(""),

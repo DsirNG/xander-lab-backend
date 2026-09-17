@@ -15,8 +15,11 @@
     <description>
         Service-to-service contract for the recitation capability (V9 §18 / §91).
 
-        Members (this cut): RecitationMaterialPort (the port), plus the read model and write
-        inputs it carries (MaterialView / MaterialDraft / MaterialFilter).
+        Members. Two cuts, two capabilities:
+
+          Materials: RecitationMaterialPort, plus MaterialView / MaterialDraft / MaterialFilter.
+          Quiz:      RecitationQuizPort (2 methods, 2 constants), plus QuizSessionView /
+                     QuizAttemptView / QuizOutcomeView / GradedItemDraft.
 
         Why the module exists. Six statements in four files reached into recitation's
         application layer, across two different consumers and two different deployment units:
@@ -30,12 +33,32 @@
         content-automation services could not be built without recitation's implementation
         classes.
 
-        This cut takes the MATERIALS capability only -- RecitationMaterialPort. It clears
-        automation -&gt; recitation completely (that edge disappears) and halves
-        agent -&gt; recitation, whose remaining two statements are the quiz tools reaching for
-        KnowledgeQuizService. The quiz capability is a second cut: it needs QuizSession,
-        GradedItem, QuizOutcome and the attempt read model, and QuizSession carries a nested
-        list of that read model, so it is a materially larger surface than this one.
+        The first cut took the MATERIALS capability only -- RecitationMaterialPort. It cleared
+        automation -&gt; recitation completely (that edge disappears) and halved
+        agent -&gt; recitation.
+
+        The second cut takes the QUIZ capability -- RecitationQuizPort -- and clears the
+        remaining two statements, so agent -&gt; recitation disappears too. It is a ZERO-WIRING
+        extension: no new module, so none of the four build wiring points moves. It is the
+        first extension that removes an edge outright rather than shortening one.
+
+        Two decisions are worth recording from that second cut:
+
+        1. No rich method is kept on the provider side. openQuiz and recordQuiz had no
+           same-domain caller of their return types (only the two agent tools and the
+           service's own tests), so per ADR §7.5 the return types are simply replaced and the
+           domain records QuizSession / QuizOutcome are deleted. Keeping a rich method with no
+           caller would be dead code, and it would need a suffix naming an audience that does
+           not exist.
+
+        2. QuizAttemptView.items travels as TEXT. The domain field's type is Object -- it is
+           the items_json column parsed with readValue(..., Object.class) -- so it has no
+           shape to mirror. A contract may not carry JsonNode (ADR-1), and there is an
+           established answer: JSON enters and leaves the port as text, exactly as
+           agent-api's RemoteTool does. That also moves the parse leniency to the caller,
+           where the "the port answers data questions, the caller owns the fallback" rule
+           says it belongs, and it keeps the provider from having to know the stored shape
+           at all.
 
         Why the filter is NOT recitation.application.RecitationService.MaterialQuery. That
         nested record's fifth component is an ArchiveFilter -- recitation's own
@@ -82,11 +105,14 @@
         not swallow recitation.application or recitation.domain).
 
         What is deliberately NOT here yet:
-        - The quiz capability (KnowledgeQuizService: openQuiz / recordQuiz). It is the
-          remaining agent -&gt; recitation pair and the next cut.
         - Any of recitation's own api layer (com.xander.lab.recitation.api.*). It is the
           frontend HTTP contract, a different audience, and it joins a contract module only
           when that layer itself is split in Wave 2.
+        - listQuizzes, whose only caller is RecitationController (same domain).
+        - The two-argument openQuiz overload. It has NO production caller -- only the
+          service's own tests use it -- and the three-argument port method covers the same
+          semantics by passing a null conversation. Deleting it is a separate "remove dead
+          code" decision, not part of this cut.
 
         Zero dependencies, and that is the point. A contract that drags in a framework
         cannot be depended on by every service, and V9 §19 is explicit that the WebFlux

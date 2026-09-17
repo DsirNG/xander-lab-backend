@@ -10,6 +10,11 @@ import com.xander.lab.recitation.domain.RecitationMaterial;
 import com.xander.lab.recitation.infrastructure.KnowledgeQuizAttemptMapper;
 import com.xander.lab.recitation.infrastructure.KnowledgeQuizSessionMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
+import com.xander.lab.recitation.spi.GradedItemDraft;
+import com.xander.lab.recitation.spi.QuizAttemptView;
+import com.xander.lab.recitation.spi.QuizOutcomeView;
+import com.xander.lab.recitation.spi.QuizSessionView;
+import com.xander.lab.recitation.spi.RecitationQuizPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -35,19 +40,21 @@ import java.util.List;
  *
  * <p>分数刻意由服务端从逐题得分算出，而不是让智能体直接报一个总分：总分是可以随口给的，
  * 逐题判分必须逐题给出证据，虚高的代价就大得多。</p>
+ *
+ * <p>本类实现跨域契约 {@link RecitationQuizPort}（{@code recitation.spi}）。
+ * {@code openQuiz} 与 {@code recordQuiz} 就是端口方法本身 —— 它们的返回类型原来有一对
+ * 域内 record（{@code QuizSession} / {@code QuizOutcome}），但**没有同域调用方**：
+ * 唯一的调用者是 agent 的两个工具和服务自己的测试，所以按 ADR §7.5 直接换返回类型，
+ * 不保留带 {@code ForView} 后缀的富方法（那个后缀是用来说明受众的，而这里受众是空的）。</p>
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class KnowledgeQuizService {
+public class KnowledgeQuizService implements RecitationQuizPort {
 
-    /** 单次测验最多留档的题数；工具的参数说明要引用它，所以对外可见。 */
-    public static final int MAX_ITEMS = 20;
     static final int MAX_QUESTION_CHARS = 500;
     static final int MAX_ANSWER_CHARS = 1000;
     static final int MAX_COMMENT_CHARS = 500;
-    /** 总体讲评的长度上限；同样出现在工具参数说明里。 */
-    public static final int MAX_VERDICT_CHARS = 1000;
     /** 列表接口返回的历史条数上限，与录音任务列表保持一致。 */
     static final int LIST_LIMIT = 30;
     /** 开场交给智能体出题的正文上限：够出题，又不至于把主上下文挤满。 */
@@ -66,17 +73,18 @@ public class KnowledgeQuizService {
 
     /** 开一场测验并持久化会话，使后续评分只能落到这次真实出题上。 */
     @Transactional
-    public QuizSession openQuiz(Long userId, Long materialId) {
+    public QuizSessionView openQuiz(Long userId, Long materialId) {
         return openQuiz(userId, materialId, null);
     }
 
     /** 开一场属于指定智能体对话的测验；跨对话不能拿该会话评分。 */
+    @Override
     @Transactional
-    public QuizSession openQuiz(Long userId, Long materialId, Long conversationId) {
+    public QuizSessionView openQuiz(Long userId, Long materialId, Long conversationId) {
         RecitationMaterial material = requireMaterial(userId, materialId);
         String content = material.getContent() == null ? "" : material.getContent();
         boolean truncated = content.length() > QUIZ_CONTENT_CHARS;
-        List<KnowledgeQuizAttemptView> history = recentQuizzes(userId, materialId, SESSION_HISTORY_LIMIT);
+        List<QuizAttemptView> history = recentQuizAttempts(userId, materialId, SESSION_HISTORY_LIMIT);
         LocalDateTime nextReviewAt = material.getNextReviewAt();
         KnowledgeQuizSession quizSession = new KnowledgeQuizSession();
         quizSession.setUserId(userId);
@@ -85,7 +93,8 @@ public class KnowledgeQuizService {
         quizSession.setStatus(SESSION_OPEN);
         quizSession.setExpiresAt(LocalDateTime.now().plusHours(SESSION_TTL_HOURS));
         sessionMapper.insert(quizSession);
-        return new QuizSession(quizSession.getId(), material.getId(), material.getTitle(), material.getKnowledgeType(),
+        return new QuizSessionView(quizSession.getId(), material.getId(), material.getTitle(),
+                material.getKnowledgeType(),
                 material.getTestMode(), truncated ? content.substring(0, QUIZ_CONTENT_CHARS) + "…" : content,
                 truncated, content.length(), material.getMasteryScore(), material.getMasteryLevel(),
                 material.getReviewCount() == null ? 0 : material.getReviewCount(),
@@ -112,13 +121,14 @@ public class KnowledgeQuizService {
      * @param verdict        面向用户的总体讲评，可为空
      * @param rawItems       逐题判分证据，不能为空
      */
-    public QuizOutcome recordQuiz(Long userId, Long quizSessionId, Long conversationId,
-                                  String verdict, List<GradedItem> rawItems) {
+    @Override
+    public QuizOutcomeView recordQuiz(Long userId, Long quizSessionId, Long conversationId,
+                                      String verdict, List<GradedItemDraft> rawItems) {
         List<GradedItem> items = normalize(rawItems);
         BigDecimal score = score(items);
         int correctCount = (int) items.stream()
                 .filter(item -> item.credit().compareTo(BigDecimal.ONE) >= 0).count();
-        QuizOutcome outcome = transactionTemplate.execute(status -> {
+        QuizOutcomeView outcome = transactionTemplate.execute(status -> {
             KnowledgeQuizSession session = requireSession(userId, quizSessionId, conversationId);
             RecitationMaterial material = requireMaterial(userId, session.getMaterialId());
             if (SESSION_GRADED.equals(session.getStatus())) {
@@ -165,10 +175,10 @@ public class KnowledgeQuizService {
                     .eq(KnowledgeQuizSession::getId, session.getId())
                     .eq(KnowledgeQuizSession::getUserId, userId)
                     .set(KnowledgeQuizSession::getAttemptId, attempt.getId()));
-            return new QuizOutcome(attempt.getId(), material.getId(), material.getTitle(), score, items.size(),
-                    correctCount, mastery.level(), material.getMasteryLevel(),
+            return new QuizOutcomeView(attempt.getId(), material.getId(), material.getTitle(), score,
+                    items.size(), correctCount, mastery.level(), material.getMasteryLevel(),
                     (material.getReviewCount() == null ? 0 : material.getReviewCount()) + 1,
-                    reviewedAt, mastery.nextReviewAt());
+                    mastery.nextReviewAt());
         });
         if (outcome == null) throw new IllegalStateException("无法记录知识测验");
         log.info("knowledge quiz resolved material={} questions={} correct={} score={}",
@@ -189,7 +199,7 @@ public class KnowledgeQuizService {
         return session;
     }
 
-    private QuizOutcome existingOutcome(KnowledgeQuizSession session, RecitationMaterial material) {
+    private QuizOutcomeView existingOutcome(KnowledgeQuizSession session, RecitationMaterial material) {
         if (!SESSION_GRADED.equals(session.getStatus()) || session.getAttemptId() == null) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "测验正在评分，请稍后重试");
         }
@@ -199,18 +209,24 @@ public class KnowledgeQuizService {
                 .eq(KnowledgeQuizAttempt::getQuizSessionId, session.getId()));
         if (attempt == null) throw new IllegalStateException("测验会话缺少评分记录");
         int reviewCount = material.getReviewCount() == null ? 0 : material.getReviewCount();
-        return new QuizOutcome(attempt.getId(), material.getId(), material.getTitle(), attempt.getScore(),
+        return new QuizOutcomeView(attempt.getId(), material.getId(), material.getTitle(), attempt.getScore(),
                 attempt.getQuestionCount(), attempt.getCorrectCount(), material.getMasteryLevel(),
-                material.getMasteryLevel(), reviewCount, material.getLastReviewAt(), material.getNextReviewAt());
+                material.getMasteryLevel(), reviewCount, material.getNextReviewAt());
     }
 
     /**
-     * 校验并规范逐题证据。
+     * 校验并规范逐题证据，产出**域内**的 {@link GradedItem}。
      *
      * <p>空清单和缺 credit 都直接拒绝而不是当成 0 分：那说明智能体想只报一个总分，
      * 而总分正是本设计不信任的东西。拒绝会变成它的一条观察，它会带着证据重来。</p>
+     *
+     * <p>⚠️ 入参是契约的 {@link GradedItemDraft}，出参是本类的 {@link GradedItem} ——
+     * 两者形状相同，但**不能合并**：{@code GradedItem} 是"已规范化"的那一份，
+     * 而 {@link #writeItems} 把它序列化进 {@code items_json} 列。让契约类型直接决定落库格式，
+     * 意味着以后改契约的分量名会**静默改变历史行的形状**。这道换算就是那个隔离层，
+     * 也是 credit 夹到 [0,1]、字符串截断发生的地方。</p>
      */
-    private List<GradedItem> normalize(List<GradedItem> rawItems) {
+    private List<GradedItem> normalize(List<GradedItemDraft> rawItems) {
         if (rawItems == null || rawItems.isEmpty()) {
             throw new IllegalArgumentException("必须逐题给出题目、用户作答和得分，没有证据的分数不予记录");
         }
@@ -218,7 +234,7 @@ public class KnowledgeQuizService {
             throw new IllegalArgumentException("一次最多记录 " + MAX_ITEMS + " 道题的评分");
         }
         List<GradedItem> items = new ArrayList<>(rawItems.size());
-        for (GradedItem raw : rawItems) {
+        for (GradedItemDraft raw : rawItems) {
             String question = limit(raw == null ? null : raw.question(), MAX_QUESTION_CHARS);
             if (!StringUtils.hasText(question)) {
                 throw new IllegalArgumentException("每道题都要写清题目");
@@ -249,13 +265,32 @@ public class KnowledgeQuizService {
         }
     }
 
-    private List<KnowledgeQuizAttemptView> recentQuizzes(Long userId, Long materialId, int limit) {
+    private List<KnowledgeQuizAttempt> recentQuizEntities(Long userId, Long materialId, int limit) {
         return quizMapper.selectList(new LambdaQueryWrapper<KnowledgeQuizAttempt>()
-                        .eq(KnowledgeQuizAttempt::getUserId, userId)
-                        .eq(KnowledgeQuizAttempt::getMaterialId, materialId)
-                        .orderByDesc(KnowledgeQuizAttempt::getCreatedAt, KnowledgeQuizAttempt::getId)
-                        .last("LIMIT " + limit))
-                .stream().map(this::toView).toList();
+                .eq(KnowledgeQuizAttempt::getUserId, userId)
+                .eq(KnowledgeQuizAttempt::getMaterialId, materialId)
+                .orderByDesc(KnowledgeQuizAttempt::getCreatedAt, KnowledgeQuizAttempt::getId)
+                .last("LIMIT " + limit));
+    }
+
+    /**
+     * 前端那一份投影：把 {@code items_json} 解析成对象，随 {@link KnowledgeQuizAttemptView}
+     * 序列化给知识页。
+     */
+    private List<KnowledgeQuizAttemptView> recentQuizzes(Long userId, Long materialId, int limit) {
+        return recentQuizEntities(userId, materialId, limit).stream().map(this::toView).toList();
+    }
+
+    /**
+     * 跨域那一份投影：{@code items_json} **原样**交给契约，不解析。
+     *
+     * <p>两份投影读同一批行、查同一次库，差别只在 {@code items} 那一列怎么交出去。
+     * 分开是必要的：前端要的是结构（它要渲染每道题），跨域要的是文本（智能体只是把它
+     * 原样放进工具输出，自己不看结构）。让它们共用一份会把其中一个的语义强加给另一个。</p>
+     */
+    private List<QuizAttemptView> recentQuizAttempts(Long userId, Long materialId, int limit) {
+        return recentQuizEntities(userId, materialId, limit).stream()
+                .map(KnowledgeQuizService::toAttemptView).toList();
     }
 
     private RecitationMaterial requireMaterial(Long userId, Long materialId) {
@@ -283,6 +318,27 @@ public class KnowledgeQuizService {
                 attempt.getScore(), attempt.getVerdict(), items, attempt.getCreatedAt());
     }
 
+    /**
+     * 跨域投影：{@code items_json} 原样带走，不解析、不容错。
+     *
+     * <p>与上面那个 {@link #toView} 的差别就在这一处：那里解析失败会吞掉异常、留 {@code null}
+     * （前端那份视图要能显示"证据读不出来"），而这里**什么都不做** —— 契约只回答
+     * "这一列里是什么"，怎么应对非法内容由消费方决定。这正好是
+     * "端口只回答数据问题，兜底留调用方"。</p>
+     *
+     * <p>⚠️ 返回的 {@code itemsJson} 可能是 {@code null} 或空串（列里本来就没内容），
+     * 契约侧不做归一化 —— 把它变成 {@code "[]"} 是一种兜底，不属于端口。</p>
+     */
+    private static QuizAttemptView toAttemptView(KnowledgeQuizAttempt attempt) {
+        return new QuizAttemptView(
+                attempt.getQuestionCount() == null ? 0 : attempt.getQuestionCount(),
+                attempt.getCorrectCount() == null ? 0 : attempt.getCorrectCount(),
+                attempt.getScore(),
+                attempt.getVerdict(),
+                attempt.getItemsJson(),
+                attempt.getCreatedAt());
+    }
+
     private String limit(String value, int maxLength) {
         String trimmed = value == null ? "" : value.trim();
         if (trimmed.isEmpty()) return "";
@@ -290,35 +346,18 @@ public class KnowledgeQuizService {
     }
 
     /**
-     * 开场交给智能体的出题材料。
+     * 一道题的判分证据，**已规范化**（credit 夹到 [0,1] 并保留两位、三个字符串按上限截断）。
      *
-     * @param contentTruncated 正文被截断时为 true，智能体出题时应避免涉及未见部分
-     * @param dueForReview     是否已到建议复习时间
-     * @param recentQuizzes    最近几次测验，用于针对错处出题
-     */
-    public record QuizSession(Long quizSessionId, Long materialId, String title, String knowledgeType, String testMode,
-                              String content, boolean contentTruncated, int contentLength,
-                              BigDecimal masteryScore, String masteryLevel, int reviewCount,
-                              LocalDateTime lastReviewAt, LocalDateTime nextReviewAt, boolean dueForReview,
-                              List<KnowledgeQuizAttemptView> recentQuizzes) {
-    }
-
-    /**
-     * 一道题的判分证据。
+     * <p>⚠️ 它留在域内，不上端口 —— 端口收的是契约的 {@link GradedItemDraft}。两者的分量
+     * 逐字段同名同序，看起来像重复，但它们回答的是不同的问题：draft 是"调用方想写什么"
+     * （credit 可为 {@code null}，字符串长度未受约束），这个是"准备落库的是什么"。
+     * 合并成一份会让 {@link #writeItems} 把**契约类型**序列化进 {@code items_json}，
+     * 于是以后改契约的分量名会静默改变历史行的形状。</p>
+     *
+     * <p>它也不能搬进契约：{@code normalize} 会 {@code new} 它，而契约不许带实现。</p>
      *
      * @param credit 得分比例，0 到 1；0.5 表示只答对一半
      */
     public record GradedItem(String question, String userAnswer, String comment, BigDecimal credit) {
-    }
-
-    /**
-     * 一次测验落库后的结果。
-     *
-     * @param previousMasteryLevel 本次之前的掌握等级，便于告诉用户"从 FAMILIAR 升到了 APPLYING"
-     */
-    public record QuizOutcome(Long attemptId, Long materialId, String title, BigDecimal score,
-                              int questionCount, int correctCount, String masteryLevel,
-                              String previousMasteryLevel, int reviewCount,
-                              LocalDateTime lastReviewAt, LocalDateTime nextReviewAt) {
     }
 }

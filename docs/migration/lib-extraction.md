@@ -22,10 +22,16 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 另有 2 个类从**业务域包** `identity.security` 迁出、4 个类从 `publishing.domain` 迁出。
 剩下 3 个 lib 与 2 个契约模块（`knowledge-api`、`studio-api`）未开始。
 
-⚠️ **"7 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过两轮：
-`core-api` 加过 `UserLookupPort`（§3septies），`automation-api` 加过 `NotificationPort`（§3duodecies）。
+⚠️ **"7 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过多轮：
+`core-api` 加过 `UserLookupPort`（§3septies），`automation-api` 加过 `NotificationPort`（§3duodecies），
+`recitation-api` 加过 `RecitationQuizPort`（§3quaterdecies）。
 扩展是**零构建接线**的 —— 不新增模块，四处构建接线一处都不用改。
-`recitation-api` 是**第十刀**（§3terdecies），也是第一个"建新模块"的刀自 `automation-api` 之后。
+`recitation-api` 是**第十刀**（§3terdecies），也是第一个"建新模块"的刀自 `automation-api` 之后；
+它的测验能力扩展是**第十一刀**（§3quaterdecies），又回到零接线。
+
+⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十一刀）；
+`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第十八刀）。
+两者都对，只是分母不同。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
 不是审美 —— 见 §5。
@@ -54,7 +60,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；跨部署单元累计 **−8**；总计 **−14** |
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
 | `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。**第九刀再加 `NotificationPort`（写一条持久化用户通知）+ 两个从实体搬来的常量**。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | 第八刀：`agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元。**第九刀（零接线扩展，§3duodecies）**：`knowledgebase → automation` 2 → **0（边整条消失）**，总计再 **−2**（跨单元 −2）；`api_statements` **16 → 16 不变**（消费方 import 的是 `.application` / `.domain`，从没碰过 `.api`）。图形状：`knowledgebase` 变成**纯汇点**（整个域从清单里消失）；`automation` 扇入只剩 `admin`（SSE，要框架类型）与 `integration`（模板真环） |
-| `recitation-api` | **已完成** | 第十刀（§3terdecies）：`RecitationMaterialPort`（背诵材料能力端口，4 个方法）+ `MaterialView`（收窄的读模型，9 分量）/ `MaterialDraft`（4）/ `MaterialFilter`（4）。包是 `com.xander.lab.recitation.spi`，**不是** `.recitation.api`（同因：那个包是 6 个前端 HTTP 文件的家）。**只做材料能力**，测验能力（`KnowledgeQuizService` 的嵌套 record + `items` 是 `Object`）另开一刀 | `automation → recitation` 2 → **0（边整条消失）**、`agent → recitation` 4 → **2**；总计 **−4**（跨单元 −4）。另外 `api_statements` 16 → 13（−3）：三个 `recitation.api.*` import 换成 `recitation.spi.*`。图形状：**`content-automation ↔ core-host` 不再是互依对**（`automation → recitation` 是最后一条边），互依对 3 → 2；`MUTUAL_UNIT_PAIRS` 删掉那对（门禁主动报出过期条目） |
+| `recitation-api` | **已完成**（两刀） | 第十刀（§3terdecies）：`RecitationMaterialPort`（背诵材料能力端口，4 个方法）+ `MaterialView`（收窄的读模型，9 分量）/ `MaterialDraft`（4）/ `MaterialFilter`（4）。第十一刀（§3quaterdecies）：`RecitationQuizPort`（测验能力端口，2 个方法 + 2 个常量）+ `QuizSessionView`（15，全带）/ `QuizAttemptView`（收窄，6，`items` 走**文本** `itemsJson`）/ `QuizOutcomeView`（收窄，10）/ `GradedItemDraft`（4）。包是 `com.xander.lab.recitation.spi`，**不是** `.recitation.api`（同因：那个包是 6 个前端 HTTP 文件的家）。⚠️ 第十一刀**删掉了两个域内 record**（`QuizSession` / `QuizOutcome`，同域生产消费方为零）而不是搬走 | 材料刀：`automation → recitation` 2 → **0（边整条消失）**、`agent → recitation` 4 → 2；总计 **−4**（跨单元 −4），`api_statements` 16 → 13（−3）。测验刀：`agent → recitation` 2 → **0（边整条消失）**，总计 **−2**（跨单元 −2），`api_statements` 13 → 12（−1）。图形状：**`content-automation ↔ core-host` 不再是互依对**（互依对 3 → 2，`MUTUAL_UNIT_PAIRS` 删掉那对，门禁主动报出过期条目）；`recitation` 成为**零跨域消费方**的域 |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
 | `payment-api` | **已完成** | `BillingBiz`（`points_ledger.biz_type` 词表）；**`BillingPort`（积分账本端口）+ `TokenUsage`（用量 DTO）** | 词表那一刀：`agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7）。端口那一刀：`agent 3→0`、`integration 2→0`、`automation 1→0`、`blogagent 1→0`、`identity 1→0`、`profile 1→0`、`studio 1→0` —— **7 条边全部归零**，总计再 **−10**（跨单元 −7）。两刀合计 **−18**（跨单元 −14） |
@@ -1643,6 +1649,245 @@ Wave 2 强连通分量仍是 {content-automation, core-host, platform-integratio
 候选：①把它收窄成一个新的契约 record（要反推所有读点）；②让契约侧的
 `AttemptView` 干脆不带 `items`，让消费方自己按需查。
 
+**已做，见 §3quaterdecies。** 两个候选都**没被采用** —— 正确答案是第三种：
+契约带**文本**（`itemsJson`），解析上移到工具。理由见 §3quaterdecies.3。
+
+---
+
+## 3quaterdecies. 第十一刀：`recitation-api` 的测验能力 —— 一个无形状字段，与两份投影的一致性
+
+### 3quaterdecies.1 目标边
+
+| from → to | impl | api | 文件 |
+|---|---|---|---|
+| `agent → recitation` | 2 | 1 | `QuizKnowledgeTool`、`GradeAnswerTool` |
+
+这是 §3terdecies.16 写下的待办。做完之后 `agent → recitation` **整条边消失**，
+`recitation` 成为一个**零跨域消费方**的域（材料与测验两条能力都在契约上，
+没有任何域 import `recitation.*` 的实现包）。
+
+### 3quaterdecies.2 这一刀与上一刀的分工：`openQuiz` / `recordQuiz` 的调用方只有那两个工具
+
+§3terdecies.7 遇到过"端口方法要拿规范名，但域侧富方法同名同参只差返回值"，
+于是富方法加了 `ForView` 后缀（`getMaterialForView` / `updateStatusForView`）。
+这一刀**没有这个问题**：
+
+```java
+@Override
+@Transactional
+public QuizSessionView openQuiz(Long userId, Long materialId, Long conversationId) { ... }
+
+@Override
+public QuizOutcomeView recordQuiz(Long userId, Long quizSessionId, Long conversationId,
+                                  String verdict, List<GradedItemDraft> rawItems) { ... }
+```
+
+按 §3nonies / §7.5 的判据，**调用方只有 agent 的工具（加服务自己的测试）⇒ 直接换返回类型**，
+不保留富方法。判据的输入要实测：
+
+```bash
+grep -rn "\.openQuiz(\|\.recordQuiz(\|\.listQuizzes(" apps/core-host/src --include=*.java \
+  | grep -v "KnowledgeQuizService.java"
+```
+
+结果里只有那两个工具与 `RecitationControllerTest`。`listQuizzes` 只被
+`RecitationController` 用 ⇒ **不上端口**（前端 HTTP 契约，受众不同，§2.7 那条线）。
+
+> **判据是"这个方法还有没有别的调用方"，不是"它看起来像不像一个富方法"。**
+
+### 3quaterdecies.3 ⚠️ 无形状字段：`items` 是 `Object`，三种做法只有第三种对
+
+域侧 `KnowledgeQuizAttemptView` 有一个分量：
+
+```java
+/** 逐题证据，反序列化自 items_json 列。 */
+private final Object items;
+```
+
+它的运行时类型是"从 `items_json` 那一列反序列化出来的任意 JSON" ——
+**那一列里可能有旧版本写下的内容**。三种做法：
+
+| 做法 | 结果 |
+|---|---|
+| 把 `Object` 搬进契约 | 等于把"随便什么"写进契约。契约要能回答"这个分量是什么形状"，`Object` 回答不了 |
+| 收窄成一个新的契约 record（`QuizItemView`） | 契约会开始**假装知道**历史行里存的是什么形状。旧行可能没有 `comment`，也可能多一个字段 —— 契约一旦钉了形状，读取端就必须做兼容，而它**没有做兼容的地方** |
+| **契约带文本（`itemsJson`），解析留给消费方** | ✅ 契约只承诺"这是一串 JSON 文本"，不承诺内部形状 |
+
+`QuizAttemptView.itemsJson` 因此是 `String`，解析上移到工具里
+（`QuizKnowledgeTool.parseItems`，空/非法/`null` 一律退化成空数组 ——
+单条历史坏掉不该把整场测验带下水）。
+
+> **这一次 ADR-1 不是代价，而是答案。** 契约不带 JSON 库 ⇒ 契约**没法**解析 ⇒
+> 只能带文本；而"契约没法解析"正是 ADR-1 想要的。
+> 前三刀 ADR-1 都表现为"要绕一下"（§3octies / §3decies / §3undecies），
+> 这一刀它**直接给出了正确答案**：一个"什么都不知道"的契约，
+> 恰好是唯一不会对历史行撒谎的契约。
+
+### 3quaterdecies.4 两个域内 record 被**删掉**，不是搬走
+
+`KnowledgeQuizService.QuizSession` / `QuizOutcome` / `GradedItem` 是服务里的嵌套 record，
+**同域生产消费方为零**（只有那两个工具 + 服务自己的测试）。所以它们不是"搬进契约"，
+而是**被契约类型取代后删除**：
+
+| 原类型 | 取代者 | 分量变化 |
+|---|---|---|
+| `KnowledgeQuizService.QuizSession` | `QuizSessionView` | 15 → 15（全带） |
+| `KnowledgeQuizService.QuizOutcome` | `QuizOutcomeView` | 11 → 10（去掉 `lastReviewAt`） |
+| `KnowledgeQuizService.GradedItem` | `GradedItemDraft` | 4 → 4 |
+| `KnowledgeQuizAttemptView`（前端可见） | `QuizAttemptView`（新增，**收窄**） | 8 → 6 |
+
+> **"删掉它不会有别的症状"的约束必须有专门测试**（推演法：假设删掉，看还有谁会红）。
+> 这里的验证是：删掉后全反应堆 1362 个测试绿，且 `RecitationControllerTest` **一行没改**
+> —— 说明它们真的只有那两个工具在依赖。
+> 注意 `KnowledgeQuizAttemptView` **不是被取代**，它是**新增的第二个投影**（见 .6）。
+
+`QuizOutcomeView` 去掉 `lastReviewAt` 是**收窄**（按 §2.5 的分支判断）：
+`GradeAnswerTool` 只读 `masteryLevel` / `previousMasteryLevel` / `reviewCount` / `nextReviewAt`。
+`QuizSessionView` 则是**全带** —— 工具 15 个分量全读。
+
+### 3quaterdecies.5 两个常量跟着端口搬（第二次）
+
+`MAX_ITEMS = 20` 与 `MAX_VERDICT_CHARS = 1000` 从 `KnowledgeQuizService` 搬到
+`RecitationQuizPort`。理由与 §3duodecies.4 完全相同：`GradeAnswerTool` 要把它们写进
+工具的 JSON Schema（"最多 N 题"），只要还写着 `KnowledgeQuizService.MAX_ITEMS`，
+工具就仍然 import 提供方的实现类，实现语句一条都没少 —— 端口白抽了。
+
+**搬完的判据**（比看指标快）：
+
+```bash
+grep -rn "import com\.xander\.lab\.recitation\." apps/core-host/src/main/java/com/xander/lab/agent/
+# 结果里只剩 recitation.spi.*
+```
+
+### 3quaterdecies.6 ⚠️ 一份实体、两份投影：新增一条"它们必须一致"的测试
+
+`KnowledgeQuizAttempt` 这一张表现在被投影成两个类型：
+
+| 投影 | 类型 | 受众 | `items` 形态 |
+|---|---|---|---|
+| 前端 | `recitation.api.KnowledgeQuizAttemptView` | `RecitationController` | **已解析**（`Object`） |
+| 契约 | `recitation.spi.QuizAttemptView` | `agent` 的两个工具 | **文本**（`String`） |
+
+两个投影各写一份最危险的地方是**它们会悄悄漂移**，而两边各自的测试都不会红：
+前端的测试只断言解析后的结构，契约的测试只断言文本，**谁都不看"这两个投影在共享字段上是否一致"**。
+
+`RecitationQuizPortMappingTest.theContractProjectionAndTheFrontendProjectionAgreeOnTheFieldsTheyShare`
+把这条补上：同一条历史行，两个投影的 `questionCount` / `correctCount` / `score` / `verdict` /
+`createdAt` 必须相等。
+
+⚠️ **注入 D 证明它有独立价值**：把 `toAttemptView` 的 `questionCount` 与 `correctCount` 对调时，
+它和逐字段落点测试**同时**变红，而工具侧与前端侧的测试全绿。
+没有它，一旦哪天有人把逐字段落点测试当成"太琐碎"删掉，两份投影就会静默漂移。
+
+> **凡"一份实体投影成两份类型"的地方都要配一条同款断言。**
+> `ContentPost` / `MediaAssetRef` 收窄时（§4 待办）会再次遇到。
+
+### 3quaterdecies.7 端口形状：2 个方法、2 个常量、没有 `default`
+
+```java
+int MAX_ITEMS = 20;
+int MAX_VERDICT_CHARS = 1000;
+
+QuizSessionView openQuiz(Long userId, Long materialId, Long conversationId);
+QuizOutcomeView recordQuiz(Long userId, Long quizSessionId, Long conversationId,
+                           String verdict, List<GradedItemDraft> items);
+```
+
+域侧 `KnowledgeQuizService` 有 7 个公开方法，端口只收 2 个。**没收进来的**：
+`openQuiz(Long, Long)` 两参重载（**没有任何生产调用方**）、
+`listQuizzes(Long, Long)`（只有控制器在用）、以及几个私有 helper。
+
+⚠️ `openQuiz` 的两参重载这次**保留在服务上**（不像 §3terdecies.7 那样改名）：
+它不与端口方法冲突，只是端口不收它 —— 两参重载继续服务控制器路径。
+**"同名不同签名"只在真的冲突时才需要处理**，不要为了对称去改没冲突的东西。
+
+### 3quaterdecies.8 端口"变宽"依然没人守（第八次确认）
+
+同 §3decies.7 / §3undecies.8 / §3duodecies.6 / §3terdecies.11：
+加一个 `default` 方法编译通过、指标不动、26 条门禁全 PASS，**只有反射测试会红**。
+本轮注入 A 第八次确认（3 条红，`RecordShapeTest` 保持绿）。
+**端口宽度仍然只有测试在守，没有门禁。**
+
+### 3quaterdecies.9 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 38 | **36** |
+| `implementation_edges` | 17 | **16** |
+| `cross_deployment_unit_statements` | 21 | **19** |
+| `cross_deployment_unit_edges` | 10 | **9** |
+| `api_statements` | 13 | **12** |
+
+**`agent → recitation` 整条边从清单里消失。**
+`api` 与 `impl` 的降幅这次是 **1 比 2**（`GradeAnswerTool` 原本只 import 了实现类，
+没有 `recitation.api.*` import）—— 又一次印证**看收益必须两列都看，比例没有规律**：
+
+| 刀 | impl 降 | api 降 |
+|---|---|---|
+| §3undecies（第八刀） | 6 | **9** |
+| §3duodecies（第九刀） | 2 | **0** |
+| §3terdecies（第十刀） | 4 | **3** |
+| **本刀（第十一刀）** | **2** | **1** |
+
+### 3quaterdecies.10 图形状：`recitation` 成为零跨域消费方的域
+
+`agent → recitation` 消失后，`recitation` 与 `agent` 之间的**双向**依赖都不存在了。
+`agent` 的剩余出边四条**全部跨部署单元**：
+
+| 边 | impl | api | 单元 |
+|---|---|---|---|
+| `agent → blogagent` | 4 | 2 | `dinqor-agent` → `dinqor-content-automation` |
+| `agent → identity` | 2 | 0 | → `dinqor-core-host` |
+| `agent → integration` | 2 | 0 | → `dinqor-platform-integration` |
+| `agent → publishing` | 0 | 1 | → `dinqor-content-automation` |
+
+Wave 2 强连通分量仍是 {content-automation, core-host, platform-integration}；
+`dinqor-agent` 与 `dinqor-bloghtml-preview` 仍是孤立单元（可单独抽取）。
+
+### 3quaterdecies.11 为什么没有加 `contract-changes.yaml` 条目
+
+同 §3bis / §3nonies / §3undecies / §3duodecies / §3terdecies：
+**这一刀没有改变任何前端可见的形状**。
+
+- `RecitationController` 的四个端点路由、响应形状、错误码一行未变。
+- 前端可见的 `KnowledgeQuizAttemptView` **原样保留**（控制器继续用它），
+  契约侧的 `QuizAttemptView` 是**新增的另一个类型**，不是它的替代品。
+- `openQuiz` 的返回类型变了，但 `openQuiz` **不是 HTTP 端点** —— 控制器走自己那条路径。
+
+所以这是一次可证明的纯重构。
+
+### 3quaterdecies.12 注入验证：五次注入，每次变红的都正好是预期的那些
+
+| # | 注入 | 期望 | 实测 |
+|---|---|---|---|
+| A | 端口加 `default` 方法 | 3 条 | **3 条**（`RecordShapeTest` 与材料端口测试保持绿） |
+| B | `MAX_ITEMS` 20 → 10 | 1 条 | **1 条** |
+| C | `openQuiz` 里 `title` 与 `knowledgeType` 对调 | 1 条 | **1 条**（工具测试与服务测试保持绿） |
+| D | `toAttemptView` 里 `questionCount` 与 `correctCount` 对调 | 2 条 | **2 条** |
+| E | 守卫清单里删掉 `KnowledgeQuizService` | 1 条 | **1 条**，消息点名缺的是哪个类 |
+
+注入 A 里的"参数个数守卫"给出的是**有意义的失败**
+（"injectedWidening 没有参数：端口方法必须显式收调用方 id"），
+不是 `ArrayIndexOutOfBounds` —— 这是 §3duodecies.9 修掉的那处测试缺陷
+在**连续两刀里的第二次生效**。
+
+### 3quaterdecies.13 测试
+
+`recitation-api` 16 → **35**（`RecitationQuizPortTest` 10 + `RecordShapeTest` 15 是扩展后的）；
+`core-host` 1161 → **1168**（`RecitationQuizPortMappingTest` 4 是新类，
+两个工具测试各 +1/+2）；全反应堆 1336 → **1362**（0 fail / 0 err）。
+26 门禁 → 24 pass / 0 fail / 2 skip；`contract-dependency-boundary` 报 **7 个模块 / 49 个源文件，JDK-only**。
+
+### 3quaterdecies.14 下一刀
+
+`agent → blogagent`（4 impl / 2 api，三个工具：`BlogGenerationTool` / `ImageGenerationTool` /
+`PublishPostTool`）。它是 agent 最大的出边，而且 `PublishPostTool` **一个文件同时贡献两条边**
+（`agent → blogagent` 与 `agent → integration` 那 2 条）⇒ 做它可能顺带清掉第三条边。
+
+⚠️ 与这一刀不同的是：`blogagent` 的目标类型可能**不是** `Object` 那样的无形状字段，
+但也可能撞上 `agent-api` 那种"要抽的端口属于 agent 自己的工具体系"的反向问题 ——
+**先侦察，再定形状**。
+
 ---
 
 ## 4. 必须留痕的判断
@@ -1839,7 +2084,7 @@ python scripts/migration/ci_gates.py
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
 类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
 只看最后那个 `Results:` 会以为"测试变少了"。
-**要核对的是各模块之和。**最新一轮（§3terdecies 之后，2026-09-17）：
+**要核对的是各模块之和。**最新一轮（§3quaterdecies 之后，2026-09-17）：
 
 | 模块 | Tests run |
 |---|---|
@@ -1850,11 +2095,22 @@ python scripts/migration/ci_gates.py
 | `contracts/payment-api` | 21 |
 | `contracts/agent-api` | 21 |
 | `contracts/automation-api` | 31 |
-| `contracts/recitation-api` | 16 |
-| `apps/core-host` | 1161 |
-| **合计** | **1336**（0 failures / 0 errors） |
+| `contracts/recitation-api` | 35 |
+| `apps/core-host` | 1168 |
+| **合计** | **1362**（0 failures / 0 errors） |
 
-三处增量（1310 → 1336）：
+第十一刀的增量（1336 → 1362）：
+
+* `contracts/recitation-api` 16 → **35**（+19）：`RecitationQuizPortTest`(10) 是新类；
+  `RecordShapeTest` 6 → **15**（+9）—— 四个新 record 各一条形状断言 + 一条"没有框架注解"。
+* `apps/core-host` 1161 → **1168**（+7）：`RecitationQuizPortMappingTest`(4) 是新类 ——
+  钉三个换算的逐字段落点，外加**一条"两份投影在共享字段上相等"**（§3quaterdecies.6）；
+  `QuizKnowledgeToolTest` 6 → 8（+2，两个 `itemsJson` 退化用例）；
+  `GradeAnswerToolTest` 7 → 8（+1，常量与 schema 不许漂移）；
+  `KnowledgeQuizServiceTest` 15 → 15（改名，数目不变）；`PortDelegationTransactionTest`
+  清单加一个类（数目不变）。
+
+前两轮的增量（1310 → 1336）：
 
 * `contracts/recitation-api` **+16**（新模块）：`RecitationMaterialPortTest`(10) +
   `RecordShapeTest`(6)。

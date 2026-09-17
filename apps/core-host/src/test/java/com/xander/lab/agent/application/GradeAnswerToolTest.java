@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.recitation.application.KnowledgeQuizService;
+import com.xander.lab.recitation.spi.GradedItemDraft;
+import com.xander.lab.recitation.spi.QuizOutcomeView;
+import com.xander.lab.recitation.spi.RecitationQuizPort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -23,15 +25,19 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * mock 的是<b>契约端口</b>，不是 {@code KnowledgeQuizService} ——
+ * 这本身就是"工具只依赖端口"的证明。
+ */
 class GradeAnswerToolTest {
 
-    private final KnowledgeQuizService quizService = mock(KnowledgeQuizService.class);
-    private final GradeAnswerTool tool = new GradeAnswerTool(quizService);
+    private final RecitationQuizPort quizPort = mock(RecitationQuizPort.class);
+    private final GradeAnswerTool tool = new GradeAnswerTool(quizPort);
     private final AgentToolContext context = new AgentToolContext(42L, 7L, 3L);
 
     @Test
     void recordsThePerQuestionEvidenceAndReportsWhereMasteryLanded() {
-        when(quizService.recordQuiz(eq(42L), eq(55L), eq(7L), eq("推导那题没答上"), any()))
+        when(quizPort.recordQuiz(eq(42L), eq(55L), eq(7L), eq("推导那题没答上"), any()))
                 .thenReturn(outcome(new BigDecimal("50.00"), "FAMILIAR", "NEW"));
 
         JsonNode result = tool.execute(context, args(), new NoopProgress());
@@ -49,8 +55,8 @@ class GradeAnswerToolTest {
         assertThat(result.path("hint")).asString().contains("不要在回复里改写它").contains("别只报个分数");
 
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<KnowledgeQuizService.GradedItem>> items = ArgumentCaptor.forClass(List.class);
-        verify(quizService).recordQuiz(eq(42L), eq(55L), eq(7L), eq("推导那题没答上"), items.capture());
+        ArgumentCaptor<List<GradedItemDraft>> items = ArgumentCaptor.forClass(List.class);
+        verify(quizPort).recordQuiz(eq(42L), eq(55L), eq(7L), eq("推导那题没答上"), items.capture());
         assertThat(items.getValue()).hasSize(2);
         assertThat(items.getValue().get(0).question()).isEqualTo("和角公式怎么写");
         assertThat(items.getValue().get(0).userAnswer()).isEqualTo("sin a cos b + cos a sin b");
@@ -61,7 +67,7 @@ class GradeAnswerToolTest {
 
     @Test
     void anUnchangedLevelIsReportedAsUnchangedSoTheAgentDoesNotCongratulateProgressThatDidNotHappen() {
-        when(quizService.recordQuiz(any(), any(), any(), any(), any()))
+        when(quizPort.recordQuiz(any(), any(), any(), any(), any()))
                 .thenReturn(outcome(new BigDecimal("30.00"), "FAMILIAR", "FAMILIAR"));
 
         JsonNode result = tool.execute(context, args(), new NoopProgress());
@@ -71,7 +77,7 @@ class GradeAnswerToolTest {
 
     @Test
     void acceptsAPlainCorrectFlagBecauseModelsOftenGradeInRightOrWrongTerms() {
-        when(quizService.recordQuiz(any(), any(), any(), any(), any()))
+        when(quizPort.recordQuiz(any(), any(), any(), any(), any()))
                 .thenReturn(outcome(new BigDecimal("50.00"), "FAMILIAR", "NEW"));
         ObjectNode args = JsonNodeFactory.instance.objectNode();
         args.put("quizSessionId", 55L);
@@ -82,13 +88,13 @@ class GradeAnswerToolTest {
 
         tool.execute(context, args, new NoopProgress());
 
-        assertThat(captureItems()).extracting(KnowledgeQuizService.GradedItem::credit)
+        assertThat(captureItems()).extracting(GradedItemDraft::credit)
                 .containsExactly(BigDecimal.ONE, BigDecimal.ZERO, new BigDecimal("0.5"));
     }
 
     @Test
     void leavesAnUngradedQuestionNullSoTheServiceRefusesInsteadOfTheToolGuessingAZero() {
-        when(quizService.recordQuiz(any(), any(), any(), any(), any()))
+        when(quizPort.recordQuiz(any(), any(), any(), any(), any()))
                 .thenReturn(outcome(new BigDecimal("0.00"), "NEW", "NEW"));
         ObjectNode args = JsonNodeFactory.instance.objectNode();
         args.put("quizSessionId", 55L);
@@ -102,20 +108,20 @@ class GradeAnswerToolTest {
 
     @Test
     void gradesWithoutAConversationTooSoTheToolStaysUsableOutsideTheChatLoop() {
-        when(quizService.recordQuiz(eq(42L), eq(55L), isNull(), any(), any()))
+        when(quizPort.recordQuiz(eq(42L), eq(55L), isNull(), any(), any()))
                 .thenReturn(outcome(new BigDecimal("50.00"), "FAMILIAR", "NEW"));
 
         JsonNode result = tool.execute(42L, args(), new NoopProgress());
 
         assertThat(result.path("ok").asBoolean()).isTrue();
-        verify(quizService).recordQuiz(eq(42L), eq(55L), isNull(), any(), any());
+        verify(quizPort).recordQuiz(eq(42L), eq(55L), isNull(), any(), any());
     }
 
     @Test
     void stopsBeforeWritingAnythingWhenTheUserAlreadyCancelled() {
         assertThatThrownBy(() -> tool.execute(context, args(), new CancelledProgress()))
                 .isInstanceOf(CancellationException.class);
-        verifyNoInteractions(quizService);
+        verifyNoInteractions(quizPort);
     }
 
     @Test
@@ -132,10 +138,24 @@ class GradeAnswerToolTest {
                 .contains("不要自己报总分").contains("判分要严格").contains("用户的原话");
     }
 
-    private List<KnowledgeQuizService.GradedItem> captureItems() {
+    /**
+     * 上限常量现在住在契约端口上。schema 里的数字必须跟着端口走 ——
+     * 域侧把 20 改成 10 而契约没改时，模型收到的指令就与真正会被接受的东西不一致。
+     */
+    @Test
+    void theSchemaLimitsComeFromThePortSoTheyCannotDriftAwayFromWhatTheProviderAccepts() {
+        JsonNode schema = tool.parametersSchema();
+
+        assertThat(schema.path("properties").path("items").path("description").asText())
+                .contains(String.valueOf(RecitationQuizPort.MAX_ITEMS));
+        assertThat(schema.path("properties").path("verdict").path("description").asText())
+                .contains(String.valueOf(RecitationQuizPort.MAX_VERDICT_CHARS));
+    }
+
+    private List<GradedItemDraft> captureItems() {
         @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<KnowledgeQuizService.GradedItem>> items = ArgumentCaptor.forClass(List.class);
-        verify(quizService).recordQuiz(any(), any(), any(), any(), items.capture());
+        ArgumentCaptor<List<GradedItemDraft>> items = ArgumentCaptor.forClass(List.class);
+        verify(quizPort).recordQuiz(any(), any(), any(), any(), items.capture());
         return items.getValue();
     }
 
@@ -151,9 +171,9 @@ class GradeAnswerToolTest {
         return args;
     }
 
-    private KnowledgeQuizService.QuizOutcome outcome(BigDecimal score, String level, String previousLevel) {
-        return new KnowledgeQuizService.QuizOutcome(77L, 9L, "三角函数和角公式", score, 2, 1,
-                level, previousLevel, 3, LocalDateTime.now(), LocalDateTime.now().plusDays(1));
+    private QuizOutcomeView outcome(BigDecimal score, String level, String previousLevel) {
+        return new QuizOutcomeView(77L, 9L, "三角函数和角公式", score, 2, 1,
+                level, previousLevel, 3, LocalDateTime.now().plusDays(1));
     }
 
     private static final class NoopProgress implements AgentTool.ProgressListener {

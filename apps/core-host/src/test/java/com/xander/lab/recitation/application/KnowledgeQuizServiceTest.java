@@ -11,6 +11,10 @@ import com.xander.lab.recitation.domain.RecitationMaterial;
 import com.xander.lab.recitation.infrastructure.KnowledgeQuizAttemptMapper;
 import com.xander.lab.recitation.infrastructure.KnowledgeQuizSessionMapper;
 import com.xander.lab.recitation.infrastructure.RecitationMaterialMapper;
+import com.xander.lab.recitation.spi.GradedItemDraft;
+import com.xander.lab.recitation.spi.QuizOutcomeView;
+import com.xander.lab.recitation.spi.QuizSessionView;
+import com.xander.lab.recitation.spi.RecitationQuizPort;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -81,7 +85,7 @@ class KnowledgeQuizServiceTest {
     void scoresTheQuizFromPerQuestionCreditsInsteadOfTrustingAReportedTotal() {
         givenMaterial(material());
 
-        KnowledgeQuizService.QuizOutcome outcome = service.recordQuiz(42L, 9L, 7L, "第二题只答对一半",
+        QuizOutcomeView outcome = service.recordQuiz(42L, 9L, 7L, "第二题只答对一半",
                 List.of(item("和角公式怎么写", "1"), item("怎么推导", "0.5"), item("差角公式呢", "0")));
 
         assertThat(outcome.score()).isEqualByComparingTo("50.00");
@@ -95,7 +99,7 @@ class KnowledgeQuizServiceTest {
     void writesMasteryTheSameWayFinishedAudioRecitationDoesSoBothPathsShareOneStatistic() {
         givenMaterial(material());
 
-        KnowledgeQuizService.QuizOutcome outcome = service.recordQuiz(42L, 9L, 7L, "全对",
+        QuizOutcomeView outcome = service.recordQuiz(42L, 9L, 7L, "全对",
                 List.of(item("和角公式怎么写", "1"), item("差角公式呢", "1")));
 
         assertThat(outcome.score()).isEqualByComparingTo("100.00");
@@ -147,7 +151,7 @@ class KnowledgeQuizServiceTest {
     void clampsCreditIntoZeroThroughOneSoAnOutOfRangeJudgementCannotInflateTheScore() {
         givenMaterial(material());
 
-        KnowledgeQuizService.QuizOutcome outcome = service.recordQuiz(42L, 9L, 7L, "",
+        QuizOutcomeView outcome = service.recordQuiz(42L, 9L, 7L, "",
                 List.of(item("超范围给分", "5"), item("负分", "-3")));
 
         assertThat(outcome.score()).isEqualByComparingTo("50.00");
@@ -157,20 +161,20 @@ class KnowledgeQuizServiceTest {
     @Test
     void rejectsMoreQuestionsThanTheCapInsteadOfDroppingEvidenceAndMisreportingTheDenominator() {
         givenMaterial(material());
-        List<KnowledgeQuizService.GradedItem> tooMany = java.util.stream.IntStream
-                .range(0, KnowledgeQuizService.MAX_ITEMS + 1)
+        List<GradedItemDraft> tooMany = java.util.stream.IntStream
+                .range(0, RecitationQuizPort.MAX_ITEMS + 1)
                 .mapToObj(index -> item("第 " + index + " 题", "1"))
                 .toList();
 
         assertThatThrownBy(() -> service.recordQuiz(42L, 9L, 7L, "", tooMany))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining(String.valueOf(KnowledgeQuizService.MAX_ITEMS));
+                .hasMessageContaining(String.valueOf(RecitationQuizPort.MAX_ITEMS));
     }
 
     @Test
     void keepsTheQuestionsAndTheUsersOwnWordsAsEvidenceAndTruncatesTheOverlongOnes() {
         givenMaterial(material());
-        KnowledgeQuizService.GradedItem huge = new KnowledgeQuizService.GradedItem(
+        GradedItemDraft huge = new GradedItemDraft(
                 "问".repeat(600), "答".repeat(1200), "评".repeat(600), new BigDecimal("0.5"));
 
         service.recordQuiz(42L, 9L, 7L, "讲".repeat(1200), List.of(huge));
@@ -178,7 +182,7 @@ class KnowledgeQuizServiceTest {
         ArgumentCaptor<KnowledgeQuizAttempt> saved = ArgumentCaptor.forClass(KnowledgeQuizAttempt.class);
         verify(quizMapper).insert(saved.capture());
         KnowledgeQuizAttempt attempt = saved.getValue();
-        assertThat(attempt.getVerdict()).hasSize(KnowledgeQuizService.MAX_VERDICT_CHARS + 1).endsWith("…");
+        assertThat(attempt.getVerdict()).hasSize(RecitationQuizPort.MAX_VERDICT_CHARS + 1).endsWith("…");
         assertThat(attempt.getTestMode()).isEqualTo("AI_QA");
         assertThat(attempt.getConversationId()).isEqualTo(7L);
         assertThat(attempt.getItemsJson()).contains("问".repeat(500) + "…").contains("答".repeat(1000) + "…");
@@ -193,7 +197,7 @@ class KnowledgeQuizServiceTest {
         givenMaterial(material);
         when(quizMapper.selectList(any())).thenReturn(List.of(historyRow()));
 
-        KnowledgeQuizService.QuizSession session = service.openQuiz(42L, 9L, 7L);
+        QuizSessionView session = service.openQuiz(42L, 9L, 7L);
 
         assertThat(session.quizSessionId()).isEqualTo(55L);
         assertThat(session.content()).isEqualTo("sin(a+b) = sin a cos b + cos a sin b");
@@ -206,7 +210,11 @@ class KnowledgeQuizServiceTest {
                 .satisfies(quiz -> {
                     assertThat(quiz.score()).isEqualByComparingTo("60.00");
                     assertThat(quiz.correctCount()).isEqualTo(1);
-                    assertThat(quiz.items().toString()).contains("上次问的题");
+                    // ⚠️ 契约侧这一列是**文本**（域实体里就是 `items_json` 一列），
+                    // 不是解析后的结构 —— 解析只发生在前端那条路径上（listQuizzes）。
+                    // 断言因此落在"文本里含有什么"，而不是"结构里有什么"：
+                    // 端口这一侧不做解析，是因为解析需要一个 JSON 库，而契约不许带。
+                    assertThat(quiz.itemsJson()).contains("上次问的题");
                 });
         verify(quizMapper, never()).insert(any(KnowledgeQuizAttempt.class));
         verify(sessionMapper).insert(any(KnowledgeQuizSession.class));
@@ -238,7 +246,7 @@ class KnowledgeQuizServiceTest {
         when(sessionMapper.selectOne(any())).thenReturn(graded);
         when(quizMapper.selectOne(any())).thenReturn(historyRow());
 
-        KnowledgeQuizService.QuizOutcome outcome = service.recordQuiz(
+        QuizOutcomeView outcome = service.recordQuiz(
                 42L, 9L, 7L, "重复提交", List.of(item("同一道题", "1")));
 
         assertThat(outcome.attemptId()).isEqualTo(5L);
@@ -266,7 +274,7 @@ class KnowledgeQuizServiceTest {
         givenMaterial(material);
         when(quizMapper.selectList(any())).thenReturn(List.of());
 
-        KnowledgeQuizService.QuizSession session = service.openQuiz(42L, 9L);
+        QuizSessionView session = service.openQuiz(42L, 9L);
 
         assertThat(session.content()).hasSize(KnowledgeQuizService.QUIZ_CONTENT_CHARS + 1).endsWith("…");
         assertThat(session.contentTruncated()).isTrue();
@@ -359,8 +367,8 @@ class KnowledgeQuizServiceTest {
         return session;
     }
 
-    private KnowledgeQuizService.GradedItem item(String question, String credit) {
-        return new KnowledgeQuizService.GradedItem(question, "用户的原话", "点评",
+    private GradedItemDraft item(String question, String credit) {
+        return new GradedItemDraft(question, "用户的原话", "点评",
                 credit == null ? null : new BigDecimal(credit));
     }
 }
