@@ -3,8 +3,7 @@ package com.xander.lab.knowledgebase.application;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
-import com.xander.lab.automation.application.BlogNotificationService;
-import com.xander.lab.automation.domain.BlogNotification;
+import com.xander.lab.automation.spi.NotificationPort;
 import com.xander.lab.knowledgebase.domain.DetectedChapter;
 import com.xander.lab.knowledgebase.domain.KnowledgeChapter;
 import com.xander.lab.knowledgebase.domain.KnowledgeFile;
@@ -47,7 +46,7 @@ class KnowledgeIngestionServiceTest {
     private KnowledgeChapterMapper chapterMapper;
     private KnowledgeStructureService structureService;
     private KnowledgeTagService tagService;
-    private BlogNotificationService notificationService;
+    private NotificationPort notificationService;
     private KnowledgeBaseProperties properties;
     private KnowledgeIngestionService service;
 
@@ -67,7 +66,7 @@ class KnowledgeIngestionServiceTest {
         chapterMapper = mock(KnowledgeChapterMapper.class);
         structureService = mock(KnowledgeStructureService.class);
         tagService = mock(KnowledgeTagService.class);
-        notificationService = mock(BlogNotificationService.class);
+        notificationService = mock(NotificationPort.class);
         properties = new KnowledgeBaseProperties();
         service = new KnowledgeIngestionService(extractor, fileMapper, contentMapper, chapterMapper,
                 structureService, tagService, notificationService, properties);
@@ -117,8 +116,8 @@ class KnowledgeIngestionServiceTest {
         assertThat(file.getStructureMessage()).contains("阅读某一章时会为该章单独生成");
         verify(structureService, never()).generateForFile(any(), any(), anyString(), anyList());
         verify(notificationService).notifyResource(eq(7L),
-                eq(BlogNotification.TYPE_KNOWLEDGE_STRUCTURE_PENDING),
-                anyString(), anyString(), eq(BlogNotification.RESOURCE_KNOWLEDGE_FILE), eq(500L));
+                eq(NotificationPort.TYPE_KNOWLEDGE_STRUCTURE_PENDING),
+                anyString(), anyString(), eq(NotificationPort.RESOURCE_KNOWLEDGE_FILE), eq(500L));
         // 章节目录照旧要落库，否则用户点开章节时没有可生成的对象。
         assertThat(insertedChapters()).hasSize(15);
         assertThat(insertedChapters()).allSatisfy(chapter ->

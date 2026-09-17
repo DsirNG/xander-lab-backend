@@ -15,9 +15,11 @@
     <description>
         Service-to-service contract for the automation capability (V9 §18 / §91).
 
-        Members: EmailReminderPort and ContentPlanPort (the ports), plus the read models
-        and write drafts they carry (EmailReminderView / EmailReminderDraft /
-        ContentPlanView / ContentPlanDraft / ContentPlanEdit).
+        Members: EmailReminderPort, ContentPlanPort and NotificationPort (the ports), plus the
+        read models and write drafts they carry (EmailReminderView / EmailReminderDraft /
+        ContentPlanView / ContentPlanDraft / ContentPlanEdit). NotificationPort carries no DTO:
+        the notification it writes has no cross-domain reader, so its only payload is a pair of
+        persisted vocabulary constants.
 
         Why the module exists. Six agent tools reached straight into automation's
         application layer: EmailReminderTool / QueryEmailRemindersTool /
@@ -75,9 +77,8 @@
         - Any of automation's own api layer (com.xander.lab.automation.api.*). It is the
           frontend HTTP contract, a different audience, and it joins a contract module only
           when that layer itself is split in Wave 2.
-        - The BlogNotificationService port that knowledgebase needs, and the SSE broadcast
-          port that admin needs. Both belong here (same capability, same direction) and both
-          are zero-wiring extensions of this module; they are simply not part of this cut.
+        - The SSE broadcast port that admin needs. It would have to expose SseEmitter, a
+          framework type, so its shape is nothing like these three ports; it is a separate cut.
         - The email-reminder mail template. integration.mail.MailService imports
           automation.domain.EmailReminderMailTemplates, which is the reverse direction and
           closes a real automation &lt;-&gt; integration cycle: automation's
@@ -85,6 +86,15 @@
           automation to render the body. Breaking that cycle is a separate cut because it
           changes MailService's API, and it is recorded in
           docs/migration/lib-extraction.md.
+
+        Cut 10 added NotificationPort (knowledgebase -&gt; automation, 2 statements, one file).
+        It was a zero-wiring extension: no new module, no new dependency, nothing to add to
+        the root POM, the app POM, SHARED_KERNEL or the Dockerfile. BlogNotificationService
+        simply gained "implements NotificationPort", and the two constants its consumer needs
+        moved off the BlogNotification entity onto the port -- had they stayed, the consumer
+        would still have imported the entity and the cut would have removed nothing. The four
+        TYPE_* constants that automation uses internally stayed on the entity, so the port
+        carries only what its consumer reads.
 
         Zero dependencies, and that is the point. A contract that drags in a framework
         cannot be depended on by every service, and V9 §19 is explicit that the WebFlux

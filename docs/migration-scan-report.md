@@ -80,8 +80,8 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 Counted from `import com.xander.lab.<other domain>.<layer>...`. Only the
 implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 
-- implementation statements: **44** across 19 edges
-- of which cross a deployment unit (the real backlog): **27** across 12 edges
+- implementation statements: **42** across 18 edges
+- of which cross a deployment unit (the real backlog): **25** across 11 edges
 - api-layer statements (contract surface): **16**
 
 | from | to | impl | api | crosses unit | from unit -> to unit |
@@ -97,7 +97,6 @@ implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 | automation | publishing | 2 | 0 | no | dinqor-content-automation -> dinqor-content-automation |
 | automation | recitation | 2 | 0 | yes | dinqor-content-automation -> dinqor-core-host |
 | blogagent | publishing | 2 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
-| knowledgebase | automation | 2 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | admin | automation | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
 | admin | virtualpay | 1 | 1 | no | dinqor-core-host -> dinqor-core-host |
 | identity | integration | 1 | 0 | yes | dinqor-core-host -> dinqor-platform-integration |

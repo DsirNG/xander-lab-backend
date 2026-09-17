@@ -22,6 +22,10 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 另有 2 个类从**业务域包** `identity.security` 迁出、4 个类从 `publishing.domain` 迁出。
 剩下 3 个 lib 与 2 个契约模块（`knowledge-api`、`studio-api`）未开始。
 
+⚠️ **"6 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过两轮：
+`core-api` 加过 `UserLookupPort`（§3septies），`automation-api` 加过 `NotificationPort`（§3duodecies）。
+扩展是**零构建接线**的 —— 不新增模块，四处构建接线一处都不用改。
+
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
 不是审美 —— 见 §5。
 
@@ -48,7 +52,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
 | `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；跨部署单元累计 **−8**；总计 **−14** |
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
-| `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | `agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元 |
+| `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。**第九刀再加 `NotificationPort`（写一条持久化用户通知）+ 两个从实体搬来的常量**。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | 第八刀：`agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元。**第九刀（零接线扩展，§3duodecies）**：`knowledgebase → automation` 2 → **0（边整条消失）**，总计再 **−2**（跨单元 −2）；`api_statements` **16 → 16 不变**（消费方 import 的是 `.application` / `.domain`，从没碰过 `.api`）。图形状：`knowledgebase` 变成**纯汇点**（整个域从清单里消失）；`automation` 扇入只剩 `admin`（SSE，要框架类型）与 `integration`（模板真环） |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
 | `payment-api` | **已完成** | `BillingBiz`（`points_ledger.biz_type` 词表）；**`BillingPort`（积分账本端口）+ `TokenUsage`（用量 DTO）** | 词表那一刀：`agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7）。端口那一刀：`agent 3→0`、`integration 2→0`、`automation 1→0`、`blogagent 1→0`、`identity 1→0`、`profile 1→0`、`studio 1→0` —— **7 条边全部归零**，总计再 **−10**（跨单元 −7）。两刀合计 **−18**（跨单元 −14） |
@@ -1284,9 +1288,124 @@ api_statements                    25 → 16      (-9)
 | `agent` | **0 / 0** | **已归零**（§3decies） |
 
 两个候选：①`automation-api` 的**零接线扩展**（`knowledgebase → automation` 2 条，
-只需往已有模块加 `BlogNotificationService` 端口）成本最低；②把 `agent → recitation`(4)
+只需往已有模块加端口）成本最低；②把 `agent → recitation`(4)
 与 `agent → blogagent`(4) 合成一刀，清掉 `dinqor-agent` 的**出边** ——
 那时 agent 进出都归零，完全孤立，是最干净的一个抽取单元。
+
+**候选 ① 已做 → §3duodecies**（第九刀，端口名是 `NotificationPort`，不是当时预写的
+`BlogNotificationService` 端口 —— 理由见 §3duodecies.2）。
+下一个仍是候选 ②。
+
+---
+
+## 3duodecies. 第九刀：`automation-api` 的零接线扩展 —— `NotificationPort`
+
+**零构建接线的一刀。** 不新增模块 ⇒ 根 POM 的 `<modules>`、应用 POM 的依赖、
+`scan.py` 的 `SHARED_KERNEL`、**Dockerfile** 四处一处都没动。
+于是这次改动里没有"构建接线"可以出错，全部风险收敛到语义上 —— 而语义有反射测试守着。
+
+### 3duodecies.1 目标边：`knowledgebase → automation`（2 条，1 个文件）
+
+`KnowledgeIngestionService` 在大部头文档不自动生成结构图时，要发一条"阅读某一章时再生成"的通知。
+通知表 `blog_notification` 属 `automation`，所以它 import 了
+`automation.application.BlogNotificationService` 与 `automation.domain.BlogNotification`。
+
+这刀是 §3undecies.12 与 `contracts/automation-api` 的 `package-info` 早就写下的待办，
+原文是"零接线的扩展，只是不属于这一刀"。
+
+### 3duodecies.2 端口名是 `NotificationPort`，不是预写的 `BlogNotificationService` 端口
+
+`automation` 那一族类型**全都带 `Blog` 前缀**（`BlogNotification` 实体 / `BlogNotificationService` /
+`BlogNotificationMapper` / `BlogNotificationVO` / `BlogNotificationController`）。
+但契约里的先例是**丢掉这个遗留前缀**：`ContentPlanPort` 对应的是 `BlogContentPlanService`，
+不是 `BlogContentPlanPort`。本刀沿用先例 ⇒ `NotificationPort`。
+
+### 3duodecies.3 两个类型都不能搬，理由还是两条不同的
+
+- `BlogNotification` 带 `@TableName("blog_notification")` ⇒ **域实体**，ADR-2 §2.2 不许跨边界。
+- `BlogNotificationService` 是 `@Service` ⇒ **具体实现**，抽取判据第二种：抽端口。
+
+### 3duodecies.4 ⚠️ 常量必须跟着端口搬（第二次踩，这次是设计出来的）
+
+`TYPE_KNOWLEDGE_STRUCTURE_PENDING` 与 `RESOURCE_KNOWLEDGE_FILE` 原本声明在**实体上**。
+不搬走的话，消费方为了拿这两个常量仍然要 import 实体，实现语句**一条都减不掉**。
+判据：`grep -rn "import com.xander.lab.automation" <knowledgebase 包>` 结果只剩 `.spi`。
+
+搬得干净的前提是它们在 `automation` 内部**无人使用**（实测：只有 knowledgebase 的服务与测试引用）。
+另外四个 `TYPE_*` 由 `BlogPlanRunService` 使用，**刻意留在实体上** —— 端口只带消费方真正用到的。
+实体的类注释写明了这条分界，防止下次有人加回去。
+
+### 3duodecies.5 ⚠️ 落库的字面量要单独钉：这里的常量值**是数据**
+
+两个字符串写进 `blog_notification.type` / `.resource_type`，前端按它们分流。
+所以契约测试钉**字面量本身**，消费方测试钉"传下去的就是这个常量"。
+**只有消费方测试是不闭合的** —— 生产代码与测试用同一个常量，常量值错了两边一起错。
+
+### 3duodecies.6 端口形状选"与实现同形"，返回 `Long` 而非 `void`
+
+唯一消费方忽略返回值，按"端口只收调用方真正用到的"应该收窄成 `void`。
+**没收窄**，因为 Java 不允许同名同参只差返回值 ⇒ 收窄会让实现侧**必须改名**，
+那是与这条缝无关的改动。同形 ⇒ 提供方只是"加 `implements` + 加 `@Override`"，可证明行为不变。
+这是与 §3nonies.5（`PublicationPort` 零改动）同一条思路的第二次应用，
+也是与 §3undecies 里"同名不同签名 + `ForView` 后缀"**相反**的选择 —— 那里是同名不可避免。
+
+### 3duodecies.7 实测收益（重新生成基线后）
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 44 | **42** |
+| `implementation_edges` | 19 | **18** |
+| `cross_deployment_unit_statements` | 27 | **25** |
+| `cross_deployment_unit_edges` | 12 | **11** |
+| `api_statements` | 16 | **16**（不变） |
+
+**`api_statements` 这次一条没掉**，与 §3undecies 掉 9 相反：消费方 import 的是
+`automation.application` / `automation.domain`（都是实现语句），从没碰过 `automation.api`。
+
+测试：`automation-api` 22 → **31**，`core-host` 1151 不变，全反应堆 1301 → **1310**（0 fail）。
+
+### 3duodecies.8 图形状：`knowledgebase` 变成**纯汇点**
+
+改完之后 `knowledgebase` 在 `docs/cross-domain-imports.yaml` 里**整域消失** —— 它没有出边了。
+**纯汇点**意味着它不欠任何域的实现依赖，抽取时不需要为它准备契约，只要它依赖的契约就位。
+（`bloghtml` / `dinqor-agent` 是"孤立"，与"纯汇点"的区别是纯汇点仍会被别人依赖。）
+
+`automation` 的扇入也削到只剩两条，且**两条都卡在别的决定上**：`admin` 要 `SseEmitter`
+（框架类型，形状不同）、`integration` 是邮件模板真环（要改 `MailService` 的 API）。
+
+### 3duodecies.9 ⚠️ 注入验证逮到三个测试缺陷 + 一处门禁空转（没修）
+
+四次注入，前三次如期变红。**第四次（加一个无参方法）逮到的不是产品缺陷，是测试缺陷**：
+断言无条件读 `getParameterTypes()[0]`，无参方法时抛的是下标越界，报的信息指向数组而不是问题。
+同款写法在 `EmailReminderPortTest` / `ContentPlanPortTest` 都有，一并加了守卫。
+
+顺带发现 `getDeclaredMethods()[0]` 这种**按下标反射**的写法有两处（本刀新增的一处 +
+`contracts/core-api/UserLookupPortTest` 里既有的一处）。**JVM 不保证声明顺序**，
+加一个方法就会静默换检查对象。两处都改成按名字取。
+
+**第五次注入没红，而且这是对的**：把常量放回实体、让 `knowledgebase` 重新 import 它 ⇒
+扫描器如实报 42 → 43 条、边 18 → 19，而 `cross-domain-import-baseline` 仍报 **PASS**。
+原因是该门禁把 `scan.py` 的产物当作自己的基线，在"先 scan 后 gates"的既定流程下基线恒等于实时值。
+这是**既有缺陷**（修法要动 CI 设计，见 ADR §10 待办第 16 项），本刀只改了门禁 docstring 里
+那句失实的保证。
+
+> **教训**：一个判据的"基线"必须来自判据之外。拿被测方自己的产物当基线，等于让它自己给自己打分
+> —— 与"门禁不复用生成方的哈希函数"是同一条忌讳。与 §3undecies.7 的判据空转、
+> `util` 死条目三者同源：**判据只朝一个方向看，另一个方向没人看。**
+
+### 3duodecies.10 为什么没有加 `contract-changes.yaml` 条目
+
+同 §3bis / §3nonies / §3undecies：没有改任何前端可见类型。
+`automation.api.BlogNotificationVO` / `BlogNotificationListResult` 一行未动，路由与响应形状未变。
+两个常量是**搬家**（同字面量、同名字，只是从实体挪到端口），唯一的可观测差异是 Java 全限定名，
+而它不出进程边界。
+
+### 3duodecies.11 下一刀
+
+仍是 §3undecies.8 的候选 ②：把 `agent → recitation`(4) 与 `agent → blogagent`(4) 合成一刀，
+清掉 `dinqor-agent` 的**出边** —— 那时 agent 进出都归零、完全孤立。
+（`agent` 还剩 `identity` 2 与 `integration` 2，所以"出边归零"要连这两条一起，
+共 12 条；得再分两刀。）
 
 ---
 

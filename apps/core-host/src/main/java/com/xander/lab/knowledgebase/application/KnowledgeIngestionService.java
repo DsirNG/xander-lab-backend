@@ -1,8 +1,7 @@
 package com.xander.lab.knowledgebase.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.xander.lab.automation.application.BlogNotificationService;
-import com.xander.lab.automation.domain.BlogNotification;
+import com.xander.lab.automation.spi.NotificationPort;
 import com.xander.lab.knowledgebase.domain.ChapterDetector;
 import com.xander.lab.knowledgebase.domain.DetectedChapter;
 import com.xander.lab.knowledgebase.domain.KnowledgeChapter;
@@ -47,7 +46,7 @@ public class KnowledgeIngestionService {
     private final KnowledgeChapterMapper chapterMapper;
     private final KnowledgeStructureService structureService;
     private final KnowledgeTagService tagService;
-    private final BlogNotificationService notificationService;
+    private final NotificationPort notificationService;
     private final KnowledgeBaseProperties properties;
 
     /**
@@ -150,9 +149,9 @@ public class KnowledgeIngestionService {
         file.setStructureMessage(message);
         try {
             notificationService.notifyResource(file.getUserId(),
-                    BlogNotification.TYPE_KNOWLEDGE_STRUCTURE_PENDING,
+                    NotificationPort.TYPE_KNOWLEDGE_STRUCTURE_PENDING,
                     "《" + file.getDisplayName() + "》未自动生成知识结构图",
-                    message, BlogNotification.RESOURCE_KNOWLEDGE_FILE, file.getId());
+                    message, NotificationPort.RESOURCE_KNOWLEDGE_FILE, file.getId());
         } catch (Exception e) {
             // 通知发不出去不影响文件本身可用，状态字段里已经写清楚了原因。
             log.warn("[知识库] 结构图待生成通知发送失败，fileId={}: {}", file.getId(), e.getMessage());

@@ -5,6 +5,7 @@
  * <ul>
  *   <li>{@link com.xander.lab.automation.spi.EmailReminderPort} —— 定时邮件提醒能力</li>
  *   <li>{@link com.xander.lab.automation.spi.ContentPlanPort} —— 定时发文计划能力</li>
+ *   <li>{@link com.xander.lab.automation.spi.NotificationPort} —— 写一条持久化用户通知的能力</li>
  *   <li>读模型：{@link com.xander.lab.automation.spi.EmailReminderView} /
  *       {@link com.xander.lab.automation.spi.ContentPlanView}</li>
  *   <li>写入草稿：{@link com.xander.lab.automation.spi.EmailReminderDraft} /
@@ -51,9 +52,11 @@
  * 所以它们只带工具真正读到的字段（10 / 11 个），每个字段都有具名消费者。
  * 把 24 个字段照抄一遍去保留一个不存在的序列化表面，只会换来一个位置顺序风险很高的记录。</p>
  *
- * <h2>这一刀拆掉了什么</h2>
+ * <h2>这个契约拆掉了什么（两刀）</h2>
+ *
+ * <p><b>第九刀 —— 6 条语句 / 6 个文件，方向全是 agent → automation：</b></p>
  * <table>
- *   <caption>6 条语句 / 6 个文件，方向全是 agent → automation</caption>
+ *   <caption>端口 {@code EmailReminderPort} / {@code ContentPlanPort}</caption>
  *   <tr><th>文件</th><th>原来 import</th></tr>
  *   <tr><td>{@code EmailReminderTool}</td><td>{@code automation.application.EmailReminderService}</td></tr>
  *   <tr><td>{@code QueryEmailRemindersTool}</td><td>同上</td></tr>
@@ -65,11 +68,25 @@
  * <p>全部跨 {@code dinqor-agent} / {@code dinqor-content-automation} 部署单元边界。
  * 改完之后依赖方向是 {@code agent -&gt; automation-api &lt;- automation}。</p>
  *
+ * <p><b>第十刀 —— 2 条语句 / 1 个文件，方向是 knowledgebase → automation：</b></p>
+ * <table>
+ *   <caption>端口 {@code NotificationPort}（<b>零构建接线</b>：只是往本模块加类型）</caption>
+ *   <tr><th>文件</th><th>原来 import</th></tr>
+ *   <tr><td>{@code KnowledgeIngestionService}</td>
+ *       <td>{@code automation.application.BlogNotificationService}<br>
+ *           {@code automation.domain.BlogNotification}</td></tr>
+ * </table>
+ * <p>这刀把 {@code automation} 的<b>扇入</b>又削掉一路：原本 4 个单元指向它，现在
+ * {@code agent} 已改走契约，只剩 {@code admin}（SSE，要 {@code SseEmitter} 框架类型）与
+ * {@code integration}（邮件模板真环）两条，两条都卡在别的决定上。</p>
+ * <p>两个常量 {@code TYPE_KNOWLEDGE_STRUCTURE_PENDING} 与 {@code RESOURCE_KNOWLEDGE_FILE}
+ * 随之从 {@code BlogNotification} 实体<b>搬到这里</b> —— 不搬的话消费方仍要 import 实体，
+ * 一条语句都减不掉。它们在 automation 内部无人使用，所以搬得干净。</p>
+ *
  * <h2>有意不在这次改动里的</h2>
  * <ul>
- *   <li>{@code BlogNotificationService} 的端口（knowledgebase 要）与 SSE 广播端口
- *       （admin 要）。它们同属这个契约、方向也相同，是<b>零接线</b>的扩展，
- *       只是不属于这一刀。</li>
+ *   <li>SSE 广播端口（{@code admin} 要）。它要的是 {@code SseEmitter}（框架类型），
+ *       形状与本模块三个端口完全不同，单独一刀。</li>
  *   <li>邮件模板。{@code integration.mail.MailService} import 了
  *       {@code automation.domain.EmailReminderMailTemplates}，这是<b>反方向</b>，
  *       而且闭成了一个真环：automation 的 {@code EmailReminderScheduler} 调

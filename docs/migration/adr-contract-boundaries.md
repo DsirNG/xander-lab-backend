@@ -186,7 +186,7 @@ blogagent ───→ content-api ←─── agent
 **所以它不构成一次 §11 契约变更，不该进登记表。** 这一点写在这里，
 是为了让后来的人知道"没登记"是判断，不是漏掉。
 
-> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§9 待办第 3 项），
+> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§10 待办第 3 项），
 > 那**必须**进 `contract-changes.yaml` 并走 §11 流程 —— 因为它会真的删掉
 > 前端能看到 10 个字段。
 
@@ -302,7 +302,7 @@ MediaAssetRef findReusableGenerated(Long userId, String title);
 
 > **这暴露了一个仍未拍板的问题**：契约能不能依赖契约？今天答案是**不能**
 > （Maven 无法编排 test-only 的跨契约依赖，所以门禁干脆全禁）。
-> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §9 待办。
+> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §10 待办。
 
 ### 3.5 `byte[]` 而不是 `MultipartFile`，以及 `MAX_IMAGE_BYTES`
 
@@ -539,7 +539,7 @@ api_statements / api_edges         38 / 11 (不变)
 
 **但这笔账要在拆分后重新算**：一旦 `payment-api` 作为独立版本化的 jar 发布，
 `TokenUsage` 的分量顺序就变成了跨进程的线上格式，届时任何重排都必须走 §11
-（见 §9 第 7 项）。
+（见 §10 第 7 项）。
 
 ---
 
@@ -739,7 +739,7 @@ api_edges                          11 -> 10   (-1)
 也确认（28 个能力 0 增 0 退；14 条变更全部可解析）。
 
 **⚠️ 但这笔账要在拆分后重新算**：`ContentPost` 的 17 个分量顺序与 `ContentPostPage` 的 6 个分量顺序，
-与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §9 第 7 项）。
+与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §10 第 7 项）。
 今天不登记，契约 jar 独立版本化时必须补。
 
 ---
@@ -769,7 +769,7 @@ SPI，所以看起来理所当然。问题在方向：`AgentTool` / `AgentDynami
 
 1. **`parametersSchema()` 返回 `com.fasterxml.jackson.databind.JsonNode`。** ADR-1 说契约
    必须与序列化框架无关，`CONTRACT_ALLOWED_IMPORT_PREFIXES` 只有 `java.`。搬它就必须放宽
-   门禁——而 §9.1 明写"不许为了过门禁而放宽"。
+   门禁——而 §10.1 明写"不许为了过门禁而放宽"。
 2. **它有 6 个 `default` 成员**（`promptSection` / `execute(AgentToolContext,…)` /
    `reconcile` / `approvalReason` / `readOnly`），外加嵌套的 `ProgressListener` 又有 5 个。
    搬过去等于把 agent 的整套工具词汇表塞进每个依赖方。
@@ -1100,7 +1100,199 @@ NEW  joined = ['dinqor-newbie'] -> FAIL      ← 抓到了
 
 ---
 
-## 8. 这两条 ADR 与既有规则的交叉
+## 8. 落地记录（六）：`NotificationPort` —— 同一个契约的第二刀，零构建接线
+
+### 8.1 这一刀是 §7 早就写下的待办
+
+§7.12 与 `contracts/automation-api` 的 `package-info` 都写着同一句话：
+
+> `BlogNotificationService` 的端口（knowledgebase 要）与 SSE 广播端口（admin 要）。
+> 它们同属这个契约、方向也相同，是**零接线**的扩展，只是不属于这一刀。
+
+这一刀做的就是前半句。
+
+**零接线不是"省事"，而是这一刀唯一的结构性优点。** 不新增模块 ⇒ 根 POM 的 `<modules>`、
+应用 POM 的依赖、`scan.py` 的 `SHARED_KERNEL`、**Dockerfile** 这四处**一处都不用动**
+（§15.6 记过漏 Dockerfile 会报 `Child module ... does not exist`，而且门禁发现不了）。
+于是这次改动里没有任何"构建接线"可以出错，全部风险收敛到语义上 —— 而语义有反射测试守着。
+
+### 8.2 侦察：为什么这一刀必须是端口，不能搬
+
+`automation` 的扇入一共四个消费方，本刀只动第二个：
+
+| 消费方 | 用到的类型 | 处置 |
+|---|---|---|
+| `agent` | `automation.spi.*` | 已由 §7 清掉 |
+| **`knowledgebase`** | `BlogNotificationService`（`@Service`）+ `BlogNotification`（`@TableName` 实体） | **本刀**：抽端口 `NotificationPort` |
+| `admin` | `BlogPlanSseService`（要 `SseEmitter`） | **推迟**：框架类型，端口形状完全不同 |
+| `integration` | `EmailReminderMailTemplates` | **推迟**：真环，要改 `MailService` 的 API 而非加端口 |
+
+两个类型都不满足"搬进契约"的条件，而且是两条不同的理由：
+
+- `BlogNotification` 带 `@TableName("blog_notification")` —— 是**域实体**。ADR-2 §2.2 明写实体不许跨边界；
+  搬进契约等于把 MyBatis 注解拖进每个依赖方的 classpath。
+- `BlogNotificationService` 是 `@Service` —— **具体实现**。按抽取判据第二种情况：抽端口，实现留在原地。
+
+所以这一刀是"抽端口"，不是"搬"。
+
+### 8.3 端口形状：与实现同形，返回 `Long` 而不是 `void`
+
+唯一的消费方 `KnowledgeIngestionService` **忽略**了 `notifyResource` 的返回值，所以按"端口只收
+调用方真正用到的东西"的直觉，这里应该收窄成 `void`。**但这次没收窄**，理由是形态可证性：
+
+```java
+// 端口方法
+Long notifyResource(Long userId, String type, String title, String message,
+                    String resourceType, Long resourceId);
+```
+
+与 `BlogNotificationService#notifyResource` **逐字同形** ⇒ 提供方那边的改动退化成
+"加 `implements` + 加 `@Override`"这一处**纯类型替换**，可证明行为不变。
+若在这里收窄成 `void`，Java **不允许**同名同参只差返回值，实现侧就必须**改名** ——
+那是与这条缝无关的改动，白增风险。
+
+返回的 id 也是这次操作的自然结果（"写一条通知，得到它的 id"），不是实现细节；
+当前这点富余是**惰性**的，真出现第二个消费方时再讨论收窄。
+契约测试专门钉了返回值是 `Long`，改它会被当成契约变更拦下来。
+
+这是**与 §7.5「同名不同签名」相反的选择**：§7 里端口拿规范名、同域富方法加 `ForView` 后缀，
+是因为两个方法**必须**同名（一个给端口、一个给控制器）。这里没有这个约束，所以优先取同形。
+
+### 8.4 ⚠️ 常量必须跟着端口搬 —— 这一刀真正的技术点
+
+`TYPE_KNOWLEDGE_STRUCTURE_PENDING` 与 `RESOURCE_KNOWLEDGE_FILE` 原本声明在 `BlogNotification`
+**实体上**。抽端口时它们**必须一起搬走**：不搬的话，消费方为了拿这两个常量仍然要 `import`
+那个实体，实现语句**一条都减不掉** —— 端口就白抽了（§7.6 是第一次踩到）。
+
+判据（比看指标快）：
+
+```bash
+grep -rn "import com.xander.lab.automation" apps/core-host/src/main/java/com/xander/lab/knowledgebase/
+# 期望：结果只剩 com.xander.lab.automation.spi.*
+```
+
+搬得干净的前提是**它们在 `automation` 内部没有任何使用者**（实测：只有 knowledgebase 的
+服务与测试引用）。另外四个 `TYPE_*`（`REVIEW_REJECTED` / `CSDN_FAILED` / `JUEJIN_FAILED` /
+`RUN_FAILED`）由 `BlogPlanRunService` 使用，属于 automation 自己的词表，**刻意留在实体上**，
+不进端口 —— 端口只带消费方真正用到的东西。
+
+于是"通知类型"这个词表**故意分成两半**：跨域可见的两个在端口上，automation 内部四个在实体上。
+实体的类注释里写明了这一点，并留了一句"要加新的跨域通知类型请加到端口上，不要加回这里"，
+防止下一次有人顺手加回来。
+
+### 8.5 ⚠️ 落库的字面量要单独钉：常量值在这里是**数据**，不是代码
+
+这两个常量的字面量写进 `blog_notification.type` 与 `.resource_type`，前端也按它们分流。
+所以契约测试除了钉"常量存在"，还**钉字面量本身**：
+
+```java
+assertEquals("KNOWLEDGE_STRUCTURE_PENDING", NotificationPort.TYPE_KNOWLEDGE_STRUCTURE_PENDING,
+        "这个字面量落库（blog_notification.type）。改它不是重构，是数据迁移。");
+assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
+```
+
+消费方测试则钉"传下去的就是这个常量"（`eq(NotificationPort.TYPE_KNOWLEDGE_STRUCTURE_PENDING)`）。
+两处合起来才闭合：契约测试钉值、消费方测试钉用法。
+**只有消费方测试的话是不闭合的** —— 生产代码与测试用同一个常量，常量值错了两边一起错。
+
+### 8.6 端口"变宽"依然没人守（第六次确认）
+
+见 §3.6 / §4.7 / §5.8 / §6.6 / §7.8。本端口同样由反射测试钉住：完整签名（含返回值）、
+无 `default`、不继承、无框架类型、首参是调用方 id、**常量个数正好 2 个**。
+最后一条是本刀特有的：它挡的是"把 automation 内部那四个 `TYPE_*` 也挪进端口"这种走偏。
+
+### 8.7 实测收益
+
+| 指标 | 改动前 | 改动后 |
+|---|---|---|
+| `implementation_statements` | 44 | **42** |
+| `implementation_edges` | 19 | **18** |
+| `cross_deployment_unit_statements` | 27 | **25** |
+| `cross_deployment_unit_edges` | 12 | **11** |
+| `api_statements` | 16 | **16**（不变） |
+
+**`api_statements` 这次一条没掉，和 §7 正好相反。** 原因是消费方 import 的是
+`automation.application` / `automation.domain`（两条都是**实现**语句），从来没碰过 `automation.api`。
+§7 掉 9 是因为那 6 个工具原本 import 的是 `automation.api.*`。
+**看收益必须两列都看**：只看 impl 会漏掉 §7 的一半，只看 api 会以为本刀什么都没做。
+
+测试：`automation-api` **22 → 31**（新增 `NotificationPortTest` 9 条），`core-host` 1151 不变，
+全反应堆 **1301 → 1310**（0 fail / 0 error）；26 门禁 → 24 pass / 0 fail / 2 skip。
+
+### 8.8 图形状：`knowledgebase` 变成**纯汇点**
+
+改完之后 `knowledgebase` 在 `docs/cross-domain-imports.yaml` 里**整域消失** ——
+它没有任何出边了。之前它唯一的出边就是指向 `automation` 的这 2 条。
+
+这是个比"少 2 条语句"更重要的结果：**纯汇点意味着它不欠任何域的实现依赖**，
+抽取时不需要为它准备任何契约，只需要它自己依赖的那些契约就位。
+（`bloghtml` 与 `dinqor-agent` 是另一种形状：孤立。纯汇点与孤立都不欠出边，
+区别是纯汇点仍会被别人依赖。）
+
+### 8.9 为什么没有加 `contract-changes.yaml` 条目
+
+同 §2.6 / §3.4 / §4.10 / §5.11 / §7.11：这一刀**没有改任何前端可见类型**。
+`automation.api.BlogNotificationVO` / `BlogNotificationListResult` 一行未动，
+路由、响应形状、错误码都未变。新增的 `NotificationPort` 在**新的缝**上，前端看不到它。
+两个常量是**搬家**（同一个字面量、同一个名字，只是从实体挪到端口），
+不是形状变更 —— 唯一的可观测差异是 Java 里的全限定名，而它不出进程边界。
+
+### 8.10 刻意没做的事
+
+- **SSE 广播端口**（`admin` 要）：它必须暴露 `SseEmitter`（spring-web 类型），
+  与 ADR-1 同类冲突，端口形状也和这三个完全不同。单独一刀，且大概率要改成
+  "端口只回答数据问题、`SseEmitter` 留在实现里"的形状。
+- **邮件模板**（`integration` 要）：反方向且构成真环，要改 `MailService` 的 API。
+- **读侧四个方法**（`list` / `unreadCount` / `markRead` / `markAllRead`）：服务前端 Navbar 铃铛，
+  不跨域，不上端口。
+- **`RESOURCE_KNOWLEDGE_FILE` 的归属**：它语义上更像"knowledgebase 的资源类型"而不是
+  "通知表的词表"。这次按"跟着端口搬"处理（纯搬家，可证）；真要改归属是**另一个决定**，
+  记在 §10 待办里。
+
+### 8.11 注入验证：四次注入，逮到三个缺陷（其中两个在测试里）
+
+这一刀的注入验证做了四次，每次都**核对变红的正好是预期的那几个**：
+
+| # | 注入 | 预期变红 | 实际 |
+|---|---|---|---|
+| 1 | 端口加一个 `default` 方法 | `noMethodIsDefault...`（+ 签名清单那条） | ✓ 2 条 |
+| 2 | 把 `RESOURCE_KNOWLEDGE_FILE` 的字面量改掉 | `theTwoMovedConstantsKeepTheirExactLiteralValues...` | ✓ 1 条 |
+| 3 | 端口加第三个常量 | `carriesExactlyTwoConstantsAndNothingElse` | ✓ 1 条 |
+| 4 | 端口加一个**无参**方法 | `theMethodTakesTheCallerIdExplicitly...` | ⚠️ **它 ERROR 了，不是 FAIL** |
+
+第 4 次是这次最有价值的一次，因为它逮到的是**测试自己的缺陷**：
+
+**缺陷一：无参方法让断言抛 `ArrayIndexOutOfBounds`。**
+`theMethodTakesTheCallerIdExplicitly...` 无条件读 `method.getParameterTypes()[0]`，
+方法没有参数时抛的是下标越界 —— 报出来的信息**指向数组而不是指向问题**。
+已加 `getParameterCount() > 0` 守卫，现在报的是
+"`injectedNoArg` 没有参数：端口方法必须显式收调用方 id"。同款缺陷在
+`EmailReminderPortTest` / `ContentPlanPortTest` 里都有，一并修了。
+
+**缺陷二：按下标取方法，顺序一变就静默换检查对象。**
+`returnsLongSoTheProviderSideIsAPureTypeReplacement` 读的是 `getDeclaredMethods()[0]`。
+**`getDeclaredMethods()` 的顺序 JVM 并不保证。** 加了那个无参方法之后下标 0 变成了新方法，
+这条断言就开始检查一个**完全不同的方法** —— 它变红是**碰巧**，因为新方法返回 `String`；
+如果新方法也返回 `Long`，它会继续绿着，而检查对象早就换人了。
+已改成按名字取（`methodNamed("notifyResource")`）。
+
+**缺陷三（既有代码，不是本刀引入的）：同一个写法在 `contracts/core-api` 里也有一处。**
+`UserLookupPortTest#displayNameTakesAUserIdAndReturnsANullableString` 同样读
+`getDeclaredMethods()[0]`。同文件上一条断言虽然钉了"只有一个方法"，但两条断言是**独立**的：
+一旦有人加了方法，这条会在检查别的方法却可能照样通过。已改成按名字取。
+
+**没修但必须记下来的一处**：第 5 次注入（把常量放回实体、让 `knowledgebase` 重新 import）
+**没有让 `cross-domain-import-baseline` 变红** —— 扫描器如实报了 42 → 43 条语句、边 18 → 19，
+门禁却报 PASS。原因是该门禁拿 `scan.py` 的产物当自己的基线，在"先 scan 后 gates"的既定流程下
+基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §10 待办第 16 项；
+本刀只先把门禁 docstring 里那句"任何边增长就 FAIL"的失实保证改成实情。
+
+> 教训与 §7.10、`util` 死条目同源：**一个判据的"基线"必须来自判据之外。**
+> 拿被测方自己的产物当基线，等于让它给自己打分 —— 和门禁复用生成方的哈希函数是同一条忌讳。
+
+---
+
+## 9. 这两条 ADR 与既有规则的交叉
 
 | 既有规则 | 与 ADR 的关系 |
 |---|---|
@@ -1122,7 +1314,7 @@ NEW  joined = ['dinqor-newbie'] -> FAIL      ← 抓到了
 
 ---
 
-## 9. 待办
+## 10. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -1135,12 +1327,16 @@ NEW  joined = ['dinqor-newbie'] -> FAIL      ← 抓到了
 | 7 | `TokenUsage` / `ContentPost` / `ContentPostPage` 分量顺序是否要登记为 §11 契约变更 | **未定**。今天不登记（理由同 §2.6），但拆分后契约 jar 独立版本化时它们会变成线上格式 |
 | 8 | `blogagent → publishing` 的 1 条 api 语句（`BlogPostVO`） | **未做**，独立一刀（§5.10） |
 | 9 | `ContentPostPort` 的 16 个不上端口方法，拆分后是否需要新的端口 | **未定**。`automation` / `blogagent` 与内容域同单元，拆完还在一个进程里 |
-| 10 | `automation-api`（10 条语句指向它，当时最大的目标域） | **部分已做**（§7）。范围只做 `agent → automation` 6 条；剩 `knowledgebase` 2（加 `BlogNotificationService` 端口，零接线）、`admin` 1（需要 SSE 广播端口，形状不同）、`integration` 1（**构成真环**，要改 `MailService` 的 API 而非加端口） |
+| 10 | `automation-api`（10 条语句指向它，当时最大的目标域） | **部分已做**（§7 + §8）。`agent → automation` 6 条（§7）与 `knowledgebase → automation` 2 条（§8，端口 `NotificationPort`，零接线扩展）已清；剩 `admin` 1（需要 SSE 广播端口，形状不同）、`integration` 1（**构成真环**，要改 `MailService` 的 API 而非加端口） |
 | 11 | `deployment-unit-coupling` 判据 2 **空转**：根单元 `dinqor-agent` 离开分量后 `joined` 恒为空 | **已修**（§7.10）。判据改成对**每个** Wave 2 单元取分量并集；detail 改报**实测**分量大小，并新增"哪些单元已可单独抽取"的进度提示 |
 | 12 | `UpdatePlanTool` 的 `triggerTime` 分支**从工具路径不可达**：只给 `triggerTime` 会走到 `parseSendTimes([])` 抛"请设置至少一个发送时间" | **未修**，既有行为，本刀逐字保留 —— 顺手修会让这次改动不再是可证明的纯重构（§7.12） |
 | 13 | `shared-kernel-classification` 缺**反向**判据：只查"每个发布的包都有条目"，不查"每个条目都有包"，于是 `util` 是死条目 | **未修**，删 `util` 触发 0 门禁 / 0 指标（见 `backend-norms`） |
+| 14 | `RESOURCE_KNOWLEDGE_FILE` 的**归属**：它语义上更像 knowledgebase 的资源类型，而不是通知表的词表 | **未定**。§8 按"跟着端口搬"处理（纯搬家、可证）；改归属是另一个决定，且会动契约的公共常量 |
+| 15 | `automation` 剩两条扇入：`admin`（SSE，要 `SseEmitter`）与 `integration`（邮件模板真环） | **未做**，两条都卡在别的决定上（§8.10 / §7.12） |
+| 16 | **⚠️ `cross-domain-import-baseline` 在"先 scan 后 gates"的既定流程下不可能变红** —— 它把 `docs/cross-domain-imports.yaml`（`scan.py` 的产物）当作自己的基线，于是基线 == 实时值 | **未修**（高优先）。2026-09-17 实测：把 `RESOURCE_KNOWLEDGE_FILE` 放回实体并让 `knowledgebase` 重新 import 它 ⇒ 扫描器如实报 42 → **43** 条、边从 18 → **19**，而该门禁仍报 **PASS**。它今天实际只检测"改了代码没重跑 scan"。修法二选一：加人工基线文件（照 `capability-baseline.yaml` + `.lock` 的模式），或从上次提交读基线。已先改掉门禁 docstring 里那句失实的保证（§8.11） |
+| 17 | 契约测试里按下标反射取方法的写法（`getDeclaredMethods()[0]`） | **已修**（§8.11）。`NotificationPortTest` 与既有的 `UserLookupPortTest` 各一处；`getDeclaredMethods()` 的顺序 JVM 不保证，加一个方法就会静默换检查对象 |
 
-### 9.1 第 1 项的边界（明确不许顺手放宽）
+### 10.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -1151,7 +1347,7 @@ NEW  joined = ['dinqor-newbie'] -> FAIL      ← 抓到了
 
 ---
 
-## 10. 一句话记法
+## 11. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

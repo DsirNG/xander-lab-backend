@@ -563,6 +563,40 @@ assertEquals(EXPECTED, found);
 见 `docs/migration/adr-contract-boundaries.md` §4 与 §6，以及
 `docs/migration/lib-extraction.md` §3quinquies.5 / §3decies。
 
+**零接线扩展：往已有契约模块加类型，比新建模块便宜得多，优先找这条路。**
+抽契约前**先查已有契约里有没有同一能力 / 同一方向的类型** —— 有就是零接线扩展。
+"零接线"的具体含义：**不新增模块 ⇒ 四处构建接线（根 POM `<modules>`、应用 POM 依赖、
+`scan.py` 的 `SHARED_KERNEL`、Dockerfile）一处都不用动**，于是改动里没有"接线"可以出错，
+风险全部收敛到语义上，而语义有反射测试守着。
+本项目实例：`core-api` 加 `UserLookupPort`、`automation-api` 加 `NotificationPort`
+（后者见 `adr-contract-boundaries.md` §8）。
+
+**⚠️ 常量落库时，契约测试要钉字面量；只有消费方测试是不闭合的。**
+若一个契约常量的值会写进数据库列 / 前端按它分流，那它的字面量**是数据不是代码**，
+改它等于数据迁移。此时：
+
+```java
+// 契约侧：钉值
+assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE,
+        "这个字面量落库（blog_notification.resource_type）。改它不是重构，是数据迁移。");
+
+// 消费方侧：钉"传下去的就是这个常量"
+verify(port).notifyResource(eq(7L), anyString(), anyString(), anyString(),
+        eq(NotificationPort.RESOURCE_KNOWLEDGE_FILE), eq(500L));
+```
+
+**两处合起来才闭合。** 只有消费方测试的话，生产代码与测试引用**同一个**常量 ——
+常量值错了两边一起错，测试永远绿。反过来只有契约测试也不够：它管不了消费方传了别的字面量。
+（先例：`NotificationPortTest` + `KnowledgeIngestionServiceTest`，2026-09-17。）
+
+**⚠️ 端口方法的返回值不要为了"窄"而收窄，先看会不会逼实现侧改名。**
+Java **不允许**同名同参只差返回值，所以把 `Long notifyResource(...)` 收窄成 `void`
+会让实现侧**必须改名** —— 那是与这条缝无关的改动，白增风险。
+与实现**同形**的端口，提供方的改动退化成"加 `implements` + 加 `@Override`"，
+可证明行为不变。返回值是 JDK 类型、又是操作的自然结果（"写一条通知，得到它的 id"）时，
+这点富余是**惰性**的，不必急着砍。（先例：`NotificationPort`；对照：`PublicationPort`
+也是零改动形状，见 `lib-extraction.md` §3nonies.5。）
+
 ## API 与异常契约
 
 - 所有错误响应：`{ "code", "message", "data" }`；code 必须与真实 HTTP 语义一致（400/401/403/404/5xx 不被 HTTP 200 包装）。
@@ -700,6 +734,44 @@ assertEquals(EXPECTED, found);
   本项目两次注入的期望值与实测：去掉 reconciler 闸门 ⇒ 2 红（两个
   `*DoesNothingBeforeThePlaneIsReady`）；去掉版本闸门 ⇒ 3 红（`SecurityStateApplierTest` 2 +
   `SecurityStateBootstrapTest` 1）。数量或名字对不上，说明测试之间串了或判据写歪了。
+  ⚠️ **对不上时先怀疑测试本身。** 2026-09-17 给 `NotificationPort` 注入一个**无参方法**，
+  预期 1 红，实测 1 FAIL + **1 ERROR** —— 那个 ERROR 是测试自己的缺陷（见下条）。
+  注入验证的价值有一半在于它会顺带照出测试的毛病。
+
+### ⚠️ 用反射钉契约形状时：按**名字**取方法，不要按下标
+
+```java
+// ❌ 顺序一变就静默换检查对象。getDeclaredMethods() 的顺序 JVM 并不保证。
+Method m = SomePort.class.getDeclaredMethods()[0];
+
+// ✅
+Method m = null;
+for (Method each : SomePort.class.getDeclaredMethods()) {
+    if (each.getName().equals("notifyResource")) m = each;
+}
+assertNotNull(m, "端口上没有 notifyResource 方法");
+```
+
+2026-09-17 实测：给 `NotificationPort` 加一个方法后，`getDeclaredMethods()[0]` 变成了新方法，
+那条"返回值必须是 `Long`"的断言就开始检查**另一个方法** —— 它变红只是**碰巧**（新方法返回
+`String`）。如果新方法也返回 `Long`，它会继续绿着而检查对象早已换人。
+同款写法在 `contracts/core-api/UserLookupPortTest` 里也有一处（已一并修）。
+**同文件里"只有一个方法"那条断言救不了它** —— 两条断言是独立的。
+
+### ⚠️ 断言"第一个参数是调用方 id"之前，先查参数个数
+
+```java
+for (Method method : Port.class.getDeclaredMethods()) {
+    // 无参方法直接读 getParameterTypes()[0] 会抛 ArrayIndexOutOfBounds，
+    // 报出来的是"下标越界"，而不是"这个端口方法没收调用方 id"。
+    assertTrue(method.getParameterCount() > 0,
+            method.getName() + " 没有参数：端口方法必须显式收调用方 id。");
+    assertEquals(Long.class, method.getParameterTypes()[0], ...);
+}
+```
+
+**断言失败的信息必须指向真正的问题**，否则下次有人看到"下标越界"会去查数组而不是查契约。
+`automation-api` 的三个端口测试都补了这个守卫（2026-09-17）。
 
 ## 验证门禁（改动后必须执行并贴结果，不要直接宣布完成）
 
@@ -868,6 +940,31 @@ detail = f"{recomputed} implementation statements across {len(base_edges)} edges
 两种情况都要写进记录 —— 前者的证据是门禁名，后者的证据是**测试方法名 + 行号**。
 反过来说，凡是"只有测试能守"的不变量，测试**必须**存在且必须钉到**完整签名**
 （见前面端口宽度那条），否则这个不变量实际上无人看守。
+
+### ⚠️ 判据的"基线"必须来自判据之外，否则它永远绿
+
+**拿被测方自己的产物当基线，等于让它给自己打分。** 这与"门禁不复用生成方的哈希函数"
+是同一条忌讳，也是"判据的根不能是一个会变的量"的同源问题。
+
+2026-09-17 实测（`cross-domain-import-baseline`）：该门禁的 `baseline` 读的是
+`docs/cross-domain-imports.yaml`，而 `scan.py` **会覆盖这个文件**。
+于是按既定流程（**先 `scan.py` 再 `ci_gates.py`**）跑，基线恒等于实时值：
+
+```python
+baseline = load("cross-domain-imports.yaml")     # scan.py 的产物
+live = scan.build_cross_domain_imports()          # 同一次扫描
+```
+
+实验：把一个常量放回 `BlogNotification` 实体、让 `knowledgebase` 重新 import 它 ⇒
+扫描器如实报 **42 → 43** 条语句、边 **18 → 19**，而该门禁仍报 **PASS**。
+它今天实际只检测"改了代码没重跑 `scan.py`"，不是它 docstring 声称的"任何边增长就 FAIL"。
+
+**判据**：读一个门禁的实现，问"它的 baseline / 期望值从哪来？"
+若答案是被测流程自己生成的，那这条门禁**不可作为证据**。
+`capability-baseline.yaml` + `capability-baseline.lock` 是正例（人工维护，机器不覆盖）。
+
+**当下怎么做**：这条门禁绿了**不能**当作"存量没长"的证据，
+要**手工把 detail 行里的语句数与上一次比对**。
 
 ### ⚠️ `cross_deployment_unit_edges` 只数 impl > 0 的边，与列表长度不等
 

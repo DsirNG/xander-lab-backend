@@ -7,10 +7,10 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 44
-  implementation_edges: 19
-  cross_deployment_unit_statements: 27
-  cross_deployment_unit_edges: 12
+  implementation_statements: 42
+  implementation_edges: 18
+  cross_deployment_unit_statements: 25
+  cross_deployment_unit_edges: 11
   api_statements: 16
   api_edges: 9
   shared_kernel_sources:
@@ -139,15 +139,6 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/blogagent/application/BlogAgentService.java
-  - from: knowledgebase
-    to: automation
-    from_unit: dinqor-core-host
-    to_unit: dinqor-content-automation
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/knowledgebase/application/KnowledgeIngestionService.java
   - from: admin
     to: automation
     from_unit: dinqor-core-host

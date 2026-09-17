@@ -513,6 +513,25 @@ def gate_cross_domain_import_baseline() -> None:
     expected; when an edge reaches zero its baseline entry must be deleted,
     otherwise the remaining backlog looks bigger than it is and the Wave 0B
     progress number stops meaning anything.
+
+    ⚠️ KNOWN HOLE (measured 2026-09-17, not yet fixed): the "baseline" below is
+    ``docs/cross-domain-imports.yaml`` itself, and ``scan.py`` *overwrites* that
+    file. So in the documented order -- scan first, then gates -- the baseline and
+    the live scan are the same data and this gate cannot fail. What it actually
+    detects today is "code changed without re-running scan.py", not "the backlog
+    grew". Measured: put one constant back on ``BlogNotification`` and have
+    ``knowledgebase`` import it again -> scan reports 42 -> 43 statements and the
+    edge returns, yet this gate still reports PASS.
+
+    The file is machine output (scan.py's own docstring says curated files are
+    never overwritten by it), so using it as its own baseline breaks the
+    machine-key-set / curated-baseline split that ``capability-baseline.yaml`` +
+    ``capability-baseline.lock`` follow. Fixing it means either adding a curated
+    baseline file or reading the baseline from the last commit; both are a
+    deliberate change, tracked in
+    ``docs/migration/adr-contract-boundaries.md`` section 10. Until then, do not
+    read a green run here as evidence that the backlog did not grow -- compare the
+    statement count in the detail line against the previous run by hand.
     """
     gate = "cross-domain-import-baseline"
     baseline = load("cross-domain-imports.yaml")

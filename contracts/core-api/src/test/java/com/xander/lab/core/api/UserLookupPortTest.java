@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Method;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -35,7 +36,15 @@ class UserLookupPortTest {
 
     @Test
     void displayNameTakesAUserIdAndReturnsANullableString() {
-        Method displayName = UserLookupPort.class.getDeclaredMethods()[0];
+        // ⚠️ 按名字取，不按下标：getDeclaredMethods() 的顺序 JVM 并不保证。
+        // 上面那条断言虽然钉了"只有一个方法"，但两条断言是**独立**的 ——
+        // 一旦有人加了方法，这条会在检查一个完全不同的方法，却可能照样通过。
+        // （在 automation-api 的注入验证里实测到过：加一个方法后下标 0 就换了对象。）
+        Method displayName = null;
+        for (Method method : UserLookupPort.class.getDeclaredMethods()) {
+            if (method.getName().equals("displayName")) displayName = method;
+        }
+        assertNotNull(displayName, "端口上没有 displayName 方法");
 
         assertEquals(String.class, displayName.getReturnType(),
                 "返回 null 表示'无法确定'，调用方各自兜底；改成 Optional 会改变契约形状");

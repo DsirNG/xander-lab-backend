@@ -59,6 +59,10 @@ class ContentPlanPortTest {
     @Test
     void everyMethodTakesTheCallerIdExplicitlyBecauseThreadLocalDoesNotCrossProcesses() {
         for (var method : ContentPlanPort.class.getDeclaredMethods()) {
+            // ⚠️ 先查参数个数：无参方法直接读 getParameterTypes()[0] 会抛 ArrayIndexOutOfBounds，
+            // 报出来的是"下标越界"而不是"这个端口方法没收调用方 id"。见 NotificationPortTest。
+            assertTrue(method.getParameterCount() > 0,
+                    method.getName() + " 没有参数：端口方法必须显式收调用方 id。");
             assertEquals(Long.class, method.getParameterTypes()[0],
                     method.getName() + " 的第一个参数必须是调用方 id（见 EmailReminderPort 上的同一断言）。");
         }

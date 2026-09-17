@@ -7,6 +7,7 @@ import com.xander.lab.automation.api.BlogNotificationListResult;
 import com.xander.lab.automation.api.BlogNotificationVO;
 import com.xander.lab.automation.domain.BlogNotification;
 import com.xander.lab.automation.infrastructure.BlogNotificationMapper;
+import com.xander.lab.automation.spi.NotificationPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,10 +16,16 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /** Reads and acknowledges user notifications for the Navbar bell. Notifications
- * are written by background plan runs (see BlogPlanRunService). */
+ * are written by background plan runs (see BlogPlanRunService).
+ *
+ * <p>实现 {@link NotificationPort}（Wave 0B 第十刀）：这是 {@code knowledgebase} 发
+ * 「大部头未自动出结构图」通知的唯一入口。端口方法 {@link #notifyResource} 与本类原有的
+ * 方法<b>逐字同形</b>，所以这一刀在提供方只是加了一个 {@code implements} 与一个
+ * {@code @Override} —— 可证明是纯重构。读侧四个方法（{@code list} / {@code unreadCount} /
+ * {@code markRead} / {@code markAllRead}）服务的是前端 Navbar 铃铛，不跨域，<b>刻意不进端口</b>。</p> */
 @Service
 @RequiredArgsConstructor
-public class BlogNotificationService {
+public class BlogNotificationService implements NotificationPort {
 
     private final BlogNotificationMapper notificationMapper;
 
@@ -80,8 +87,9 @@ public class BlogNotificationService {
      *
      * <p>独立事务：通知只是旁路提醒，写不进去不该把调用方的主流程一起回滚。</p>
      *
-     * @param resourceType 见 {@link BlogNotification#RESOURCE_KNOWLEDGE_FILE}
+     * @param resourceType 见 {@link NotificationPort#RESOURCE_KNOWLEDGE_FILE}
      */
+    @Override
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public Long notifyResource(Long userId, String type, String title, String message,
                               String resourceType, Long resourceId) {
