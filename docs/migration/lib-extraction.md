@@ -46,7 +46,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `content-api` | **已完成** | 第一刀：`BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits`。第二刀：`MediaAssetPort` `MediaAssetRef` `StoredImage`。第三刀：`ContentPostPort` `PublicationPort` `ContentPost` `ContentPostPage` `ContentPostInput` `ContentPostQuery` `ContentPostStatus` | 第一刀：`integration → publishing` 22 → 5；总计 −18 条跨单元 import。第二刀：`publishing ↔ blogagent` 环拆成单向；跨单元 −8。第三刀：`integration → publishing` 5 → 0（api 11 → 0）、`agent → publishing` 3 → 0、`profile → publishing` 1 → 0 —— **`publishing` 跨单元入边归零**；总计 **−9**（跨单元 −9） |
 | `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
 | `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；跨部署单元累计 **−8**；总计 **−14** |
-| `agent-api` | 未开始 | — | — |
+| `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
 | `automation-api` | 未开始 | — | — |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
@@ -890,11 +890,14 @@ api_statements / api_edges         38 / 11 (不变)
 ⚠️ **耦合图形状没变**：`deployment-unit-coupling` 仍报 4 个单元在一个 SCC 里、
 4 对互相依赖。这一刀减的是**存量**，不是形状 —— 与 §3septies.8 的提醒一致。
 
-### 3octies.7 仍然没做的那一半：`agent-api`
+### 3octies.7 另一半 `agent-api`：**已做**，见 §3decies
 
-`AgentTool.parametersSchema()` 返回 `JsonNode`，**50 个实现、41 个 `parametersSchema()` 覆写**。
-按 ADR-1 它只能改成 `String` 或 `Object`，改动面比 billing 大一个量级，
-所以单独排一刀。`integration -> agent` 的 5 条实现语句是它的收益目标。
+当时记的是"`AgentTool.parametersSchema()` 返回 `JsonNode`，**50 个实现、41 个覆写**，
+按 ADR-1 只能改成 `String` 或 `Object`，改动面比 billing 大一个量级"。
+
+**结论是那个前提本身要改**：不该去改 `AgentTool`，也不该搬它。`integration -> agent` 的
+5 条实现语句用"加一个窄端口"消掉了，50 个实现一个没动。完整论证见 §3decies 与
+`adr-contract-boundaries.md` §6。
 
 ---
 
@@ -1011,14 +1014,173 @@ api_edges                          11 -> 10   (-1)
 | `automation` | 10 / 10 | 最大的跨单元目标，入边来自 `agent` 6 / `knowledgebase` 2 / `admin` 1 / `integration` 1 |
 | `integration` | 9 / 9 | `automation -> integration` 6 条是最大的一条边 |
 | `recitation` | 6 / 6 | `agent -> recitation` 4 + `automation -> recitation` 2 |
-| `agent` | 5 / 5 | 就是 `agent-api` 那一刀（`parametersSchema()` 返回 `JsonNode`） |
+| `agent` | **0 / 0** | **已归零**（§3decies）。原先是 `integration -> agent` 5 条 |
 | `blogagent` | 9 / 5 | `agent -> blogagent` 4 + `studio -> blogagent` 1 |
 | `identity` | 11 / 3 | 11 条里 8 条同单元 |
 | `publishing` | 4 / **0** | **已归零**（本刀） |
 | `virtualpay` | 1 / 0 | 同单元 |
 
 当前最大的跨单元边是 `agent -> automation`（6）与 `automation -> integration`（6）。
-`agent-api` 那一刀目标仍是 `integration -> agent` 的 5 条（§3octies.7）。
+`agent` 已在 §3decies 归零，剩余最大的跨单元目标是 `automation`（10）与 `integration`（9）。
+
+---
+
+## 3decies. 第七刀：`agent-api` —— 不搬 `AgentTool`，只加一个窄端口
+
+完整论证在 `docs/migration/adr-contract-boundaries.md` §6 / §2.7，这里只记与"抽库"直接相关的部分。
+
+### 3decies.1 目标边：一条**方向错误**的边
+
+`integration.mcp.client.application` 里三个文件 import 了 agent 的实现类，5 条实现语句，
+全部跨部署单元（`dinqor-platform-integration` → `dinqor-agent`）：
+
+| 文件 | import | 用途 |
+|---|---|---|
+| `AgentMcpServerService` | `AgentToolRegistry` | 配置变更后反向调 `invalidate()` |
+| `McpToolSource` | `AgentDynamicToolSource`、`AgentTool` | 实现消费方的动态来源接口 |
+| `RemoteMcpTool` | `AgentPromptSection`、`AgentTool` | 实现消费方的工具接口 |
+
+形态上像 SPI，所以看起来理所当然。问题是 `AgentTool` / `AgentDynamicToolSource` 是 agent 的
+**进程内抽象**：提供方实现它们，等于把自己的编译单元绑在消费方的实现类上，而且**是提供方在调
+消费方的实现**，控制流反了。
+
+### 3decies.2 ⚠️ 包名：`com.xander.lab.agent.api` 已经被这个域自己占了
+
+`contracts/<x>-api` 的默认包名是 `com.xander.lab.<x>.api`，已建的四份都是这么落的。
+**但这条对 `agent` / `automation` / `studio` 不成立**——这三个域已经把
+`com.xander.lab.<域>.api` 用作自己的**前端 HTTP 层**：
+
+```text
+com/xander/lab/
+├── agent/       api  application  domain  infrastructure   ← api 已被占用
+├── automation/  api  application  domain  infrastructure   ← api 已被占用
+├── studio/      api  application  domain  infrastructure   ← api 已被占用
+├── integration/ file  mail  mcp  oss                       ← 没有 api，所以 integration-api 能落在 .api
+└── publishing/  api  application  domain  infrastructure   ← 但 content-api 与它不同名
+```
+
+契约再用这个包名会有两个后果，第二个是致命的：
+
+1. **同一个包出现在两个 jar 里**（`apps/core-host` 与 `contracts/agent-api`）；
+2. **该域自己的 Controller 会被算成共享内核。** `SHARED_KERNEL` 是前缀匹配，登记 `agent.api`
+   就同时覆盖了那 12 个 Controller / VO / 请求体；它们的 `domain_of` 变成 `agent.api`（不是业务域
+   `agent`），于是每个 Controller 引用自己的 application 层都会产生一条 `agent.api -> agent`
+   的**新边**——把 `implementation_statements` 推高几十条，并同时触发
+   `shared-kernel-reverse-dependency` 违规。
+
+所以这三个契约取**下一个空着的段**：`spi`，`SHARED_KERNEL` 登记 `agent.spi` 这类带点条目
+（最长匹配，不会连带覆盖 `agent.api`）。
+
+> **加契约模块前的第一步**：`ls apps/core-host/src/main/java/com/xander/lab/<域>/`，
+> 看 `api` 是否已被占用。占用了就换段，**别改扫描器**。
+
+名字带 `spi` 也不只是躲碰撞：本端口确实是**宿主定义、插件实现**的经典 SPI 形态，与
+`BlogPublisher` 同类——agent 是宿主，integration 是插件。
+
+### 3decies.3 判据的第三种情况：**接口也不能搬**
+
+前六刀攒下的判据是两条：
+
+| 情况 | 动作 |
+|---|---|
+| 类型本身是**接口**或**纯 DTO** | **搬**进契约 |
+| 类型是**具体实现**（`@Service` / 带 mapper / 带框架注解） | **抽端口**，实现留在原地 |
+
+这一刀是第三种，而且是前两条都没覆盖的：
+
+| 情况 | 动作 |
+|---|---|
+| 类型是接口，但**签名里带框架类型**（`JsonNode`），且有几十个实现 | **不动它**，另立一个**窄端口**，把框架类型挡在端口外 |
+
+`AgentTool` 三条独立的否决理由：
+
+1. `parametersSchema()` 返回 `JsonNode` —— ADR-1 不许，而放宽 `CONTRACT_ALLOWED_IMPORT_PREFIXES`
+   是明令禁止的动作；
+2. 6 个 `default` 成员 + 一个 5 方法的嵌套 `ProgressListener` —— 搬过去等于把 agent 的整套工具
+   词汇表塞进每个依赖方；
+3. **50 个实现、41 个覆写 `parametersSchema()`** —— 搬接口就要改这 50 个文件。
+
+所以这一刀**不动** `AgentTool`，在 `contracts/agent-api` 里另立
+`RemoteToolCatalog` / `RemoteTool` / `RemoteToolCall`，只回答消费方真正要问的问题。
+**收益有一半来自"没做什么"**：50 个实现一个都没动。
+
+### 3decies.4 端口形状：三处 JSON 全部走 `String`
+
+schema、参数、返回值都是 JSON，契约里全部以**文本**出入：
+
+```java
+String parametersSchemaJson();
+String approvalReason(String argsJson);
+String invoke(Long userId, String argsJson, RemoteToolCall call);
+```
+
+代价是调用侧多一次解析（适配器里缓存）、提供方多一次 `toString`；对照的是一次真实网络往返。
+收益是契约保持零依赖，`contract-dependency-boundary` 不用动。
+
+`RemoteTool` 的 7 个方法**正好**是消费方适配器要实现的 `AgentTool` 成员里除去 `reconcile`
+的那 7 个。`reconcile` 没有对应方法：远端工具查不了——副作用在第三方那里，本平台既没有记录
+也没有能力去问。
+
+**准则不带 `order`。** 契约只给正文（`promptText()`），顺序由渲染方定（统一挂
+`AgentPromptSection.ORDER_SIDE_EFFECT`）。把 `int order` 放进契约，agent 的常量表
+（50 / 100 / 200 / 300）就得跨模块再抄一份，两份值可以**无声漂移**，漂移的后果是提示词里准则
+排序变了而没有任何测试会红。
+
+### 3decies.5 反向依赖：版本号取代 `invalidate()` 回调
+
+三条 import 里最麻烦的是 `AgentMcpServerService` 那条。改法是**把"我变了"的通知换成
+"你问我变没变"的轮询**：
+
+- `AgentDynamicToolSource` 加 `default long version()`（默认 `0` = 永不变）；
+- `AgentToolRegistry` 每次读取先读各来源版本，与缓存比对，不一致才重建；
+- `McpToolSource.invalidate()` 顺手 `incrementAndGet()` 自己的版本号；
+- `AgentMcpServerService.changed()` 只剩 `toolSource.invalidate()`。
+
+控制流于是只剩一个方向：**注册表问，来源答，来源永远不需要知道注册表是谁。**
+
+> `version()` 之所以可以是 `default`：`AgentDynamicToolSource` 是**函数式接口**，测试里大量用
+> lambda 实现它；加抽象方法会让那些 lambda 全编译不过，而它们表达的正是"版本恒为 0 的静态来源"
+> 这个合法语义。默认值 `0` 恰好就是那个语义——这不是"静默变宽"，是"默认值正确"。
+
+**⚠️ 一个没有别的症状的顺序坑**：注册表必须**先读版本、后取工具**。反过来会留下一个
+**永久性**的陈旧缓存——期间发生的变更让"新版本 + 旧工具"一起被存下来，版本再也不会变，
+那份旧工具就再也刷新不掉。只能用**调用顺序断言**钉住
+（`AgentToolRegistryTest#theVersionIsReadBeforeTheToolsSoAConcurrentChangeCannotBeCachedAsFresh`）。
+
+> 写这条测试时踩了一次：第一版断言"缓存命中时两个调用都不该发生"，实测是
+> `[version, tools, version]`——**版本是每次都要读的**，不读就发现不了变更，而发现变更正是这个
+> 机制存在的全部理由。缓存命中的只是"取工具"那一步。
+
+### 3decies.6 实测收益
+
+```text
+implementation_statements        55 → 50      (-5)
+implementation_edges             21 → 20
+cross_deployment_unit_statements 38 → 33      (-5)
+cross_deployment_unit_edges      14 → 13
+api_statements                   25 → 25      (未动)
+```
+
+`integration → agent` 这条边**整条消失**。更重要的是图形状变了：`deployment-unit-coupling`
+从"4 个单元 4 对互依"变成"**4 个单元 3 对互依**"，并明确报出
+`1 pair(s) no longer mutual ... [('dinqor-agent', 'dinqor-platform-integration')]`
+——这是这条门禁第一次报出"互依对减少"。`MUTUAL_UNIT_PAIRS` 里那两个方向已按提示删掉。
+
+### 3decies.7 下一刀
+
+按剩余跨单元实现语句排序（当前基线 33 条 / 13 条边）：
+
+| 目标域 | 总数 / 跨单元 | 说明 |
+|---|---|---|
+| `automation` | 10 / 10 | 最大的跨单元目标：`agent -> automation` 6、`knowledgebase` 2、`admin` 1、`integration` 1 |
+| `integration` | 9 / 9 | `automation -> integration` 6 是最大的一条边，但卡在 `MailService` 上（§3quinquies） |
+| `recitation` | 6 / 6 | `agent -> recitation` 4 + `automation -> recitation` 2 |
+| `blogagent` | 5 / 5 | `agent -> blogagent` 4 + `studio -> blogagent` 1 |
+| `identity` | 3 / 3 | `agent` 2 + `integration` 1 |
+| `publishing` | 2 / **0** | **跨单元已归零** |
+| `agent` | **0 / 0** | **已归零**（本刀） |
+
+`automation-api` 是下一个最大目标，10 条全跨单元。
 
 ---
 
@@ -1139,7 +1301,7 @@ Maven 直接拒绝：
 
 §18 列的 8 个契约里，**有 4 个的名字同时是业务域**：
 `agent-api` / `automation-api` / `integration-api` / `studio-api`。
-它们的包只能落在 `com.xander.lab.<域>.api`，于是撞上扫描器原本的一条硬限制：
+它们的包落在该域的命名空间里，于是撞上扫描器原本的一条硬限制：
 
 **`SHARED_KERNEL` 原本只按"第一段"匹配**（`domain_of()` 取 `parts[3]`），
 所以 `com.xander.lab.integration.api` 无法被单独表达 —— 只能登记 `integration`，
@@ -1152,6 +1314,8 @@ Maven 直接拒绝：
 |---|---|---|
 | `com.xander.lab.integration.api.UploadResponse` | `integration.api` | 共享内核 → 不计入跨域基线 |
 | `com.xander.lab.integration.oss.OssService` | （无） | 业务域 `integration` → 计入 |
+| `com.xander.lab.agent.spi.RemoteTool` | `agent.spi` | 共享内核 → 不计入跨域基线 |
+| `com.xander.lab.agent.api.AgentConversationController` | （无） | 业务域 `agent` → 计入 |
 
 ⚠️ **登记裸的 `integration` 不会"把域误划成共享内核"——真正的后果是契约隐形。**
 实测（把 `integration` 加进 `SHARED_KERNEL` 后重跑）：跨域基线**仍是 116 / 85，一条都没少**，
@@ -1166,6 +1330,14 @@ Maven 直接拒绝：
 所以 `shared-kernel-classification` 新增判据二「**窄性**」：
 **任何条目都不得等于业务域名、也不得是业务域名的前缀**。裸 `integration` 直接 FAIL。
 判据一「覆盖」同时改成按声明包深度比对，报错信息现在给出 `content.api` 这种精确包名。
+
+⚠️ **但"契约落在 `<域>.api`"这条只对 `integration` 成立，对另外三个是错的。**
+`agent` / `automation` / `studio` 已经把 `com.xander.lab.<域>.api` 用作自己的**前端 HTTP 层**
+（Controller / VO / 请求体），契约再用这个包名会同时造成"一个包两个 jar"和
+"该域的 Controller 被算成共享内核、凭空多出几十条 `<域>.api -> <域>` 边并触发反向依赖违规"。
+这三个契约因此取下一个空段 `spi`（`agent.spi` / `automation.spi` / `studio.spi`）。
+`integration` 没事是因为它按接入类型分包（`file` / `mail` / `mcp` / `oss`），压根没有 `integration/api`。
+详见 §3decies.2 与 `adr-contract-boundaries.md` §2.7。
 
 ⚠️ 这次改动的安全验证方式是**基线必须逐字节不变**：改完扫描器、**不搬任何类**，
 重新生成 `docs/cross-domain-imports.yaml` 与 `docs/migration-scan-report.md`，

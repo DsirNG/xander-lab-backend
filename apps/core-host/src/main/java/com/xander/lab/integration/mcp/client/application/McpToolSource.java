@@ -3,8 +3,8 @@ package com.xander.lab.integration.mcp.client.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.agent.application.AgentDynamicToolSource;
-import com.xander.lab.agent.application.AgentTool;
+import com.xander.lab.agent.spi.RemoteTool;
+import com.xander.lab.agent.spi.RemoteToolCatalog;
 import com.xander.lab.integration.mcp.client.McpClientProperties;
 import com.xander.lab.integration.mcp.client.domain.AgentMcpServer;
 import com.xander.lab.integration.mcp.client.domain.McpRemoteTool;
@@ -16,49 +16,75 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 把启用的远端 MCP 服务器上的工具，变成智能体工具面里的一份动态工具。
+ * 把启用的远端 MCP 服务器上的工具，变成 agent 工具面里的一份动态工具。
  *
  * <p>只读缓存，不碰网络：工具清单来自 {@code agent_mcp_server.tools_json}，
  * 那是上次探测的结果。所以渲染工具面永远不发请求——探测只发生在用户点「测试连接」时。</p>
  *
  * <p>可见性：平台级配置（owner 0）人人可用，用户自己配的只对自己可见。
  * 这条规则在这里生效，是「甲的服务器不该出现在乙的工具面里」的唯一实现点。</p>
+ *
+ * <p>本类实现 {@link RemoteToolCatalog}，即 agent 拥有的契约（ADR-2：跨域走消费方拥有的
+ * 契约）。在此之前它实现的是 {@code agent.application.AgentDynamicToolSource}、
+ * 产出的是 {@code agent.application.AgentTool}——那是 integration 域在实现 agent 域的
+ * 实现类，跨了 {@code dinqor-platform-integration} / {@code dinqor-agent} 这条部署单元边界，
+ * 方向也是反的。现在它只认契约，把契约翻成 agent 自己的工具类型这件事由 agent 侧的
+ * {@code RemoteToolDynamicSource} / {@code RemoteToolAdapter} 做。</p>
  */
 @Component
 @RequiredArgsConstructor
-public class McpToolSource implements AgentDynamicToolSource {
+public class McpToolSource implements RemoteToolCatalog {
 
     private final McpClientProperties properties;
     private final AgentMcpServerMapper mapper;
     private final McpConnectionFactory connectionFactory;
     private final ObjectMapper objectMapper;
 
-    private volatile List<AgentTool> allCached;
+    /**
+     * 目录版本号：每次 {@link #invalidate()} 加一。
+     *
+     * <p>它是<b>替代"反向调用注册表 invalidate"</b>的那件东西：agent 侧每轮渲染工具面前读一次，
+     * 变了就重建合并视图。所以它必须廉价（一次 AtomicLong 读）且单调不减（只加一）。</p>
+     */
+    private final AtomicLong version = new AtomicLong();
 
-    private final Map<Long, List<AgentTool>> perUserCached = new ConcurrentHashMap<>();
+    private volatile List<RemoteTool> allCached;
+
+    private final Map<Long, List<RemoteTool>> perUserCached = new ConcurrentHashMap<>();
 
     @Override
-    public List<AgentTool> dynamicTools(Long userId) {
+    public List<RemoteTool> tools(Long userId) {
         if (!properties.isEnabled()) return List.of();
         if (userId == null) {
-            List<AgentTool> current = allCached;
+            List<RemoteTool> current = allCached;
             if (current != null) return current;
-            List<AgentTool> loaded = List.copyOf(load(null));
+            List<RemoteTool> loaded = List.copyOf(load(null));
             allCached = loaded;
             return loaded;
         }
         return perUserCached.computeIfAbsent(userId, id -> List.copyOf(load(id)));
     }
 
+    @Override
+    public long catalogVersion() {
+        return version.get();
+    }
+
     /**
-     * 配置变更后丢弃缓存。
+     * 配置变更后丢弃缓存并推进版本号。
      *
-     * <p>调用方还需要同时让 {@link com.xander.lab.agent.application.AgentToolRegistry#invalidate()}
-     * 失效——注册表缓存的是合并视图，本类只缓存自己这一层。两处都清才算真正生效。</p>
+     * <p>清缓存与推进版本两件事都要做，但真正让消费方看见变化的是<b>版本号</b>：agent 的
+     * {@code AgentToolRegistry} 缓存的是"内置 + 动态"的合并视图，它只按版本号判断要不要重建，
+     * 不会来问这里缓存了什么。只清这里而不推进版本，改动不会生效。</p>
+     *
+     * <p>调用方只有 {@link AgentMcpServerService}（同域），所以这个方法刻意<b>不</b>进契约：
+     * 契约是消费方拥有的，消费方从不要求提供方失效。</p>
      */
     public void invalidate() {
+        version.incrementAndGet();
         allCached = null;
         perUserCached.clear();
     }
@@ -84,12 +110,12 @@ public class McpToolSource implements AgentDynamicToolSource {
         }
     }
 
-    private List<AgentTool> load(Long userId) {
+    private List<RemoteTool> load(Long userId) {
         List<AgentMcpServer> servers = mapper.selectList(new LambdaQueryWrapper<AgentMcpServer>()
                 .eq(AgentMcpServer::getEnabled, true)
                 .orderByAsc(AgentMcpServer::getOwnerUserId)
                 .orderByAsc(AgentMcpServer::getServerKey));
-        List<AgentTool> tools = new ArrayList<>();
+        List<RemoteTool> tools = new ArrayList<>();
         for (AgentMcpServer server : servers) {
             if (!visibleTo(server, userId)) continue;
             tools.addAll(toolsOf(server));
@@ -111,17 +137,18 @@ public class McpToolSource implements AgentDynamicToolSource {
         return server.isPlatformOwned() || userId.equals(server.getOwnerUserId());
     }
 
-    private List<AgentTool> toolsOf(AgentMcpServer server) {
+    private List<RemoteTool> toolsOf(AgentMcpServer server) {
         List<McpRemoteTool> remotes = readCatalog(server);
         if (remotes.isEmpty()) return List.of();
-        List<AgentTool> tools = new ArrayList<>();
+        List<RemoteTool> tools = new ArrayList<>();
         for (McpRemoteTool remote : remotes) {
             if (remote == null || remote.name() == null || remote.name().isBlank()) continue;
             String name = RemoteMcpTool.composeName(server.getServerKey(), remote.name());
             // agent_tool_invocation.tool_name 与 agent_approval.tool_name 都是 VARCHAR(64)。
             // 名字过长会在落库那一刻炸掉整轮执行，所以这里就把它挡在外面，而不是等调用时才发现。
             if (name.length() > properties.getMaxToolNameLength()) continue;
-            tools.add(new RemoteMcpTool(server, remote, name, describe(server, remote), connectionFactory));
+            tools.add(new RemoteMcpTool(server, remote, name, describe(server, remote),
+                    connectionFactory, objectMapper));
         }
         return tools;
     }

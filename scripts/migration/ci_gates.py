@@ -578,19 +578,26 @@ WAVE2_UNITS = (
     "dinqor-platform-integration",
 )
 
-# The unit pairs that depend on each other in *implementation* terms, measured 2026-09-16.
+# The unit pairs that depend on each other in *implementation* terms, measured 2026-09-16
+# and re-measured 2026-09-17 after the agent-api cut.
 # Stored as ordered pairs so the baseline records direction, not just adjacency.
 #
 # Shape of the graph, and why it matters for Wave 2:
 #
-#   * Four pairs are mutual: agent <-> platform-integration, content-automation <->
-#     core-host, content-automation <-> platform-integration, core-host <->
-#     platform-integration.
+#   * Three pairs are mutual: content-automation <-> core-host, content-automation <->
+#     platform-integration, core-host <-> platform-integration.
+#   * agent <-> platform-integration WAS the fourth, and the agent-api cut ended it:
+#     integration used to implement agent's AgentTool / AgentDynamicToolSource and call
+#     AgentToolRegistry, which was 5 implementation statements one way. They now go through
+#     the agent.spi contract, so integration -> agent is zero and the pair is no longer
+#     mutual. Both directions are deleted from this baseline so the remaining tangle stays
+#     visible -- a stale entry makes the graph look worse than it is.
 #   * agent -> content-automation and agent -> core-host are one-way (19 and 14
 #     statements); nothing points back at agent from those two units.
 #   * Despite the one-way edges, all four units still form ONE strongly-connected
 #     component, via the chord cycle agent -> content-automation -> core-host ->
-#     platform-integration -> agent. So no unit is a leaf.
+#     platform-integration -> agent. So no unit is a leaf. Note the cycle no longer needs
+#     the platform-integration -> agent leg to close.
 #
 # This is NOT itself a defect. After the split these become ordinary service-to-service
 # calls, and A calling B while B calls A is normal. What it does mean is that Wave 2 has no
@@ -600,11 +607,9 @@ WAVE2_UNITS = (
 # implementation). That is why the contract line, not the lib line, is the one that moves
 # this graph.
 MUTUAL_UNIT_PAIRS = frozenset({
-    ("dinqor-agent", "dinqor-platform-integration"),
     ("dinqor-content-automation", "dinqor-core-host"),
     ("dinqor-content-automation", "dinqor-platform-integration"),
     ("dinqor-core-host", "dinqor-platform-integration"),
-    ("dinqor-platform-integration", "dinqor-agent"),
     ("dinqor-core-host", "dinqor-content-automation"),
     ("dinqor-platform-integration", "dinqor-content-automation"),
     ("dinqor-platform-integration", "dinqor-core-host"),

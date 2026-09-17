@@ -76,12 +76,34 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 `BlogPostMapper` 的投影目标（`@JsonIgnore tagsRaw` 承接 `GROUP_CONCAT`），搬它之前必须先把
 上线形状与持久化投影分开。
 
-**搬 vs 抽端口：先看那个类型是不是接口。** 这是两种不同的活，别混：
+**搬 vs 抽端口：先看那个类型是不是接口。** 三种情况，别混：
 
-- 类型**本来就是接口**（或纯 DTO）→ 搬家，连同它的 DTO 一起换包。先例 `BlogPublisher`。
-- 类型是**具体实现**（`@Service`、拖 SDK / mapper / `@Value`）→ 不能搬，只能**抽端口**：
-  在契约里新建一个接口，让原实现 `implements` 它，调用方改依赖接口。
-  先例 `OssPort` / `OssService`。
+| 那个类型长什么样 | 动作 | 先例 |
+|---|---|---|
+| **本来就是接口**（或纯 DTO） | **搬家**，连同它的 DTO 一起换包 | `BlogPublisher` |
+| **具体实现**（`@Service`、拖 SDK / mapper / `@Value`） | **抽端口**：契约里新建接口，原实现 `implements` 它，调用方改依赖接口 | `OssPort` / `OssService` |
+| **是接口，但签名里带框架类型，且有几十个实现** | **不动它**，另立一个**窄端口**把框架类型挡在外面 | `RemoteToolCatalog` / `AgentTool` |
+
+第三种是 2026-09-17 新增的一行，也是最容易做错的一行 —— 前两种的直觉都会让你去动那个类型，
+而正确答案是**连碰都不要碰它**。实测 `AgentTool`：签名返回 Jackson 的 `JsonNode`（ADR-1 直接
+违规）、带 6 个 `default` 成员 + 一个 5 方法的嵌套监听器、**50 个实现 / 41 个覆写
+`parametersSchema()`**。搬它 = 让 Jackson 进契约；改它的签名 = 动 50 个文件。
+
+正确做法是在契约里建一个**窄**端口，只收调用方**真正用到**的成员，且 JSON 一律走 `String`：
+
+```java
+public interface RemoteTool {                 // 7 个方法，全是调用方实现适配器时必需的那 7 个
+    String name();  String description();  String parametersSchemaJson();
+    String promptText();  String approvalReason(String argsJson);
+    boolean readOnly();
+    String invoke(Long userId, String argsJson, RemoteToolCall call);
+}
+```
+
+然后在**两边各写一个适配器**：实现侧 `implements RemoteTool`（一个类），调用方侧
+`RemoteToolAdapter implements AgentTool`（一个类）。收益是 **50 个实现一行没动** ——
+这次抽取一半的价值来自"没碰的东西"。判断"端口该多宽"的方法：**列出调用方的适配器
+被迫要实现的成员，那就是端口的方法集**（`reconcile` 调用方不需要，所以端口里没有）。
 
 **抽端口的真正信号：两个域各自写了一遍同样的代码。** 只看"它是不是具体实现"会漏掉关键判断 ——
 `UserLookupPort` 那次，`BlogService.resolveAuthor` 与 `ComponentService.shareComponent`
@@ -116,7 +138,23 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
            "端口变宽了。它存在的意义是收窄暴露面……");
    ```
 
+   **2026-09-17 实测的强度**：给 `RemoteTool` 加一个 `default String unusedCapability()`
+   之后，**26 条门禁全 PASS**、编译通过、所有指标不动 —— 只有反射测试红（2 个）。
+   所以这些反射测试**就是**这条不变量的唯一防线，不是"补充"。
+
    注入验证方法：加一个 `default` 方法（这样实现类不用改，只有宽度测试会红）。
+
+   **⚠️ 钉"完整签名"，不要只钉方法名。** 三个相邻的 `String` 换位不会报错，
+   只会静默错账（实测：`chargeTokens` 头四个参数 `(Long, String, String, String)`
+   换位会把幂等键写到 `biz_type` 列上）。用 `getSimpleName()` 列表断言**类型 + 顺序 + 方法名**：
+
+   ```java
+   assertEquals(List.of("name():String", "invoke(Long,String,RemoteToolCall):String", ...),
+                declaredSignatures(RemoteTool.class));
+   ```
+
+   配套：断言**没有任何 `default` 方法**（`getDeclaredMethods()` 里 `isDefault()` 全为假）、
+   断言**没有继承别的接口**、断言**签名里没有框架类型**（见下）。
 
    **⚠️ 反射检查参数类型时，数组要先 `getComponentType()`。**
    `byte[].class.getName()` 返回 **`"[B"`**，不是 `"java.…"`。所以
@@ -148,6 +186,56 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 同进程里这能工作，但**跨进程根本没有 ThreadLocal 可传** —— 不收 `userId` 的端口只是在描述
 一个无法跨进程的调用，等于没抽。附带收益：`getPublishedPostId(requestId)` 一次请求里读了
 **3 次** `UserContext`，收 `userId` 之后自然收敛成 1 次。
+
+**⚠️ 用"版本号轮询"替换反向回调，把控制流变成单向的。** 抽端口时最容易漏掉的一类依赖
+是**反向的**：实现方在状态变化时回调调用方去清缓存。实测
+`AgentMcpServerService.changed()` 原来直接调 `AgentToolRegistry.invalidate()` —— 于是
+`integration` 域 import 了 `agent` 域，方向反了，正是要消灭的那条边。
+
+拆法不是"把 `invalidate` 也放进端口"（那只是把反向依赖搬个地方），而是：
+
+```java
+// 端口侧：一个廉价、单调不减的版本号
+long catalogVersion();
+
+// 调用方侧：读到版本变了才重建，而不是等人来通知
+private Map<String, AgentTool> allTools() {
+    List<Long> versions = currentVersions();       // ⚠️ 先读版本
+    Snapshot current = allToolsSnapshot;
+    if (current != null && current.versions().equals(versions)) return current.tools();
+    Map<String, AgentTool> built = merge(tools, null);
+    allToolsSnapshot = new Snapshot(versions, built);
+    return built;
+}
+```
+
+四条要点：
+
+1. **⚠️ 读顺序是"先版本、后工具"，反过来会留下一个永久性的陈旧缓存。**
+   先取工具再取版本，并发变更时会存下"新版本 + 旧工具"，而版本此后再也不变，
+   缓存**永远**不会重建。这个错误**没有任何状态可见** —— 不抛异常、指标不动、门禁不报，
+   只能靠测试记录调用顺序来钉：
+   ```java
+   assertThat(calls).containsExactly("version", "tools", "version");
+   ```
+   （注意缓存命中时序列是 `[version, tools, version]` —— **版本每次都要读**，那正是机制本身；
+   被跳过的只有工具抓取。我第一次把断言写成 `[version, tools]`，红了才发现自己理解错了。）
+2. **版本号必须是 `long` 且单调不减**，`0` 的语义是"永不变化"。给 `default long version()`
+   在这里是**正确**的，不是"静默变宽"：接口是函数式接口、测试里用 lambda 实现，
+   而 `0` 就是一个语义合法的默认值。判据是"默认值是不是一个合法的真实语义"。
+3. **多源时别折成一个 `long`，除非你能证明不撞。** 本仓库两处形状不同且都有理由：
+   `AgentToolRegistry` 用 `List<Long>` 逐元素比较（源列表长度在装配期会变，折叠会撞）；
+   `RemoteToolDynamicSource` 用 `version * 31L + catalog.catalogVersion()` 折叠
+   （目录列表长度构造后固定 + 每个版本单调 ⇒ 可证单射）。**注入验证**：造一个 9×9 的
+   版本对穷举，断言没有两对折到同一个值。
+4. **一个 provider 抛异常不能把别的 provider 的工具一起弄没。** 注册表是**按源**catch 的，
+   所以一个聚合源里必须**按 provider** 再 catch 一层 —— 否则一个远端 MCP server 抖动
+   会让所有 provider 的工具集体消失。`RemoteToolDynamicSource` 就为此多了一层 try/catch。
+
+**⚠️ 端口不该携带渲染方的策略常量。** `RemoteTool.promptText()` 只给文本，**不给 `order`**；
+`order` 是 agent 域渲染提示词时的排序口径，由调用方适配器统一映射
+（`AgentPromptSection.sideEffect(text)`）。把 `order` 放进端口 = 让 agent 的常量表在
+契约里复制一份，两边可以静默漂移。
 
 **⚠️ 同域调用点比跨域多得多时，把旧公开方法留成"薄壳"，不要改它们的签名。**
 判断依据：**同域调用点不算跨域边界**。实测 `BlogService`：`BlogController` 有 17 个调用点
@@ -273,16 +361,37 @@ spring.servlet.multipart.max-file-size = 100MB
 所以：端口上**公开**这个常量（`long MAX_IMAGE_BYTES = 10L * 1024 * 1024`，避免三个调用方各抄一份），
 并且每个调用方**必须**在 `getBytes()` **之前**用 `file.getSize()` 先卡一道。
 
-**`SHARED_KERNEL` 里契约的包名可能要带点。** §18 的 8 个契约里有 4 个
-（`agent-api` / `automation-api` / `integration-api` / `studio-api`）的名字同时是业务域，
-包只能落在 `com.xander.lab.<域>.api`。条目按**最长前缀**匹配，所以登记 `integration.api`
+**⚠️ 给契约挑包名之前，先 `ls` 一下那个域，别照抄 `integration.api` 的结论。**
+§18 的 8 个契约里有 4 个（`agent-api` / `automation-api` / `integration-api` / `studio-api`）
+的名字同时是业务域，条目按**最长前缀**匹配，所以包名必须带点、登记也要带点
 （**不要**登记裸 `integration`：那会让契约隐形，因为业务域在扫描器里优先）。
+
+但"带点"之后**带哪一段，四个域答案不一样** —— 2026-09-17 实测踩到：
+
+```bash
+# 先做这一步，再决定包名
+ls apps/core-host/src/main/java/com/xander/lab/<domain>/
+```
+
+| 域 | `<domain>.api` 是否已被占用 | 契约包 |
+|---|---|---|
+| `integration` | 空闲（该域按集成方式分子包：`file` / `mail` / `mcp` / `oss`） | `integration.api` |
+| `agent` / `automation` / `studio` | **已被占用** —— 是这三个域自己的**前端 HTTP 层**（controller / VO / request body） | `agent.spi` / `automation.spi` / `studio.spi` |
+
+硬把契约塞进 `<domain>.api` 会同时坏两件事：（a）一个包名出现在两个 jar 里；
+（b）扫描器会把那个域的 **controller 当成共享内核**，于是"controller import 自己的
+application 层"变成一条条 `<domain>.api -> <domain>` 的假边 —— 待还债凭空多出几十条，
+外加每条一个 `shared-kernel-reverse-dependency` 违规。
+**新增契约模块前必做：`ls` 那个域，确认 `.api` 是不是空的。** 不要因为
+`integration.api` 能用就假定 `agent.api` 也能用。
 
 还有第三种情况：**契约名与它所属的业务域不同名**。`payment-api` 搬的是 `billing` 域的类型，
 包是 `com.xander.lab.payment.api`。`payment` 既不是业务域（域叫 `billing` / `virtualpay`）
 也不在 `SHARED_KERNEL` 里 —— 同样必须是带点条目 `payment.api`。
 §18 的契约名是按**能力**而不是按**现有模块**命名的（`payment` 对 `billing`），
 这是 §91 的意图，所以"名字对不上现有目录"是正常的，别顺手改成 `billing.api`。
+同理 `content-api` 装的是 `publishing` 域的类型 —— **建契约前先查已有契约里有没有
+同一能力的类型**，扩展它比新建省掉四处接线。
 
 **搬类型进契约时，调用方要一起改。** `OssService` 那次一共动了 4 个域 + 4 个测试文件。
 改完必须 `grep -rn "<旧包名>" --include=*.java apps/ contracts/` 复核，
@@ -300,20 +409,47 @@ spring.servlet.multipart.max-file-size = 100MB
 自动补 import 的脚本会给这类文件塞进一个**未使用**的 import（本轮 `GlobalExceptionHandler`
 和 `FeatureModelConfig` 各中一次），补完要回头检查。
 
-**⚠️ 契约包名前缀不是业务域名时（`core.api` / `payment.api`），指标完全靠不住，只有门禁能发现问题。**
-做过三次对照实验，一次比一次干净：
+**⚠️ `SHARED_KERNEL` 条目删错一个，五个头条指标可能一个字都不动 —— 只有门禁知道。**
+2026-09-17 把 10 个条目**逐个**删掉重跑扫描（每次都从 pristine 副本还原 `scan.py`，
+绝不读自己刚写的那份），结论可以用**一个谓词**概括：
+**`entry.split(".")[0]` 是否在 `BUSINESS_DOMAINS` 里。**
 
-| 实验 | 从 `SHARED_KERNEL` 删掉 | impl / cross / api |
-|---|---|---|
-| `integration.api` | `integration.api` | 116/85/38 不变（但 `integration` 是业务域，另有多出 5 条假反向依赖） |
-| `core.api` | `core.api` | 98/71/38 不变，`unclassified_sources` 多出 `core` |
-| `payment.api` | `payment.api` | **90/64/38 完全不变**，`unclassified_sources` 多出 `payment` |
+| 删掉的条目 | 首段是业务域 | impl / cross 变化 | api 变化 | `unclassified_sources` | 失败门禁数 |
+|---|---|---|---|---|---|
+| `agent.spi` | **是**（`agent`） | **+4 语句 / +1 边** | 0 | 不变 | **3** |
+| `integration.api` | **是**（`integration`） | 0 | **+8** | 不变 | 1 |
+| `core.api` | 否（`core`） | **0** | 0 | **+core** | 1 |
+| `content` | 否 | **0** | 0 | **+content** | 1 |
+| `payment.api` | 否（`payment`） | **0** | 0 | **+payment** | 1 |
+| `auth` / `common` / `config` / `filter` | 否 | **0** | 0 | 各 **+1** | 1 |
+| `util` | 否 | **0** | 0 | **不变** | **0** ⚠️ |
 
-因为 `core` / `payment` 既不在 `BUSINESS_DOMAINS` 里，也不在 `SHARED_KERNEL` 里，
-那些 import 只是被**静默丢掉**，而数字与"正确"状态一模一样 —— 第三次实验里
-**错状态与对状态在全部三个头条数字上逐字节相同**。唯一信号是
-`unclassified_sources` 多一个条目，以及 `shared-kernel-classification` 门禁 FAIL。
-**别因为数字好看就跳过门禁。**
+机制在 `domain_of()`：
+
+- 首段**是**业务域 ⇒ 未登记的包**回落到那个业务域**，import 重新被算成跨域边。
+  `agent.spi` 那行是 4 条 impl 语句；`integration.api` 那行是 8 条 `.api` 层语句，
+  只进 `api_statements` 所以 impl 不动。门禁会连报三条：
+  `shared-kernel-classification`、`cross-domain-import-baseline`
+  （`new cross-domain implementation edge(s): integration->agent`）、
+  `deployment-unit-coupling`（`new mutually-dependent unit pair(s)`）。**这是好消息** ——
+  指标在动，人看得见。
+- 首段**不是**业务域 ⇒ `target not in BUSINESS_DOMAINS` 把它**静默丢掉**，
+  五个数字与"正确"状态**逐字节相同**，只有 `shared-kernel-classification` 一条红，
+  外加 `unclassified_sources` 多一个条目。**别因为数字好看就跳过门禁**；也别把
+  "删了条目指标没动"读成"这个条目没用" —— 它恰恰是那条边被静默吞掉的证据。
+
+⚠️ **`util` 那一行是另一个洞：没有任何东西在守"条目是不是死的"。** `util` 已经在
+`SHARED_KERNEL` 里躺了很久，但**没有任何文件**住在 `com.xander.lab.util` 下
+（`find . -type d -name util` 为空），所以删掉它 0 条门禁失败、0 个指标移动、
+连 `unclassified_sources` 都不动。`shared-kernel-classification` 只检查
+**"每个被发布的包都有条目"**，不检查**"每个条目都有包"** —— 反向判据是缺的。
+（`unclassified_sources` 基线**本来就非空**：里面有 `DinQorAIApplication.java`，
+来自一个直接躺在 `com/xander/lab/` 下的类。所以"列表变长"要比对**集合**，不能只看空不空。）
+
+⚠️ 写这类测量脚本时，**别用带 `\s*$` 的正则去切 YAML 块列表** —— `\s` 会匹配换行，
+于是它可能吞掉整块、报出**隔壁键**的条目。本轮就因此得到过一行假的 `+util`，
+换了逐行状态机之后才消失。**任何"测量结果"在写进文档前都要先用另一种解析方式复核一遍。**
+
 
 **⚠️ 搬常量类 / 枚举类时，用"字面量整体 diff"验证，不要用眼睛。**
 `BillingBiz` 是 final 常量类、零 import，"看起来一样"不算验证。用 `git show HEAD:<旧路径>`
@@ -344,12 +480,18 @@ assertEquals(EXPECTED, found);
 新增业务项时人会记得改常量、不会记得改测试。整体比对让新增 / 改名 / 删除**全部**失败，
 不依赖任何人记得补一行。（先例：`BillingBizTest` / `ModelGatewayTest`。）
 
-**⚠️ 契约的依赖边界（JDK-only）遇到 Jackson 时不要顺手放宽。** `agent-api` 与
-`payment-api` 都卡在同一处：`AgentTool.parametersSchema()` 返回 `JsonNode`、
-`BillingService.chargeTokens(...)` 收 `ModelUsage`（住在 `libs/xander-model`，
-带 Jackson）。放宽 `CONTRACT_ALLOWED_IMPORT_PREFIXES` 是**设计决策**，
-不是重构的顺带产物 —— 见 `docs/migration/lib-extraction.md` §3quinquies.5，
-先把问题记下来问清楚，别在实现里悄悄改掉这条不变量。
+**⚠️ 契约的依赖边界（JDK-only）遇到 Jackson 时不要顺手放宽 —— 两处都已按"改设计"解决。**
+放宽 `CONTRACT_ALLOWED_IMPORT_PREFIXES` 是**设计决策**，不是重构的顺带产物。两个先例各给了一种解法：
+
+| 卡点 | 错误解法 | 实际解法 |
+|---|---|---|
+| `BillingService.chargeTokens(...)` 收 `ModelUsage`（住在 `libs/xander-model`，带 Jackson） | 放宽白名单 | 契约**自带等价 DTO** `payment.api.TokenUsage`，调用方在边界换算 |
+| `AgentTool.parametersSchema()` 返回 `JsonNode` | 搬 `AgentTool` 进契约 | 另立**窄端口** `agent.spi.RemoteTool`，JSON 一律走 `String` |
+
+两张表的共同点：**被挡在门外的那个类型一行都不用改**，代价只是边界上一个适配器。
+判断标准是"契约侧能不能只描述**数据**，把框架细节留给适配器"。
+见 `docs/migration/adr-contract-boundaries.md` §4 与 §6，以及
+`docs/migration/lib-extraction.md` §3quinquies.5 / §3decies。
 
 ## API 与异常契约
 
@@ -609,6 +751,21 @@ detail = f"{recomputed} implementation statements across {len(base_edges)} edges
 **规矩：门禁的 pass 消息里所有数字必须取自同一时刻。**
 要对比就显式写成两个字段（`X; baseline was Y`），不要在一个句子里混。
 验证方法同上：临时把基线改成一个"看起来缩了"的值，跑一次看 pass 消息是否如实。
+
+**⚠️ 注入验证要区分"门禁该拦的"和"只有测试能拦的"，并且把后者明确记为门禁盲区。**
+有些不变量的破坏**编译通过、指标不动、26 条门禁全绿** —— 它们只被反射测试守着。
+2026-09-17 实测三例，结论不同：
+
+| 注入 | 结果 | 说明 |
+|---|---|---|
+| 从 `SHARED_KERNEL` 删掉 `agent.spi` | **3 条门禁红** | 门禁真的在守这次抽取 |
+| `AgentToolRegistry` 里把"先读版本、后取工具"调换 | **0 条门禁红**，1 个测试红 | 顺序错误**没有任何状态可见** |
+| 给 `RemoteTool` 加一个 `default String unusedCapability()` | **0 条门禁红**，2 个测试红 | 端口变宽无编译错误、无指标变化 |
+
+所以：**"注入后门禁没红"不等于"这个注入没意义"**，也可能是"这个不变量本来就不归门禁管"。
+两种情况都要写进记录 —— 前者的证据是门禁名，后者的证据是**测试方法名 + 行号**。
+反过来说，凡是"只有测试能守"的不变量，测试**必须**存在且必须钉到**完整签名**
+（见前面端口宽度那条），否则这个不变量实际上无人看守。
 
 ### ⚠️ `cross_deployment_unit_edges` 只数 impl > 0 的边，与列表长度不等
 

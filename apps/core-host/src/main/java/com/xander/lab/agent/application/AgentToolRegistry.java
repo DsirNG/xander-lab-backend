@@ -30,8 +30,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p>工具分两层：内置工具在启动期固定，动态工具（远端 MCP 等）由
  * {@link AgentDynamicToolSource} 提供、随配置变化。合并结果按用户缓存，
- * 配置变更时由来源方调用 {@link #invalidate()} 丢弃——这样同一轮里的多次渲染读到的是
- * 同一份 map，{@link #describeToolSurface} 的"逐字节一致"前提才成立。</p>
+ * 配置变更时由<b>来源的版本号</b>驱动重建——注册表每次读取时先读一遍各来源的
+ * {@link AgentDynamicToolSource#version()}，与缓存里的比对，不一致才重建。这样同一轮里的
+ * 多次渲染读到的是同一份 map，{@link #describeToolSurface} 的"逐字节一致"前提才成立。</p>
+ *
+ * <p>为什么是版本号而不是"来源反向调用 {@link #invalidate()}"：那个形状要求提供方依赖
+ * 消费方的实现类（MCP 客户端在 integration 域，注册表在 agent 域），拆服务之后就是一条
+ * 反向的跨服务依赖，而这一刀的全部意义正是把它拆掉。{@link #invalidate()} 仍然保留，
+ * 但只用于装配期与测试。</p>
  */
 @Component
 public class AgentToolRegistry {
@@ -41,11 +47,11 @@ public class AgentToolRegistry {
 
     private final List<AgentDynamicToolSource> dynamicSources = new CopyOnWriteArrayList<>();
 
-    /** 内置 + 全部动态工具的合并视图；null 表示需要重建。不区分用户的场景读它。 */
-    private volatile Map<String, AgentTool> allToolsCache;
+    /** 内置 + 全部动态工具的合并视图，外加构建它时各来源的版本号；null 表示需要重建。 */
+    private volatile Snapshot allToolsSnapshot;
 
     /** 按用户缓存的合并视图：内置 + 平台级动态工具 + 该用户自己的动态工具。 */
-    private final Map<Long, Map<String, AgentTool>> perUserTools = new ConcurrentHashMap<>();
+    private final Map<Long, Snapshot> perUserSnapshots = new ConcurrentHashMap<>();
 
     public AgentToolRegistry(List<AgentTool> availableTools) {
         Map<String, AgentTool> sorted = new TreeMap<>();
@@ -65,10 +71,15 @@ public class AgentToolRegistry {
         invalidate();
     }
 
-    /** 配置变更后丢弃合并快照；下一次读取时重建。 */
+    /**
+     * 配置变更后丢弃合并快照；下一次读取时重建。
+     *
+     * <p>正常情况下不需要调它：动态来源的 {@link AgentDynamicToolSource#version()} 一变，
+     * 下一次读取就会自己重建。它留给装配期（{@link #setDynamicToolSources}）与测试使用。</p>
+     */
     public void invalidate() {
-        this.allToolsCache = null;
-        this.perUserTools.clear();
+        this.allToolsSnapshot = null;
+        this.perUserSnapshots.clear();
     }
 
     public AgentTool get(String name) {
@@ -166,23 +177,50 @@ public class AgentToolRegistry {
     }
 
     /**
-     * 合并内置工具与全部动态工具，结果缓存到 {@link #allTools}。
+     * 合并内置工具与全部动态工具，结果缓存到 {@link #allToolsSnapshot}。
      *
      * <p>动态工具不得顶掉同名内置工具：内置工具的名字是既有行为的一部分，
      * 被一台远端服务器顶掉会让老会话的能力无声改变。所以用 putIfAbsent。</p>
+     *
+     * <p><b>⚠️ 版本必须先读、工具必须后取。</b>反过来的顺序（先取工具、后读版本）会留下
+     * 一个<b>永久性</b>的陈旧缓存：期间发生的变更会让"新版本 + 旧工具"被一起存下来，而版本
+     * 再也不会变，那份旧工具就再也刷新不掉了。当前顺序下最坏情况只是多刷一次——变更发生在
+     * 读版本之后、取工具之前时，读到的是偏旧的版本，下一次读取判定过期并重建。</p>
      */
     private Map<String, AgentTool> allTools() {
-        Map<String, AgentTool> current = allToolsCache;
-        if (current != null) return current;
+        List<Long> versions = currentVersions();
+        Snapshot current = allToolsSnapshot;
+        if (current != null && current.versions().equals(versions)) return current.tools();
         Map<String, AgentTool> built = merge(tools, null);
-        allToolsCache = built;
+        allToolsSnapshot = new Snapshot(versions, built);
         return built;
     }
 
     /** 按用户缓存的合并视图；{@code userId} 为 null 时等价于全量表。 */
     private Map<String, AgentTool> mergedFor(Long userId) {
         if (userId == null) return allTools();
-        return perUserTools.computeIfAbsent(userId, id -> merge(tools, id));
+        List<Long> versions = currentVersions();
+        Snapshot current = perUserSnapshots.get(userId);
+        if (current != null && current.versions().equals(versions)) return current.tools();
+        Map<String, AgentTool> built = merge(tools, userId);
+        perUserSnapshots.put(userId, new Snapshot(versions, built));
+        return built;
+    }
+
+    /**
+     * 各动态来源当前的版本号，顺序与 {@link #dynamicSources} 一致。
+     *
+     * <p>用 {@code List<Long>} 而不是把版本折叠成一个 long 再比：折叠（{@code v*31 + next}）
+     * 在来源个数变化时会碰撞，而"来源个数"恰恰是装配期能变的东西（多一个契约实现方就多一个
+     * 来源）。逐元素比较没有这个问题，代价是每次读取分配一个长度等于来源个数的小列表——
+     * 来源个数是个位数。</p>
+     */
+    private List<Long> currentVersions() {
+        return dynamicSources.stream().map(AgentDynamicToolSource::version).toList();
+    }
+
+    /** 一份合并视图，以及构建它时各来源的版本号；版本变了就整体作废。 */
+    private record Snapshot(List<Long> versions, Map<String, AgentTool> tools) {
     }
 
     private Map<String, AgentTool> merge(Map<String, AgentTool> builtin, Long userId) {

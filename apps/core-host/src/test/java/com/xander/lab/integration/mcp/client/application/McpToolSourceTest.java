@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.client.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.agent.application.AgentTool;
+import com.xander.lab.agent.spi.RemoteTool;
 import com.xander.lab.integration.mcp.client.McpClientProperties;
 import com.xander.lab.integration.mcp.client.domain.AgentMcpServer;
 import com.xander.lab.integration.mcp.client.domain.McpRemoteTool;
@@ -15,6 +15,15 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * {@link McpToolSource} 作为 {@code agent.spi.RemoteToolCatalog} 的行为。
+ *
+ * <p>除了原有的可见性与目录读取，这里多守一件新东西：<b>目录版本号</b>。它是这一刀的核心
+ * 机制——原来 integration 在配置变更后反向调 agent 的
+ * {@code AgentToolRegistry#invalidate()}，现在改成 agent 读这里的版本号。所以"变更后版本必须
+ * 变"和"不变更时版本必须不动"两条都要钉：前者不成立改动不生效，后者不成立缓存每轮都白重建
+ * （工具面就不再逐字节稳定，上游 prompt 缓存整段失效）。</p>
+ */
 class McpToolSourceTest {
 
     private static final long ME = 7L;
@@ -28,8 +37,8 @@ class McpToolSourceTest {
         disabled.setEnabled(false);
         McpToolSource source = source(disabled, platformServer());
 
-        assertThat(source.dynamicTools(ME)).isEmpty();
-        assertThat(source.dynamicTools(null)).isEmpty();
+        assertThat(source.tools(ME)).isEmpty();
+        assertThat(source.tools(null)).isEmpty();
     }
 
     /** 平台级配置人人可用，用户自己配的只对自己可见。 */
@@ -37,8 +46,8 @@ class McpToolSourceTest {
     void platformServersAreVisibleToEveryoneButPersonalOnesAreNot() {
         McpToolSource source = source(enabled(), platformServer(), personalServer(SOMEONE_ELSE));
 
-        assertThat(names(source.dynamicTools(ME))).containsExactly("mcp__platform__ping");
-        assertThat(names(source.dynamicTools(SOMEONE_ELSE)))
+        assertThat(names(source.tools(ME))).containsExactly("mcp__platform__ping");
+        assertThat(names(source.tools(SOMEONE_ELSE)))
                 .containsExactly("mcp__platform__ping", "mcp__u9__act");
     }
 
@@ -46,7 +55,7 @@ class McpToolSourceTest {
     void theOwnerSeesTheirOwnServer() {
         McpToolSource source = source(enabled(), platformServer(), personalServer(ME));
 
-        assertThat(names(source.dynamicTools(ME)))
+        assertThat(names(source.tools(ME)))
                 .containsExactly("mcp__platform__ping", "mcp__u7__act");
     }
 
@@ -54,7 +63,7 @@ class McpToolSourceTest {
     void aNullUserSeesEverything() {
         McpToolSource source = source(enabled(), platformServer(), personalServer(ME), personalServer(SOMEONE_ELSE));
 
-        assertThat(names(source.dynamicTools(null)))
+        assertThat(names(source.tools(null)))
                 .containsExactly("mcp__platform__ping", "mcp__u7__act", "mcp__u9__act");
     }
 
@@ -78,7 +87,7 @@ class McpToolSourceTest {
         server.setToolsJson(catalog(new McpRemoteTool("x".repeat(64), "太长", null),
                 new McpRemoteTool("ping", "探活", null)));
 
-        assertThat(names(source(enabled(), server).dynamicTools(ME)))
+        assertThat(names(source(enabled(), server).tools(ME)))
                 .containsExactly("mcp__platform__ping");
     }
 
@@ -88,7 +97,7 @@ class McpToolSourceTest {
         AgentMcpServer server = platformServer();
         server.setToolsJson("{not json");
 
-        assertThat(source(enabled(), server).dynamicTools(ME)).isEmpty();
+        assertThat(source(enabled(), server).tools(ME)).isEmpty();
     }
 
     @Test
@@ -108,9 +117,60 @@ class McpToolSourceTest {
         AgentMcpServer server = platformServer();
         server.setToolsJson(catalog(new McpRemoteTool("ping", "x".repeat(50), null)));
 
-        String description = source(properties, server).dynamicTools(ME).get(0).description();
+        String description = source(properties, server).tools(ME).get(0).description();
 
         assertThat(description).startsWith("x".repeat(10) + "…").contains("平台级");
+    }
+
+    /**
+     * 什么都没变时版本必须不动。
+     *
+     * <p>版本一动，agent 那边的合并视图就重建一次。而"合并视图逐字节稳定"是提示词前缀能被
+     * 上游缓存的前提——每轮白重建一次会让缓存整段失效，而且看不出任何症状。</p>
+     */
+    @Test
+    void theCatalogVersionDoesNotMoveWhileNothingChanges() {
+        McpToolSource source = source(enabled(), platformServer());
+
+        long before = source.catalogVersion();
+        source.tools(ME);
+        source.tools(SOMEONE_ELSE);
+        source.tools(null);
+
+        assertThat(source.catalogVersion()).isEqualTo(before);
+    }
+
+    /**
+     * 失效必须推进版本号，而且必须<b>同时</b>清掉自己这两层缓存。
+     *
+     * <p>两件事各管一半：清缓存让这里下次读到新配置；推进版本让 agent 那边的合并视图重建。
+     * 只清这里，agent 永远看不见变化；只推版本不清这里，agent 重建出来的还是旧工具。</p>
+     */
+    @Test
+    void invalidateBothBumpsTheVersionAndDropsTheCachedTools() {
+        AgentMcpServer server = platformServer();
+        McpToolSource source = source(enabled(), server);
+        long before = source.catalogVersion();
+        assertThat(names(source.tools(ME))).containsExactly("mcp__platform__ping");
+
+        server.setToolsJson(catalog(new McpRemoteTool("pong", "换了个工具", null)));
+        source.invalidate();
+
+        assertThat(source.catalogVersion()).isGreaterThan(before);
+        assertThat(names(source.tools(ME))).containsExactly("mcp__platform__pong");
+    }
+
+    /** 禁用状态下也不该动版本：没有配置变化可言，白推一次就是白重建一次。 */
+    @Test
+    void aDisabledClientStillReportsAStableVersion() {
+        McpClientProperties disabled = new McpClientProperties();
+        disabled.setEnabled(false);
+        McpToolSource source = source(disabled, platformServer());
+
+        long before = source.catalogVersion();
+        source.tools(ME);
+
+        assertThat(source.catalogVersion()).isEqualTo(before);
     }
 
     private McpToolSource source(McpClientProperties properties, AgentMcpServer... servers) {
@@ -156,7 +216,7 @@ class McpToolSourceTest {
         }
     }
 
-    private List<String> names(List<AgentTool> tools) {
-        return tools.stream().map(AgentTool::name).toList();
+    private List<String> names(List<RemoteTool> tools) {
+        return tools.stream().map(RemoteTool::name).toList();
     }
 }

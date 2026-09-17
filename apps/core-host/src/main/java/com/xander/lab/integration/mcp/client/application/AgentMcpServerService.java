@@ -2,7 +2,6 @@ package com.xander.lab.integration.mcp.client.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.agent.application.AgentToolRegistry;
 import com.xander.lab.integration.mcp.client.McpClientProperties;
 import com.xander.lab.integration.mcp.client.api.AgentMcpServerRequest;
 import com.xander.lab.integration.mcp.client.api.AgentMcpServerView;
@@ -38,19 +37,16 @@ public class AgentMcpServerService {
     private final McpToolSource toolSource;
     private final McpHeaderCipher headerCipher;
     private final McpClientProperties properties;
-    private final AgentToolRegistry toolRegistry;
     private final ObjectMapper objectMapper;
 
     public AgentMcpServerService(AgentMcpServerMapper mapper, McpConnectionFactory connectionFactory,
                                  McpToolSource toolSource, McpHeaderCipher headerCipher,
-                                 McpClientProperties properties, AgentToolRegistry toolRegistry,
-                                 ObjectMapper objectMapper) {
+                                 McpClientProperties properties, ObjectMapper objectMapper) {
         this.mapper = mapper;
         this.connectionFactory = connectionFactory;
         this.toolSource = toolSource;
         this.headerCipher = headerCipher;
         this.properties = properties;
-        this.toolRegistry = toolRegistry;
         this.objectMapper = objectMapper;
     }
 
@@ -159,12 +155,13 @@ public class AgentMcpServerService {
     /**
      * 配置变更后让工具面重新计算。
      *
-     * <p>两处缓存都要清：本类上游的 {@link McpToolSource} 缓存"有哪些远端工具"，
-     * 注册表缓存"内置 + 动态合并后长什么样"。只清一处，改动不会生效。</p>
+     * <p>只清<b>本域</b>这一层缓存：{@link McpToolSource#invalidate()} 顺手推进目录版本号，
+     * agent 的 {@code AgentToolRegistry} 下一次读取时发现版本变了，自己重建合并视图。
+     * 本类不再反向调它的 {@code invalidate()} —— 那是一次 {@code integration -> agent} 的
+     * 实现类依赖，跨部署单元，拆服务之后不可能成立。</p>
      */
     private void changed() {
         toolSource.invalidate();
-        toolRegistry.invalidate();
     }
 
     private AgentMcpServer require(Long id, long ownerUserId) {

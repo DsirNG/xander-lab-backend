@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>agent-api</artifactId>
+    <name>agent-api</name>
+    <description>
+        Service-to-service contract for remote tool supply (V9 §18 / §91).
+
+        Members: RemoteToolCatalog (the port), RemoteTool (one contributed tool) and
+        RemoteToolCall (the channel a tool talks back through).
+
+        Why the module exists. integration.mcp.client.application implemented
+        com.xander.lab.agent.application.AgentTool and AgentPromptSection, and
+        AgentMcpServerService called AgentToolRegistry#invalidate() -- five
+        implementation statements pointing integration -> agent, crossing the
+        dinqor-platform-integration / dinqor-agent deployment-unit boundary. After the
+        split that means the integration service cannot be built without the agent
+        service's implementation classes, and the call goes the wrong way: the *provider*
+        of remote tools was reaching into its *consumer*. The port and its data move to a
+        module both sides may depend on, and the direction becomes
+        integration -&gt; agent-api &lt;- agent.
+
+        Package note: this module's package is com.xander.lab.agent.spi, NOT
+        com.xander.lab.agent.api. The three sibling contracts that sit inside a domain's
+        own namespace (agent-api / automation-api / studio-api) hit a collision the
+        content-api / core-api / payment-api ones do not: those domains already own
+        com.xander.lab.&lt;domain&gt;.api as their *frontend HTTP* layer (controllers, VOs,
+        request bodies). Declaring the contract there would put one package in two jars,
+        and worse, would make the scanner classify the domain's own controllers as shared
+        kernel -- every controller importing its own application layer would become an
+        agent.api -> agent edge (inflating the backlog with dozens of statements) and a
+        shared-kernel-reverse-dependency violation. So the contract takes the next free
+        segment, spi, and SHARED_KERNEL lists agent.spi (dotted, matched longest-first).
+        automation-api and studio-api hit the same collision; they take the same answer.
+
+        Why AgentTool itself is NOT here, which is the whole difficulty of this cut.
+        AgentTool is the obvious candidate -- it is the interface integration used to
+        implement -- but it is unusable as a contract type:
+          * parametersSchema() returns com.fasterxml.jackson.databind.JsonNode. ADR-1
+            says a contract module must stay serialization-framework agnostic, and
+            CONTRACT_ALLOWED_IMPORT_PREFIXES is java. only. Moving AgentTool here would
+            require widening that gate, which is exactly the super-common.jar §19 forbids.
+          * It has 6 default members (promptSection / execute / reconcile /
+            approvalReason / readOnly) plus a nested ProgressListener with 5 more, so
+            every implementation would be coupled to agent's whole tool vocabulary.
+          * 50 implementations, 41 of which override parametersSchema(). Moving the
+            interface means touching all of them.
+        So the cut does not move AgentTool. It adds a narrow port that answers only the
+        questions the consumer actually asks, and keeps AgentTool where it is. The 50
+        implementations are untouched; the Jackson cut is confined to this port surface
+        plus one adapter on each side. A port is a design freedom -- choose the shape that
+        makes the implementation-side change degenerate.
+
+        Why the schema travels as String. RemoteTool#parametersSchemaJson returns the JSON
+        Schema as text, and RemoteTool#invoke takes arguments and returns the result the
+        same way. That is not a stylistic choice: JsonNode is what made AgentTool
+        un-movable. It costs one parse on the agent side (cached in the adapter) and one
+        toString on the provider side, against a call that is a network round trip.
+        Verified byte-identical: RemoteMcpTool already held a parsed JsonNode, so
+        schema.toString() -> readTree() reproduces the same tree and the rendered tool
+        surface JSON does not change. That is what keeps this cut out of
+        docs/contract-changes.yaml.
+
+        RemoteTool deliberately has no order() for its prompt section. Ordering is the
+        renderer's policy, not the provider's data: every remote tool leaves the platform,
+        so its guidance is a side-effect rule by definition, and the adapter maps it to
+        AgentPromptSection.ORDER_SIDE_EFFECT. Carrying an int across the boundary would
+        mean a second copy of that constant table in another module, free to drift.
+
+        What is deliberately NOT here yet:
+        - Any of agent's own api layer (com.xander.lab.agent.api.*). It is the frontend
+          HTTP contract (web / miniprogram), a different audience from the
+          service-to-service one, and it joins a contract module only when that layer
+          itself is split in Wave 2.
+        - AgentDynamicToolSource / AgentToolRegistry. They are agent's in-process
+          abstractions; the whole point of the port is that integration never sees them.
+
+        Known residual after this cut (recorded, not fixed): agent -> integration stays at
+        0 statements in both layers, but the agent-side adapter still has to be reachable
+        as a Spring bean from the integration-owned McpToolSource -- in one process that
+        is automatic, across two it becomes a network call. Same open question as
+        BlogPublisher; see docs/migration/lib-extraction.md.
+
+        Zero dependencies, and that is the point. A contract that drags in a framework
+        cannot be depended on by every service, and V9 §19 is explicit that the WebFlux
+        Gateway must stay free of spring-webmvc. Nothing here may gain a compile
+        dependency without a deliberate decision; test scope is fine.
+    </description>
+
+    <dependencies>
+        <!--
+            No compile or runtime dependency by design. junit-jupiter is test-scoped: the
+            port's width and its full signatures are pinned by reflection, because widening
+            a port trips no other defence. It compiles, the coupling metrics do not move,
+            and no gate reports it. Adding a default method is the silent form of widening.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class".
+            -->
+        </plugins>
+    </build>
+
+</project>

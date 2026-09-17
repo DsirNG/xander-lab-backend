@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -207,6 +208,92 @@ class AgentToolRegistryTest {
         // allowedNames 返回的是 Set，顺序不保证；要顺序得用 names(userId)。
         assertThat(scoped.allowedNames(7L)).containsExactlyInAnyOrder("mcp__new__thing", "remember");
         assertThat(scoped.names(7L)).containsExactly("mcp__new__thing", "remember");
+    }
+
+    /**
+     * 来源的版本号一变，合并视图自己重建，不需要任何人来调 {@code invalidate()}。
+     *
+     * <p>这是"把反向调用换成轮询"的那一半：原来 MCP 客户端（integration 域）在配置变更后
+     * 反向调注册表的 {@code invalidate()}，那是跨部署单元的实现类依赖。现在提供方只推进自己的
+     * 版本号，消费方每次读取时比对——控制流只剩一个方向。</p>
+     *
+     * <p>同时钉住"版本不动就不重建"：否则每轮都白重建，工具面不再逐字节稳定，上游 prompt
+     * 缓存整段失效，而且看不出任何症状。</p>
+     */
+    @Test
+    void aSourceVersionBumpRebuildsTheMergeWithoutAnExplicitInvalidate() {
+        AtomicLong version = new AtomicLong();
+        List<AgentTool> supplied = new ArrayList<>();
+        AgentToolRegistry scoped = new AgentToolRegistry(List.of(tool("remember")));
+        scoped.setDynamicToolSources(List.of(new AgentDynamicToolSource() {
+            @Override
+            public long version() {
+                return version.get();
+            }
+
+            @Override
+            public List<AgentTool> dynamicTools(Long userId) {
+                return List.copyOf(supplied);
+            }
+        }));
+
+        assertThat(scoped.allowedNames(7L)).containsExactly("remember");
+
+        supplied.add(tool("mcp__new__thing"));
+        assertThat(scoped.allowedNames(7L)).containsExactly("remember");
+
+        version.incrementAndGet();
+        assertThat(scoped.names(7L)).containsExactly("mcp__new__thing", "remember");
+    }
+
+    /**
+     * <b>版本必须先读、工具必须后取。</b>
+     *
+     * <p>反过来的顺序会留下一个<b>永久性</b>的陈旧缓存：先取工具（旧）、再读版本（新），
+     * 于是"新版本 + 旧工具"被存下来，而版本再也不会变，那份旧工具就再也刷新不掉了。
+     * 这个 bug 没有任何别的症状——功能测试全绿，只有线上偶发地少一个工具，所以只能用调用
+     * 顺序断言钉住。</p>
+     */
+    @Test
+    void theVersionIsReadBeforeTheToolsSoAConcurrentChangeCannotBeCachedAsFresh() {
+        List<String> calls = new ArrayList<>();
+        AgentToolRegistry scoped = new AgentToolRegistry(List.of(tool("remember")));
+        scoped.setDynamicToolSources(List.of(new AgentDynamicToolSource() {
+            @Override
+            public long version() {
+                calls.add("version");
+                return 1L;
+            }
+
+            @Override
+            public List<AgentTool> dynamicTools(Long userId) {
+                calls.add("tools");
+                return List.of();
+            }
+        }));
+
+        scoped.allowedNames(7L);
+        assertThat(calls).containsExactly("version", "tools");
+
+        // 缓存命中时只该少掉"取工具"那一步，版本仍然每次都读——不读就发现不了变更，
+        // 而发现变更正是这个机制存在的全部理由。所以第二次读是 version 而非 tools。
+        scoped.allowedNames(7L);
+        assertThat(calls).containsExactly("version", "tools", "version");
+    }
+
+    /** 默认版本 0 表示"这个来源永不变化"，注册表就不该因为读版本而反复重建。 */
+    @Test
+    void aSourceThatKeepsTheDefaultVersionIsNeverRebuiltSpontaneously() {
+        List<AgentTool> supplied = new ArrayList<>();
+        AgentToolRegistry scoped = new AgentToolRegistry(List.of(tool("remember")));
+        scoped.setDynamicToolSources(List.of(userId -> List.copyOf(supplied)));
+
+        assertThat(scoped.allowedNames(7L)).containsExactly("remember");
+
+        supplied.add(tool("mcp__new__thing"));
+        // 版本恒为 0，所以即使来源内容变了也不重建——这正是加版本号之前的行为，
+        // 由显式 invalidate() 负责（见 invalidateDropsTheCachedDynamicMerge）。
+        assertThat(scoped.allowedNames(7L)).containsExactly("remember");
     }
 
     private AgentTool tool(String name) {

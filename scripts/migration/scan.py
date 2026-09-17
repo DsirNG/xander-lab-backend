@@ -136,14 +136,27 @@ BUSINESS_DOMAINS = [
 # Entries are package **prefixes**, matched by ``shared_kernel_owner()`` taking the longest
 # match, so they may be dotted. That is not decoration: 4 of the 8 contracts V9 section 18
 # names (``agent-api`` / ``automation-api`` / ``integration-api`` / ``studio-api``) are
-# named after a package that is *also* a business domain. A contract for those has to live
-# at ``com.xander.lab.<domain>.api``, and listing the bare domain would classify the whole
-# domain as shared kernel -- dropping every ``integration.oss`` / ``integration.mail`` /
-# ``integration.mcp`` edge from the backlog while the coupling was unchanged.
+# named after a package that is *also* a business domain. Listing the bare domain would
+# classify the whole domain as shared kernel -- dropping every ``integration.oss`` /
+# ``integration.mail`` / ``integration.mcp`` edge from the backlog while the coupling was
+# unchanged.
+#
+# Where the contract itself goes is a second question, and the answer is NOT the same for
+# all four. ``integration`` works out to ``integration.api`` because that domain organises
+# its packages by integration kind (``file`` / ``mail`` / ``mcp`` / ``oss``) and leaves
+# ``.api`` free. The other three do not: ``agent`` / ``automation`` / ``studio`` each
+# already own ``com.xander.lab.<domain>.api`` as their *frontend HTTP* layer (controllers,
+# VOs, request bodies). Putting a contract there would (a) ship one package in two jars and
+# (b) make the scanner classify those controllers as shared kernel, so every controller
+# importing its own application layer becomes an ``<domain>.api -> <domain>`` edge --
+# inflating the backlog by dozens of statements -- plus a
+# ``shared-kernel-reverse-dependency`` violation for each. Those contracts therefore take
+# the next free segment: ``agent.spi`` / ``automation.spi`` / ``studio.spi``.
 #
 # ``common`` / ``config`` / ``filter`` / ``util`` are the in-app shared packages; ``auth``
-# is the package provided by ``libs/xander-auth-core`` (V9 §20); ``content`` is the package
-# provided by ``contracts/content-api`` (V9 §18/§91).
+# is the package provided by ``libs/xander-auth-core`` (V9 §20); ``content`` / ``core.api``
+# / ``payment.api`` / ``integration.api`` / ``agent.spi`` are the packages provided by
+# ``contracts/*`` (V9 §18/§91).
 #
 # Contract packages belong here even though a contract is not a "library". A contract's
 # whole purpose is to be the one legal cross-service dependency, so an import of one must
@@ -159,7 +172,7 @@ BUSINESS_DOMAINS = [
 # so ``shared_kernel_packages()`` below derives the set from the tree and the
 # ``shared-kernel-classification`` gate compares the two. Adding a module means adding its
 # package here; the gate fails until you do.
-SHARED_KERNEL = ["auth", "common", "config", "content", "core.api", "filter",
+SHARED_KERNEL = ["agent.spi", "auth", "common", "config", "content", "core.api", "filter",
                  "integration.api", "payment.api", "util"]
 
 # Import prefixes a ``contracts/*`` module is allowed to use (V9 §19 / §21).

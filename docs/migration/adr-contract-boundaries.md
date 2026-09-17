@@ -86,10 +86,12 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
 
 ### 1.5 当前状态
 
-- `contracts/` 下 4 个模块（`core-api` / `content-api` / `integration-api` /
-  `payment-api`）目前**零 Jackson 依赖**，由门禁
+- `contracts/` 下 5 个模块（`core-api` / `content-api` / `integration-api` /
+  `payment-api` / `agent-api`）目前**零 Jackson 依赖**，由门禁
   `contract-dependency-boundary` 守着（JDK-only import + 无 compile/runtime 依赖）。
-- 尚未清理的是**边界路径上的 Jackson 泄漏**（见 §7 待办），不是契约模块本身。
+- `agent-api` 是这条 ADR 最难的一次应用：要抽的端口属于 agent 的工具体系，而
+  `AgentTool.parametersSchema()` 返回 `JsonNode`。**没有**放宽门禁，也没有搬 `AgentTool`，
+  而是让 JSON 以文本出入端口（见 §6）。
 
 ---
 
@@ -180,9 +182,43 @@ blogagent ───→ content-api ←─── agent
 **所以它不构成一次 §11 契约变更，不该进登记表。** 这一点写在这里，
 是为了让后来的人知道"没登记"是判断，不是漏掉。
 
-> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§7 待办第 3 项），
+> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§8 待办第 3 项），
 > 那**必须**进 `contract-changes.yaml` 并走 §11 流程 —— 因为它会真的删掉
 > 前端能看到 10 个字段。
+
+### 2.7 契约模块的包名：`<domain>.api` 对三个域**已经被占用**
+
+`contracts/<x>-api` 的包名默认是 `com.xander.lab.<x>.api`，已建的四份都是这么落的。
+但这条规律对 **`agent-api` / `automation-api` / `studio-api` 不成立**，因为这三个域
+**已经**把 `com.xander.lab.<domain>.api` 用作自己的**前端 HTTP 层**：
+
+```text
+apps/core-host/src/main/java/com/xander/lab/
+├── agent/       api  application  domain  infrastructure   ← api 已被占用
+├── automation/  api  application  domain  infrastructure   ← api 已被占用
+├── studio/      api  application  domain  infrastructure   ← api 已被占用
+├── integration/ file  mail  mcp  oss                       ← 没有 api，所以 integration-api 能落在这里
+└── publishing/  api  application  domain  infrastructure   ← 但 content-api 与它不同名，不冲突
+```
+
+把契约也放进 `<domain>.api` 会有两个后果，第二个是真正致命的：
+
+1. **同一个包出现在两个 jar 里**（`apps/core-host` 与 `contracts/agent-api`）。
+2. **扫描器会把该域自己的 Controller 也算成共享内核。** `SHARED_KERNEL` 是前缀匹配，
+   登记 `agent.api` 就同时覆盖了那 12 个 Controller / VO / 请求体；而它们的
+   `domain_of` 会变成 `agent.api`（不是业务域 `agent`），于是每个 Controller 引用自己的
+   application 层都会产生一条 `agent.api -> agent` 的**新边**——把
+   `implementation_statements` 推高几十条，并同时触发
+   `shared-kernel-reverse-dependency` 违规（它只允许一条白名单里的存量）。
+
+所以这三个契约取**下一个空着的段**：`spi`，`SHARED_KERNEL` 登记 `agent.spi` 这类带点条目
+（`shared_kernel_owner()` 最长匹配，`agent.spi` 不会连带覆盖 `agent.api`）。
+
+> **加契约模块前的第一步**：`ls apps/core-host/src/main/java/com/xander/lab/<domain>/`，
+> 看 `api` 是否已被占用。占用了就换段，别改扫描器。
+
+名字带 `spi` 也不只是躲碰撞：本端口确实是**宿主定义、插件实现**的经典 SPI 形态，
+与 `BlogPublisher` 同类——agent 是宿主，integration 是插件。
 
 ---
 
@@ -262,7 +298,7 @@ MediaAssetRef findReusableGenerated(Long userId, String title);
 
 > **这暴露了一个仍未拍板的问题**：契约能不能依赖契约？今天答案是**不能**
 > （Maven 无法编排 test-only 的跨契约依赖，所以门禁干脆全禁）。
-> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §7 待办。
+> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §8 待办。
 
 ### 3.5 `byte[]` 而不是 `MultipartFile`，以及 `MAX_IMAGE_BYTES`
 
@@ -499,7 +535,7 @@ api_statements / api_edges         38 / 11 (不变)
 
 **但这笔账要在拆分后重新算**：一旦 `payment-api` 作为独立版本化的 jar 发布，
 `TokenUsage` 的分量顺序就变成了跨进程的线上格式，届时任何重排都必须走 §11
-（见 §7 第 7 项）。
+（见 §8 第 7 项）。
 
 ---
 
@@ -699,12 +735,164 @@ api_edges                          11 -> 10   (-1)
 也确认（28 个能力 0 增 0 退；14 条变更全部可解析）。
 
 **⚠️ 但这笔账要在拆分后重新算**：`ContentPost` 的 17 个分量顺序与 `ContentPostPage` 的 6 个分量顺序，
-与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §7 第 7 项）。
+与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §8 第 7 项）。
 今天不登记，契约 jar 独立版本化时必须补。
 
 ---
 
-## 6. 这两条 ADR 与既有规则的交叉
+## 6. 落地记录（四）：`agent-api` —— 不搬 `AgentTool`，只加一个窄端口
+
+### 6.1 拆掉的是一处**方向错误**，不是一处耦合
+
+改之前，`integration.mcp.client.application` 里三个文件 import 了 agent 的**实现类**，
+共 5 条实现语句，全部跨部署单元（`dinqor-platform-integration` → `dinqor-agent`）：
+
+| 文件 | import 了什么 | 为什么 |
+|---|---|---|
+| `AgentMcpServerService` | `agent.application.AgentToolRegistry` | 配置变更后反向调它的 `invalidate()` |
+| `McpToolSource` | `AgentDynamicToolSource`、`AgentTool` | 实现消费方的"动态工具来源"接口 |
+| `RemoteMcpTool` | `AgentPromptSection`、`AgentTool` | 实现消费方的"工具"接口 |
+
+这三条都不是"提供方偷懒用了对方的内部类型"，而是**提供方在实现消费方的接口**——形态上像
+SPI，所以看起来理所当然。问题在方向：`AgentTool` / `AgentDynamicToolSource` 是 agent 的
+**进程内抽象**，integration 实现它们等于把自己的编译单元绑在 agent 的实现类上。拆成两个
+服务之后，integration 的构建要依赖 agent 的实现 jar；而且**是提供方在调消费方的实现**，
+控制流是反的。
+
+### 6.2 为什么**不能**把 `AgentTool` 搬进契约（这是这一刀的全部难点）
+
+`AgentTool` 是"顺手搬过去"的那个显然选择，但它当不了契约类型，三条独立的理由：
+
+1. **`parametersSchema()` 返回 `com.fasterxml.jackson.databind.JsonNode`。** ADR-1 说契约
+   必须与序列化框架无关，`CONTRACT_ALLOWED_IMPORT_PREFIXES` 只有 `java.`。搬它就必须放宽
+   门禁——而 §8.1 明写"不许为了过门禁而放宽"。
+2. **它有 6 个 `default` 成员**（`promptSection` / `execute(AgentToolContext,…)` /
+   `reconcile` / `approvalReason` / `readOnly`），外加嵌套的 `ProgressListener` 又有 5 个。
+   搬过去等于把 agent 的整套工具词汇表塞进每个依赖方。
+3. **50 个实现、41 个覆写 `parametersSchema()`。** 搬接口就要改这 50 个文件。
+
+三条里任何一条单独都够否决，合起来说明"搬 `AgentTool`"这个方向本身就是错的：
+**它不是一个 DTO，也不是一个为跨域设计的端口，它是 agent 内部的工具抽象。**
+
+### 6.3 端口的形状：JSON 走文本，7 个方法正好是适配器要实现的那些
+
+所以这一刀**不动** `AgentTool`，而是在 `contracts/agent-api` 里加一个**窄端口**，
+只回答消费方真正要问的问题：
+
+```java
+public interface RemoteToolCatalog {          // 端口：消费方问，提供方答
+    List<RemoteTool> tools(Long userId);
+    long catalogVersion();
+}
+
+public interface RemoteTool {                 // 数据 + 一次调用
+    String name();  String description();
+    String parametersSchemaJson();            // ← JSON Schema 以文本给出
+    String promptText();
+    String approvalReason(String argsJson);   // ← 参数也是文本
+    boolean readOnly();
+    String invoke(Long userId, String argsJson, RemoteToolCall call);   // ← 结果也是文本
+}
+```
+
+三处 JSON 全部走 `String`，这是 ADR-1 的直接后果。代价是调用侧多一次解析（适配器里缓存）、
+提供方多一次 `toString`；对照的是一次真实网络往返，可以忽略。
+
+`RemoteTool` 的 7 个方法**正好**是消费方适配器要实现的 `AgentTool` 成员里除去 `reconcile`
+的那 7 个。`reconcile`（查证一次被打断的调用的持久化结果）没有对应方法，因为远端工具查不了
+——副作用在第三方那里，本平台既没有记录也没有能力去问。
+
+**这一刀的收益一半来自"没做什么"**：agent 的 50 个工具实现一个都没动，Jackson 的切口被
+限制在端口表面加两侧各一个适配器（`RemoteToolDynamicSource` / `RemoteToolAdapter`）。
+端口形状是设计自由——选那个让实现侧改动退化成类型替换的形状。
+
+### 6.4 反向依赖怎么断：版本号取代 `invalidate()` 回调
+
+三条 import 里最麻烦的是第一条。`AgentMcpServerService` 在配置变更后要清**两处**缓存：
+自己域的 `McpToolSource`，以及 agent 的 `AgentToolRegistry`（合并视图）。第二处就是那条
+反向依赖。
+
+**改法：把"我变了"的通知换成"你问我变没变"的轮询。**
+
+- `AgentDynamicToolSource` 加 `default long version()`，默认 `0` 表示"永不变"；
+- `AgentToolRegistry` 每次读取时先读各来源的版本，与缓存里的比对，不一致才重建；
+- `McpToolSource.invalidate()` 顺手 `incrementAndGet()` 自己的版本号；
+- `AgentMcpServerService.changed()` 只剩 `toolSource.invalidate()`。
+
+于是控制流只剩一个方向：**注册表问，来源答，来源永远不需要知道注册表是谁。**
+
+> 为什么 `version()` 可以是 `default`：`AgentDynamicToolSource` 是**函数式接口**，测试里大量
+> 用 lambda 实现它。加抽象方法会让那些 lambda 全部编译不过，而它们表达的正是"版本恒为 0 的
+> 静态来源"这个合法语义——默认值 `0` 恰好就是那个语义。这不是"静默变宽"，是"默认值正确"。
+
+**⚠️ 一个没有别的症状的顺序坑**：注册表必须**先读版本、后取工具**。反过来的顺序会留下一个
+**永久性**的陈旧缓存——期间发生的变更让"新版本 + 旧工具"被一起存下来，而版本再也不会变，
+那份旧工具就再也刷新不掉了。当前顺序下最坏只是多刷一次。这条只能用**调用顺序断言**钉住
+（`AgentToolRegistryTest#theVersionIsReadBeforeTheToolsSoAConcurrentChangeCannotBeCachedAsFresh`）。
+
+### 6.5 为什么准则不带 `order`
+
+契约只给准则正文（`promptText()`），不给渲染顺序。顺序是**渲染方的策略**，不是提供方的数据：
+远端工具的定义就是"调用会离开本平台"，所以它的准则天然属于
+`AgentPromptSection.ORDER_SIDE_EFFECT`，适配器统一挂到那一档。
+
+若把 `int order` 放进契约，agent 的常量表（50 / 100 / 200 / 300）就得跨模块再抄一份，
+两份值可以**无声漂移**——漂移的后果是提示词里准则的排序变了，没有任何测试会红。
+
+### 6.6 端口"变宽"依然没人守（第四次确认）
+
+与 §3.6 / §4.7 / §5.8 同一手法，这次钉了**三个**类型而不是一个：
+`RemoteToolTest` / `RemoteToolCatalogTest` / `RemoteToolCallTest`，各自断言
+
+- 完整签名清单（名字 + 参数类型顺序 + 返回类型）逐条相等、条数相等；
+- 没有任何 `default` 方法；
+- 不继承别的接口（宽度不从别处漏进来）；
+- 签名里不出现非 JDK / 非本契约包的类型；
+- 契约类型必须住在 `com.xander.lab.agent.spi`。
+
+`RemoteToolCall` 只有两个方法，看起来最不值得测，其实是三个里**最容易被"顺手加一个
+default"**的：它是回调，而回调天然让人想给"可选能力"加默认空实现。加下去的代价不只是变宽，
+还让那个能力**看起来存在**——比直接不提供更糟。
+
+公共断言抽在 `ContractShape`（测试作用域）里。**不复用生产代码里的任何东西**：
+契约模块没有生产代码可复用，而且就算有也不能用——用被测方的函数去算判据，等于让它自己
+给自己打分（与门禁校验生成物清单那条规矩同源）。
+
+### 6.7 实测收益
+
+```text
+implementation_statements      55 → 50      (-5)
+implementation_edges           21 → 20
+cross_deployment_unit_statements  38 → 33   (-5)
+cross_deployment_unit_edges    14 → 13
+api_statements                 25 → 25      (未动)
+```
+
+`integration → agent` 这条边**整条消失**（5 条语句、3 个文件）。更重要的是图形状变了：
+
+> `deployment-unit-coupling` 从"4 个单元 4 对互依"变成"**4 个单元 3 对互依**"，
+> 并且明确报出 `1 pair(s) no longer mutual, delete both directions from MUTUAL_UNIT_PAIRS:
+> [('dinqor-agent', 'dinqor-platform-integration')]`。
+
+这是这条门禁第一次报出"互依对减少"。`MUTUAL_UNIT_PAIRS` 里那两条（两个方向）已经删掉——
+留着会让图看起来比实际更缠，而这个门禁的消息是 Wave 2 唯一的进度信号。
+
+### 6.8 为什么没有加 `contract-changes.yaml` 条目
+
+理由与 §2.6 / §4.10 / §5.11 相同，而且这次有**机器证明**：
+`RemoteMcpTool` 原本就持有一个已解析的 `JsonNode` schema，改成
+`toString()` → `readTree()` 得到同一棵树，字段顺序也不变（Jackson 的 `ObjectNode`
+保序），所以渲染出的工具面 JSON **逐字节不变**。三条断言直接钉住这件事：
+
+- `RemoteMcpToolTest#passesThroughTheRemoteSchemaWithItsFieldOrderIntact`（提供方侧：文本与输入逐字节相同）
+- `RemoteToolAdapterTest#theSchemaRoundTripsByteIdenticallySoTheRenderedToolSurfaceDoesNotChange`（消费方侧：解析再序列化回到原文本）
+- `RemoteToolDynamicSourceTest#distinctVersionPairsNeverFoldToTheSameValue`（折叠不碰撞，版本变化一定能被看见）
+
+路由、响应形状、错误码都未变，所以不构成 §11 契约变更。
+
+---
+
+## 7. 这两条 ADR 与既有规则的交叉
 
 | 既有规则 | 与 ADR 的关系 |
 |---|---|
@@ -726,21 +914,21 @@ api_edges                          11 -> 10   (-1)
 
 ---
 
-## 7. 待办
+## 8. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
-| 1 | 边界路径上的 Jackson 泄漏：`billing` 端口 | **已做**（§4）。`agent-api` 仍未做，见第 6 项 |
+| 1 | 边界路径上的 Jackson 泄漏：`billing` 端口 | **已做**（§4）。`agent-api` 也已做（§6），两条已知泄漏都清了 |
 | 2 | 契约能否依赖契约 | **未拍板**。今天禁止，代价是 `StoredImage` / `TokenUsage` 这类重复类型 |
 | 3 | `MediaAssetRef` 收窄到前端真正读的 3 个字段 | **未做**，独立 §11 变更 |
 | 4 | `agent -> publishing` 的 9 条 impl 语句（`BlogService`） | **已做**（§5）。边归零，只剩 1 条 api（§5.10） |
 | 5 | `@JsonIgnoreProperties` 存量清单与清理时点 | **未清点** |
-| 6 | `agent-api`（`AgentTool.parametersSchema()` 返回 `JsonNode`） | **未做**，50 个实现 / 41 个覆写，是下一刀 |
+| 6 | `agent-api`（`AgentTool.parametersSchema()` 返回 `JsonNode`） | **已做**（§6）。结论是**不搬 `AgentTool`**，只加窄端口 `RemoteToolCatalog` / `RemoteTool` / `RemoteToolCall`，50 个实现一个没动。契约包名取 `agent.spi` 而非 `agent.api`，理由见 §2.7 |
 | 7 | `TokenUsage` / `ContentPost` / `ContentPostPage` 分量顺序是否要登记为 §11 契约变更 | **未定**。今天不登记（理由同 §2.6），但拆分后契约 jar 独立版本化时它们会变成线上格式 |
 | 8 | `blogagent → publishing` 的 1 条 api 语句（`BlogPostVO`） | **未做**，独立一刀（§5.10） |
 | 9 | `ContentPostPort` 的 16 个不上端口方法，拆分后是否需要新的端口 | **未定**。`automation` / `blogagent` 与内容域同单元，拆完还在一个进程里 |
 
-### 7.1 第 1 项的边界（明确不许顺手放宽）
+### 8.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -751,7 +939,7 @@ api_edges                          11 -> 10   (-1)
 
 ---
 
-## 8. 一句话记法
+## 9. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

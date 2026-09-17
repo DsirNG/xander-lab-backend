@@ -95,6 +95,21 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            Remote-tool-supply service-to-service contract: RemoteToolCatalog / RemoteTool /
+            RemoteToolCall (V9 §18 / §91). The integration domain's MCP client implemented the
+            agent domain's AgentTool / AgentDynamicToolSource and called AgentToolRegistry,
+            which points the wrong way across the dinqor-platform-integration /
+            dinqor-agent boundary. Note the package is com.xander.lab.agent.spi, not
+            .agent.api, because that domain already owns .agent.api as its frontend HTTP layer.
+            Zero transitive dependencies by design; see contracts/agent-api/pom.xml.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>agent-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>
