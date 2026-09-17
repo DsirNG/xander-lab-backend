@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.automation.api.BlogContentPlanVO;
-import com.xander.lab.automation.application.BlogContentPlanService;
+import com.xander.lab.automation.spi.ContentPlanPort;
+import com.xander.lab.automation.spi.ContentPlanView;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -15,14 +15,17 @@ import java.util.List;
  * Lists the current user's recurring content plans (定时发文计划). A single
  * unpaged query returns all matching plans, optionally filtered by status, so
  * the agent never has to page through results.
+ *
+ * <p>依赖 {@link ContentPlanPort} 而不是 {@code BlogContentPlanService}：这个工具属于
+ * agent 域，而那个实现类属于 automation 域，两者在拆服务后是两个进程。</p>
  */
 @Component
 public class QueryPlansTool implements AgentTool {
 
-    private final BlogContentPlanService planService;
+    private final ContentPlanPort planPort;
 
-    public QueryPlansTool(BlogContentPlanService planService) {
-        this.planService = planService;
+    public QueryPlansTool(ContentPlanPort planPort) {
+        this.planPort = planPort;
     }
 
     @Override
@@ -62,29 +65,29 @@ public class QueryPlansTool implements AgentTool {
     public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
         String status = args.path("status").asText("");
-        List<BlogContentPlanVO> plans = planService.listAll(userId, status);
+        List<ContentPlanView> plans = planPort.listAll(userId, status);
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("total", plans.size());
         ArrayNode records = outcome.putArray("plans");
-        for (BlogContentPlanVO plan : plans) {
+        for (ContentPlanView plan : plans) {
             ObjectNode item = records.addObject();
-            item.put("id", plan.getId());
-            item.put("topic", defaultText(plan.getTopic(), ""));
-            item.put("status", defaultText(plan.getStatus(), ""));
-            item.put("timezone", defaultText(plan.getTimezone(), ""));
-            item.put("syncCsdn", Boolean.TRUE.equals(plan.getSyncCsdn()));
-            item.put("syncJuejin", Boolean.TRUE.equals(plan.getSyncJuejin()));
-            item.put("runOnce", Boolean.TRUE.equals(plan.getRunOnce()));
-            item.put("nextRunAt", plan.getNextRunAt() == null ? "" : plan.getNextRunAt().toString());
-            item.put("lastRunAt", plan.getLastRunAt() == null ? "" : plan.getLastRunAt().toString());
+            item.put("id", plan.id());
+            item.put("topic", defaultText(plan.topic(), ""));
+            item.put("status", defaultText(plan.status(), ""));
+            item.put("timezone", defaultText(plan.timezone(), ""));
+            item.put("syncCsdn", Boolean.TRUE.equals(plan.syncCsdn()));
+            item.put("syncJuejin", Boolean.TRUE.equals(plan.syncJuejin()));
+            item.put("runOnce", Boolean.TRUE.equals(plan.runOnce()));
+            item.put("nextRunAt", plan.nextRunAt() == null ? "" : plan.nextRunAt().toString());
+            item.put("lastRunAt", plan.lastRunAt() == null ? "" : plan.lastRunAt().toString());
             ArrayNode triggerTimes = item.putArray("triggerTimes");
-            if (plan.getTriggerTimes() != null) {
-                plan.getTriggerTimes().forEach(triggerTimes::add);
+            if (plan.triggerTimes() != null) {
+                plan.triggerTimes().forEach(triggerTimes::add);
             }
-            if (StringUtils.hasText(plan.getErrorMessage())) {
-                item.put("errorMessage", plan.getErrorMessage().trim());
+            if (StringUtils.hasText(plan.errorMessage())) {
+                item.put("errorMessage", plan.errorMessage().trim());
             }
         }
         outcome.put("hint", "共返回 " + plans.size() + " 个定时发文计划。");

@@ -1,0 +1,84 @@
+package com.xander.lab.automation.spi;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * 钉住 {@link ContentPlanPort} 的形状。理由与 {@link EmailReminderPortTest} 相同：
+ * 端口变宽编译得过、指标不动、门禁不报，只有这里会红。
+ *
+ * <p>这个端口尤其值得钉：实现方 {@code BlogContentPlanService} 对<b>自己的控制器</b>公开了
+ * 15 个方法，而端口只要 6 个。"顺手把 controller 在用的方法也加进端口"是这次重构里最可能
+ * 发生的走偏，而它不会有任何症状 —— 所以下面那条断言把 15 个里的 9 个明确挡在门外。</p>
+ */
+class ContentPlanPortTest {
+
+    @Test
+    void declaresExactlyTheSixKnownMethodsWithTheseExactSignatures() {
+        assertEquals(List.of(
+                "create(Long, ContentPlanDraft) -> ContentPlanView",
+                "delete(Long, Long) -> void",
+                "findByClientRequestId(Long, String) -> ContentPlanView",
+                "listAll(Long, String) -> List",
+                "update(Long, Long, ContentPlanEdit) -> ContentPlanView",
+                "updateStatus(Long, Long, String) -> ContentPlanView"
+        ), ContractShape.declaredSignatures(ContentPlanPort.class),
+                "端口方法集变了。六个方法对应三个工具真正做的六件事；"
+                        + "aiGenerate / createOneShotPlans / list / detail / trigger / listRuns / "
+                        + "runDetail / generateTopics / nextRunAfter 都是控制器与调度器要的，"
+                        + "智能体不读，不该出现在这里。");
+    }
+
+    @Test
+    void noMethodIsDefaultBecauseThatWouldWidenTheContractSilently() {
+        ContractShape.assertNoDefaultMethods(ContentPlanPort.class);
+    }
+
+    @Test
+    void isAnInterfaceInTheContractPackage() {
+        assertTrue(ContentPlanPort.class.isInterface(),
+                "端口必须是接口：实现方 implements 它，契约不能带实现。");
+        assertEquals("com.xander.lab.automation.spi", ContentPlanPort.class.getPackageName());
+    }
+
+    @Test
+    void extendsNothingSoNoOtherContractCanLeakInThroughInheritance() {
+        assertEquals(0, ContentPlanPort.class.getInterfaces().length,
+                "端口不许继承别的接口。契约不能依赖契约，继承一条链就能把另一个契约拖进来。");
+    }
+
+    @Test
+    void noSignatureMentionsAFrameworkType() {
+        ContractShape.assertNoFrameworkTypes(ContentPlanPort.class);
+    }
+
+    @Test
+    void everyMethodTakesTheCallerIdExplicitlyBecauseThreadLocalDoesNotCrossProcesses() {
+        for (var method : ContentPlanPort.class.getDeclaredMethods()) {
+            assertEquals(Long.class, method.getParameterTypes()[0],
+                    method.getName() + " 的第一个参数必须是调用方 id（见 EmailReminderPort 上的同一断言）。");
+        }
+    }
+
+    @Test
+    void createTakesAKeyedDraftAndUpdateTakesAnUnkeyedEditSoTheyCannotBeConfused() {
+        // 两个写入方法的参数类型刻意不同：创建要幂等键，修改不要。同类型的话，
+        // "把创建草稿传给 update"会编译通过 —— 而 update 会静默忽略幂等键。
+        assertEquals(ContentPlanDraft.class,
+                ContentPlanPort.class.getDeclaredMethods()[indexOf("create")].getParameterTypes()[1]);
+        assertEquals(ContentPlanEdit.class,
+                ContentPlanPort.class.getDeclaredMethods()[indexOf("update")].getParameterTypes()[2]);
+    }
+
+    private int indexOf(String name) {
+        var methods = ContentPlanPort.class.getDeclaredMethods();
+        for (int i = 0; i < methods.length; i++) {
+            if (methods[i].getName().equals(name)) return i;
+        }
+        throw new AssertionError("端口上没有方法 " + name);
+    }
+}

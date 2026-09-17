@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.automation.api.EmailReminderTaskVO;
-import com.xander.lab.automation.application.EmailReminderService;
+import com.xander.lab.automation.spi.EmailReminderPort;
+import com.xander.lab.automation.spi.EmailReminderView;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -15,14 +15,17 @@ import java.util.List;
  * Lists the current user's scheduled email reminders (定时邮件提醒). A single
  * unpaged query returns all matching tasks, optionally filtered by status or
  * keyword, so the agent never has to page through results.
+ *
+ * <p>依赖 {@link EmailReminderPort} 而不是 {@code EmailReminderService}：这个工具属于
+ * agent 域，而那个实现类属于 automation 域，两者在拆服务后是两个进程。</p>
  */
 @Component
 public class QueryEmailRemindersTool implements AgentTool {
 
-    private final EmailReminderService emailReminderService;
+    private final EmailReminderPort reminderPort;
 
-    public QueryEmailRemindersTool(EmailReminderService emailReminderService) {
-        this.emailReminderService = emailReminderService;
+    public QueryEmailRemindersTool(EmailReminderPort reminderPort) {
+        this.reminderPort = reminderPort;
     }
 
     @Override
@@ -67,25 +70,25 @@ public class QueryEmailRemindersTool implements AgentTool {
         onProgress.checkCancellation();
         String status = args.path("status").asText("");
         String search = args.path("search").asText("");
-        List<EmailReminderTaskVO> tasks = emailReminderService.listAll(userId, status, search);
+        List<EmailReminderView> tasks = reminderPort.listAll(userId, status, search);
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
         outcome.put("total", tasks.size());
         ArrayNode records = outcome.putArray("reminders");
-        for (EmailReminderTaskVO task : tasks) {
+        for (EmailReminderView task : tasks) {
             ObjectNode item = records.addObject();
-            item.put("id", task.getId());
-            item.put("recipientEmail", defaultText(task.getRecipientEmail(), ""));
-            item.put("subject", defaultText(task.getSubject(), ""));
-            item.put("frequency", defaultText(task.getFrequency(), ""));
-            item.put("status", defaultText(task.getStatus(), ""));
-            item.put("timezone", defaultText(task.getTimezone(), ""));
-            item.put("sendTime", defaultText(task.getSendTime(), ""));
-            item.put("scheduledAt", task.getScheduledAt() == null ? "" : task.getScheduledAt().toString());
-            item.put("sentAt", task.getSentAt() == null ? "" : task.getSentAt().toString());
-            if (StringUtils.hasText(task.getErrorMessage())) {
-                item.put("errorMessage", task.getErrorMessage().trim());
+            item.put("id", task.id());
+            item.put("recipientEmail", defaultText(task.recipientEmail(), ""));
+            item.put("subject", defaultText(task.subject(), ""));
+            item.put("frequency", defaultText(task.frequency(), ""));
+            item.put("status", defaultText(task.status(), ""));
+            item.put("timezone", defaultText(task.timezone(), ""));
+            item.put("sendTime", defaultText(task.sendTime(), ""));
+            item.put("scheduledAt", task.scheduledAt() == null ? "" : task.scheduledAt().toString());
+            item.put("sentAt", task.sentAt() == null ? "" : task.sentAt().toString());
+            if (StringUtils.hasText(task.errorMessage())) {
+                item.put("errorMessage", task.errorMessage().trim());
             }
         }
         outcome.put("hint", "共返回 " + tasks.size() + " 个定时邮件提醒任务。");

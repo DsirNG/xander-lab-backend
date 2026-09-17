@@ -3,9 +3,9 @@ package com.xander.lab.agent.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.automation.api.EmailReminderCreateRequest;
-import com.xander.lab.automation.api.EmailReminderTaskVO;
-import com.xander.lab.automation.application.EmailReminderService;
+import com.xander.lab.automation.spi.EmailReminderDraft;
+import com.xander.lab.automation.spi.EmailReminderPort;
+import com.xander.lab.automation.spi.EmailReminderView;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -16,14 +16,18 @@ import java.util.Optional;
  * Creates a scheduled email reminder. The service owns recurrence calculation,
  * idempotency, quota limits and the durable send job; the tool only translates
  * the user's natural-language request into a validated create command.
+ *
+ * <p>依赖 {@link EmailReminderPort} 而不是 {@code EmailReminderService}：这个工具属于
+ * agent 域，而那个实现类属于 automation 域，两者在拆服务后是两个进程。
+ * 端口只暴露本工具真正用到的五个操作与两个状态常量。</p>
  */
 @Component
 public class EmailReminderTool implements AgentTool {
 
-    private final EmailReminderService emailReminderService;
+    private final EmailReminderPort reminderPort;
 
-    public EmailReminderTool(EmailReminderService emailReminderService) {
-        this.emailReminderService = emailReminderService;
+    public EmailReminderTool(EmailReminderPort reminderPort) {
+        this.reminderPort = reminderPort;
     }
 
     @Override
@@ -97,37 +101,47 @@ public class EmailReminderTool implements AgentTool {
     @Override
     public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
         onProgress.checkCancellation();
-        EmailReminderCreateRequest request = new EmailReminderCreateRequest();
-        request.setRecipientEmail(args.path("recipientEmail").asText("").trim());
-        request.setSubject(args.path("subject").asText("").trim());
-        request.setMessage(args.path("message").asText(""));
-        if (!StringUtils.hasText(request.getRecipientEmail())) {
+        String recipientEmail = args.path("recipientEmail").asText("").trim();
+        String subject = args.path("subject").asText("").trim();
+        String message = args.path("message").asText("");
+        if (!StringUtils.hasText(recipientEmail)) {
             throw new IllegalArgumentException("定时邮件工具缺少参数 recipientEmail");
         }
-        if (!StringUtils.hasText(request.getSubject())) {
+        if (!StringUtils.hasText(subject)) {
             throw new IllegalArgumentException("定时邮件工具缺少参数 subject");
         }
-        if (!StringUtils.hasText(request.getMessage())) {
+        if (!StringUtils.hasText(message)) {
             throw new IllegalArgumentException("定时邮件工具缺少参数 message");
         }
-        request.setFrequency(defaultText(args.path("frequency").asText(""), "ONCE"));
-        request.setTimezone(defaultText(args.path("timezone").asText(""), "Asia/Shanghai"));
-        request.setSendTime(defaultText(args.path("sendTime").asText(""), null));
-        request.setContentType(defaultText(args.path("contentType").asText(""), "PLAIN"));
-        request.setTemplateId(defaultText(args.path("templateId").asText(""), "classic"));
-        if (args.path("recurrenceDay").isIntegralNumber()) {
-            request.setRecurrenceDay(args.path("recurrenceDay").asInt());
-        }
-        if (args.path("intervalDays").isIntegralNumber()) {
-            request.setIntervalDays(args.path("intervalDays").asInt());
-        }
-        String scheduledAt = args.path("scheduledAt").asText("");
-        if (StringUtils.hasText(scheduledAt)) {
-            request.setScheduledAt(OffsetDateTime.parse(scheduledAt));
-        }
-        request.setClientRequestId(context.invocationId());
+        Integer recurrenceDay = args.path("recurrenceDay").isIntegralNumber()
+                ? args.path("recurrenceDay").asInt()
+                : null;
+        Integer intervalDays = args.path("intervalDays").isIntegralNumber()
+                ? args.path("intervalDays").asInt()
+                : null;
+        String scheduledAtText = args.path("scheduledAt").asText("");
+        OffsetDateTime scheduledAt = StringUtils.hasText(scheduledAtText)
+                ? OffsetDateTime.parse(scheduledAtText)
+                : null;
+
+        // ⚠️ 记录类型靠位置构造：分量顺序必须与 EmailReminderDraft 的声明完全一致，
+        // 写反不会有任何编译错误。顺序由契约侧的 RecordShapeTest 钉住，
+        // 而"哪个分量落到哪个字段"由本工具的测试用互不相同的字面量钉住。
+        EmailReminderDraft draft = new EmailReminderDraft(
+                context.invocationId(),
+                recipientEmail,
+                subject,
+                message,
+                defaultText(args.path("frequency").asText(""), "ONCE"),
+                defaultText(args.path("timezone").asText(""), "Asia/Shanghai"),
+                scheduledAt,
+                defaultText(args.path("sendTime").asText(""), null),
+                recurrenceDay,
+                intervalDays,
+                defaultText(args.path("contentType").asText(""), "PLAIN"),
+                defaultText(args.path("templateId").asText(""), "classic"));
         onProgress.onProgress("正在创建定时邮件提醒…");
-        EmailReminderTaskVO task = emailReminderService.create(context.userId(), request);
+        EmailReminderView task = reminderPort.create(context.userId(), draft);
 
         return toOutcome(task);
     }
@@ -137,21 +151,21 @@ public class EmailReminderTool implements AgentTool {
         if (!StringUtils.hasText(context.invocationId())) {
             return Optional.empty();
         }
-        EmailReminderTaskVO task = emailReminderService.findByClientRequestId(
+        EmailReminderView task = reminderPort.findByClientRequestId(
                 context.userId(), context.invocationId());
         return task == null ? Optional.empty() : Optional.of(toOutcome(task));
     }
 
-    private ObjectNode toOutcome(EmailReminderTaskVO task) {
+    private ObjectNode toOutcome(EmailReminderView task) {
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
-        outcome.put("taskId", task.getId());
-        outcome.put("recipientEmail", defaultText(task.getRecipientEmail(), ""));
-        outcome.put("subject", defaultText(task.getSubject(), ""));
-        outcome.put("frequency", defaultText(task.getFrequency(), ""));
-        outcome.put("scheduledAt", task.getScheduledAt() == null ? "" : task.getScheduledAt().toString());
-        outcome.put("status", defaultText(task.getStatus(), ""));
-        outcome.put("hint", "定时邮件提醒已创建，到点会自动发送到 " + defaultText(task.getRecipientEmail(), "") + "。");
+        outcome.put("taskId", task.id());
+        outcome.put("recipientEmail", defaultText(task.recipientEmail(), ""));
+        outcome.put("subject", defaultText(task.subject(), ""));
+        outcome.put("frequency", defaultText(task.frequency(), ""));
+        outcome.put("scheduledAt", task.scheduledAt() == null ? "" : task.scheduledAt().toString());
+        outcome.put("status", defaultText(task.status(), ""));
+        outcome.put("hint", "定时邮件提醒已创建，到点会自动发送到 " + defaultText(task.recipientEmail(), "") + "。");
         return outcome;
     }
 

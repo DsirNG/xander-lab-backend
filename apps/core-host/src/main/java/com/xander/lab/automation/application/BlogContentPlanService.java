@@ -16,6 +16,10 @@ import com.xander.lab.automation.domain.BlogPlanRun;
 import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
 import com.xander.lab.automation.infrastructure.BlogContentPlanMapper;
 import com.xander.lab.automation.infrastructure.BlogPlanRunMapper;
+import com.xander.lab.automation.spi.ContentPlanDraft;
+import com.xander.lab.automation.spi.ContentPlanEdit;
+import com.xander.lab.automation.spi.ContentPlanPort;
+import com.xander.lab.automation.spi.ContentPlanView;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
@@ -40,9 +44,34 @@ import java.util.Set;
 
 /** C-end use cases for daily content plans: CRUD, lifecycle transitions,
  * manual test trigger, run history, and next-fire preview. */
+/**
+ * 定时发文计划的领域服务；同时是 {@link ContentPlanPort} 在 automation 域这一侧的实现。
+ *
+ * <h2>为什么同一个能力有两套公开方法</h2>
+ * <p>本类对<b>自己的控制器</b>公开 15 个方法，返回前端页面要的全字段
+ * {@code BlogContentPlanVO}（24 个字段，含 {@code csdnAuthorized} / {@code juejinAuthorized}
+ * 这类要现场查凭据的派生字段）。智能体的三个工具只要 6 个操作、11 个字段，
+ * 通过 {@link ContentPlanPort} 拿 {@link ContentPlanView}。</p>
+ * <p>两者不能只靠返回类型重载（Java 不允许），所以按本仓库既有的做法：
+ * <b>端口方法拿规范名</b>（{@code updateStatus}），<b>同域的富方法加后缀说明它服务谁</b>
+ * （{@code updateStatusForView}）。</p>
+ *
+ * <h2>为什么端口方法是转调 + 换算，而不是把实现体搬过来</h2>
+ * <p>实现体一行没动：端口方法调同域的富方法，再把 VO 收窄成 {@link ContentPlanView}
+ * （读方法也走 {@code toVO}，为的是让"往读模型落字段"只有一处 —— 见 {@code toView} 上的注释）。
+ * 多一次内存里的对象构造，换来的是"这次抽取不改变任何行为"可以被直接看出来。</p>
+ *
+ * <p>⚠️ <b>已知残留</b>：端口调用会经过 {@code toVO}，而它要调
+ * {@code csdnCredentialService.isAuthorized} / {@code juejinCredentialService.isAuthorized}
+ * 去填那两个前端要的派生字段（{@link ContentPlanView} 里没有它们）。
+ * 同进程里这没有区别（今天就是这样），但拆服务后
+ * {@link ContentPlanPort#updateStatus} 会变得比它需要的样子更脆：一个智能体并不读的派生字段，
+ * 能让一次状态变更失败。要修就得把实现体改成返回实体、由两个公开方法各自包装 ——
+ * 那是独立的一刀，不在这次重构里做。</p>
+ */
 @Service
 @RequiredArgsConstructor
-public class BlogContentPlanService {
+public class BlogContentPlanService implements ContentPlanPort {
 
     private static final String UNAUTHORIZED_MESSAGE = "未登录或登录已过期";
 
@@ -141,16 +170,34 @@ public class BlogContentPlanService {
         return toVO(planMapper.selectById(plan.getId()), userId);
     }
 
-    /** Finds an existing create result by the caller's stable idempotency key. */
+    /**
+     * {@inheritDoc}
+     *
+     * <p>把契约草稿装回域请求体后转调上面那个方法，再把 VO 收窄。校验、限流、时区解析、
+     * 幂等全在那一个实现体里，只有一份 —— 复制一份到这里意味着以后改限流规则要改两处，
+     * 而且不会有任何编译错误提醒。</p>
+     */
+    @Override
+    public ContentPlanView create(Long userId, ContentPlanDraft draft) {
+        return toView(create(userId, toCreateRequest(draft)));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>返回类型从 {@code BlogContentPlanVO} 换成契约读模型：本方法的<b>唯一</b>调用方是
+     * {@code SchedulePlanTool} 的幂等确认路径，它只读几个字段。</p>
+     */
+    @Override
     @Transactional(readOnly = true)
-    public BlogContentPlanVO findByClientRequestId(Long userId, String clientRequestId) {
+    public ContentPlanView findByClientRequestId(Long userId, String clientRequestId) {
         requireUser(userId);
         String normalized = normalizeClientRequestId(clientRequestId);
         if (normalized == null) {
             return null;
         }
         BlogContentPlan plan = findPlanByClientRequestId(userId, normalized);
-        return plan == null || plan.getDeletedAt() != null ? null : toVO(plan, userId);
+        return plan == null || plan.getDeletedAt() != null ? null : toView(toVO(plan, userId));
     }
 
     /** AI 生成计划: refines the seed into one topic per day (model call, kept
@@ -246,8 +293,9 @@ public class BlogContentPlanService {
 
     /** 当前用户全部计划（不分页），status 非空时按状态过滤（如 ACTIVE / FAILED），
      * ALL 或空表示全部；供智能体一次调用拿全量，无需逐页查询。 */
+    @Override
     @Transactional(readOnly = true)
-    public List<BlogContentPlanVO> listAll(Long userId, String status) {
+    public List<ContentPlanView> listAll(Long userId, String status) {
         requireUser(userId);
         String normalized = normalizeListStatus(status);
         LambdaQueryWrapper<BlogContentPlan> wrapper = ownedWrapper(userId);
@@ -257,7 +305,7 @@ public class BlogContentPlanService {
         wrapper.orderByDesc(BlogContentPlan::getCreatedAt)
                 .orderByDesc(BlogContentPlan::getId);
         return planMapper.selectList(wrapper).stream()
-                .map(plan -> toVO(plan, userId))
+                .map(plan -> toView(toVO(plan, userId)))
                 .toList();
     }
 
@@ -371,8 +419,16 @@ public class BlogContentPlanService {
         return toVO(planMapper.selectById(plan.getId()), userId);
     }
 
+    /**
+     * 改状态并返回<b>前端要的全字段 VO</b>；同域调用方是 {@code BlogContentPlanController}。
+     *
+     * <p>名字带 {@code ForView} 后缀，是因为端口方法 {@link #updateStatus(Long, Long, String)}
+     * 已经占用了规范名 {@code updateStatus}：两者参数表完全相同、只差返回类型，
+     * 而 Java 不允许只靠返回类型重载。按本仓库既有的做法 ——
+     * <b>端口方法拿规范名，同域的富方法加后缀说明它服务谁</b>。</p>
+     */
     @Transactional
-    public BlogContentPlanVO updateStatus(Long userId, Long planId, String action) {
+    public BlogContentPlanVO updateStatusForView(Long userId, Long planId, String action) {
         requireUser(userId);
         BlogContentPlan plan = requireOwnedPlan(planId, userId);
         String normalized = action.strip().toUpperCase(Locale.ROOT);
@@ -413,6 +469,30 @@ public class BlogContentPlanService {
         return toVO(requireOwnedPlan(planId, userId), userId);
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>与 {@link #updateStatusForView} 同一实现体，只换返回类型。</p>
+     */
+    @Override
+    public ContentPlanView updateStatus(Long userId, Long planId, String action) {
+        return toView(updateStatusForView(userId, planId, action));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>把契约修改草稿装回域请求体后转调
+     * {@link #update(Long, Long, BlogContentPlanUpdateRequest)}，再把 VO 收窄。
+     * 这是本类"同名不同参"的第二个实例：域请求体有 15 个字段，契约草稿只有 8 个。</p>
+     */
+    @Override
+    public ContentPlanView update(Long userId, Long planId, ContentPlanEdit edit) {
+        return toView(update(userId, planId, toUpdateRequest(edit)));
+    }
+
+    /** {@inheritDoc} */
+    @Override
     @Transactional
     public void delete(Long userId, Long planId) {
         requireUser(userId);
@@ -566,6 +646,78 @@ public class BlogContentPlanService {
                 .csdnAuthorized(csdnCredentialService.isAuthorized(userId))
                 .juejinAuthorized(juejinCredentialService.isAuthorized(userId))
                 .build();
+    }
+
+    /**
+     * 富 VO → 契约读模型。这是<b>唯一</b>一处往 {@link ContentPlanView} 落字段的地方。
+     *
+     * <p>为什么不写一个"实体 → 读模型"的映射（那样读路径可以少构造一个 VO，也少两次
+     * 凭据查询）：那会变成两份字段映射，而两份迟早不一致 —— 而且不一致的症状是
+     * "列表接口和创建接口对同一条计划返回不同的值"，很难发现。
+     * 这里选择让读路径也经过 {@link #toVO}，换来"只有一处映射"这个性质。</p>
+     *
+     * <p>逐个字段手写，<b>不要</b> {@code BeanUtils.copyProperties} / 反射：字段名对不上时
+     * 反射版本静默留 {@code null}，手写版本编译期报错。</p>
+     *
+     * <p>⚠️ {@code triggerTimes} 取的是 VO 上的值，而 VO 用的是
+     * {@link BlogContentPlan#allTriggerTimes()}（"JSON 列 → 时间列表"的解析入口，带兜底）。
+     * 换回 {@code getTriggerTimesJson()} 会让工具看到的触发时间与前端看到的不一致。</p>
+     */
+    private ContentPlanView toView(BlogContentPlanVO vo) {
+        if (vo == null) return null;
+        return new ContentPlanView(
+                vo.getId(),
+                vo.getTopic(),
+                vo.getStatus(),
+                vo.getTimezone(),
+                vo.getTriggerTimes(),
+                vo.getSyncCsdn(),
+                vo.getSyncJuejin(),
+                vo.getRunOnce(),
+                vo.getNextRunAt(),
+                vo.getLastRunAt(),
+                vo.getErrorMessage());
+    }
+
+    /**
+     * 契约草稿 → 域创建请求体。
+     *
+     * <p>刻意<b>不</b>在这里补默认值：{@code create} 的实现体已经做了
+     * （{@code syncCsdn} 的 {@code null → FALSE}、{@code autoPublish} 的默认真、
+     * 主题与触发时间的规范化）。在这里再补一次会变成第二份规则，两份迟早不一致。</p>
+     */
+    private BlogContentPlanCreateRequest toCreateRequest(ContentPlanDraft draft) {
+        BlogContentPlanCreateRequest request = new BlogContentPlanCreateRequest();
+        request.setClientRequestId(draft.clientRequestId());
+        request.setTopic(draft.topic());
+        request.setTopics(draft.topics());
+        request.setTriggerTimes(draft.triggerTimes());
+        request.setTriggerTime(draft.triggerTime());
+        request.setTimezone(draft.timezone());
+        request.setAudience(draft.audience());
+        request.setTone(draft.tone());
+        request.setSyncCsdn(draft.syncCsdn());
+        request.setSyncJuejin(draft.syncJuejin());
+        return request;
+    }
+
+    /**
+     * 契约修改草稿 → 域修改请求体。
+     *
+     * <p>同上：不补默认值。{@code update} 的实现体按"字段非空才改"的语义处理，
+     * 所以 {@code null} 在这里就是"保持原值"的意思，不能被换算层改写。</p>
+     */
+    private BlogContentPlanUpdateRequest toUpdateRequest(ContentPlanEdit edit) {
+        BlogContentPlanUpdateRequest request = new BlogContentPlanUpdateRequest();
+        request.setTopic(edit.topic());
+        request.setTriggerTimes(edit.triggerTimes());
+        request.setTriggerTime(edit.triggerTime());
+        request.setTimezone(edit.timezone());
+        request.setAudience(edit.audience());
+        request.setTone(edit.tone());
+        request.setSyncCsdn(edit.syncCsdn());
+        request.setSyncJuejin(edit.syncJuejin());
+        return request;
     }
 
     private List<LocalTime> resolveTriggerTimes(List<String> triggerTimes, String triggerTime) {

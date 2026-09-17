@@ -579,7 +579,7 @@ WAVE2_UNITS = (
 )
 
 # The unit pairs that depend on each other in *implementation* terms, measured 2026-09-16
-# and re-measured 2026-09-17 after the agent-api cut.
+# and re-measured 2026-09-17 after the agent-api and automation-api cuts.
 # Stored as ordered pairs so the baseline records direction, not just adjacency.
 #
 # Shape of the graph, and why it matters for Wave 2:
@@ -592,20 +592,31 @@ WAVE2_UNITS = (
 #     the agent.spi contract, so integration -> agent is zero and the pair is no longer
 #     mutual. Both directions are deleted from this baseline so the remaining tangle stays
 #     visible -- a stale entry makes the graph look worse than it is.
-#   * agent -> content-automation and agent -> core-host are one-way (19 and 14
-#     statements); nothing points back at agent from those two units.
-#   * Despite the one-way edges, all four units still form ONE strongly-connected
-#     component, via the chord cycle agent -> content-automation -> core-host ->
-#     platform-integration -> agent. So no unit is a leaf. Note the cycle no longer needs
-#     the platform-integration -> agent leg to close.
+#   * The automation-api cut then removed the last implementation edge pointing *into*
+#     agent: the six agent -> automation statements (EmailReminderService /
+#     BlogContentPlanService and their VOs) now go through the automation.spi contract.
+#     agent is left with outgoing edges only -- 4 to content-automation, 6 to core-host,
+#     2 to platform-integration -- and nothing points back at it.
+#   * Consequence: agent is no longer in the Wave 2 strongly-connected component. The old
+#     chord cycle closed through the platform-integration -> agent leg, so removing that
+#     leg is exactly what broke it. agent is now a singleton component, which is the same
+#     precondition bloghtml has and the reason it can be extracted on its own.
+#   * The remaining component is {content-automation, core-host, platform-integration}:
+#     three mutually-dependent pairs, so none of those three is a leaf.
 #
 # This is NOT itself a defect. After the split these become ordinary service-to-service
-# calls, and A calling B while B calls A is normal. What it does mean is that Wave 2 has no
-# "extract the leaf first" order available: each unit needs both its outgoing and its
-# incoming cross-unit implementation imports converted, and a contract module is precisely
-# what converts one (it lets the caller depend on the port without depending on the
-# implementation). That is why the contract line, not the lib line, is the one that moves
-# this graph.
+# calls, and A calling B while B calls A is normal. What it does mean is that the remaining
+# three have no "extract the leaf first" order available: each needs both its outgoing and
+# its incoming cross-unit implementation imports converted, and a contract module is
+# precisely what converts one (it lets the caller depend on the port without depending on
+# the implementation). That is why the contract line, not the lib line, is the one that
+# moves this graph.
+#
+# ⚠️ WAVE2_UNITS[0] is dinqor-agent, and agent is now a singleton -- so criterion 2 below
+# MUST be evaluated over every Wave 2 unit. Rooting it at WAVE2_UNITS[0] would silently
+# stop checking the graph: the component of a unit nobody depends on can never gain a
+# member, so `joined` would always be empty and a new unit joining the *real* component
+# would go unreported.
 MUTUAL_UNIT_PAIRS = frozenset({
     ("dinqor-content-automation", "dinqor-core-host"),
     ("dinqor-content-automation", "dinqor-platform-integration"),
@@ -627,10 +638,13 @@ def gate_deployment_unit_coupling() -> None:
        implementation edge in either direction -- a precondition, not a coincidence. A
        single new edge pointing at or from it would make the Wave 1 extraction depend on a
        conversion nobody has scheduled.
-    2. **No new unit joins the strongly-connected component.** The four Wave 2 units reach
-       each other in implementation terms, directly or through a chord cycle, so none of
-       them is a leaf. A unit that joins that component cannot be extracted on its own
-       either, and the set is much easier to keep from growing than to untangle later.
+    2. **No new unit joins the strongly-connected component.** The Wave 2 units that reach
+       each other in implementation terms -- directly or through a chord cycle -- cannot be
+       extracted on their own. A unit that joins that component inherits the same problem,
+       and the set is much easier to keep from growing than to untangle later. Evaluated
+       over every Wave 2 unit rather than a single root: a unit that has already left the
+       component collapses to a singleton, and a single-rooted check would silently stop
+       looking at the rest of the graph.
     3. **No new mutually-dependent pair.** Weaker than criterion 2 and reported separately
        because it is the more actionable signal: a mutual pair is a concrete pair of
        statements to convert, whereas the component is a summary.
@@ -673,15 +687,32 @@ def gate_deployment_unit_coupling() -> None:
         return {other for other in units
                 if other in reach[unit] and unit in reach[other]}
 
-    component = component_of(WAVE2_UNITS[0])
-    joined = sorted(component - set(WAVE2_UNITS))
+    # Criterion 2 is evaluated over EVERY Wave 2 unit, not just WAVE2_UNITS[0].
+    #
+    # Rooting it at one unit is only sound while that unit is actually in the component.
+    # A unit that leaves collapses to a singleton, and the component of a unit nobody
+    # depends on can never gain a member -- so `joined` would be permanently empty and a
+    # new unit joining the *real* component would go unreported. That is not hypothetical:
+    # dinqor-agent is WAVE2_UNITS[0] and left the component on 2026-09-17 (the
+    # automation-api cut removed the last edge into it), which made the single-root version
+    # vacuous. The union over all four roots is the same check before that happened and
+    # stays correct after.
+    components = {unit: component_of(unit) for unit in WAVE2_UNITS}
+    joined: set[str] = set()
+    for component in components.values():
+        joined |= component - set(WAVE2_UNITS)
     if joined:
-        report(gate, False,
-               f"{joined} joined the Wave 2 strongly-connected component "
-               f"({sorted(component)}): those units now reach each other in implementation "
-               f"terms, so none of them can be extracted alone. Convert the new direction "
-               f"through a contract first")
-        return
+        # Name the component that actually gained a member, not components[WAVE2_UNITS[0]]
+        # -- the root may be a singleton by now, and pointing at it would send the reader
+        # to a unit that has nothing to do with the new edge.
+        for unit in WAVE2_UNITS:
+            if components[unit] & joined:
+                report(gate, False,
+                       f"{sorted(joined)} joined the Wave 2 strongly-connected component "
+                       f"of {unit} ({sorted(components[unit])}): those units now reach each "
+                       f"other in implementation terms, so none of them can be extracted "
+                       f"alone. Convert the new direction through a contract first")
+                return
 
     # MUTUAL_UNIT_PAIRS records ordered pairs (so the baseline keeps direction), but a
     # mutual dependency is a property of the *pair*: reporting (a, b) and (b, a) as two
@@ -701,9 +732,16 @@ def gate_deployment_unit_coupling() -> None:
         return
 
     cleared = sorted(baseline_pairs - mutual)
-    detail = (f"{len(WAVE2_UNITS)} units in one component "
+    # Report the MEASURED component, not len(WAVE2_UNITS): agent left on 2026-09-17, so
+    # printing the constant would overstate the component by one and hide real progress.
+    wave2_component = max(components.values(), key=len)
+    outside = sorted(set(WAVE2_UNITS) - wave2_component)
+    detail = (f"{len(wave2_component)} of {len(WAVE2_UNITS)} Wave 2 unit(s) in one component "
               f"({len(mutual)} mutually-dependent pair(s)); "
               f"{bloghtml_unit} still isolated")
+    if outside:
+        detail += (f"; {outside} left the component (no unit points back at them) and can "
+                   f"now be extracted alone")
     if cleared:
         detail += (f"; {len(cleared)} pair(s) no longer mutual, delete both directions "
                    f"from MUTUAL_UNIT_PAIRS: {cleared}")

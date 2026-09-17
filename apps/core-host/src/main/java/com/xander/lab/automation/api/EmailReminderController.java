@@ -47,7 +47,9 @@ public class EmailReminderController {
     public Result<EmailReminderTaskVO> updateStatus(
             @PathVariable Long id,
             @Valid @RequestBody EmailReminderStatusUpdateRequest request) {
-        return Result.success(reminderService.updateStatus(
+        // updateStatusForView 而不是 updateStatus：后者现在是与 EmailReminderPort 同名同参的
+        // 窄方法（返回契约读模型）。HTTP 层要的是前端页面渲染的全字段 VO，所以调这个。
+        return Result.success(reminderService.updateStatusForView(
                 UserContext.getUserId(),
                 id,
                 request.getStatus()

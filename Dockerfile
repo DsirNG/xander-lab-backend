@@ -17,6 +17,7 @@ COPY contracts/integration-api/pom.xml ./contracts/integration-api/pom.xml
 COPY contracts/core-api/pom.xml ./contracts/core-api/pom.xml
 COPY contracts/payment-api/pom.xml ./contracts/payment-api/pom.xml
 COPY contracts/agent-api/pom.xml ./contracts/agent-api/pom.xml
+COPY contracts/automation-api/pom.xml ./contracts/automation-api/pom.xml
 COPY apps/core-host/pom.xml ./apps/core-host/pom.xml
 
 # Download dependencies using Aliyun mirror

@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.automation.api.BlogContentPlanUpdateRequest;
-import com.xander.lab.automation.api.BlogContentPlanVO;
-import com.xander.lab.automation.application.BlogContentPlanService;
+import com.xander.lab.automation.spi.ContentPlanEdit;
+import com.xander.lab.automation.spi.ContentPlanPort;
+import com.xander.lab.automation.spi.ContentPlanView;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -22,14 +22,17 @@ import java.util.Optional;
  * into the matching action. Action words are normalized leniently because the
  * model may mix the plan status vocabulary (PAUSED / CANCELLED) with the action
  * vocabulary (PAUSE / CANCEL); both spellings must work to avoid retry loops.
+ *
+ * <p>依赖 {@link ContentPlanPort} 而不是 {@code BlogContentPlanService}：这个工具属于
+ * agent 域，而那个实现类属于 automation 域，两者在拆服务后是两个进程。</p>
  */
 @Component
 public class UpdatePlanTool implements AgentTool {
 
-    private final BlogContentPlanService planService;
+    private final ContentPlanPort planPort;
 
-    public UpdatePlanTool(BlogContentPlanService planService) {
-        this.planService = planService;
+    public UpdatePlanTool(ContentPlanPort planPort) {
+        this.planPort = planPort;
     }
 
     @Override
@@ -118,19 +121,19 @@ public class UpdatePlanTool implements AgentTool {
         switch (action) {
             case "PAUSED", "RESUME", "CANCELLED" -> {
                 onProgress.onProgress("正在" + actionText(action) + "定时发文计划…");
-                BlogContentPlanVO plan = planService.updateStatus(userId, planId, action);
+                ContentPlanView plan = planPort.updateStatus(userId, planId, action);
                 fillPlan(outcome, plan);
                 outcome.put("hint", "定时发文计划已" + actionText(action) + "。");
             }
             case "EDIT" -> {
                 onProgress.onProgress("正在更新定时发文计划…");
-                BlogContentPlanVO plan = planService.update(userId, planId, toUpdateRequest(args));
+                ContentPlanView plan = planPort.update(userId, planId, toEdit(args));
                 fillPlan(outcome, plan);
                 outcome.put("hint", "定时发文计划已更新。");
             }
             case "DELETE" -> {
                 onProgress.onProgress("正在删除定时发文计划…");
-                planService.delete(userId, planId);
+                planPort.delete(userId, planId);
                 outcome.put("hint", "定时发文计划已删除。");
             }
             default -> throw new IllegalArgumentException(
@@ -154,38 +157,51 @@ public class UpdatePlanTool implements AgentTool {
         };
     }
 
-    private BlogContentPlanUpdateRequest toUpdateRequest(JsonNode args) {
-        BlogContentPlanUpdateRequest request = new BlogContentPlanUpdateRequest();
-        String topic = args.path("topic").asText("");
-        if (StringUtils.hasText(topic)) {
-            if (topic.trim().length() > 120) {
+    /**
+     * 把工具参数收成契约修改草稿。
+     *
+     * <p>⚠️ 这里有一条语义必须保住：<b>没传</b>与<b>传了空</b>不是一回事。
+     * {@code topic} / {@code syncCsdn} / {@code syncJuejin} 缺省时留 {@code null}，
+     * 实现体据此判断"保持原值"；写成空串或 {@code false} 会把"没说"变成"明确改成空"。
+     * 所以这三个字段不能用 {@code defaultText} 兜底。</p>
+     */
+    private ContentPlanEdit toEdit(JsonNode args) {
+        String rawTopic = args.path("topic").asText("");
+        String topic = null;
+        if (StringUtils.hasText(rawTopic)) {
+            if (rawTopic.trim().length() > 120) {
                 throw new IllegalArgumentException(
-                        "文章主题过长：" + topic.trim().length()
+                        "文章主题过长：" + rawTopic.trim().length()
                                 + " 字。请把素材提炼为不超过 120 字的简短标题，不要把素材原文直接作为主题。");
             }
-            request.setTopic(topic.trim());
+            topic = rawTopic.trim();
         }
-        request.setTriggerTime(defaultText(args.path("triggerTime").asText(""), null));
-        request.setTriggerTimes(stringArray(args.path("triggerTimes")));
-        if (args.path("syncCsdn").isBoolean()) {
-            request.setSyncCsdn(args.path("syncCsdn").asBoolean());
-        }
-        if (args.path("syncJuejin").isBoolean()) {
-            request.setSyncJuejin(args.path("syncJuejin").asBoolean());
-        }
-        request.setAudience(defaultText(args.path("audience").asText(""), null));
-        request.setTone(defaultText(args.path("tone").asText(""), null));
-        request.setTimezone(defaultText(args.path("timezone").asText(""), null));
-        return request;
+        return new ContentPlanEdit(
+                topic,
+                stringArray(args.path("triggerTimes")),
+                defaultText(args.path("triggerTime").asText(""), null),
+                defaultText(args.path("timezone").asText(""), null),
+                defaultText(args.path("audience").asText(""), null),
+                defaultText(args.path("tone").asText(""), null),
+                optionalBoolean(args.path("syncCsdn")),
+                optionalBoolean(args.path("syncJuejin")));
     }
 
-    private void fillPlan(ObjectNode outcome, BlogContentPlanVO plan) {
-        outcome.put("topic", defaultText(plan.getTopic(), ""));
-        outcome.put("status", defaultText(plan.getStatus(), ""));
-        outcome.put("nextRunAt", plan.getNextRunAt() == null ? "" : plan.getNextRunAt().toString());
+    /**
+     * 只有用户（模型）真的传了布尔值才算"表达了意愿"，缺省时留 {@code null}
+     * 交给实现体去判断"保持原值" —— 在这里写 {@code false} 会把"没说"变成"明确说不要"。
+     */
+    private Boolean optionalBoolean(JsonNode node) {
+        return node != null && node.isBoolean() ? node.asBoolean() : null;
+    }
+
+    private void fillPlan(ObjectNode outcome, ContentPlanView plan) {
+        outcome.put("topic", defaultText(plan.topic(), ""));
+        outcome.put("status", defaultText(plan.status(), ""));
+        outcome.put("nextRunAt", plan.nextRunAt() == null ? "" : plan.nextRunAt().toString());
         ArrayNode details = outcome.putArray("triggerTimes");
-        if (plan.getTriggerTimes() != null) {
-            plan.getTriggerTimes().forEach(details::add);
+        if (plan.triggerTimes() != null) {
+            plan.triggerTimes().forEach(details::add);
         }
     }
 

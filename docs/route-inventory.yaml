@@ -914,7 +914,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#generateTopics"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 103
+    line: 105
   - id: automation-delete-blog-plans-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -925,7 +925,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#delete"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 68
+    line: 70
   - id: automation-get-blog-plans-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -958,7 +958,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#nextRun"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 96
+    line: 98
   - id: automation-get-blog-plans-id-runs
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -969,7 +969,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#runs"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 83
+    line: 85
   - id: automation-get-blog-plans-id-runs-runid
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -980,7 +980,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#runDetail"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 90
+    line: 92
   - id: automation-patch-blog-plans-id-status
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -1002,7 +1002,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#trigger"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 75
+    line: 77
   - id: publishing-get-blog-categories
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1321,7 +1321,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.EmailReminderController#delete"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
-    line: 57
+    line: 59
   - id: automation-patch-email-reminders-id-status
     logical_owner: automation
     deployment_unit: dinqor-content-automation

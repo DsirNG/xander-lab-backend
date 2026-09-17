@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>automation-api</artifactId>
+    <name>automation-api</name>
+    <description>
+        Service-to-service contract for the automation capability (V9 §18 / §91).
+
+        Members: EmailReminderPort and ContentPlanPort (the ports), plus the read models
+        and write drafts they carry (EmailReminderView / EmailReminderDraft /
+        ContentPlanView / ContentPlanDraft / ContentPlanEdit).
+
+        Why the module exists. Six agent tools reached straight into automation's
+        application layer: EmailReminderTool / QueryEmailRemindersTool /
+        UpdateEmailReminderTool injected EmailReminderService, and QueryPlansTool /
+        SchedulePlanTool / UpdatePlanTool injected BlogContentPlanService. Six
+        implementation statements pointing agent -&gt; automation, all crossing the
+        dinqor-agent / dinqor-content-automation deployment-unit boundary. After the split
+        the agent service could not be built without automation's implementation classes,
+        and every tool was coupled to the exact method list of a concrete @Service --
+        including its @Value config surface and its mapper.
+
+        Direction. Here the *consumer* is agent (it asks for reminders and plans) and the
+        *provider* is automation. So the ports are consumer-shaped: each answers only the
+        questions the six tools actually ask. The three plan tools want six operations
+        (list / create / findByIdempotencyKey / updateStatus / update / delete) and the
+        three reminder tools want five plus the two status constants -- not the twenty-odd
+        public methods those two services expose to their own controllers.
+
+        Why the DTOs are NARROWED, not mirrored, unlike ContentPost. The mirror rule
+        (docs/migration/adr-contract-boundaries.md §2.5) exists for a type that
+        *replaces* a frontend-visible one: mirroring then makes "serialization is
+        byte-identical" a provable statement, which is what keeps the cut a pure refactor.
+        None of these types replaces anything. automation.api.EmailReminderTaskVO and
+        BlogContentPlanVO stay exactly where they are and keep going to the frontend
+        unchanged from automation.api.EmailReminderController / BlogContentPlanController.
+        The contract types are new, on a new seam, and the frontend never sees them. They
+        therefore carry exactly the fields the tools read, and every field has a named
+        consumer. Mirroring would have copied 24 fields of BlogContentPlanVO -- including
+        four runs of adjacent same-typed components, which is a position-order hazard with
+        no compile-time protection -- to preserve a serialization surface that does not
+        exist. What IS pinned is the component order, by reflection, and the tool output
+        JSON, by the tools' own tests.
+
+        Why jakarta.validation annotations are NOT here. automation.api.EmailReminderCreateRequest
+        and BlogContentPlanCreateRequest carry @NotBlank / @Pattern / @Size / @Email / @Min /
+        @Max. Those are the HTTP boundary's business: they fire because the controller
+        annotates the parameter @Valid. A contract may not carry them anyway (they would add
+        a dependency, and ADR-1 keeps this module framework-free). Nothing is lost on the
+        agent path, which never had them: the tools build their arguments from JSON and
+        validate by hand before calling. The domain-side request types keep their
+        annotations and stay the validated front door for the HTTP callers.
+
+        Package note: this module's package is com.xander.lab.automation.spi, NOT
+        com.xander.lab.automation.api. automation already owns
+        com.xander.lab.automation.api as its *frontend HTTP* layer -- 20 files of
+        controllers, VOs and request bodies. Declaring the contract there would put one
+        package in two jars, and would make the scanner classify those controllers as
+        shared kernel, turning "a controller imports its own application layer" into dozens
+        of automation.api -&gt; automation backlog edges plus a
+        shared-kernel-reverse-dependency violation each. Same collision as agent-api and
+        studio-api; same answer. SHARED_KERNEL lists automation.spi (dotted, matched
+        longest-first, so it does not swallow automation.application).
+
+        What is deliberately NOT here yet:
+        - Any of automation's own api layer (com.xander.lab.automation.api.*). It is the
+          frontend HTTP contract, a different audience, and it joins a contract module only
+          when that layer itself is split in Wave 2.
+        - The BlogNotificationService port that knowledgebase needs, and the SSE broadcast
+          port that admin needs. Both belong here (same capability, same direction) and both
+          are zero-wiring extensions of this module; they are simply not part of this cut.
+        - The email-reminder mail template. integration.mail.MailService imports
+          automation.domain.EmailReminderMailTemplates, which is the reverse direction and
+          closes a real automation &lt;-&gt; integration cycle: automation's
+          EmailReminderScheduler calls MailService#sendReminderMail, which calls back into
+          automation to render the body. Breaking that cycle is a separate cut because it
+          changes MailService's API, and it is recorded in
+          docs/migration/lib-extraction.md.
+
+        Zero dependencies, and that is the point. A contract that drags in a framework
+        cannot be depended on by every service, and V9 §19 is explicit that the WebFlux
+        Gateway must stay free of spring-webmvc. Nothing here may gain a compile
+        dependency without a deliberate decision; test scope is fine.
+    </description>
+
+    <dependencies>
+        <!--
+            No compile or runtime dependency by design. junit-jupiter is test-scoped: the
+            ports' width and their full signatures are pinned by reflection, because widening
+            a port trips no other defence. It compiles, the coupling metrics do not move,
+            and no gate reports it. Adding a default method is the silent form of widening.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class".
+            -->
+        </plugins>
+    </build>
+
+</project>

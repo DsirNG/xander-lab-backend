@@ -155,8 +155,8 @@ BUSINESS_DOMAINS = [
 #
 # ``common`` / ``config`` / ``filter`` / ``util`` are the in-app shared packages; ``auth``
 # is the package provided by ``libs/xander-auth-core`` (V9 §20); ``content`` / ``core.api``
-# / ``payment.api`` / ``integration.api`` / ``agent.spi`` are the packages provided by
-# ``contracts/*`` (V9 §18/§91).
+# / ``payment.api`` / ``integration.api`` / ``agent.spi`` / ``automation.spi`` are the
+# packages provided by ``contracts/*`` (V9 §18/§91).
 #
 # Contract packages belong here even though a contract is not a "library". A contract's
 # whole purpose is to be the one legal cross-service dependency, so an import of one must
@@ -172,8 +172,8 @@ BUSINESS_DOMAINS = [
 # so ``shared_kernel_packages()`` below derives the set from the tree and the
 # ``shared-kernel-classification`` gate compares the two. Adding a module means adding its
 # package here; the gate fails until you do.
-SHARED_KERNEL = ["agent.spi", "auth", "common", "config", "content", "core.api", "filter",
-                 "integration.api", "payment.api", "util"]
+SHARED_KERNEL = ["agent.spi", "auth", "automation.spi", "common", "config", "content",
+                 "core.api", "filter", "integration.api", "payment.api", "util"]
 
 # Import prefixes a ``contracts/*`` module is allowed to use (V9 §19 / §21).
 #

@@ -110,6 +110,22 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            Automation service-to-service contract: EmailReminderPort / ContentPlanPort and the
+            read models and write drafts they carry (V9 §18 / §91). Six agent tools injected
+            automation's concrete @Service classes (EmailReminderService / BlogContentPlanService)
+            straight from their application layer, crossing the dinqor-agent /
+            dinqor-content-automation boundary. Note the package is
+            com.xander.lab.automation.spi, not .automation.api, because that domain already owns
+            .automation.api as its frontend HTTP layer (20 controllers / VOs / request bodies).
+            Zero transitive dependencies by design; see contracts/automation-api/pom.xml.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>automation-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>

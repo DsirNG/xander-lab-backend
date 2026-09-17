@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.automation.api.BlogContentPlanCreateRequest;
-import com.xander.lab.automation.api.BlogContentPlanVO;
-import com.xander.lab.automation.application.BlogContentPlanService;
+import com.xander.lab.automation.spi.ContentPlanDraft;
+import com.xander.lab.automation.spi.ContentPlanPort;
+import com.xander.lab.automation.spi.ContentPlanView;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -19,14 +19,17 @@ import java.util.Optional;
  * queue, trigger times, and an optional CSDN sync; the automation poller runs
  * the headless pipeline on schedule. The agent only creates the durable plan,
  * it never runs the schedule itself.
+ *
+ * <p>依赖 {@link ContentPlanPort} 而不是 {@code BlogContentPlanService}：这个工具属于
+ * agent 域，而那个实现类属于 automation 域，两者在拆服务后是两个进程。</p>
  */
 @Component
 public class SchedulePlanTool implements AgentTool {
 
-    private final BlogContentPlanService planService;
+    private final ContentPlanPort planPort;
 
-    public SchedulePlanTool(BlogContentPlanService planService) {
-        this.planService = planService;
+    public SchedulePlanTool(ContentPlanPort planPort) {
+        this.planPort = planPort;
     }
 
     @Override
@@ -105,23 +108,19 @@ public class SchedulePlanTool implements AgentTool {
                     "文章主题过长：" + topic.trim().length()
                             + " 字。用户素材只能作参考，请提炼为不超过 120 字的简短文章标题，不要把素材原文直接作为主题。");
         }
-        BlogContentPlanCreateRequest request = new BlogContentPlanCreateRequest();
-        request.setTopic(topic.trim());
-        request.setTimezone(defaultText(args.path("timezone").asText(""), "Asia/Shanghai"));
-        request.setTriggerTime(defaultText(args.path("triggerTime").asText(""), null));
-        request.setTriggerTimes(stringArray(args.path("triggerTimes")));
-        request.setTopics(stringArray(args.path("topics")));
-        request.setAudience(defaultText(args.path("audience").asText(""), null));
-        request.setTone(defaultText(args.path("tone").asText(""), null));
-        if (args.path("syncCsdn").isBoolean()) {
-            request.setSyncCsdn(args.path("syncCsdn").asBoolean());
-        }
-        if (args.path("syncJuejin").isBoolean()) {
-            request.setSyncJuejin(args.path("syncJuejin").asBoolean());
-        }
-        request.setClientRequestId(context.invocationId());
+        ContentPlanDraft draft = new ContentPlanDraft(
+                context.invocationId(),
+                topic.trim(),
+                stringArray(args.path("topics")),
+                stringArray(args.path("triggerTimes")),
+                defaultText(args.path("triggerTime").asText(""), null),
+                defaultText(args.path("timezone").asText(""), "Asia/Shanghai"),
+                defaultText(args.path("audience").asText(""), null),
+                defaultText(args.path("tone").asText(""), null),
+                optionalBoolean(args.path("syncCsdn")),
+                optionalBoolean(args.path("syncJuejin")));
         onProgress.onProgress("正在创建定时发文计划…");
-        BlogContentPlanVO plan = planService.create(context.userId(), request);
+        ContentPlanView plan = planPort.create(context.userId(), draft);
 
         return toOutcome(plan);
     }
@@ -131,20 +130,28 @@ public class SchedulePlanTool implements AgentTool {
         if (!StringUtils.hasText(context.invocationId())) {
             return Optional.empty();
         }
-        BlogContentPlanVO plan = planService.findByClientRequestId(context.userId(), context.invocationId());
+        ContentPlanView plan = planPort.findByClientRequestId(context.userId(), context.invocationId());
         return plan == null ? Optional.empty() : Optional.of(toOutcome(plan));
     }
 
-    private ObjectNode toOutcome(BlogContentPlanVO plan) {
+    private ObjectNode toOutcome(ContentPlanView plan) {
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
-        outcome.put("planId", plan.getId());
-        outcome.put("topic", defaultText(plan.getTopic(), ""));
-        outcome.put("triggerTimes", plan.getTriggerTimes() == null ? new ArrayNode(JsonNodeFactory.instance) : toArray(plan.getTriggerTimes()));
-        outcome.put("nextRunAt", plan.getNextRunAt() == null ? "" : plan.getNextRunAt().toString());
-        outcome.put("status", defaultText(plan.getStatus(), ""));
+        outcome.put("planId", plan.id());
+        outcome.put("topic", defaultText(plan.topic(), ""));
+        outcome.put("triggerTimes", plan.triggerTimes() == null ? new ArrayNode(JsonNodeFactory.instance) : toArray(plan.triggerTimes()));
+        outcome.put("nextRunAt", plan.nextRunAt() == null ? "" : plan.nextRunAt().toString());
+        outcome.put("status", defaultText(plan.status(), ""));
         outcome.put("hint", "定时发文计划已创建，系统将按计划自动生成并发布文章。");
         return outcome;
+    }
+
+    /**
+     * 只有用户（模型）真的传了布尔值才算"表达了意愿"，缺省时留 {@code null}
+     * 交给实现体去补默认值 —— 在这里写 {@code false} 会把"没说"变成"明确说不要"。
+     */
+    private Boolean optionalBoolean(JsonNode node) {
+        return node != null && node.isBoolean() ? node.asBoolean() : null;
     }
 
     private List<String> stringArray(JsonNode node) {

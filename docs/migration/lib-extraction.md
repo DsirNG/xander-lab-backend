@@ -17,9 +17,10 @@
 所以 §19 必须拆。
 
 Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`xander-auth-core`）
-与 **1 个契约模块**（`contracts/content-api`），`common` 从 12 类降到 6 类，
+与 **6 个契约模块**（`content-api`、`integration-api`、`core-api`、`payment-api`、
+`agent-api`、`automation-api`），`common` 从 12 类降到 6 类，
 另有 2 个类从**业务域包** `identity.security` 迁出、4 个类从 `publishing.domain` 迁出。
-剩下 3 个 lib 与 7 个契约模块未开始。
+剩下 3 个 lib 与 2 个契约模块（`knowledge-api`、`studio-api`）未开始。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
 不是审美 —— 见 §5。
@@ -47,7 +48,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
 | `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；跨部署单元累计 **−8**；总计 **−14** |
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
-| `automation-api` | 未开始 | — | — |
+| `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | `agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元 |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
 | `payment-api` | **已完成** | `BillingBiz`（`points_ledger.biz_type` 词表）；**`BillingPort`（积分账本端口）+ `TokenUsage`（用量 DTO）** | 词表那一刀：`agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7）。端口那一刀：`agent 3→0`、`integration 2→0`、`automation 1→0`、`blogagent 1→0`、`identity 1→0`、`profile 1→0`、`studio 1→0` —— **7 条边全部归零**，总计再 **−10**（跨单元 −7）。两刀合计 **−18**（跨单元 −14） |
@@ -1168,7 +1169,7 @@ api_statements                   25 → 25      (未动)
 
 ### 3decies.7 下一刀
 
-按剩余跨单元实现语句排序（当前基线 33 条 / 13 条边）：
+按剩余跨单元实现语句排序（这一刀之后的基线 33 条 / 13 条边）：
 
 | 目标域 | 总数 / 跨单元 | 说明 |
 |---|---|---|
@@ -1180,7 +1181,112 @@ api_statements                   25 → 25      (未动)
 | `publishing` | 2 / **0** | **跨单元已归零** |
 | `agent` | **0 / 0** | **已归零**（本刀） |
 
-`automation-api` 是下一个最大目标，10 条全跨单元。
+`automation-api` 是下一个最大目标，10 条全跨单元 —— 见 §3undecies。
+
+---
+
+## 3undecies. 第八刀：`contracts/automation-api` —— 最大的目标域，收窄而不是镜像
+
+完整论证在 `docs/migration/adr-contract-boundaries.md` §7（含 §7.10 那处门禁空转的
+实测证据）。这里只留实施与数字。
+
+### 3undecies.1 范围：只做 `agent → automation` 这一条边
+
+10 条语句指向 `automation`，来自 4 个单元。这一刀**只做 6 条**（`agent`），另外三条
+各自有明确理由被推迟（`admin` 那条需要 SSE 广播端口，形状不同；`integration` 那条
+构成真环，要改 `MailService` 的 API）。**一次一刀、每刀可证明是纯重构**，比一次吞掉
+10 条然后说不清哪条引入了行为变化要好。
+
+### 3undecies.2 五个新类型，全部是收窄而非镜像
+
+| 契约类型 | 分量数 | 域 VO | 域 VO 字段数 |
+|---|---|---|---|
+| `EmailReminderView` | 11 | `EmailReminderTaskVO` | 20 |
+| `EmailReminderDraft` | 12 | `EmailReminderCreateRequest` | 12 |
+| `ContentPlanView` | 11 | `BlogContentPlanVO` | 24 |
+| `ContentPlanDraft` | 10 | `BlogContentPlanCreateRequest` | 10 |
+| `ContentPlanEdit` | 8 | `BlogContentPlanUpdateRequest` | 15 |
+
+**没有一个替换前端可见类型**，所以 §2.5 的镜像规则不适用：域 VO 全部原地不动，
+继续由各自的控制器发给前端。
+
+### 3undecies.3 ⚠️ 字段集要从消费方读取点反推 —— 这一刀真的漏了一个字段
+
+`EmailReminderView` 的 Javadoc 把 `sendTime` 写成 `QueryEmailRemindersTool` 要读的字段，
+但 record 的**分量列表里没有它**。漏掉的症状是工具输出静默少一个键，不是编译错误。
+
+抓法：对 6 个工具跑
+`grep -oE "\.(get|is)[A-Z][A-Za-z0-9]*\(" | sort -u` 取并集，再与 record 逐分量对账。
+`ContentPlanView` 的 11 个分量完全吻合，`EmailReminderView` 少 1 个，已补。
+
+> Javadoc 里列了消费方字段清单 **不等于** record 里有那些分量 —— 两者分开手写就会分开漂移。
+
+### 3undecies.4 ⚠️ "没传"与"传了空"：record 化最容易丢的语义
+
+`UpdatePlanTool` 的 EDIT 是"只改提交了的字段"（没传 → 保持原值）。
+换成位置构造的 record 后，`syncCsdn` / `syncJuejin` / `topic` 一旦被兜底成
+`false` / 空串，**每次编辑都会静默关掉同步或清空主题**，而用户没说过这话。
+
+所以 `ContentPlanEdit` 的两个布尔分量是装箱 `Boolean`，并且加了**两条互补**断言：
+`editLeavesUnspecifiedFieldsNull`（缺省必须 `null`）与
+`editCarriesExplicitFalseBooleans`（显式 `false` 必须落成 `false`）。
+
+### 3undecies.5 换算落点必须由应用模块测（契约侧看不见域类型）
+
+契约模块的 `RecordShapeTest` 只能证明"契约自己没变"。真正会静默错的是**换算那一行** ——
+`EmailReminderView` 有六个相邻 `String` 加两个 `Instant`，把收件人填成主题不会有编译错误。
+所以新增 `EmailReminderPortMappingTest`(2) / `ContentPlanPortMappingTest`(3)，
+用**互不相同的字面量**逐字段钉住 `toView`。
+
+⚠️ 三个相邻的 `Boolean` 只有两个取值，**一组字面量钉不满**：
+`(true, false, true)` 时把第一个和第三个对调测试仍然全绿。所以用**两组互补**字面量。
+
+### 3undecies.6 实测收益
+
+```text
+implementation_statements         50 → 44      (-6)
+implementation_edges              20 → 19      (-1)
+cross_deployment_unit_statements  33 → 27      (-6)
+cross_deployment_unit_edges       13 → 12      (-1)
+api_statements                    25 → 16      (-9)
+```
+
+`api_statements` 掉 9 是这一刀最值得记的数字：6 个工具原本 import 的 9 个
+`automation.api.*` 类型全部换成 `automation.spi.*`，而**契约包在 `SHARED_KERNEL` 里，
+不计入任何指标**。这就是"用契约换掉实现依赖"在数字上的样子。
+
+图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边：→content-automation 4、
+→core-host 6、→platform-integration 2），成为和 `bloghtml` 一样"可以单独抽取"的单元。
+
+### 3undecies.7 ⚠️ 顺带发现一处门禁空转（已修）
+
+`deployment-unit-coupling` 的判据 2 原本取 `component_of(WAVE2_UNITS[0])`，
+而 `WAVE2_UNITS[0]` 正是 `dinqor-agent`。agent 脱离分量后，这条判据的**根变成了单元素**，
+`joined` 恒为空、**再也不会红**。实测：构造新单元加入真实分量后，
+旧判据 `joined = []` → PASS（空转），新判据 `joined = ['dinqor-newbie']` → FAIL。
+
+修法：改成对**每个** Wave 2 单元取分量的并集；detail 行改报**实测**分量大小
+（原来打印 `len(WAVE2_UNITS)` 这个常量，会把"agent 已脱离"这个进度盖掉），
+并新增"哪些单元已可单独抽取"的进度提示。详见 ADR §7.10。
+
+### 3undecies.8 下一刀
+
+按剩余跨单元实现语句排序（这一刀之后的基线 27 条 / 12 条边）：
+
+| 目标域 | 总数 / 跨单元 | 说明 |
+|---|---|---|
+| `automation` | 4 / 4 | `agent → automation` 6 条已归零（本刀）；剩 `knowledgebase` 2、`admin` 1、`integration` 1 |
+| `integration` | 9 / 9 | `automation → integration` 6 是最大的一条边，但卡在 `MailService` 上（§3quinquies） |
+| `recitation` | 6 / 6 | `agent → recitation` 4 + `automation → recitation` 2 |
+| `blogagent` | 5 / 5 | `agent → blogagent` 4 + `studio → blogagent` 1 |
+| `identity` | 3 / 3 | `agent` 2 + `integration` 1 |
+| `publishing` | 2 / **0** | **跨单元已归零** |
+| `agent` | **0 / 0** | **已归零**（§3decies） |
+
+两个候选：①`automation-api` 的**零接线扩展**（`knowledgebase → automation` 2 条，
+只需往已有模块加 `BlogNotificationService` 端口）成本最低；②把 `agent → recitation`(4)
+与 `agent → blogagent`(4) 合成一刀，清掉 `dinqor-agent` 的**出边** ——
+那时 agent 进出都归零，完全孤立，是最干净的一个抽取单元。
 
 ---
 
@@ -1378,7 +1484,7 @@ python scripts/migration/ci_gates.py
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
 类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
 只看最后那个 `Results:` 会以为"测试变少了"。
-**要核对的是各模块之和。**最新一轮（§3nonies 之后，2026-09-17）：
+**要核对的是各模块之和。**最新一轮（§3undecies 之后，2026-09-17）：
 
 | 模块 | Tests run |
 |---|---|
@@ -1387,8 +1493,15 @@ python scripts/migration/ci_gates.py
 | `contracts/integration-api` | 3 |
 | `contracts/core-api` | 12 |
 | `contracts/payment-api` | 21 |
-| `apps/core-host` | 1074 |
-| **合计** | **1181**（0 failures / 0 errors） |
+| `contracts/agent-api` | 21 |
+| `contracts/automation-api` | 22 |
+| `apps/core-host` | 1151 |
+| **合计** | **1301**（0 failures / 0 errors） |
+
+`apps/core-host` 单模块的增量是 **+7**（1144 → 1151），来源是两处新测试：
+`EmailReminderPortMappingTest`(2) + `ContentPlanPortMappingTest`(3) —— 钉换算落点；
+`UpdatePlanToolTest` 的 `editLeavesUnspecifiedFieldsNull` /
+`editCarriesExplicitFalseBooleans`(2) —— 钉"没传 ≠ 传了空"。
 
 ⚠️ `target/surefire-reports/` **不会被自动清理**，里面会留下已经搬走的测试类的报告。
 用脚本按目录累加 `Tests run` 会把这部分算进去（曾出现
@@ -1416,7 +1529,21 @@ python scripts/migration/ci_gates.py
 
 `deployment-unit-coupling` 的三条判据：`bloghtml` 保持孤立；没有新单元加入 Wave 2
 的强连通分量；没有新的互相依赖单元对。这是唯一一条看**图形状**而不是**规模**的门禁，
-详见 §3ter。三条判据都用注入法验证过（判据 2 需要临时造第六个单元才能触发）。
+详见 §3ter。三条判据都用注入法验证过（判据 2 需要临时造一个新单元才能触发）。
+
+⚠️ **判据 2 曾经空转过（2026-09-17 修）**：它原本取
+`component_of(WAVE2_UNITS[0])`，而 `WAVE2_UNITS[0]` 正是 `dinqor-agent`。
+`automation-api` 那一刀把最后一条指向 agent 的实现边消掉之后，agent 只剩出边、
+脱离分量，这条判据的**根就变成了单元素集合** —— 而"没人指向它的单元"的分量永远
+只含自己，`joined` 恒为空，**判据再也不会红**。
+
+> 教训：**判据的根不能是一个会变的量。** 写"取第一个"的时候隐含假设了
+> "第一个一定在分量里"，而这个假设没有被任何东西守住。
+> 与 `shared-kernel-classification` 缺反向判据（`util` 是死条目）同源。
+
+修法：对**每个** Wave 2 单元取分量的并集；detail 行改报**实测**分量大小
+（原来打印的是 `len(WAVE2_UNITS)` 这个常量，会把"agent 已脱离"这个进度盖掉），
+并新增"哪些单元已可单独抽取"的进度提示。实测证据见 ADR §7.10 与 §3undecies.7。
 
 `xml-authoring-safety` 的两条判据：注释里不得出现 `--`；文件必须能被 XML 解析器解析。
 第二条是本轮新增的 —— 写 `contracts/content-api/pom.xml` 的 `<description>` 时写了

@@ -7,15 +7,16 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 50
-  implementation_edges: 20
-  cross_deployment_unit_statements: 33
-  cross_deployment_unit_edges: 13
-  api_statements: 25
-  api_edges: 10
+  implementation_statements: 44
+  implementation_edges: 19
+  cross_deployment_unit_statements: 27
+  cross_deployment_unit_edges: 12
+  api_statements: 16
+  api_edges: 9
   shared_kernel_sources:
     - agent.spi
     - auth
+    - automation.spi
     - common
     - config
     - content
@@ -26,20 +27,6 @@ counts:
   unclassified_sources:
     - DinQorAIApplication.java
 edges:
-  - from: agent
-    to: automation
-    from_unit: dinqor-agent
-    to_unit: dinqor-content-automation
-    crosses_deployment_unit: true
-    api_statements: 9
-    implementation_statements: 6
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/EmailReminderTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryEmailRemindersTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/QueryPlansTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/SchedulePlanTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/UpdateEmailReminderTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/UpdatePlanTool.java
   - from: automation
     to: integration
     from_unit: dinqor-content-automation

@@ -237,6 +237,31 @@ private Map<String, AgentTool> allTools() {
 （`AgentPromptSection.sideEffect(text)`）。把 `order` 放进端口 = 让 agent 的常量表在
 契约里复制一份，两边可以静默漂移。
 
+**⚠️ 端口抽走之后，端口用到的常量也必须一起搬走 —— 否则"断了实现依赖"是假的。**
+`UpdateEmailReminderTool` 要判断 `PAUSE` 该写哪个状态，原来写
+`EmailReminderService.STATUS_PAUSED`。**只要还写着那个名字，消费方就仍然要 import
+提供方的实现类**，实现语句一条都没少 —— 端口白抽了。正解：把常量声明在端口上，
+实现类通过 `implements` 继承拿到它们（不再重复声明）。
+
+> **判据（比看指标快得多）**：抽完端口后，
+> `grep -rn "import <提供方域>" <消费方包>` 的结果应该**只剩契约包**。
+> `automation-api` 那一刀之后，`com/xander/lab/agent/` 下 15 条 `automation.*` 导入
+> 全部是 `automation.spi.*` —— 一条 `automation.application` / `automation.api` 都没有。
+
+**⚠️ "没传"与"传了空"不是一回事 —— 这是 record 化最容易丢的语义。**
+域侧的 `@Data` 请求体用 `null` 表达"这个字段用户没说，保持原值"，
+工具侧靠 `if (args.path("x").isBoolean())` 实现。换成位置构造的 record 之后，
+这个条件极易被写成 `args.path("x").asBoolean()` —— 缺省时得到 `false`，
+于是**每次编辑都静默关掉同步开关**，而用户根本没说过这话。
+
+三条硬性做法：
+1. 可选布尔分量声明成**装箱 `Boolean`**，不是 `boolean`（`boolean` 无法表达"没说"）。
+2. 换算层**不要**用 `defaultText` / `Boolean.FALSE` 兜底这些字段 ——
+   `topic` 兜成空串 = "改成空"，布尔兜成 `false` = "明确说不要"。
+3. 加**两条互补**断言：`editLeavesUnspecifiedFieldsNull`（缺省必须 `null`）与
+   `editCarriesExplicitFalseBooleans`（显式 `false` 必须落成 `false`）。
+   只加一条，另一个方向就会静默错。
+
 **⚠️ 同域调用点比跨域多得多时，把旧公开方法留成"薄壳"，不要改它们的签名。**
 判断依据：**同域调用点不算跨域边界**。实测 `BlogService`：`BlogController` 有 17 个调用点
 （全部同域），跨部署单元只有 9 条语句 / 3 条边。按"改签名 + 改所有调用点"去做，
@@ -285,6 +310,16 @@ private BlogPostVO createBlog(Long userId, ContentPostInput input, ...) { ... } 
 
 **测试里那组相邻同类型分量必须给互不相同的字面量** —— 都给同一个值的话，
 把它们对调测试仍然全绿，顺序就白钉了。这条比"分量名列表"更关键。
+
+**⚠️ 但 `Boolean` 分量只有两个取值，一组字面量钉不满 —— 要两组互补的。**
+`ContentPlanView` 有三个相邻 `Boolean`（`syncCsdn` / `syncJuejin` / `runOnce`）。
+取 `(true, false, true)` 时，把**第一个和第三个对调**测试仍然全绿。
+所以 `ContentPlanPortMappingTest` 用两组互补组合（`(true,false,true)` 与
+`(false,true,false)`）：两组都过，任意两个分量对调必有一条红。
+**规律：n 个相邻同类型分量至少需要 ⌈log₂(n+1)⌉ 组互补字面量，
+而 `Boolean` 只能给 2 个取值，所以 3 个以上就必须靠组合。**
+（`payment-api` 那次 `TokenUsage` 三个相邻 `long` 可以用全不相同的值，所以一组就够 ——
+`Boolean` 是特例，别照抄"一组就够"的结论。）
 
 **⚠️ 词表类进契约，但不要改成枚举。** `ContentPostStatus`（`DRAFT=0` / `PUBLISHED=1` /
 `TRASHED=-1`）进契约是因为两个 agent 工具各自把 `"draft" ⇄ 0` 写了一遍。
@@ -341,6 +376,25 @@ Maven 编排不了 test-only 的跨契约依赖，所以门禁干脆全禁。后
 `docs/contract-changes.yaml` **不需要**加条目。收窄（只留前端真读的 3 个）**也能做**，
 但那是独立的 §11 变更，**必须**进登记表。
 **选镜像，并在注释里写明为什么** —— 否则下一个人会以为那 10 个多余字段是疏忽。
+
+**⚠️ 收窄型契约的字段集，必须每次从"消费方读取点"重推一遍再与 record 对账。**
+2026-09-17 的 `automation-api` 真的漏了一个字段：`EmailReminderView` 的 Javadoc 已经把
+`sendTime` 写成 `QueryEmailRemindersTool` 要读的字段，但 record 的**分量列表里没有它** ——
+写 Javadoc 时想到了，写分量时漏了。症状不是编译错误，而是**工具输出静默少一个键**。
+
+推法（对每个消费方文件跑，取并集）：
+
+```bash
+for f in <消费方文件…>; do grep -oE "\.(get|is)[A-Z][A-Za-z0-9]*\(" "$f" | sort -u; done
+```
+
+> **Javadoc 里列了消费方字段清单 ≠ record 里有那些分量。** 两者是分开手写的，就会分开漂移。
+> 而且**不能沿用上一次抽取的结果** —— 消费方的读取点会变，字段集就得跟着重推。
+
+收窄比镜像更容易出错，因为它没有"序列化逐字节不变"这个可证明的命题兜底：
+镜像时字段集是照抄的，收窄时字段集是**判断**出来的，判断就会错。
+所以收窄**必须**配一对互补的测试：契约侧 `RecordShapeTest` 钉形状，
+应用侧 `*PortMappingTest` 用互不相同的字面量钉**换算那一行**（契约侧看不见域类型）。
 
 **⚠️ 循环依赖靠"端口只收真正用到的字段"来断。** 2026-09-17 的环：
 `BlogMediaService.saveAgentImage(..., GeneratedImage, ...)` 收了**下游**类型，
@@ -445,6 +499,22 @@ application 层"变成一条条 `<domain>.api -> <domain>` 的假边 —— 待�
 **"每个被发布的包都有条目"**，不检查**"每个条目都有包"** —— 反向判据是缺的。
 （`unclassified_sources` 基线**本来就非空**：里面有 `DinQorAIApplication.java`，
 来自一个直接躺在 `com/xander/lab/` 下的类。所以"列表变长"要比对**集合**，不能只看空不空。）
+
+**⚠️ 契约包在 `SHARED_KERNEL` 里 ⇒ 消费方 import 契约**一条都不计入任何指标**，
+所以 `api_statements` 也会跟着掉。** 这不是意外，而是"用契约换掉实现依赖"在数字上的样子，
+但第一次见到会以为哪里算错了。
+
+`automation-api` 那一刀：
+
+```text
+implementation_statements         50 → 44   (-6)   6 条 automation.application.* 换掉
+api_statements                    25 → 16   (-9)   9 条 automation.api.* 换掉
+```
+
+`api_statements` 掉 9 的来源：6 个工具原本 import 了 `EmailReminderTaskVO` ×3、
+`BlogContentPlanVO` ×3、三个请求体 ×3。**换成 `automation.spi.*` 之后这 9 条归零**
+（契约包被登记进 `SHARED_KERNEL`，前缀匹配直接跳过）。
+所以**看收益要同时看 impl 和 api 两列** —— 只看 impl 会低估一半。
 
 ⚠️ 写这类测量脚本时，**别用带 `\s*$` 的正则去切 YAML 块列表** —— `\s` 会匹配换行，
 于是它可能吞掉整块、报出**隔壁键**的条目。本轮就因此得到过一行假的 `+util`，
@@ -722,6 +792,38 @@ stale scheduled-inventory.yaml for ['img2three-service'] -- re-run scripts/migra
 若某条判据在**当前代码状态下无法触发**（例如"不得有新单元加入"需要第六个单元才成立），
 就临时造出那个前提（把某个域临时指到新单元），验完再还原 —— 不要因为"现在触发不了"
 就跳过验证，也不要删掉这条前瞻护栏。
+
+**⚠️ 更阴的一种：判据的「根」是一个会变的量，于是它悄悄空转了。**
+`deployment-unit-coupling` 判据 2 原本取 `component_of(WAVE2_UNITS[0])`，
+而 `WAVE2_UNITS[0]` 正是 `dinqor-agent`。`automation-api` 那一刀把最后一条指向 agent
+的实现边消掉之后，agent 只剩出边、**脱离**了强连通分量：
+
+```text
+component_of(dinqor-agent)              = ['dinqor-agent']              ← 单元素
+component_of(dinqor-content-automation) = ['dinqor-content-automation',
+                                           'dinqor-core-host',
+                                           'dinqor-platform-integration']
+```
+
+于是"没人指向它的单元"成了判据的根 —— 它的分量**永远只含自己**，`joined` 恒为空，
+**这条判据再也不会红**。新的单元加入真正的分量会被静默放过。
+
+实测（构造 `dinqor-newbie ↔ dinqor-platform-integration`，两套判据各跑一次）：
+
+```text
+OLD  joined = []                -> PASS      ← 空转
+NEW  joined = ['dinqor-newbie'] -> FAIL      ← 抓到了
+```
+
+> **教训：判据的根不能是一个会变的量。** 写"取第一个"时隐含假设了"第一个一定在分量里"，
+> 而这个假设没有被任何东西守住。与 `shared-kernel-classification` 缺反向判据
+> （`util` 是死条目）同源：**两条都是"判据只朝一个方向看，另一个方向没人看"。**
+
+顺带两条同类的 pass 消息缺陷，一起修了：
+- `detail` 里打印的是 `len(WAVE2_UNITS)` 这个**常量**，不是实测分量大小 ——
+  会把"agent 已脱离"这个**进度**盖掉。改成实测，并新增"哪些单元已可单独抽取"的提示。
+- 失败消息原本指向 `components[WAVE2_UNITS[0]]`，而那个根可能已经是单元素，
+  会把读者引到一个和新增边无关的单元上。改成指向**真正获得了新成员**的那个分量。
 
 ⚠️ 还原后**不要**用"原始字节 sha256 相等"证明还原成功：本仓库 `core.autocrlf=true`，
 `git checkout -- <file>` 会把 LF 重写成 CRLF，字节数会变（实测 `scan.py` 差 1347 字节

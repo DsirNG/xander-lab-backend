@@ -86,12 +86,16 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
 
 ### 1.5 当前状态
 
-- `contracts/` 下 5 个模块（`core-api` / `content-api` / `integration-api` /
-  `payment-api` / `agent-api`）目前**零 Jackson 依赖**，由门禁
+- `contracts/` 下 6 个模块（`core-api` / `content-api` / `integration-api` /
+  `payment-api` / `agent-api` / `automation-api`）目前**零 Jackson 依赖**，由门禁
   `contract-dependency-boundary` 守着（JDK-only import + 无 compile/runtime 依赖）。
 - `agent-api` 是这条 ADR 最难的一次应用：要抽的端口属于 agent 的工具体系，而
   `AgentTool.parametersSchema()` 返回 `JsonNode`。**没有**放宽门禁，也没有搬 `AgentTool`，
   而是让 JSON 以文本出入端口（见 §6）。
+- `automation-api` 是第二次撞上同一个问题：6 个工具要读 automation 的
+  `EmailReminderTaskVO` / `BlogContentPlanVO`（本身是干净的 DTO，但它们住在
+  `automation.api`，也就是**前端 HTTP 层**）。同样是**收窄出一份新的读模型**，
+  而不是把前端类型搬进契约（见 §7）。
 
 ---
 
@@ -182,7 +186,7 @@ blogagent ───→ content-api ←─── agent
 **所以它不构成一次 §11 契约变更，不该进登记表。** 这一点写在这里，
 是为了让后来的人知道"没登记"是判断，不是漏掉。
 
-> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§8 待办第 3 项），
+> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§9 待办第 3 项），
 > 那**必须**进 `contract-changes.yaml` 并走 §11 流程 —— 因为它会真的删掉
 > 前端能看到 10 个字段。
 
@@ -298,7 +302,7 @@ MediaAssetRef findReusableGenerated(Long userId, String title);
 
 > **这暴露了一个仍未拍板的问题**：契约能不能依赖契约？今天答案是**不能**
 > （Maven 无法编排 test-only 的跨契约依赖，所以门禁干脆全禁）。
-> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §8 待办。
+> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §9 待办。
 
 ### 3.5 `byte[]` 而不是 `MultipartFile`，以及 `MAX_IMAGE_BYTES`
 
@@ -535,7 +539,7 @@ api_statements / api_edges         38 / 11 (不变)
 
 **但这笔账要在拆分后重新算**：一旦 `payment-api` 作为独立版本化的 jar 发布，
 `TokenUsage` 的分量顺序就变成了跨进程的线上格式，届时任何重排都必须走 §11
-（见 §8 第 7 项）。
+（见 §9 第 7 项）。
 
 ---
 
@@ -735,7 +739,7 @@ api_edges                          11 -> 10   (-1)
 也确认（28 个能力 0 增 0 退；14 条变更全部可解析）。
 
 **⚠️ 但这笔账要在拆分后重新算**：`ContentPost` 的 17 个分量顺序与 `ContentPostPage` 的 6 个分量顺序，
-与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §8 第 7 项）。
+与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §9 第 7 项）。
 今天不登记，契约 jar 独立版本化时必须补。
 
 ---
@@ -765,7 +769,7 @@ SPI，所以看起来理所当然。问题在方向：`AgentTool` / `AgentDynami
 
 1. **`parametersSchema()` 返回 `com.fasterxml.jackson.databind.JsonNode`。** ADR-1 说契约
    必须与序列化框架无关，`CONTRACT_ALLOWED_IMPORT_PREFIXES` 只有 `java.`。搬它就必须放宽
-   门禁——而 §8.1 明写"不许为了过门禁而放宽"。
+   门禁——而 §9.1 明写"不许为了过门禁而放宽"。
 2. **它有 6 个 `default` 成员**（`promptSection` / `execute(AgentToolContext,…)` /
    `reconcile` / `approvalReason` / `readOnly`），外加嵌套的 `ProgressListener` 又有 5 个。
    搬过去等于把 agent 的整套工具词汇表塞进每个依赖方。
@@ -892,7 +896,211 @@ api_statements                 25 → 25      (未动)
 
 ---
 
-## 7. 这两条 ADR 与既有规则的交叉
+## 7. 落地记录（五）：`automation-api` —— 最大的目标域，收窄而不是镜像
+
+### 7.1 侦察：10 条语句、4 条边，全部指向 `automation`
+
+`automation` 是当时**最大的目标域**：10 条跨域实现语句从 4 个单元指进来。
+
+| 边 | 语句 | 文件 | 处理 |
+|---|---|---|---|
+| `agent → automation` | **6** | 6 个智能体工具 | **本刀的目标** |
+| `knowledgebase → automation` | 2 | `BlogNotificationService` + `BlogNotification` 实体 | 待办（扩 `automation-api`，零接线） |
+| `admin → automation` | 1 | `BlogPlanSseService`（基础设施类） | 待办（需要 SSE 广播端口） |
+| `integration → automation` | 1 | `EmailReminderMailTemplates` | 待办，且**构成真环**（见 §7.8） |
+
+四条边**全部是"指进来"的**，`automation` 自己一条都没有往外指（它有的是
+`automation → integration` 6 条，方向相反）。所以这个域的形状是"扇入枢纽"：
+它越像公共设施，越说明里面的服务本来就不是 automation 的业务。
+
+### 7.2 包名：`automation.api` 已被前端 HTTP 层占用 → 走 `automation.spi`
+
+与 §2.7 同一手法，这次落到了第三个域上。`com.xander.lab.automation.api` 是
+**20 个前端 HTTP 文件**的家（`EmailReminderController` / `EmailReminderTaskVO` /
+`BlogContentPlanController` / `BlogContentPlanVO` …），和 `agent` / `automation` / `studio`
+一样被占满。契约只能落在 `com.xander.lab.automation.spi`。
+
+这不是换个名字那么轻：**同一刀里两个包并存**，`EmailReminderTaskVO`（前端）和
+`EmailReminderView`（服务间）会长期住在同一个域的相邻包里，名字相似、字段大半重叠。
+所以两者的 Javadoc 必须互相点名，说清"谁给前端、谁给智能体"，否则下一个人会以为
+其中一个是另一个的重复而去合并它们 —— 合并的后果是把前端可见类型拖进服务间契约，
+正好违反 ADR-2。
+
+### 7.3 收窄而不是镜像：这一刀差距最大的一次
+
+§2.5 的镜像规则适用于一个类型**替换**了前端可见类型的情形（那时"序列化逐字节不变"
+是可证明的命题）。这一刀**一条都不满足**：`EmailReminderTaskVO` / `BlogContentPlanVO`
+原地不动，继续由各自的控制器发给前端，前端永远看不到这两个契约读模型。
+
+| 契约类型 | 分量数 | 对应的域 VO | 域 VO 字段数 |
+|---|---|---|---|
+| `EmailReminderView` | **11** | `EmailReminderTaskVO` | 20 |
+| `EmailReminderDraft` | 12 | `EmailReminderCreateRequest` | 12 |
+| `ContentPlanView` | **11** | `BlogContentPlanVO` | 24 |
+| `ContentPlanDraft` | 10 | `BlogContentPlanCreateRequest` | 10 |
+| `ContentPlanEdit` | 8 | `BlogContentPlanUpdateRequest` | 15 |
+
+`ContentPlanView` 是差距最大的一处：**11 / 24**。镜像它意味着照抄一个 24 分量、
+含四组相邻同类型字段的位置顺序，去保留一个**不存在**的序列化表面。
+
+**每个留下的分量都有具名消费者**，字段集不是凭感觉挑的，是从工具的读取点反推的
+（见 §7.4）。
+
+### 7.4 ⚠️ 字段集必须从消费方读取点反推，再与 record 对账
+
+这一刀里真实发生了一次漏字段：`EmailReminderView` 的 Javadoc 已经把 `sendTime`
+写成 `QueryEmailRemindersTool` 要读的字段，但 record 的**分量列表里没有它** ——
+写 Javadoc 时想到了，写分量时漏了。漏掉的后果不是编译错误，而是工具输出
+**静默少一个键**，模型再也看不到"计划几点发"。
+
+抓法是把字段集机械化地重新推一遍：
+
+```bash
+for f in <6 个工具>; do grep -oE "\.(get|is)[A-Z][A-Za-z0-9]*\(" "$f" | sort -u; done
+```
+
+得到的并集再与 record 的分量逐一对账。这次对账发现 `ContentPlanView` 的 11 个分量
+与读取点**完全吻合**，`EmailReminderView` 少 1 个。
+
+> **规矩**：收窄型契约的字段集**不能**沿用"上次抽取的结果"，必须每次从消费方
+> 读取点重推一次再对账。Javadoc 里列了消费方字段清单不等于 record 里有那些分量 ——
+> 两者是分开手写的，就会分开漂移。
+
+### 7.5 同名不同签名：端口拿规范名，同域富方法加 `ForView` 后缀
+
+`EmailReminderService.updateStatus` 与 `BlogContentPlanService.updateStatus` 是两处真冲突：
+端口方法与同域富方法**参数表完全相同、只差返回类型**，而 Java 不允许只靠返回类型重载。
+
+按 §5.2 定下的做法（先例 `OssService.uploadImage`）：**端口方法拿规范名
+`updateStatus`，同域的富方法加 `ForView` 后缀说明它服务谁**。两个控制器改调
+`updateStatusForView`，并留注释说明为什么名字带后缀。
+
+`listAll` / `findByClientRequestId` / `delete` 没有冲突（`listAll` 与
+`findByClientRequestId` 的调用方只有智能体工具和服务自己的测试），直接换返回类型。
+
+### 7.6 状态常量必须搬到端口上，否则"断了实现依赖"是假的
+
+`UpdateEmailReminderTool` 要判断 `PAUSE` 该写哪个状态：
+
+```java
+String targetStatus = "RESUME".equals(action)
+        ? EmailReminderPort.STATUS_PENDING
+        : EmailReminderPort.STATUS_PAUSED;
+```
+
+原来这里写的是 `EmailReminderService.STATUS_PENDING`。**只要还写着那个名字，
+工具就仍然要 import 实现类**，实现语句一条都没少 —— 端口白抽了。所以两个常量
+从实现类搬到端口上，实现类通过继承拿到它们（不再重复声明）。
+
+> 判据：抽完端口后，**消费方的 import 列表里不许再出现提供方的实现包**。
+> `grep -rn "import <提供方域>" <消费方包>` 的结果应该只剩契约包。这一刀之后
+> `com/xander/lab/agent/` 下 15 条 `automation.*` 导入**全部**是 `automation.spi.*`。
+
+### 7.7 ⚠️ "没传"与"传了空"不是一回事：record 化最容易丢的语义
+
+`UpdatePlanTool` 的 EDIT 语义是"只改提交了的字段"：
+
+```java
+if (args.path("syncCsdn").isBoolean()) { request.setSyncCsdn(...); }   // 没传 → 保持 null
+```
+
+换成位置构造的 record 之后，这个条件很容易被写成
+`optionalBoolean(...)` → 忘了它就变成 `args.path("syncCsdn").asBoolean()`，
+缺省时得到 `false` —— **每次编辑都会静默关掉 CSDN 同步**，而这是用户没说的话。
+同理 `topic` 不能用 `defaultText` 兜空串，否则"没说"变成"改成空"。
+
+所以 `ContentPlanEdit` 的两个布尔分量是**装箱 `Boolean`**（不是 `boolean`），
+并且 `UpdatePlanToolTest` 里加了**两条**针对性断言：
+`editLeavesUnspecifiedFieldsNull`（缺省必须是 `null`）与
+`editCarriesExplicitFalseBooleans`（显式 `false` 必须落成 `false`）。
+缺任何一条，另一个方向就会静默错。
+
+### 7.8 端口"变宽"依然没人守（第五次确认）
+
+与 §3.6 / §4.7 / §5.8 / §6.6 同一手法，`automation-api` 的 22 条测试里：
+
+- `EmailReminderPortTest`(8) / `ContentPlanPortTest`(7)：完整签名清单逐条相等、
+  条数相等、无 `default`、不继承别的接口、签名里无非 JDK 类型、**每个方法的第一个参数
+  是 `Long userId`**（ThreadLocal 不跨进程）。
+- `RecordShapeTest`(7)：每个 record 的**分量名与顺序**逐条相等，且无 Jackson 注解
+  （record 本身、分量、以及分量对应的字段三处都查）。
+
+`EmailReminderPort` 还额外断言**端口上恰好只有 2 个字段**（那两个状态常量）——
+常量也是宽度，多一个就是一个新的跨模块词。
+
+### 7.9 实测收益
+
+```text
+implementation_statements         50 → 44      (-6)
+implementation_edges              20 → 19      (-1)
+cross_deployment_unit_statements  33 → 27      (-6)
+cross_deployment_unit_edges       13 → 12      (-1)
+api_statements                    25 → 16      (-9)
+```
+
+`agent → automation` 这条边**整条消失**。另外 `api_statements` 掉了 9 —— 这不是意外：
+6 个工具原本 import 了 9 个 `automation.api.*` 类型（`EmailReminderTaskVO` ×3、
+`BlogContentPlanVO` ×3、三个请求体 ×3），全部换成 `automation.spi.*`。
+**契约包在 `SHARED_KERNEL` 里，所以这些导入一条都不计入任何指标** ——
+这正是"用契约换掉实现依赖"在数字上的样子。
+
+### 7.10 ⚠️ 这一刀顺带发现了一处门禁空转（已修）
+
+`deployment-unit-coupling` 的第 2 条判据原本取
+`component_of(WAVE2_UNITS[0])`，而 **`WAVE2_UNITS[0]` 正是 `dinqor-agent`**。
+这一刀把最后一条指向 agent 的实现边（`platform-integration → agent`）消掉之后，
+agent 只剩出边、**脱离了 Wave 2 强连通分量**：
+
+```text
+component_of(dinqor-agent)                  = ['dinqor-agent']        ← 单元素
+component_of(dinqor-content-automation)     = ['dinqor-content-automation',
+                                               'dinqor-core-host',
+                                               'dinqor-platform-integration']
+```
+
+于是一个**没人指向它的单元**成了判据的根：它的分量永远只有自己，`joined` 恒为空，
+**这条判据再也不会红**。新的单元加入真正的分量会被静默放过。
+
+实测（构造 `dinqor-newbie ↔ dinqor-platform-integration` 后分别跑两套判据）：
+
+```text
+OLD  joined = []                -> PASS      ← 空转
+NEW  joined = ['dinqor-newbie'] -> FAIL      ← 抓到了
+```
+
+修法：判据改成对**每个** Wave 2 单元取分量的并集；detail 行改成报**实测**分量大小
+（原来打印的是 `len(WAVE2_UNITS)` 这个常量，会把"agent 已脱离"这个进度盖掉），
+并新增一条"哪些单元脱离了分量、现在可以单独抽"的进度提示。
+
+> 教训与 §7.11 的 `util` 同源：**判据的根不能是一个会变的量**。写"取第一个"的时候
+> 隐含假设了"第一个一定在分量里"，而这个假设没有被任何东西守住。
+
+### 7.11 为什么没有加 `contract-changes.yaml` 条目
+
+理由与 §2.6 / §4.10 / §5.11 / §6.8 相同：这是一条**新的缝**，前端从未见过这两个类型，
+路由、响应形状、错误码都未变。域 VO 留在 `automation.api` 继续发给前端，
+所以没有任何前端可见类型被替换或收窄。
+
+### 7.12 刻意没做的事
+
+- **`knowledgebase → automation`（2 条）**：需要一个 `BlogNotificationService` 端口。
+  这是 `automation-api` 的**零接线扩展**（只往已有模块加类型），下次顺手做。
+- **`admin → automation`（1 条）**：`BlogPlanSseService` 是基础设施类，需要 SSE 广播端口，
+  形状与前面几个不同（推送而非请求-响应），值得单独一刀。
+- **`integration → automation`（1 条）**：这条**构成真环**。
+  `EmailReminderScheduler`（automation）调 `MailService#sendReminderMail`（integration），
+  后者回调 automation 的 `EmailReminderMailTemplates` 渲染正文。要断环必须改
+  `MailService` 的 API（让调用方把渲染好的正文传进来），不是加个端口就行。
+- **一处既有 bug 只记录不修**：`UpdatePlanTool` 的 schema 宣传 `triggerTime`
+  "（triggerTimes 为空时使用）"，但工具**总是**传一个（可能为空的）`triggerTimes` 列表，
+  于是 `BlogContentPlanService.update` 里 `else if (triggerTime != null …)` 那一支
+  **从工具路径不可达**；只给 `triggerTime` 会走到 `parseSendTimes([])` 抛
+  "请设置至少一个发送时间"。这是**既有行为**，本刀逐字保留 —— 顺手修会让这次改动
+  不再是可证明的纯重构（"工具输出逐字段不变"这个命题会失效）。修它要单独一刀 + 单独测试。
+
+---
+
+## 8. 这两条 ADR 与既有规则的交叉
 
 | 既有规则 | 与 ADR 的关系 |
 |---|---|
@@ -914,7 +1122,7 @@ api_statements                 25 → 25      (未动)
 
 ---
 
-## 8. 待办
+## 9. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -927,8 +1135,12 @@ api_statements                 25 → 25      (未动)
 | 7 | `TokenUsage` / `ContentPost` / `ContentPostPage` 分量顺序是否要登记为 §11 契约变更 | **未定**。今天不登记（理由同 §2.6），但拆分后契约 jar 独立版本化时它们会变成线上格式 |
 | 8 | `blogagent → publishing` 的 1 条 api 语句（`BlogPostVO`） | **未做**，独立一刀（§5.10） |
 | 9 | `ContentPostPort` 的 16 个不上端口方法，拆分后是否需要新的端口 | **未定**。`automation` / `blogagent` 与内容域同单元，拆完还在一个进程里 |
+| 10 | `automation-api`（10 条语句指向它，当时最大的目标域） | **部分已做**（§7）。范围只做 `agent → automation` 6 条；剩 `knowledgebase` 2（加 `BlogNotificationService` 端口，零接线）、`admin` 1（需要 SSE 广播端口，形状不同）、`integration` 1（**构成真环**，要改 `MailService` 的 API 而非加端口） |
+| 11 | `deployment-unit-coupling` 判据 2 **空转**：根单元 `dinqor-agent` 离开分量后 `joined` 恒为空 | **已修**（§7.10）。判据改成对**每个** Wave 2 单元取分量并集；detail 改报**实测**分量大小，并新增"哪些单元已可单独抽取"的进度提示 |
+| 12 | `UpdatePlanTool` 的 `triggerTime` 分支**从工具路径不可达**：只给 `triggerTime` 会走到 `parseSendTimes([])` 抛"请设置至少一个发送时间" | **未修**，既有行为，本刀逐字保留 —— 顺手修会让这次改动不再是可证明的纯重构（§7.12） |
+| 13 | `shared-kernel-classification` 缺**反向**判据：只查"每个发布的包都有条目"，不查"每个条目都有包"，于是 `util` 是死条目 | **未修**，删 `util` 触发 0 门禁 / 0 指标（见 `backend-norms`） |
 
-### 8.1 第 1 项的边界（明确不许顺手放宽）
+### 9.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -939,7 +1151,7 @@ api_statements                 25 → 25      (未动)
 
 ---
 
-## 9. 一句话记法
+## 10. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。
