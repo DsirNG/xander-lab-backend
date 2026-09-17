@@ -1,7 +1,7 @@
 package com.xander.lab.identity.application;
 
 import com.xander.lab.common.Constants;
-import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
@@ -53,13 +53,13 @@ class AuthServiceTest {
 
     private AuthService service;
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-    private BillingService billingService;
+    private BillingPort billingPort;
 
     @BeforeEach
     void setUp() {
-        billingService = mock(BillingService.class);
+        billingPort = mock(BillingPort.class);
         service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate, passwordEncoder,
-                billingService, wechatMiniAppClient, accountMergeMapper);
+                billingPort, wechatMiniAppClient, accountMergeMapper);
         // 速率限制默认放行（increment 返回 1），只被涉及限流的用例使用
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         lenient().when(valueOperations.increment(anyString())).thenReturn(1L);
@@ -211,7 +211,7 @@ class AuthServiceTest {
         // 未建号：不得自动注册、不得发 token、不触发注册赠送
         verify(userMapper, never()).insert(any());
         verify(jwtUtil, never()).generateAccessToken(anyString(), any(Map.class));
-        verify(billingService, never()).grantRegister(any(), any());
+        verify(billingPort, never()).grantRegister(any(), any());
     }
 
     @Test
@@ -240,7 +240,7 @@ class AuthServiceTest {
         // 验证码一次性消费
         verify(valueOperations).get(Constants.REDIS_CODE_PREFIX + "new@example.com");
         verify(redisTemplate).delete(Constants.REDIS_CODE_PREFIX + "new@example.com");
-        verify(billingService).grantRegister(88L, "user:88");
+        verify(billingPort).grantRegister(88L, "user:88");
     }
 
     @Test
@@ -284,7 +284,7 @@ class AuthServiceTest {
         assertThat(captor.getValue().getOpenid()).isEqualTo("oWX-skip");
         assertThat(captor.getValue().getEmail()).isNull(); // 临时账号未绑定邮箱
         assertThat(response.isNeedsEmailBinding()).isTrue();
-        verify(billingService).grantRegister(77L, "user:77");
+        verify(billingPort).grantRegister(77L, "user:77");
     }
 
     @Test
@@ -309,7 +309,7 @@ class AuthServiceTest {
         verify(accountMergeMapper).reparentBlogAgentTasks(40L, 41L);
         verify(accountMergeMapper).reparentFlowProjects(40L, 41L);
         // 积分并入目标账号
-        verify(billingService).transferBalance(40L, 41L, "merge:40:41", "账号合并转入");
+        verify(billingPort).transferBalance(40L, 41L, "merge:40:41", "账号合并转入");
         // 临时账号删除，openid 挂到目标账号
         verify(userMapper).deleteById(40L);
         // 解绑 openid 用显式 SQL 而非 updateById：null 字段会被 MyBatis-Plus 跳过生成空 SET（回归）
@@ -346,7 +346,7 @@ class AuthServiceTest {
         TokenResponse response = service.bindWechat("bind-token", "pc@example.com", "555666", "127.0.0.1");
 
         // 临时号数据/积分并入 PC 账号并删除临时号，openid 挂到 PC 账号
-        verify(billingService).transferBalance(50L, 51L, "merge:50:51", "账号合并转入");
+        verify(billingPort).transferBalance(50L, 51L, "merge:50:51", "账号合并转入");
         verify(userMapper).deleteById(50L);
         verify(userMapper).clearOpenid(50L);
         verify(userMapper).updateById(argThat(u -> u.getId().equals(51L) && "oWX-skip".equals(u.getOpenid())));

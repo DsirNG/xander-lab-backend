@@ -15,36 +15,43 @@
     <description>
         Service-to-service contract for the payment / points domain (V9 §18 / §91).
 
-        Step 1 of two. Members: BillingBiz, the billing catalogue — the vocabulary a caller must
-        speak to charge for anything.
+        Members: BillingBiz, the billing catalogue; BillingPort, the ledger port; TokenUsage, the
+        port's usage DTO.
 
         Why it crosses a deployment unit. BillingBiz holds the biz_type values written to
         points_ledger.biz_type. Every charging call site has to name the thing it charges for,
-        and those call sites live in six domains across three future deployment units:
+        and those call sites live in seven domains across four future deployment units:
         dinqor-agent (AgentConversationService, ImageGenerationTool, PublishPostTool),
         dinqor-platform-integration (CsdnMcpApplicationService, JuejinMcpApplicationService),
         dinqor-content-automation (EmailReminderScheduler, BlogAgentService) and
-        dinqor-core-host (Img2ThreeService). The vocabulary is shared, so it cannot belong to
-        the billing domain alone: after the split, four services would each need a copy or a
-        dependency pointing into another service's internals.
+        dinqor-core-host (Img2ThreeService, AuthService, ProfileOverviewService). The vocabulary
+        is shared, so it cannot belong to the billing domain alone. The same seven domains call
+        BillingService itself, which is a concrete @Service over three MyBatis mappers, so it
+        needs a port rather than a move.
 
-        Why this is a pure move and the port is not here yet. BillingBiz is a final class of
-        String constants with a private constructor and no imports at all, so it moves without
-        touching a single behaviour. BillingService — the other cross-domain type in this domain,
-        imported by seven domains — is a concrete @Service over three MyBatis mappers, so it
-        needs a port, not a move. That port is deliberately NOT in this commit: its
-        chargeTokens(...) signature takes com.xander.lab.common.ModelUsage, which lives in
-        libs/xander-model and carries a Jackson dependency (ModelUsage.fromJson), so the port
-        forces a decision that has not been made yet — is a contract allowed to depend on a
-        framework-free shared kernel, or must it own an equivalent DTO? See
-        docs/migration/lib-extraction.md §3quinquies.5. Until that is answered this module holds
-        the vocabulary only. The same shape as contracts/integration-api, which took the OSS
-        pair and left the five concrete services behind.
+        Two cuts, done in order. The first commit moved BillingBiz only: a final class of String
+        constants with a private constructor and no imports at all, so it moved without touching
+        a single behaviour. The port came second, because its chargeTokens(...) signature takes
+        com.xander.lab.common.ModelUsage, which lives in libs/xander-model and carries a Jackson
+        dependency (ModelUsage.fromJson). That forced a decision: is a contract allowed to depend
+        on a framework-free shared kernel, or must it own an equivalent DTO? ADR-1 answered it --
+        JDK only, and the contract owns an equivalent DTO. Hence TokenUsage, and the boundary
+        conversion `new TokenUsage(u.inputTokens(), u.cachedTokens(), u.outputTokens())` at each
+        of the three call sites that hold a ModelUsage. Widening
+        CONTRACT_ALLOWED_IMPORT_PREFIXES was the other option and was rejected; see
+        docs/migration/adr-contract-boundaries.md §1 and lib-extraction.md §3quinquies.5.
+
+        What is deliberately NOT on the port. pageLedger / overview / priceList / listModelPrices /
+        upsertModelPrice / deleteModelPrice are called only from billing's own
+        PointsController and AdminModelPriceController and return frontend views
+        (PointsLedgerPage / ModelPriceView). Putting them on the port would let another service
+        edit the price table on billing's behalf, and no call site needs that.
 
         Zero dependencies, and that is the point. A contract that drags in a framework cannot be
         depended on by every service, and V9 §19 is explicit that the WebFlux Gateway must stay
         free of spring-webmvc. Nothing here may gain a compile dependency without a deliberate
-        decision; test scope is fine.
+        decision; test scope is fine. This is also why a contract may not import another
+        contract -- see content-api's StoredImage for the same situation.
 
         The package is com.xander.lab.payment.api rather than com.xander.lab.payment. "payment"
         is not a business domain (the domains are "billing" and "virtualpay"), but a bare first
@@ -59,10 +66,13 @@
 
     <dependencies>
         <!--
-            No compile or runtime dependency by design. junit-jupiter is test-scoped: the
-            constants below are persisted as points_ledger.biz_type values, so a rename would
-            not break the build, it would silently orphan existing ledger rows and break the
-            isCreditBiz classification. The test pins every literal.
+            No compile or runtime dependency by design. junit-jupiter is test-scoped, and it
+            carries three pins: BillingBizTest pins every biz_type literal (they are persisted as
+            points_ledger.biz_type values, so a rename would not break the build, it would
+            silently orphan existing ledger rows and break the isCreditBiz classification);
+            BillingPortTest pins the port's full signatures (three adjacent Strings and three
+            adjacent longs can be reordered with no compile error); TokenUsageTest pins the DTO's
+            component order, which every boundary conversion depends on positionally.
         -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

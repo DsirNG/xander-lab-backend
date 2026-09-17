@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.content.api.MediaAssetPort;
 import com.xander.lab.content.api.MediaAssetRef;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
+import com.xander.lab.payment.api.TokenUsage;
+import com.xander.lab.common.ModelUsage;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import lombok.extern.slf4j.Slf4j;
@@ -39,16 +41,16 @@ public class ImageGenerationTool implements AgentTool {
     private final BlogAgentImageClient imageClient;
     private final MediaAssetPort mediaAssetPort;
     private final BlogAgentProperties properties;
-    private final BillingService billingService;
+    private final BillingPort billingPort;
     private final ObjectMapper objectMapper;
 
     public ImageGenerationTool(BlogAgentImageClient imageClient, MediaAssetPort mediaAssetPort,
-                               BlogAgentProperties properties, BillingService billingService,
+                               BlogAgentProperties properties, BillingPort billingPort,
                                ObjectMapper objectMapper) {
         this.imageClient = imageClient;
         this.mediaAssetPort = mediaAssetPort;
         this.properties = properties;
-        this.billingService = billingService;
+        this.billingPort = billingPort;
         this.objectMapper = objectMapper;
     }
 
@@ -116,9 +118,14 @@ public class ImageGenerationTool implements AgentTool {
             throw new IllegalStateException("图片已经生成，但保存到素材库失败", exception);
         }
         try {
-            billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+            // 网关口径 ModelUsage -> 计费契约口径 TokenUsage：分量同名同序，所以这是一次
+            // 直接映射。契约不能依赖带 Jackson 的 xander-model（ADR-1），换算只能落在边界上。
+            ModelUsage billed = generated.usage();
+            billingPort.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
                     "agent-image:" + asset.id(), "asset:" + asset.id(),
-                    generated.usage(), generated.model(), "智能体生成图片");
+                    billed == null ? TokenUsage.NONE
+                            : new TokenUsage(billed.inputTokens(), billed.cachedTokens(), billed.outputTokens()),
+                    generated.model(), "智能体生成图片");
         } catch (RuntimeException exception) {
             log.warn("agent image billing failed userId={} assetId={} type={} message={}",
                     userId, asset.id(), exception.getClass().getSimpleName(), safeLogMessage(exception));

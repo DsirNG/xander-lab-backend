@@ -2,7 +2,7 @@ package com.xander.lab.agent.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
@@ -43,7 +43,7 @@ class PublishPostToolTest {
         PublishPostTool tool = new PublishPostTool(
                 blogAgentService, mock(BlogService.class),
                 mock(CsdnBlogSyncService.class), mock(JuejinBlogSyncService.class),
-                mock(BillingService.class));
+                mock(BillingPort.class));
         tool.execute(42L,
                 JsonNodeFactory.instance.objectNode().put("taskId", 9L), new RecordingProgress());
 
@@ -55,7 +55,7 @@ class PublishPostToolTest {
         BlogAgentService blogAgentService = mock(BlogAgentService.class);
         BlogPostVO published = post(9L, "本地发布", 1);
         when(blogAgentService.publish(eq(9L), eq(42L))).thenReturn(published);
-        BillingService billing = mock(BillingService.class);
+        BillingPort billing = mock(BillingPort.class);
 
         PublishPostTool tool = new PublishPostTool(
                 blogAgentService, mock(BlogService.class),
@@ -81,7 +81,7 @@ class PublishPostToolTest {
         when(blogService.getManagedBlogById(42L, 5L)).thenReturn(post);
         CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
         when(csdn.sync(eq(42L), eq(5L))).thenReturn(new PublishResult("csdn", "123", "https://csdn.example.com/123"));
-        BillingService billing = mock(BillingService.class);
+        BillingPort billing = mock(BillingPort.class);
 
         PublishPostTool tool = new PublishPostTool(
                 mock(BlogAgentService.class), blogService, csdn,
@@ -104,7 +104,7 @@ class PublishPostToolTest {
         post.setCsdnSynced(true);
         when(blogService.getManagedBlogById(42L, 5L)).thenReturn(post);
         CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
-        BillingService billing = mock(BillingService.class);
+        BillingPort billing = mock(BillingPort.class);
 
         PublishPostTool tool = new PublishPostTool(
                 mock(BlogAgentService.class), blogService, csdn,
@@ -124,7 +124,7 @@ class PublishPostToolTest {
         PublishPostTool tool = new PublishPostTool(
                 mock(BlogAgentService.class), mock(BlogService.class),
                 mock(CsdnBlogSyncService.class), mock(JuejinBlogSyncService.class),
-                mock(BillingService.class));
+                mock(BillingPort.class));
         assertThatThrownBy(() -> tool.execute(42L,
                 JsonNodeFactory.instance.objectNode(), new RecordingProgress()))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -139,7 +139,7 @@ class PublishPostToolTest {
         when(csdn.findSucceeded(42L, 5L))
                 .thenReturn(new PublishResult("csdn", "123", "https://csdn.example.com/123"));
         PublishPostTool tool = new PublishPostTool(mock(BlogAgentService.class), blogService, csdn,
-                mock(JuejinBlogSyncService.class), mock(BillingService.class));
+                mock(JuejinBlogSyncService.class), mock(BillingPort.class));
 
         JsonNode result = tool.reconcile(new AgentToolContext(42L, 7L, 3L, "invocation-1"),
                 JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn"))
@@ -155,7 +155,7 @@ class PublishPostToolTest {
         when(blogService.getManagedBlogById(42L, 5L)).thenReturn(post(5L, "CSDN 同步", 1));
         CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
         PublishPostTool tool = new PublishPostTool(mock(BlogAgentService.class), blogService, csdn,
-                mock(JuejinBlogSyncService.class), mock(BillingService.class));
+                mock(JuejinBlogSyncService.class), mock(BillingPort.class));
 
         assertThat(tool.reconcile(new AgentToolContext(42L, 7L, 3L, "invocation-1"),
                 JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn")))

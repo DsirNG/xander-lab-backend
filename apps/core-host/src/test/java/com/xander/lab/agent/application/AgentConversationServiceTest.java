@@ -18,7 +18,8 @@ import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentEventMapper;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
 import com.xander.lab.agent.infrastructure.AgentModelClient;
-import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.payment.api.BillingPort;
+import com.xander.lab.payment.api.TokenUsage;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -78,7 +79,7 @@ class AgentConversationServiceTest {
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper =
             new com.fasterxml.jackson.databind.ObjectMapper()
                     .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-    private final BillingService billingService = mock(BillingService.class);
+    private final BillingPort billingPort = mock(BillingPort.class);
     private AgentEventService eventService;
 
     private AgentToolRegistry registry;
@@ -112,7 +113,7 @@ class AgentConversationServiceTest {
         eventService = new AgentEventService(eventMapper, conversationMapper, objectMapper, new AgentEventBus());
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         org.mockito.Mockito.lenient().doReturn(leaseRenewal).when(agentLeaseRenewer)
                 .scheduleAtFixedRate(any(Runnable.class), any(Long.class), any(Long.class), any());
@@ -194,7 +195,7 @@ class AgentConversationServiceTest {
                 List.of(new FailingTool("failing_tool")));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, failingRegistry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         AgentConversation ready = conversation("running");
         when(conversationMapper.update(any(), any())).thenReturn(1);
@@ -570,7 +571,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitQuizTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode emit = decisionNode(false, "先把题目发出去", EmitQuizTool.NAME, null);
         ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
@@ -604,7 +605,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitQuizTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode markdownQuestions = decisionNode(true, "1. sin 90° 等于多少？", null, null);
         ObjectNode emit = decisionNode(false, "", EmitQuizTool.NAME, null);
@@ -633,7 +634,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode emit = decisionNode(false, "把文件交出去", EmitArtifactTool.NAME, null);
         ObjectNode args = ((ObjectNode) emit.path("action")).putObject("args");
@@ -671,7 +672,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode empty = decisionNode(true, "", null, null);
         empty.put("reply", "已完成 Node.js + ws 服务端及浏览器客户端聊天示例。");
@@ -695,7 +696,7 @@ class AgentConversationServiceTest {
         registry = new AgentToolRegistry(List.of(new EmitArtifactTool()));
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         ObjectNode inline = decisionNode(true, "", null, null);
         inline.put("reply", "已完成，代码如下：\n```js\nconsole.log('hi');\n```");
@@ -854,7 +855,7 @@ class AgentConversationServiceTest {
         });
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
         doThrow(new IllegalStateException("积分账户不存在"))
-                .when(billingService)
+                .when(billingPort)
                 .chargeTokens(any(), any(), any(), any(), any(), any(), any());
         List<String> eventTypes = new ArrayList<>();
 
@@ -1008,7 +1009,7 @@ class AgentConversationServiceTest {
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient,
                 new AgentToolRegistry(List.of(new FailingTool("failing_tool"))), properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
         when(conversationMapper.update(any(), any())).thenReturn(1);
         when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
@@ -1371,9 +1372,12 @@ class AgentConversationServiceTest {
         assertThat(mainRequest).contains("检查点：用户要整理笔记").contains("第8条")
                 .doesNotContain("第1条：").doesNotContain("第7条：");
         // 摘要是一次真实的模型调用，不报账就等于让压缩绕过计费。
-        org.mockito.ArgumentCaptor<ModelUsage> billed = org.mockito.ArgumentCaptor.forClass(ModelUsage.class);
-        verify(billingService).chargeTokens(eq(42L), any(), any(), any(), billed.capture(), any(), any());
-        assertThat(billed.getValue()).isEqualTo(new ModelUsage(1200, 800, 60));
+        // 断言的是换算后的值：网关口径 ModelUsage(1200,800,60) 必须按位置变成
+        // 计费口径 TokenUsage(1200,800,60) —— 这一步跨越 ADR-1 的边界，位置写反
+        // 不会编译报错，只会静默错账，所以连位置一起钉。
+        org.mockito.ArgumentCaptor<TokenUsage> billed = org.mockito.ArgumentCaptor.forClass(TokenUsage.class);
+        verify(billingPort).chargeTokens(eq(42L), any(), any(), any(), billed.capture(), any(), any());
+        assertThat(billed.getValue()).isEqualTo(new TokenUsage(1200, 800, 60));
     }
 
     private AgentMessage userMessage(Long id, String content, String attachmentsJson) {
@@ -1483,7 +1487,7 @@ class AgentConversationServiceTest {
     private AgentConversationService serviceWith(AgentTool... tools) {
         return new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, new AgentToolRegistry(List.of(tools)),
-                properties, transactionTemplate, eventService, agentLeaseRenewer, billingService,
+                properties, transactionTemplate, eventService, agentLeaseRenewer, billingPort,
                 objectMapper, planService, memoryService, new AgentQuizService(objectMapper));
     }
 
@@ -1521,7 +1525,7 @@ class AgentConversationServiceTest {
                 new AgentToolExecutionPipeline(approvalRegistry, journal, approvalService));
         return new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, approvalRegistry, properties,
-                transactionTemplate, eventService, billingService, objectMapper, planService,
+                transactionTemplate, eventService, billingPort, objectMapper, planService,
                 memoryService, quizService, journal,
                 AgentRequestAssembler.legacy(approvalRegistry, properties, planService, quizService, objectMapper),
                 lifecycle, projector, coordinator, AgentSkillCatalog.empty(),

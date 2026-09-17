@@ -238,7 +238,7 @@ class BlogContentPlanServiceTest {
      * generateTopics 必须【没有】事务注解（V9 §75 跨域事务边界）。
      *
      * <p>它调用的 {@code agentService.generateTopicSeries} 会做外部模型 HTTP 调用
-     * 并调用 {@code billingService.chargeTokens} 写库。加了 {@code @Transactional}
+     * 并调用 {@code billingPort.chargeTokens} 写库。加了 {@code @Transactional}
      * （尤其是 {@code readOnly = true}）会把这两件事圈进一个只读事务：</p>
      *
      * <ul>

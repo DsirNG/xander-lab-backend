@@ -2,8 +2,9 @@ package com.xander.lab.agent.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
-import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
+import com.xander.lab.payment.api.TokenUsage;
 import com.xander.lab.common.ModelUsage;
 import com.xander.lab.content.api.MediaAssetPort;
 import com.xander.lab.content.api.MediaAssetRef;
@@ -29,7 +30,7 @@ class ImageGenerationToolTest {
                 .thenThrow(new IllegalStateException("500 Internal Server Error: secret vendor body"));
         ImageGenerationTool tool = new ImageGenerationTool(
                 imageClient, mock(MediaAssetPort.class), new BlogAgentProperties(),
-                mock(BillingService.class), new ObjectMapper());
+                mock(BillingPort.class), new ObjectMapper());
         var args = JsonNodeFactory.instance.objectNode().put("prompt", "一只小猫");
 
         assertThatThrownBy(() -> tool.execute(1L, args, noOpProgress()))
@@ -46,18 +47,21 @@ class ImageGenerationToolTest {
         when(imageClient.generate(anyString())).thenReturn(
                 new BlogAgentImageClient.GeneratedImage(new byte[]{1}, "image/png", "png", usage, "gpt-image-2"));
         MediaAssetRef asset = assetRef(9L, "https://cdn.example.test/image.png");
-        BillingService billingService = mock(BillingService.class);
+        BillingPort billingPort = mock(BillingPort.class);
         MediaAssetPort mediaAssetPort = mock(MediaAssetPort.class);
         when(mediaAssetPort.recordGenerated(anyLong(), any(), anyString(), any(), anyString(), anyString()))
                 .thenReturn(asset);
         ImageGenerationTool tool = new ImageGenerationTool(
-                imageClient, mediaAssetPort, new BlogAgentProperties(), billingService, new ObjectMapper());
+                imageClient, mediaAssetPort, new BlogAgentProperties(), billingPort, new ObjectMapper());
         var args = JsonNodeFactory.instance.objectNode().put("prompt", "draw a robot");
 
         tool.execute(1L, args, noOpProgress());
 
-        verify(billingService).chargeTokens(1L, BillingBiz.BLOG_AGENT_ILLUSTRATION,
-                "agent-image:9", "asset:9", usage, "gpt-image-2", "智能体生成图片");
+        // 断言的是换算后的值而不是原对象：网关口径 ModelUsage(120,20,80) 必须按位置
+        // 变成计费口径 TokenUsage(120,20,80)。实参顺序写反不会编译报错，只会静默错账，
+        // 所以这里连位置一起钉住（见 TokenUsageTest）。
+        verify(billingPort).chargeTokens(1L, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+                "agent-image:9", "asset:9", new TokenUsage(120, 20, 80), "gpt-image-2", "智能体生成图片");
     }
 
     /**

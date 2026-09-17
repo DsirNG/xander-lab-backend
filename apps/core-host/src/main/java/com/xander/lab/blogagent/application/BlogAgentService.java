@@ -8,8 +8,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentSessionVO;
-import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
+import com.xander.lab.payment.api.TokenUsage;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import com.xander.lab.publishing.api.BlogPostVO;
@@ -70,7 +71,7 @@ public class BlogAgentService {
     private final BlogAgentMessageMapper messageMapper;
     private final BlogAgentEventService eventService;
     private final BlogAgentLeaseScheduler leaseScheduler;
-    private final BillingService billingService;
+    private final BillingPort billingPort;
 
     @Autowired
     void setPublicationService(PublicationService publicationService) {
@@ -139,8 +140,8 @@ public class BlogAgentService {
                 .limit(count)
                 .toList();
         if (!result.isEmpty()) {
-            billingService.chargeTokens(userId, BillingBiz.BLOG_TOPIC, "topics:" + userId + ":" + System.currentTimeMillis(),
-                    "seed:" + seed, call.usage(), call.model(), "AI 选题生成");
+            billingPort.chargeTokens(userId, BillingBiz.BLOG_TOPIC, "topics:" + userId + ":" + System.currentTimeMillis(),
+                    "seed:" + seed, billable(call.usage()), call.model(), "AI 选题生成");
         }
         return result;
     }
@@ -331,7 +332,7 @@ public class BlogAgentService {
                 ? "博客生成助手完成调研、写作、插图与审校"
                 : "博客生成助手完成调研、写作与审校");
         saveMessage(taskId, "assistant", "result", "review", task.getTitle());
-        billingService.chargeTokens(userId, billingBizType, billingBizKey,
+        billingPort.chargeTokens(userId, billingBizType, billingBizKey,
                 "task:" + taskId, usage.sum(), usage.model(), billingBizKey);
         return get(taskId, userId);
     }
@@ -575,9 +576,9 @@ public class BlogAgentService {
                     MediaAssetRef asset = mediaAssetPort.recordGenerated(userId, taskId, fileName,
                             generated.bytes(), generated.contentType(), meta);
                     markdown = "![" + alt + "](" + asset.url() + ")";
-                    billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
+                    billingPort.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
                             "illustration:" + taskId + ":" + (index + 1), "task:" + taskId,
-                            generated.usage(), generated.model(), "知识插图生成");
+                            billable(generated.usage()), generated.model(), "知识插图生成");
                 }
                 content = replaceOrAppend(content, placeholder, markdown);
                 generatedCount++;
@@ -719,9 +720,9 @@ public class BlogAgentService {
             String reason = result.path("reasons").isArray()
                     ? result.path("reasons").toString()
                     : "";
-            billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_COMPLIANCE,
+            billingPort.chargeTokens(userId, BillingBiz.BLOG_AGENT_COMPLIANCE,
                     "task:" + taskId + ":compliance", "task:" + taskId,
-                    call.usage(), call.model(), "合规审查");
+                    billable(call.usage()), call.model(), "合规审查");
             return new ComplianceReview(pass, reason);
         } catch (RuntimeException e) {
             log.warn("blog-agent compliance review degraded to reject for task {}: {}",
@@ -827,6 +828,21 @@ public class BlogAgentService {
 
     private record IllustrationOutcome(String content, String status, String error, int generated) {}
 
+    /**
+     * 网关口径 {@code ModelUsage} -> 计费契约口径 {@link TokenUsage}。
+     *
+     * <p>两者分量同名同序，所以这是一次直接映射，没有"漏了哪个字段"的可能。换算之所以
+     * 必须落在调用方，是因为契约不能依赖带 Jackson 的 {@code libs/xander-model}（ADR-1，
+     * 见 {@code docs/migration/adr-contract-boundaries.md}）。</p>
+     *
+     * <p>{@code null} 归一到 {@link TokenUsage#NONE}：网关没返回用量时端口按"空用量"处理
+     * （插图类会因此拒绝扣费，其它业务退回一口价），而不是抛 NPE。</p>
+     */
+    private static TokenUsage billable(ModelUsage usage) {
+        return usage == null ? TokenUsage.NONE
+                : new TokenUsage(usage.inputTokens(), usage.cachedTokens(), usage.outputTokens());
+    }
+
     /** Aggregates token usage across the sequential stages of one blog-agent run. */
     private static final class UsageAccumulator {
         private long input;
@@ -846,8 +862,14 @@ public class BlogAgentService {
             }
         }
 
-        ModelUsage sum() {
-            return new ModelUsage(input, cached, output);
+        /**
+         * 计费契约口径的汇总（分量同名同序，换算按访问器取、按位置放）。
+         *
+         * <p>累加仍用网关口径 {@code ModelUsage}：它是 {@code add()} 的入参类型，
+         * 换掉会让这个内部累加器依赖契约，而它并不需要。</p>
+         */
+        TokenUsage sum() {
+            return new TokenUsage(input, cached, output);
         }
 
         String model() {

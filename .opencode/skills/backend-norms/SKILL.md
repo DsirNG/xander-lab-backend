@@ -156,7 +156,28 @@ Maven 编排不了 test-only 的跨契约依赖，所以门禁干脆全禁。后
 `content-api` 不能复用 `integration.api.UploadResponse`，只能自己定义 `StoredImage`。
 **遇到这种情况改设计，不要放宽门禁** —— 放宽的那一刻 ADR-1 就只剩文档里一句话了。
 （"契约能不能依赖契约"本身仍是未拍板的问题，见
-`docs/migration/adr-contract-boundaries.md` §5。）
+`docs/migration/adr-contract-boundaries.md` §6。）
+
+**⚠️ 契约也不能依赖"带框架的共享内核库"，哪怕那个类型本身很干净。**
+实测卡点：`BillingService.chargeTokens(...)` 收 `com.xander.lab.common.ModelUsage` ——
+它是 `record (long, long, long)`、零注解，**但**它住在 `libs/xander-model`，那个模块为
+`ModelUsage.fromJson(JsonNode)` 声明了 `jackson-databind`，所以契约 import 不到它。
+正确动作是**契约自带等价 DTO**（`payment.api.TokenUsage`），不是放宽
+`CONTRACT_ALLOWED_IMPORT_PREFIXES`。代价是调用方在边界上做一次三字段换算：
+`new TokenUsage(u.inputTokens(), u.cachedTokens(), u.outputTokens())`。
+**选端口形状时优先选与现有实现同形的**：`TokenUsage` 的访问器与 `ModelUsage` 同名，
+于是 `BillingService` 的方法体一行没动，只换了参数类型。见
+`docs/migration/adr-contract-boundaries.md` §4。
+
+**⚠️ 契约 DTO 的分量顺序是**位置契约**，而且没有编译期保护。** 三个相邻的 `long`
+或三个相邻的 `String` 重排不会有任何错误，只会静默错账。所以：
+（1）契约侧用互不相同的字面量反射钉住分量名与顺序；（2）实现侧钉住"哪个分量落到哪一列"
+—— 实测存在一处真实换位：`TokenUsage` 是 `(input, cached, output)`，而
+`recordAndDeduct` 收的是 `(..., input, output, cached, ...)`，后两个正好相反，
+写错只让流水的 `output_tokens`/`cached_tokens` 两列互换、**金额照旧**。
+（3）端口测试钉**完整签名**（`getSimpleName()` 列表）而不只是方法名 ——
+`chargeTokens` 头四个参数是 `(Long, String, String, String)`，三个相邻 `String` 换位
+会把幂等键写到 `biz_type` 列上。
 
 **⚠️ 实体不能进契约 —— 它带的是持久化注解。** `BlogMediaAsset` 带 `@TableName` /
 `@TableId`（MyBatis），搬进契约等于把 MyBatis 拖进所有消费者。正确做法：实体留在

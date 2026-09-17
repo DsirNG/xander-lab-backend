@@ -50,7 +50,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `automation-api` | 未开始 | — | — |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
-| `payment-api` | **已完成**（第一步／共两步） | `BillingBiz`（`points_ledger.biz_type` 词表） | `agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7） |
+| `payment-api` | **已完成** | `BillingBiz`（`points_ledger.biz_type` 词表）；**`BillingPort`（积分账本端口）+ `TokenUsage`（用量 DTO）** | 词表那一刀：`agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7）。端口那一刀：`agent 3→0`、`integration 2→0`、`automation 1→0`、`blogagent 1→0`、`identity 1→0`、`profile 1→0`、`studio 1→0` —— **7 条边全部归零**，总计再 **−10**（跨单元 −7）。两刀合计 **−18**（跨单元 −14） |
 
 `integration` 域**不是一次性搬完的**：它被 7 个域引用的 7 个类型里，只有 2 个是"能直接搬"的。
 剩下 5 个（CSDN / 掘金 的凭证与同步服务、`MailService`）都是**具体实现而非接口**，
@@ -477,6 +477,14 @@ FAIL  shared-kernel-classification  module(s) ship package(s) core.api (contract
 **建议方向 1**，因为它保住了"契约可被任何服务依赖"这条硬不变量，而代价是机械的
 （转换点可数、可用测试钉住）。但这是设计决策，不应当在实现里顺手做掉。
 
+> **✅ 已拍板（2026-09-17，见 `adr-contract-boundaries.md` §1 ADR-1）：方向 1。**
+> 契约维持 JDK-only，自带等价 DTO。`payment-api` 那一半已按方向 1 落地，
+> 实测记录在本文 **§3octies**：8 个调用点里只有 4 个真的需要换算，
+> 而且实现侧退化成一次类型替换。`agent-api` 那一半**仍未做**。
+>
+> 被明确否决的是方向 2 —— `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽；
+> 方向 3 被否决的理由不变（"看情况"就是 §13 要避免的）。
+
 ---
 
 ## 3septies. 扩展 `contracts/core-api`：`UserLookupPort`（用户展示名端口）
@@ -780,6 +788,116 @@ pass 消息会一直藏在"全绿"里 —— 它不影响门禁的判定，只�
 
 ---
 
+## 3octies. 第五刀：`BillingService` → `payment.api.BillingPort`（ADR-1 首次真实应用）
+
+### 3octies.1 这一刀回答的是"卡住两个契约"的那个问题
+
+`§3quinquies.5` 列出的三选一（JDK-only / JDK+xander-model / 看情况）由 **ADR-1** 拍板：
+**JDK-only，契约自带等价 DTO**。`payment-api` 是第一个真实吃到这个代价的地方，
+所以这里的实测数字同时也是 ADR-1 成本的第一个样本。
+
+### 3octies.2 卡点只有一处，而它在端口形状里可以绕开
+
+7 个方法里只有 `chargeTokens` 卡住，因为它收 `ModelUsage`。而 `ModelUsage` 本身
+**完全干净**（`record (long, long, long)`，零注解）—— 它只是**住错了模块**
+（`libs/xander-model` 为 `fromJson(JsonNode)` 声明了 `jackson-databind`）。
+
+于是这一刀的关键不是"怎么绕开 Jackson"，而是**选一个与现有实现同形的端口形状**：
+
+```java
+public record TokenUsage(long inputTokens, long cachedTokens, long outputTokens) { ... }
+```
+
+访问器与 `ModelUsage` 同名（`inputTokens()` / `cachedTokens()` / `outputTokens()` /
+`isEmpty()`），所以 `BillingService` 的方法体**一行没动**，只换了参数类型：
+
+```java
+public class BillingService implements BillingPort {
+    @Override @Transactional
+    public void chargeTokens(..., TokenUsage usage, String model, String remark) { /* 原样 */ }
+    private long tokenToPoints(TokenUsage usage, String model) { /* 原样 */ }
+}
+```
+
+**记下来**：抽端口时"端口形状"是设计自由度。形状选得与实现同形，实现侧就退化成类型替换；
+选得不一样，实现侧就要写适配层 —— 而适配层是新的出错面。
+
+### 3octies.3 换算只落在 4 个类里，不是 8 个
+
+| 调用方 | 是否需要换算 |
+|---|---|
+| `AgentConversationService` | 是 —— 内部 `UsageAccumulator.sum()` 直接返回 `TokenUsage`（全类唯一一处） |
+| `BlogAgentService` | 是 —— 私有静态 `billable(ModelUsage)`，覆盖 4 个调用点 |
+| `ImageGenerationTool` | 是 —— 调用点内联 |
+| `Img2ThreeService` | 是 —— 调用点内联 |
+| `PublishPostTool` | 否（`chargeFlat` + `flatPoints`） |
+| `EmailReminderScheduler` | 否（同上） |
+| `CsdnMcpApplicationService` | 否（同上） |
+| `JuejinMcpApplicationService` | 否（同上） |
+
+**§3quinquies.5 里估的"8 个调用点各加一次转换"偏保守**：一口价计费那条路径
+（4 个调用方、共 5 个调用点）完全不碰 `usage`。真实成本是 3 个类 + 1 处内部汇总。
+
+### 3octies.4 ⚠️ 一处真实换位：`TokenUsage` 顺序 ≠ `recordAndDeduct` 顺序
+
+`recordAndDeduct` 收 `(..., Long input, Long output, Long cached, ...)`，
+`TokenUsage` 的分量是 `(input, cached, output)` —— **后两个正好相反**。
+`chargeTokens` 里那句 `recordAndDeduct(..., usage.inputTokens(), usage.outputTokens(),
+usage.cachedTokens(), ...)` 就是这处对调。
+
+写错的表现很阴：**扣费金额照旧**（金额走 `tokenToPoints`，只读前两个分量），
+只有流水的 `output_tokens` / `cached_tokens` 两列互换 —— 对账时金额对得上、明细对不上。
+新增 `BillingServiceTest.tokenUsagePositionsLandInTheRightLedgerColumns`，
+用三个互不相同的值钉住三列。
+
+### 3octies.5 端口测试这次钉**完整签名**，不只是方法名
+
+`MediaAssetPortTest` 只钉方法名（参数全是单一含义的，`byte[]` / `String` 不构成相邻混淆）。
+`BillingPortTest` 必须多钉一层：`chargeTokens` 头四个参数是
+`(Long, String, String, String)` —— **三个相邻的 `String`**（业务项 / 幂等键 / 业务引用）。
+换位不报错，表现是"幂等键写到 `biz_type` 列上"，于是同一笔业务重复扣费、或对账查不到。
+
+手法：用 `getSimpleName()` 拼出 `"void(Long,String,String,String,TokenUsage,String,String)"`
+这样的字符串做整体比对 —— 既能区分装箱/原始类型（`chargeFlat` 的 `points` 是原始 `long`），
+又不至于长到读不动。
+
+**注入验证（2026-09-17 实测）**：加一个 `default String debugBilling()` 后，
+反应堆编译通过、`BillingBizTest` 6/6 与 `TokenUsageTest` 9/9 全绿，
+**只有 `BillingPortTest` 红 3 条**（方法数 7→8、签名表、`default` 检查）。
+
+### 3octies.6 收益（重新生成基线后实测）
+
+```text
+agent       -> billing      3 -> 0   (跨单元)
+integration -> billing      2 -> 0   (跨单元)
+automation  -> billing      1 -> 0   (跨单元)
+blogagent   -> billing      1 -> 0   (跨单元)
+identity    -> billing      1 -> 0   (同单元)
+profile     -> billing      1 -> 0   (同单元)
+studio      -> billing      1 -> 0   (同单元)
+
+implementation_statements          74 -> 64   (-10)
+implementation_edges               31 -> 24   (-7)
+cross_deployment_unit_statements   54 -> 47   (-7)
+cross_deployment_unit_edges        21 -> 17   (-4)
+api_statements / api_edges         38 / 11 (不变)
+```
+
+**7 条边全部归零**（含 3 条同单元的）。原因：`payment.api` 已在 `SHARED_KERNEL` 里，
+"业务域 → 共享内核"的 import 不计入跨域边 —— 与 §3septies 的 `UserLookupPort`、
+§3septies.8 的 `MediaAssetPort` 同一机制。`billing` 的入边从 **10 条语句降到 0**。
+
+⚠️ **耦合图形状没变**：`deployment-unit-coupling` 仍报 4 个单元在一个 SCC 里、
+4 对互相依赖。这一刀减的是**存量**，不是形状 —— 与 §3septies.8 的提醒一致。
+
+### 3octies.7 仍然没做的那一半：`agent-api`
+
+`AgentTool.parametersSchema()` 返回 `JsonNode`，**50 个实现、41 个 `parametersSchema()` 覆写**。
+按 ADR-1 它只能改成 `String` 或 `Object`，改动面比 billing 大一个量级，
+所以单独排一刀。`integration -> agent` 的 5 条实现语句是它的收益目标。
+
+---
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`
@@ -1011,7 +1129,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 4 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **62** 条（原 103 → 85 → 77 → 71 → 64 → 62）。按被依赖目标排序（总数 / 跨单元）：`publishing` 24/17、`identity` 11/3、`automation` 10/10、`blogagent` 10/5、`billing` 10/7（**卡在 Jackson 决策上**，见 §3quinquies.5）、`integration` 9/9、`recitation` 6/6、`agent` 5/5。**最大剩余目标是 `publishing`**，其中 `agent → publishing` 9 条是全仓最大的剩余跨单元边（见 §3septies.7） | Wave 0B 剩余 |
+| 4 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **47** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47）。按被依赖目标排序（总数 / 跨单元）：`publishing` 13/9、`identity` 11/3、`automation` 10/10、`integration` 9/9、`blogagent` 9/5、`recitation` 6/6、`agent` 5/5、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）。当前最大的跨单元边是 `agent -> automation` 与 `automation -> integration`，各 6 条；`agent -> publishing` 已从 9 降到 3（见 §3septies.8） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

@@ -1,6 +1,6 @@
 package com.xander.lab.profile.application;
 
-import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.application.AuthService;
 import com.xander.lab.profile.application.ProfileOverviewService.ProfileOverview;
@@ -16,16 +16,16 @@ class ProfileOverviewServiceTest {
     @Test
     void aggregatesIdentityPointsAndManagedBlogCount() {
         AuthService authService = mock(AuthService.class);
-        BillingService billingService = mock(BillingService.class);
+        BillingPort billingPort = mock(BillingPort.class);
         BlogService blogService = mock(BlogService.class);
         ProfileOverviewService service = new ProfileOverviewService(
-                authService, billingService, blogService);
+                authService, billingPort, blogService);
         TokenResponse.UserInfo user = TokenResponse.UserInfo.builder()
                 .username("xander")
                 .nickname("XanderDING")
                 .build();
         when(authService.getUserInfo(42L)).thenReturn(user);
-        when(billingService.balance(42L)).thenReturn(9_992L);
+        when(billingPort.balance(42L)).thenReturn(9_992L);
         when(blogService.countManagedBlogs(42L)).thenReturn(12L);
 
         ProfileOverview result = service.getOverview(42L);

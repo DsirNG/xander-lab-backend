@@ -15,8 +15,8 @@ feature; deployment and database topology stay unchanged.
 - `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
 - `components` (migrated): owns the UI component library catalog, detail pages, and community-shared submissions.
 - `bloghtml` (new): owns short-lived blog HTML preview sessions. Session creation (`POST /api/blog-html/previews`) is public with per-IP Redis fixed-window rate limiting; code is stored in Redis with a TTL and served as a standalone sandbox page (`GET /blog-html/{id}/raw`) outside `/api` so iframes load it without auth, CORS or cookies. The page runs on an independent origin (per-session subdomain in production, a different port locally) and carries a strict CSP with `frame-ancestors` restricting embedders; this is the preview isolation pattern used by ChatGPT for its artifact pages.
-- `billing` (new): owns the points account (`sys_user_points`), the append-only points ledger (`points_ledger`) with a unique `(biz_type, biz_key)` idempotency key, priced model-usage charges, flat-price charges, balance pre-checks, and the `/api/points` endpoints. It must not own generation tasks, conversations, articles, reminders, or publications; feature modules call it only through `BillingService` ports and never through its mappers.
-- `profile` (new): owns the read-only `/api/profile/overview` composition used by the mini-program profile screen. It owns no persistence and reads account identity, point balance, and managed-blog count only through the `identity`, `billing`, and `publishing` application services.
+- `billing` (new): owns the points account (`sys_user_points`), the append-only points ledger (`points_ledger`) with a unique `(biz_type, biz_key)` idempotency key, priced model-usage charges, flat-price charges, balance pre-checks, and the `/api/points` endpoints. It must not own generation tasks, conversations, articles, reminders, or publications; every other domain charges through the `payment.api.BillingPort` contract and never through its mappers. `BillingService` implements that port and additionally exposes the frontend views (`pageLedger` / `overview` / `priceList` / `listModelPrices` / `upsertModelPrice` / `deleteModelPrice`), which only its own two controllers call and which are deliberately not on the port.
+- `profile` (new): owns the read-only `/api/profile/overview` composition used by the mini-program profile screen. It owns no persistence and reads account identity, point balance, and managed-blog count only through `identity`, the `payment.api.BillingPort` contract, and `publishing`.
 - `recitation` (new): owns user-scoped Chinese recitation materials, durable audio transcription attempts, and deterministic source/transcript alignment reports. Audio is stored through `integration.oss`; the background worker calls only the admin `ModelGateway` contract for the `recitation_asr` feature and keeps external model calls outside transactions. Submission and polling use conditional state transitions plus run tokens so multiple backend instances cannot overwrite one another.
 - `admin` (new): owns the backend admin console. It manages model providers (`model_provider`, AES-GCM encrypted API keys via `MODEL_PROVIDER_ENCRYPTION_KEY`), per-feature model routing (`feature_model_config` with primary + fallback endpoints), and exposes the read-side API for user bans; it never writes users or login sessions itself. `ModelGateway` is the shared contract that model clients consult for endpoint candidates; when the gateway is disabled (default), clients fall back to environment variables so existing behavior is preserved, but once the gateway is enabled every feature is driven solely by `feature_model_config` — an unconfigured feature fails with a clear "not configured" business error (HTTP 400) instead of falling back. User ban/enable mutations go through the `identity` application service (`UserAdminService`), which owns session revocation; the WeChat login credential is likewise managed through the `identity` application service (`WechatCredentialService`, via `/api/admin/wechat-credential`); `admin` owns neither identity tables nor Redis login keys.
 - `knowledgebase` (new): owns the knowledge-base file center — the folder tree (`knowledge_folder`, materialized `path`), the user-private tag vocabulary and its file links (`knowledge_tag`, `knowledge_file_tag` with a `MANUAL`/`AUTO` source column), files and their extracted text (`knowledge_file`, `knowledge_file_content`), detected chapters (`knowledge_chapter`), generated knowledge-structure graphs (`knowledge_structure_node`), and resumable chunked uploads (`knowledge_upload_session`, `knowledge_upload_chunk`). Routes live under `/api/knowledge-base/**` and `AuthInterceptor` requires login for the whole prefix; there is no public route. The root folder holds folders only — uploading into it is rejected. Object storage goes through `integration.oss`; user notifications go through the `automation` application service (`BlogNotificationService.notifyResource`) and never through its mappers; `recitation`'s quiz/knowledge-mirror tables are a different capability and are not touched. Apply `knowledge_base_schema.sql` (fresh) or `20260901_knowledge_base_file_center_migration.sql` (existing databases; marker key `20260901_knowledge_base_file_center`), which also adds the generic `resource_type`/`resource_id` pair to the shared `blog_notification` table. Chunk staging writes to a local directory, so the expired-session reaper is disabled by default (`knowledge-base.reaper-enabled`). The HTTP contract is documented in `docs/KNOWLEDGE_BASE_API.md`.
@@ -46,8 +46,20 @@ boundary. In practice that means a cross-domain caller depends on a
 `contracts/*-api` port and a `*Ref`/DTO value type, while the owning module
 keeps its entity and maps explicitly at the boundary (for example
 `publishing.domain.BlogMediaAsset` → `content.api.MediaAssetRef` behind
-`content.api.MediaAssetPort`). There is deliberately no `common-model` /
-`shared-dto` module.
+`content.api.MediaAssetPort`, and `billing.application.BillingService` →
+`payment.api.BillingPort` with `payment.api.TokenUsage` as its usage DTO).
+There is deliberately no `common-model` / `shared-dto` module.
+
+ADR-1 has a real cost and it is paid at the boundary: a contract may not import
+`libs/xander-model`, because that library declares `jackson-databind` for
+`ModelUsage.fromJson(JsonNode)`. So the seven domains that charge for something
+convert the gateway's `ModelUsage` into `payment.api.TokenUsage` themselves —
+`new TokenUsage(u.inputTokens(), u.cachedTokens(), u.outputTokens())`. The
+alternative was to widen `CONTRACT_ALLOWED_IMPORT_PREFIXES`, which would have
+made a contract depend on a framework-bearing library and put §19's
+super-`common.jar` back on the menu. See
+[`docs/migration/adr-contract-boundaries.md`](migration/adr-contract-boundaries.md)
+§4 for the measured outcome.
 
 `agent` invokes business capabilities only through `AgentTool` adapters. Every
 turn exposes the full registered tool set: skills change how the model works,
@@ -257,18 +269,28 @@ empty except for shared infrastructure:
     another service's internals (which reverses the boundary). The catalogue is
     named for the *capability* (`payment`) rather than the current module
     (`billing`), which is why its package is `com.xander.lab.payment.api` — the §18
-    module list is deliberately not a mirror of today's directory names.
-    `BillingService`, the other cross-domain type in this domain, is a concrete
-    `@Service` over three MyBatis mappers and is imported by seven domains; it needs
-    a port, not a move, and that port is **not** in this change because
-    `chargeTokens(...)` takes `com.xander.lab.common.ModelUsage`, which carries
-    Jackson — the same undecided contract-dependency-boundary question that blocks
-    `agent-api` (see `docs/migration/lib-extraction.md` §3quinquies.5). Renaming a
+    module list is deliberately not a mirror of today's directory names. Renaming a
     catalogue value does not break the build, it silently orphans existing ledger
     rows, so `BillingBizTest` reflects over every `public static final String` field
     and compares the whole map rather than asserting field by field — a per-field
     test would miss "a new charging item was added and nobody added an assertion",
     which is the likeliest change of all.
+
+    The same module now also holds `BillingPort` and `TokenUsage`, the second cut.
+    `BillingService` — the other cross-domain type in this domain, a concrete
+    `@Service` over three MyBatis mappers, imported by seven domains across four
+    future deployment units — needs a port rather than a move. Its
+    `chargeTokens(...)` takes `com.xander.lab.common.ModelUsage`, which carries
+    Jackson, so ADR-1 forced the contract to own an equivalent DTO rather than
+    widening the import allow-list. The port covers exactly the seven methods the
+    other domains call; `pageLedger` / `overview` / `priceList` / `listModelPrices` /
+    `upsertModelPrice` / `deleteModelPrice` stay on the implementation because only
+    `billing`'s own controllers call them. Because `TokenUsage`'s accessors are named
+    identically to `ModelUsage`'s, the implementation body did not change at all —
+    only the parameter type. `BillingPortTest` pins the *full signatures*, not just
+    the method names: `chargeTokens`' first four parameters are
+    `(Long, String, String, String)`, and reordering the three adjacent `String`s
+    would silently write the idempotency key into the `biz_type` column.
 
 11. `contracts/core-api` also holds `UserLookupPort`, a one-method port that answers
     "what is this user's display name". Before it existed, two domains injected

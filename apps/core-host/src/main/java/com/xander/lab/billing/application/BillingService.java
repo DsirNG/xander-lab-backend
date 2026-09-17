@@ -3,6 +3,8 @@ package com.xander.lab.billing.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
+import com.xander.lab.payment.api.TokenUsage;
 import com.xander.lab.billing.domain.ModelPrice;
 import com.xander.lab.billing.domain.PointAccount;
 import com.xander.lab.billing.domain.PointsLedger;
@@ -10,7 +12,6 @@ import com.xander.lab.billing.infrastructure.BillingProperties;
 import com.xander.lab.billing.infrastructure.ModelPriceMapper;
 import com.xander.lab.billing.infrastructure.PointAccountMapper;
 import com.xander.lab.billing.infrastructure.PointsLedgerMapper;
-import com.xander.lab.common.ModelUsage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -26,14 +27,21 @@ import java.util.Map;
 /**
  * 积分账本应用服务。
  *
- * <p>对外只暴露三个端口：{@link #chargeTokens}（token 精确计费）、
- * {@link #chargeFlat}（一口价）、{@link #ensureAvailable}（发起消耗前的余额预检）。
- * 计费发生在后台任务的成功哨点，与外部模型调用解耦，因此无需退款链路。</p>
+ * <p>实现契约端口 {@link BillingPort}（跨 7 个域、4 个部署单元），并对本域额外暴露
+ * 前端视图方法（流水分页、积分面板、价目表读写）—— 那些只被
+ * {@code billing/api/PointsController} 与 {@code billing/api/AdminModelPriceController}
+ * 调用，所以刻意<b>不在端口上</b>，见端口 javadoc「刻意不在端口上的方法」。</p>
+ *
+ * <p>计费发生在后台任务的成功哨点，与外部模型调用解耦，因此无需退款链路。</p>
+ *
+ * <p>本类的方法体<b>一行没动</b>：{@link TokenUsage} 与 {@code com.xander.lab.common.ModelUsage}
+ * 的访问器同名同序（{@code inputTokens/cachedTokens/outputTokens/isEmpty}），
+ * 所以这一刀在实现侧只是换了参数类型 —— 端口带来的全部改动都落在调用方的边界换算上。</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class BillingService {
+public class BillingService implements BillingPort {
 
     private final BillingProperties properties;
     private final PointAccountMapper accountMapper;
@@ -41,9 +49,10 @@ public class BillingService {
     private final ModelPriceMapper modelPriceMapper;
 
     /** token 精确计费：按 usage 折成积分后扣减；插图缺少 usage 时拒绝扣费，避免退回固定图片价格。 */
+    @Override
     @Transactional
     public void chargeTokens(Long userId, String bizType, String bizKey, String bizRef,
-                             ModelUsage usage, String model, String remark) {
+                             TokenUsage usage, String model, String remark) {
         if (!properties.isEnabled() || userId == null || usage == null || usage.isEmpty()) {
             if (usage != null && usage.isEmpty()
                     && !BillingBiz.BLOG_AGENT_ILLUSTRATION.equals(bizType)) {
@@ -65,6 +74,7 @@ public class BillingService {
     }
 
     /** 一口价计费（邮件 / CSDN 发布等无 token 计量项）。 */
+    @Override
     @Transactional
     public void chargeFlat(Long userId, String bizType, String bizKey, String bizRef,
                            long points, String remark) {
@@ -74,6 +84,7 @@ public class BillingService {
     }
 
     /** 余额预检：低于阈值抛 402，由 GlobalExceptionHandler 统一映射。 */
+    @Override
     public void ensureAvailable(Long userId) {
         if (!properties.isEnabled() || userId == null) return;
         if (balance(userId) < properties.getPreCheckMinBalance()) {
@@ -81,6 +92,7 @@ public class BillingService {
         }
     }
 
+    @Override
     public long balance(Long userId) {
         PointAccount account = accountMapper.selectById(userId);
         return account == null ? 0L : account.getBalance();
@@ -232,6 +244,7 @@ public class BillingService {
     }
 
     /** 注册赠送（幂等：同一 bizKey 只赠送一次）。 */
+    @Override
     @Transactional
     public void grantRegister(Long userId, String bizKey) {
         if (!properties.isEnabled() || userId == null || properties.getGrantRegister() <= 0) return;
@@ -241,6 +254,7 @@ public class BillingService {
 
     /** 账号合并：把来源账号积分余额整体转入目标账号（产生一笔转入流水），并删除来源账户行。
      *  幂等：来源账户不存在或余额为 0 时直接返回；bizKey 保证同一合并只入账一次。 */
+    @Override
     @Transactional
     public void transferBalance(Long fromUserId, Long toUserId, String bizKey, String remark) {
         if (!properties.isEnabled() || fromUserId == null || toUserId == null || fromUserId.equals(toUserId)) {
@@ -256,7 +270,7 @@ public class BillingService {
     }
 
     /** 按单价折算毫分：单价为「毫分 / 每 1K token」，tokens×milli 即毫分，四舍五入后至少 1 毫分。 */
-    private long tokenToPoints(ModelUsage usage, String model) {
+    private long tokenToPoints(TokenUsage usage, String model) {
         BillingProperties.Price price = resolvePrice(model);
         long input = Math.max(0L, usage.inputTokens());
         long output = Math.max(0L, usage.outputTokens());
@@ -294,8 +308,9 @@ public class BillingService {
     }
 
     /** 一口价目录查询，供无 token 计量项的调用点自行决定扣费金额。 */
-    public long flatPoints(String key) {
-        return properties.flatPoints(key);
+    @Override
+    public long flatPoints(String bizType) {
+        return properties.flatPoints(bizType);
     }
 
     private void recordAndDeduct(Long userId, String bizType, String bizKey, String bizRef,

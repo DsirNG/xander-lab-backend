@@ -3,8 +3,8 @@ package com.xander.lab.agent.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
@@ -31,17 +31,17 @@ public class PublishPostTool implements AgentTool {
     private final BlogService blogService;
     private final CsdnBlogSyncService csdnBlogSyncService;
     private final JuejinBlogSyncService juejinBlogSyncService;
-    private final BillingService billingService;
+    private final BillingPort billingPort;
 
     public PublishPostTool(BlogAgentService blogAgentService, BlogService blogService,
                            CsdnBlogSyncService csdnBlogSyncService,
                            JuejinBlogSyncService juejinBlogSyncService,
-                           BillingService billingService) {
+                           BillingPort billingPort) {
         this.blogAgentService = blogAgentService;
         this.blogService = blogService;
         this.csdnBlogSyncService = csdnBlogSyncService;
         this.juejinBlogSyncService = juejinBlogSyncService;
-        this.billingService = billingService;
+        this.billingPort = billingPort;
     }
 
     @Override
@@ -190,8 +190,8 @@ public class PublishPostTool implements AgentTool {
     }
 
     private void chargePlatformPublish(Long userId, String bizType, Long postId, String remark) {
-        billingService.chargeFlat(userId, bizType, bizType + ":" + postId,
-                "post:" + postId, billingService.flatPoints(bizType), remark);
+        billingPort.chargeFlat(userId, bizType, bizType + ":" + postId,
+                "post:" + postId, billingPort.flatPoints(bizType), remark);
     }
 
     private String normalizePlatform(String value) {

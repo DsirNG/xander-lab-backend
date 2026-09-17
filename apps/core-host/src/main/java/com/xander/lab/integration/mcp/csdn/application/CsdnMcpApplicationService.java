@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.csdn.application;
 
-import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 public class CsdnMcpApplicationService {
     private final CsdnAuthorizationService csdnAuthorizationService;
     private final CsdnBlogSyncService csdnBlogSyncService;
-    private final BillingService billingService;
+    private final BillingPort billingPort;
 
     public CsdnAuthorizationService.AuthorizationView authorizationStatus() {
         return csdnAuthorizationService.status(requireUserId());
@@ -28,8 +28,8 @@ public class CsdnMcpApplicationService {
     public PublishResult syncOwnedPost(Long postId) {
         Long userId = requireUserId();
         PublishResult result = csdnBlogSyncService.sync(userId, postId);
-        billingService.chargeFlat(userId, BillingBiz.CSDN_PUBLISH, "csdn:" + postId,
-                "post:" + postId, billingService.flatPoints(BillingBiz.CSDN_PUBLISH), "CSDN 发布成功");
+        billingPort.chargeFlat(userId, BillingBiz.CSDN_PUBLISH, "csdn:" + postId,
+                "post:" + postId, billingPort.flatPoints(BillingBiz.CSDN_PUBLISH), "CSDN 发布成功");
         return result;
     }
 

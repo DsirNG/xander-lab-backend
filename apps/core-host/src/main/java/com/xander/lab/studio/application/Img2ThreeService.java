@@ -6,8 +6,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.content.api.MediaAssetPort;
 import com.xander.lab.content.api.MediaAssetRef;
-import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
+import com.xander.lab.payment.api.TokenUsage;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import com.xander.lab.studio.api.Img2ThreeTaskVO;
@@ -51,7 +52,7 @@ public class Img2ThreeService {
     private final Img2ThreeProperties properties;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
-    private final BillingService billingService;
+    private final BillingPort billingPort;
 
     public Img2ThreeTaskVO create(Long userId, MultipartFile file) {
         if (userId == null) {
@@ -117,7 +118,7 @@ public class Img2ThreeService {
     }
 
     public Img2ThreeTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
-        billingService.ensureAvailable(userId);
+        billingPort.ensureAvailable(userId);
         Img2ThreeTask existing = requireOwned(taskId, userId);
         if ("ready".equals(existing.getStatus()) && StringUtils.hasText(existing.getSpecJson())) {
             return toVo(existing);
@@ -182,9 +183,14 @@ public class Img2ThreeService {
             if (!Integer.valueOf(1).equals(completed)) {
                 throw new IllegalStateException("任务状态已变化，本次重建结果未覆盖较新的任务状态");
             }
-            if (!generated.usage().isEmpty()) {
-                billingService.chargeTokens(userId, BillingBiz.IMG2THREE, "img2three:" + taskId,
-                        "task:" + taskId, generated.usage(), generated.model(), "图生 3D 重建完成");
+            // 网关口径 ModelUsage -> 计费契约口径 TokenUsage：分量同名同序，直接映射。
+            // 契约不能依赖带 Jackson 的 xander-model（ADR-1），换算只能落在调用方边界上。
+            ModelUsage billed = generated.usage();
+            if (!billed.isEmpty()) {
+                billingPort.chargeTokens(userId, BillingBiz.IMG2THREE, "img2three:" + taskId,
+                        "task:" + taskId,
+                        new TokenUsage(billed.inputTokens(), billed.cachedTokens(), billed.outputTokens()),
+                        generated.model(), "图生 3D 重建完成");
             }
             return get(taskId, userId);
         } catch (Exception e) {

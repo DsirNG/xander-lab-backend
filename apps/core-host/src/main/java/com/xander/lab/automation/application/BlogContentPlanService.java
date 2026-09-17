@@ -478,7 +478,7 @@ public class BlogContentPlanService {
      *
      * 本方法自己只读，但它调用的 agentService.generateTopicSeries 会做两件
      * 只读事务不该容纳的事：外部模型 HTTP 调用（BlogAgentService L126），
-     * 以及 billingService.chargeTokens 写库（L142）。
+     * 以及 billingPort.chargeTokens 写库（L142）。
      *
      * readOnly 在 MySQL 上只是给驱动的提示、不是强制约束，所以「只读事务里发生写」
      * 不会报任何错 —— 后果是模型调用慢时一个只读事务会持有连接数秒到数十秒

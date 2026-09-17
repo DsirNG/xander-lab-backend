@@ -2,7 +2,7 @@ package com.xander.lab.automation.infrastructure;
 
 import com.xander.lab.automation.domain.EmailReminderTask;
 import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
-import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.integration.mail.MailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class EmailReminderSchedulerTest {
         scheduler = new EmailReminderScheduler(
                 taskMapper,
                 mailService,
-                mock(BillingService.class)
+                mock(BillingPort.class)
         );
         ReflectionTestUtils.setField(scheduler, "batchSize", 20);
         ReflectionTestUtils.setField(scheduler, "claimTimeoutMs", 600_000L);

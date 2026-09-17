@@ -104,7 +104,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/studio/application/Img2ThreeService.java:106
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/studio/application/Img2ThreeService.java:107
     notes: "failAbandonedRunningTasks：回收超时未结束的 Img2Three 任务，操作的是 DB 行。"
 
   - id: redis-health-monitor

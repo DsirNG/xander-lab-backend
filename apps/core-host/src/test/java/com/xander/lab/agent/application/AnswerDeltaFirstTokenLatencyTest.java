@@ -13,7 +13,7 @@ import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentEventMapper;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
 import com.xander.lab.agent.infrastructure.AgentModelClient;
-import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
@@ -83,13 +83,13 @@ class AnswerDeltaFirstTokenLatencyTest {
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper()
                 .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
-        BillingService billingService = mock(BillingService.class);
+        BillingPort billingPort = mock(BillingPort.class);
         AgentToolRegistry registry = new AgentToolRegistry(List.of());
         AgentEventService eventService =
                 new AgentEventService(eventMapper, conversationMapper, objectMapper, new AgentEventBus());
         service = new AgentConversationService(
                 conversationMapper, messageMapper, modelClient, registry, properties,
-                transactionTemplate, eventService, agentLeaseRenewer, billingService, objectMapper,
+                transactionTemplate, eventService, agentLeaseRenewer, billingPort, objectMapper,
                 planService, memoryService, new AgentQuizService(objectMapper));
 
         lenient().doAnswer(invocation -> {

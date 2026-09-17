@@ -1,7 +1,7 @@
 package com.xander.lab.integration.mcp.juejin.application;
 
-import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.publishing.api.BlogPostDTO;
 import com.xander.lab.publishing.api.BlogPostVO;
@@ -23,7 +23,7 @@ public class JuejinMcpApplicationService {
     private final BlogMcpApplicationService blogMcpService;
     private final JuejinBlogSyncService juejinBlogSyncService;
     private final JuejinCredentialService credentials;
-    private final BillingService billingService;
+    private final BillingPort billingPort;
 
     /** 掘金授权状态：AUTHORIZED=可用凭据；EXPIRED=登录态失效待重新授权；其余 NOT_AUTHORIZED。 */
     public String authorizationStatus() {
@@ -47,8 +47,8 @@ public class JuejinMcpApplicationService {
         BlogPostVO localDraft = blogMcpService.create(request, false);
         try {
             PublishResult result = juejinBlogSyncService.sync(userId, localDraft.getId(), juejinCategoryId, juejinTagIds);
-            billingService.chargeFlat(userId, BillingBiz.JUEJIN_PUBLISH, "juejin:" + localDraft.getId(),
-                    "post:" + localDraft.getId(), billingService.flatPoints(BillingBiz.JUEJIN_PUBLISH), "掘金发布成功");
+            billingPort.chargeFlat(userId, BillingBiz.JUEJIN_PUBLISH, "juejin:" + localDraft.getId(),
+                    "post:" + localDraft.getId(), billingPort.flatPoints(BillingBiz.JUEJIN_PUBLISH), "掘金发布成功");
             return result;
         } catch (RuntimeException exception) {
             throw new JuejinPublishException(localDraft.getId(), exception.getMessage());
@@ -59,8 +59,8 @@ public class JuejinMcpApplicationService {
     public PublishResult syncOwnedPost(Long postId, String juejinCategoryId, List<String> juejinTagIds) {
         Long userId = requireUserId();
         PublishResult result = juejinBlogSyncService.sync(userId, postId, juejinCategoryId, juejinTagIds);
-        billingService.chargeFlat(userId, BillingBiz.JUEJIN_PUBLISH, "juejin:" + postId,
-                "post:" + postId, billingService.flatPoints(BillingBiz.JUEJIN_PUBLISH), "掘金发布成功");
+        billingPort.chargeFlat(userId, BillingBiz.JUEJIN_PUBLISH, "juejin:" + postId,
+                "post:" + postId, billingPort.flatPoints(BillingBiz.JUEJIN_PUBLISH), "掘金发布成功");
         return result;
     }
 

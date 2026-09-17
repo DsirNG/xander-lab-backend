@@ -1,7 +1,7 @@
 package com.xander.lab.identity.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.common.Constants;
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.api.LoginRequest;
@@ -52,7 +52,7 @@ public class AuthService {
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
     private final PasswordEncoder passwordEncoder;
-    private final BillingService billingService;
+    private final BillingPort billingPort;
     private final WechatMiniAppClient wechatMiniAppClient;
     private final AccountMergeMapper accountMergeMapper;
 
@@ -201,7 +201,7 @@ public class AuthService {
         user.setRole(role);
         user.setStatus(1);
         userMapper.insert(user);
-        billingService.grantRegister(user.getId(), "user:" + user.getId());
+        billingPort.grantRegister(user.getId(), "user:" + user.getId());
         return user;
     }
 
@@ -442,7 +442,7 @@ public class AuthService {
             }
             throw e;
         }
-        billingService.grantRegister(user.getId(), "user:" + user.getId());
+        billingPort.grantRegister(user.getId(), "user:" + user.getId());
         log.info("[Auth] 微信绑定邮箱新建账号 userId={}", user.getId());
         return user;
     }
@@ -463,7 +463,7 @@ public class AuthService {
             user.setRole("USER");
             user.setStatus(1);
             userMapper.insert(user);
-            billingService.grantRegister(user.getId(), "user:" + user.getId());
+            billingPort.grantRegister(user.getId(), "user:" + user.getId());
             log.info("[Auth] 微信用户自动注册 userId={}", user.getId());
             return user;
         } catch (DuplicateKeyException e) {
@@ -492,7 +492,7 @@ public class AuthService {
         accountMergeMapper.reparentFlowAiTasks(temp.getId(), target.getId());
         accountMergeMapper.reparentStudioProjects(temp.getId(), target.getId());
         // 2. 积分余额并入目标账号（含账户行删除）
-        billingService.transferBalance(temp.getId(), target.getId(),
+        billingPort.transferBalance(temp.getId(), target.getId(),
                 "merge:" + temp.getId() + ":" + target.getId(), "账号合并转入");
         // 3. 撤销临时账号的登录态
         revokeUserTokens(temp.getId());
@@ -845,7 +845,7 @@ public class AuthService {
         user.setRole("USER");
         user.setStatus(1);
         userMapper.insert(user);
-        billingService.grantRegister(user.getId(), "user:" + user.getId());
+        billingPort.grantRegister(user.getId(), "user:" + user.getId());
         return generateTokenResponse(user);
     }
 }

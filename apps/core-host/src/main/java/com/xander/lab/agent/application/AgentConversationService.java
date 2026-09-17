@@ -20,8 +20,9 @@ import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.agent.infrastructure.AgentConversationProperties;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
 import com.xander.lab.agent.infrastructure.AgentModelClient;
-import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.payment.api.BillingBiz;
+import com.xander.lab.payment.api.BillingPort;
+import com.xander.lab.payment.api.TokenUsage;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import lombok.extern.slf4j.Slf4j;
@@ -79,7 +80,7 @@ public class AgentConversationService {
     private final AgentConversationProperties properties;
     private final TransactionTemplate transactionTemplate;
     private final AgentEventService eventService;
-    private final BillingService billingService;
+    private final BillingPort billingPort;
     private final ObjectMapper objectMapper;
     private final AgentPlanService planService;
     private final AgentMemoryService memoryService;
@@ -97,7 +98,7 @@ public class AgentConversationService {
                                     AgentModelClient modelClient, AgentToolRegistry toolRegistry,
                                     AgentConversationProperties properties, TransactionTemplate transactionTemplate,
                                     AgentEventService eventService,
-                                    BillingService billingService, ObjectMapper objectMapper,
+                                    BillingPort billingPort, ObjectMapper objectMapper,
                                     AgentPlanService planService, AgentMemoryService memoryService,
                                     AgentQuizService quizService,
                                      AgentExecutionJournal executionJournal,
@@ -112,7 +113,7 @@ public class AgentConversationService {
         this.properties = properties;
         this.transactionTemplate = transactionTemplate;
         this.eventService = eventService;
-        this.billingService = billingService;
+        this.billingPort = billingPort;
         this.objectMapper = objectMapper;
         this.planService = planService;
         this.memoryService = memoryService;
@@ -131,11 +132,11 @@ public class AgentConversationService {
                                     AgentModelClient modelClient, AgentToolRegistry toolRegistry,
                                     AgentConversationProperties properties, TransactionTemplate transactionTemplate,
                                     AgentEventService eventService, ScheduledExecutorService agentLeaseRenewer,
-                                    BillingService billingService, ObjectMapper objectMapper,
+                                    BillingPort billingPort, ObjectMapper objectMapper,
                                     AgentPlanService planService, AgentMemoryService memoryService,
                                     AgentQuizService quizService) {
         this(conversationMapper, messageMapper, modelClient, toolRegistry, properties, transactionTemplate,
-                eventService, billingService, objectMapper, planService, memoryService,
+                eventService, billingPort, objectMapper, planService, memoryService,
                 quizService, AgentExecutionJournal.disabled(),
                 AgentRequestAssembler.legacy(toolRegistry, properties, planService, quizService, objectMapper),
                  new AgentRunLifecycle(conversationMapper, eventService, AgentExecutionJournal.disabled(),
@@ -185,7 +186,7 @@ public class AgentConversationService {
         if (!StringUtils.hasText(userMessage)) {
             throw new IllegalArgumentException("消息内容不能为空");
         }
-        billingService.ensureAvailable(userId);
+        billingPort.ensureAvailable(userId);
         // 答题卡交上来的是一段 JSON。在入口就翻译成可读的作答记录：历史、上下文窗口、
         // 分享页此后只需要认识纯文本，不必各自再解一遍这个内部格式。
         Optional<String> answers = quizService.renderSubmission(userMessage,
@@ -664,7 +665,7 @@ public class AgentConversationService {
      */
     private void chargeTurnQuietly(Long conversationId, Long userId, long runVersion, UsageAccumulator usage) {
         try {
-            billingService.chargeTokens(userId, BillingBiz.AGENT_TURN,
+            billingPort.chargeTokens(userId, BillingBiz.AGENT_TURN,
                     "conv:" + conversationId + ":run:" + runVersion, "conv:" + conversationId,
                     usage.sum(), usage.model(), "智能体会话单轮执行");
         } catch (RuntimeException exception) {
@@ -1192,8 +1193,15 @@ public class AgentConversationService {
             }
         }
 
-        ModelUsage sum() {
-            return new ModelUsage(input, cached, output);
+        /**
+         * 计费契约口径的汇总。
+         *
+         * <p>累加用的是网关口径 {@code ModelUsage}，交出去的是计费口径 {@link TokenUsage}
+         * —— 两者分量同名同序，所以这里是全类唯一一处换算，换算按<b>访问器</b>取、按位置放，
+         * 不依赖任何一方的声明顺序。</p>
+         */
+        TokenUsage sum() {
+            return new TokenUsage(input, cached, output);
         }
 
         String model() {

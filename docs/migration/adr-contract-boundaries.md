@@ -186,7 +186,7 @@ blogagent ───→ content-api ←─── agent
 
 ---
 
-## 3. 本次落地：`BlogMediaAsset / MediaAssetPort` 这一刀
+## 3. 落地记录（一）：`BlogMediaAsset / MediaAssetPort` 这一刀
 
 ### 3.1 拆掉的环
 
@@ -341,7 +341,169 @@ public Result<BlogMediaAsset> uploadImage(MultipartFile f)  // 返回实体
 
 ---
 
-## 4. 这两条 ADR 与既有规则的交叉
+## 4. 落地记录（二）：`BillingService / BillingPort` —— ADR-1 的第一次真实应用
+
+第一刀（§3）碰到的都是"实体不能进契约"（`@TableName`）。第二刀碰到的是另一种：
+**类型本身很干净，但它住的模块带 Jackson**。这是 ADR-1 第一次被真实地逼到墙角。
+
+### 4.1 卡点只有一处
+
+`BillingService` 被 **7 个域**引用（agent / integration / automation / blogagent /
+studio / identity / profile），跨 **4 个部署单元**。它是具体 `@Service`、拖三个 MyBatis
+mapper，所以只能**抽端口**。
+
+端口的 7 个方法里，只有 `chargeTokens` 卡住：
+
+```java
+void chargeTokens(Long userId, String bizType, String bizKey, String bizRef,
+                  ModelUsage usage, String model, String remark);   // ← 这个参数
+```
+
+`ModelUsage` 是 `record ModelUsage(long inputTokens, long cachedTokens, long outputTokens)`，
+字段干净、零注解。**但**它住在 `libs/xander-model`，那个模块为
+`ModelUsage.fromJson(JsonNode)` 与 `ModelCallResult.payload` 声明了 `jackson-databind`。
+契约只许 import JDK（门禁 `contract-dependency-boundary`），所以契约 import 不到它。
+
+### 4.2 两条路，选了哪条
+
+| 选项 | 后果 | 结论 |
+|---|---|---|
+| 放宽 `CONTRACT_ALLOWED_IMPORT_PREFIXES`，允许 `com.xander.lab.common.` | 契约从此可依赖带框架的库；下一步就是带 MyBatis 的库（§19） | **否决** |
+| 契约自带等价 DTO | 代价是调用方在边界上做一次三字段换算 | **采纳** |
+
+选第二条的依据就是 ADR-1 本身（§1.1）。这不是"门禁太死"，而是门禁在正确的位置上生效了：
+`ModelUsage` 之所以不能被契约用，不是因为它是坏类型，而是因为**它住错了模块**。
+
+### 4.3 `TokenUsage` 的设计取舍
+
+```java
+public record TokenUsage(long inputTokens, long cachedTokens, long outputTokens) {
+    public static final TokenUsage NONE = new TokenUsage(0, 0, 0);
+    public boolean isEmpty() { ... }
+}
+```
+
+- **分量集与顺序刻意与 `ModelUsage` 逐一同名同序**，所以换算是**总的**（三个字段一一对应，
+  没有遗漏、没有猜测），调用方写的是一次直接映射而不是一段逻辑。
+- **`NONE` / `isEmpty()` 不是方便方法，是端口语义**：网关没返回用量时调用方传 `NONE`，
+  实现据此退回一口价（或对插图直接拒绝扣费）。"空用量"这个概念必须能跨边界表达，
+  否则实现只能再加一个布尔参数，把同一个语义拆成两处。
+- ⚠️ **它是三个相邻的 `long`。** 重排分量不会有任何编译错误，只会让计费按错误口径折算 ——
+  而 token 计费错了不抛异常，只静默少扣或多扣。由 `TokenUsageTest` 用互不相同的字面量钉位置。
+
+### 4.4 换算落在边界上，而且只落在三个类里
+
+因为契约不能依赖 `ModelUsage`，换算只能由调用方做。好消息是**做的人很少**：
+
+| 调用方 | 换算方式 |
+|---|---|
+| `AgentConversationService` | 内部 `UsageAccumulator.sum()` 直接返回 `TokenUsage`（全类唯一一处） |
+| `BlogAgentService` | 私有静态 `billable(ModelUsage)`（覆盖 4 个调用点，含插图与合规审查） |
+| `ImageGenerationTool` / `Img2ThreeService` | 调用点内联一次三字段映射 |
+
+其余 4 个调用方（`PublishPostTool` / `EmailReminderScheduler` /
+`CsdnMcpApplicationService` / `JuejinMcpApplicationService`）走的是
+`chargeFlat` + `flatPoints`，**完全不涉及换算**。
+
+写法一律是**按访问器取、按位置放**：
+
+```java
+new TokenUsage(usage.inputTokens(), usage.cachedTokens(), usage.outputTokens())
+```
+
+按访问器取意味着 `ModelUsage` 自己怎么排分量都不影响正确性；剩下的唯一风险是有人手写
+实参顺序时写反，而那由 `TokenUsageTest`（钉 `TokenUsage` 的声明顺序）与
+`ImageGenerationToolTest` / `AgentConversationServiceTest`（钉换算后的值）共同守住。
+
+### 4.5 实现侧几乎没改：一次类型替换
+
+`TokenUsage` 与 `ModelUsage` 的**访问器同名**（`inputTokens()` / `cachedTokens()` /
+`outputTokens()` / `isEmpty()`），所以 `BillingService` 的方法体**一行没动**：
+
+```java
+public class BillingService implements BillingPort {
+    @Override @Transactional
+    public void chargeTokens(..., TokenUsage usage, String model, String remark) { /* 原样 */ }
+    private long tokenToPoints(TokenUsage usage, String model) { /* 原样 */ }
+}
+```
+
+这也解释了为什么这一刀比 `agent-api` 容易得多：**端口的形状可以选**，
+选一个与现有实现同形的形状，实现侧就退化成类型替换。
+
+### 4.6 ⚠️ 一处真实存在的换位：`TokenUsage` 顺序 ≠ `recordAndDeduct` 顺序
+
+`recordAndDeduct` 的入参是 `(..., Long input, Long output, Long cached, ...)`，
+而 `TokenUsage` 的分量是 `(input, cached, output)` —— **后两个正好相反**。
+`chargeTokens` 里那句
+
+```java
+recordAndDeduct(..., usage.inputTokens(), usage.outputTokens(), usage.cachedTokens(), ...)
+```
+
+就是这处对调。写错不会编译报错，只会让流水里的 `output_tokens` 与 `cached_tokens`
+两列互换，而**扣费金额照旧**（金额用的是另一条路径），所以对账时金额对得上、明细对不上。
+`BillingServiceTest.tokenUsagePositionsLandInTheRightLedgerColumns` 用三个互不相同的值钉住三列。
+
+### 4.7 端口"变宽"依然没人守（第二次确认）
+
+与 §3.6 同一手法。`BillingPortTest` 钉住**完整签名**而不只是方法名，因为
+`chargeTokens` 头四个参数是 `(Long, String, String, String)` —— 三个相邻的 `String`
+（业务项 / 幂等键 / 业务引用）。换位同样不报错：幂等键会写到 `biz_type` 列上，
+表现是"同一笔业务重复扣费"或"对账时按业务项查不到流水"。
+
+**注入验证（2026-09-17 实测）**：给端口加 `default String debugBilling()` 之后，
+反应堆编译通过、`BillingBizTest` 6/6 与 `TokenUsageTest` 9/9 全绿，
+**只有 `BillingPortTest` 红 3 条**（方法数 7→8、签名表、`default` 检查）。
+
+### 4.8 刻意不上端口的 6 个方法
+
+`pageLedger` / `overview` / `priceList` / `listModelPrices` / `upsertModelPrice` /
+`deleteModelPrice` 只被 `billing/api/PointsController` 与
+`billing/api/AdminModelPriceController` 调用，返回的是前端视图
+（`PointsLedgerPage` / `ModelPriceView`）。它们**留在 `BillingService` 上**，
+两个 Controller 继续注入具体类型 —— 与 §3.8 的 `BlogMediaController` 同一先例。
+
+### 4.9 实测收益
+
+```text
+agent       -> billing      3 -> 0   (跨单元)
+integration -> billing      2 -> 0   (跨单元)
+automation  -> billing      1 -> 0   (跨单元)
+blogagent   -> billing      1 -> 0   (跨单元)
+identity    -> billing      1 -> 0   (同单元)
+profile     -> billing      1 -> 0   (同单元)
+studio      -> billing      1 -> 0   (同单元)
+
+implementation_statements          74 -> 64   (-10)
+implementation_edges               31 -> 24   (-7)
+cross_deployment_unit_statements   54 -> 47   (-7)
+cross_deployment_unit_edges        21 -> 17   (-4)
+api_statements / api_edges         38 / 11 (不变)
+```
+
+**7 条边全部归零**（连 3 条同单元的一起），因为 `payment.api` 已在 `SHARED_KERNEL` 里，
+业务域 → 共享内核的 import 不计入跨域边。`billing` 的入边从 10 条语句降到 **0**。
+
+⚠️ 与 §3.7 同样的提醒：**耦合图形状没变**。`deployment-unit-coupling` 仍报 4 个单元
+在一个 SCC 里、4 对互相依赖。这一刀减的是**存量**，不是形状。
+
+### 4.10 为什么没有加 `contract-changes.yaml` 条目
+
+理由与 §2.6 相同，而且更强：本刀**没有改动任何既有契约类型的字段**。
+新增的 `BillingPort` / `TokenUsage` 是**新增 API 面**，不是既有字段的变更；
+`BillingService.chargeTokens` 的参数类型变了，但它是**实现类**、不是契约类型，
+且没有任何线上格式（HTTP DTO / 事件 / 头）随之改变。
+`capability-baseline-diff` 与 `contract-changes-completeness` 两个门禁都确认了这一点
+（28 个能力 0 增 0 退；14 条变更全部可解析）。
+
+**但这笔账要在拆分后重新算**：一旦 `payment-api` 作为独立版本化的 jar 发布，
+`TokenUsage` 的分量顺序就变成了跨进程的线上格式，届时任何重排都必须走 §11
+（见 §6 第 7 项）。
+
+---
+
+## 5. 这两条 ADR 与既有规则的交叉
 
 | 既有规则 | 与 ADR 的关系 |
 |---|---|
@@ -356,27 +518,37 @@ public Result<BlogMediaAsset> uploadImage(MultipartFile f)  // 返回实体
 它**守不住**"DTO 上有没有 Jackson 注解"（`jackson-annotations` 在应用模块里是合法依赖），
 也守不住"有没有人往契约里加 `JsonNode` 字段"。这两条目前**靠评审**。
 
+§4 提供了这个分工的一个实测样本：门禁**确实**拦住了"契约 import 带 Jackson 的库"
+（`contract-dependency-boundary` 会因为 `com.xander.lab.common.` 前缀而 FAIL），
+但它**拦不住**"`chargeTokens` 收一个带 Jackson 模块里的类型"这个更早的设计决定 ——
+那一步只能靠 ADR-1 这条人来执行的规则。
+
 ---
 
-## 5. 待办
+## 6. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
-| 1 | 边界路径上的 Jackson 泄漏（`agent-api` / billing 端口） | **未做**，按"先 publishing 后 Jackson"的顺序排在下一刀 |
-| 2 | 契约能否依赖契约 | **未拍板**。今天禁止，代价是 `StoredImage` 这类重复类型 |
+| 1 | 边界路径上的 Jackson 泄漏：`billing` 端口 | **已做**（§4）。`agent-api` 仍未做，见第 6 项 |
+| 2 | 契约能否依赖契约 | **未拍板**。今天禁止，代价是 `StoredImage` / `TokenUsage` 这类重复类型 |
 | 3 | `MediaAssetRef` 收窄到前端真正读的 3 个字段 | **未做**，独立 §11 变更 |
 | 4 | `agent -> publishing` 剩余 3 条（`BlogService`） | **未做**，需要为 `BlogService` 另抽端口 |
 | 5 | `@JsonIgnoreProperties` 存量清单与清理时点 | **未清点** |
+| 6 | `agent-api`（`AgentTool.parametersSchema()` 返回 `JsonNode`） | **未做**，50 个实现 / 41 个覆写，是下一刀 |
+| 7 | `TokenUsage` 分量顺序是否要登记为 §11 契约变更 | **未定**。今天不登记（理由同 §2.6），但拆分后契约 jar 独立版本化时它会变成线上格式 |
 
-### 5.1 第 1 项的边界（明确不许顺手放宽）
+### 6.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
 门禁放宽的那一刻，ADR-1 就只剩文档里的一句话了。
 
+§4 就是这条边界的实测样本：遇到 `ModelUsage` 时**没有**放宽前缀，而是让契约自带
+`TokenUsage`，代价是三个调用点上各一次三字段换算。
+
 ---
 
-## 6. 一句话记法
+## 7. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

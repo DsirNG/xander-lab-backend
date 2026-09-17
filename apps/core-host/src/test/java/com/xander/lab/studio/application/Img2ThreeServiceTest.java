@@ -118,7 +118,7 @@ class Img2ThreeServiceTest {
                 properties,
                 objectMapper,
                 transactionTemplate,
-                mock(com.xander.lab.billing.application.BillingService.class)
+                mock(com.xander.lab.payment.api.BillingPort.class)
         );
         List<String> events = new ArrayList<>();
 
