@@ -92,6 +92,29 @@ Wave 2：core-host 允许 2 实例（滚动发布需要）
 这也解释了为什么 §4 要把实例数写在 Core Host 生命周期这一节：
 **Drain 能不能做对，取决于这里写的是 1 还是 2。**
 
+### 4.1 滚动发布需要就绪探针，而就绪探针需要一个"安全平面已就绪"的信号
+
+Wave 2 允许 2 实例，意味着会出现**滚动发布**：新实例起来、旧实例下线。
+如果负载均衡在新实例还没建好本地 deny cache 时就把流量切过去，
+那段时间里封禁对新实例是失效的（V11 §27.1 明令禁止的
+「实例启动后先接流量，再慢慢填 deny cache」）。
+
+所以滚动发布的前置条件是两件事，缺一不可：
+
+| 前置 | 载体 | 状态 |
+|---|---|---|
+| 实例自己能说出"我还没准备好" | `SecurityStateBootstrap` + `SecurityPlaneReadiness`，`GET /health/ready` 在 READY 之前返回 503 | **已实现** |
+| 部署侧真的去问那个端点 | 编排文件里的 readinessProbe 指向 `/health/ready` | **未接线**（见下） |
+
+⚠️ 端口监听 ≠ 可以接流量：内嵌 Servlet 容器在 Spring 容器 refresh 期间就开始监听，
+而 `SecurityStateBootstrap` 是 `ApplicationRunner`，在 refresh 之后才跑。
+所以"不接流量"只能由负载均衡侧的就绪探针保证，**不能**靠端口是否打开来判断。
+
+在就绪探针接线之前，`SecurityStateBootstrap` 用 **fail-fast** 兜底：
+快照读不到就让进程退出，而不是「起来但没就绪」。这是当前唯一自证的机制，
+代价是启动期数据库抖动会表现为容器重启循环。详见
+[`admin-ban-security-plane.md`](./admin-ban-security-plane.md) §3.6。
+
 ---
 
 ## 5. 服务名与配置标识

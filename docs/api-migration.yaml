@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 212
+  total: 213
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -3147,6 +3147,23 @@ entries:
     old:
       method: GET
       path: "/health"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: shared-kernel-get-health-ready
+    owner: shared-kernel
+    old:
+      method: GET
+      path: "/health/ready"
     new:
       method: GET
       path: ""

@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 216
+  total: 217
   streams: 8
   websocket: 1
   sse: 7
@@ -2377,7 +2377,18 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.common.HealthController#health"
     file: apps/core-host/src/main/java/com/xander/lab/common/HealthController.java
-    line: 22
+    line: 49
+  - id: shared-kernel-get-health-ready
+    logical_owner: shared-kernel
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: GET
+    path: "/health/ready"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.common.HealthController#readiness"
+    file: apps/core-host/src/main/java/com/xander/lab/common/HealthController.java
+    line: 76
   - id: agent-get-ws-agent
     logical_owner: agent
     deployment_unit: dinqor-agent

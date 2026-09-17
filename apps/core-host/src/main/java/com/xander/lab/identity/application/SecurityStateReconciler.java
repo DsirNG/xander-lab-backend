@@ -1,5 +1,6 @@
 package com.xander.lab.identity.application;
 
+import com.xander.lab.common.security.SecurityPlaneReadiness;
 import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.identity.domain.AccountSecurityState;
 import com.xander.lab.identity.infrastructure.AccountSecurityStateMapper;
@@ -34,9 +35,13 @@ import java.util.Map;
  * <p>本类<b>必须保留</b>，不能因为快路径存在就删掉：快路径是"至少一次"投递，事件可能
  * 永久投递失败（进 DEAD）、可能在实例重启窗口内丢失、也可能在 Wave 0A 的单实例
  * 快路径下压根没轮到本实例。兜底路径是"最终收敛"的唯一保证 —— 它同时也是本实例
- * <b>游标的唯一所有者</b>：快路径刻意不推进游标（见
+ * <b>运行期游标的唯一所有者</b>：快路径刻意不推进游标（见
  * {@link SecurityEventOutboxPublisher} 的说明），否则会把游标推过一条尚未投递的变更，
  * 让那条变更被永久跳过。</p>
+ *
+ * <p>⚠️ "游标唯一所有者"只在<b>运行期</b>成立。启动期游标归
+ * {@link SecurityStateBootstrap}（V11 §27.1 第 7 步），本类的两个调度方法因此在
+ * {@code NOT_READY} 期间直接返回 —— 见 {@link #reconcile()}。</p>
  *
  * <p>本组件同时是 §52 判定规则的落地：<b>任一当前部署单元，凡其承载的业务域中存在
  * SSE/WS，都必须维护 Security Local Cache 并在 Wave 2 Staging 中验证封禁生效。</b>
@@ -69,14 +74,30 @@ public class SecurityStateReconciler {
     private final SecurityStateCache securityStateCache;
     private final SecurityStateApplier securityStateApplier;
     private final RefreshTokenProperties properties;
+    private final SecurityPlaneReadiness readiness;
 
     /**
      * 增量拉取安全状态变更并收敛本地缓存。
      *
      * <p>固定延迟调度：上一次执行结束后再等 interval，避免慢查询把调度器压垮。</p>
+     *
+     * <p>⚠️ {@code NOT_READY} 期间直接返回，把启动期的安全平面让给
+     * {@link SecurityStateBootstrap} 独占。两个理由：</p>
+     * <ul>
+     *   <li>调度器在容器 refresh 期间就已启动，可能<b>早于</b> {@code ApplicationRunner}
+     *       执行（本类不是按 bean 顺序跑的），于是它会与 bootstrap 并发读写同一份缓存；</li>
+     *   <li>并发时 {@code advanceCursor} 会把游标推到 bootstrap 尚未覆盖的位置，
+     *       使"先 snapshot 后 replay"这个顺序不再成立 —— §27.1 正是靠这个顺序
+     *       保证不漏事件。</li>
+     * </ul>
+     * <p>启动期漏掉的收敛由 bootstrap 自己完成（它做的就是同一件事），所以这里跳过
+     * 不损失任何收敛能力。</p>
      */
     @Scheduled(fixedDelayString = "${auth.refresh.security-reconcile-interval-ms:1500}")
     public void reconcile() {
+        if (!readiness.isReady()) {
+            return;
+        }
         try {
             long cursor = securityStateCache.lastSeenSeq();
             List<AccountSecurityState> changes = securityStateMapper.pullChangesAfter(
@@ -125,6 +146,11 @@ public class SecurityStateReconciler {
      */
     @Scheduled(fixedDelayString = "${auth.refresh.security-full-reconcile-interval-ms:300000}")
     public void fullReconcile() {
+        if (!readiness.isReady()) {
+            // 与 reconcile() 同理：全量对账会 replaceAll 整个 deny 集合，
+            // 在 bootstrap 的 snapshot → replay 之间插入一次替换会让 replay 区间失去意义。
+            return;
+        }
         try {
             Map<Long, Long> disabled = new HashMap<>();
             for (AccountSecurityState state : securityStateMapper.listDisabled()) {

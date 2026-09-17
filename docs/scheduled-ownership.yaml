@@ -181,7 +181,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:78
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:96
     deployment_hosts:
       - host: dinqor-core-host
         effective_from: wave0a
@@ -206,7 +206,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:126
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:147
     notes: >-
       低频全量对账兜底（5 分钟）。实例长时间离线后，本地游标可能落后于已被清理的历史区间，
       此时增量拉取会永久漏掉那一段 —— 全量刷新（listDisabled + replaceAll）保证最终收敛。

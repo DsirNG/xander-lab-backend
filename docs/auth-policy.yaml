@@ -283,6 +283,13 @@ public_non_api:
     identity_mode: none
     token_location: n/a
     note: "自定义健康检查。Wave 1 接入 Actuator 后由 /actuator/health 取代，届时本条目进入退场流程。"
+  - id: health-ready-check
+    match: {method: GET, path: /health/ready}
+    owner: shared-kernel
+    access: public
+    identity_mode: none
+    token_location: n/a
+    note: "就绪探针（V11 §27.1 第 9 步）：安全平面 READY 之前返回 503，部署侧的就绪探针指向这里。刻意用精确 path 而不是 /health/* 前缀，避免将来任何新增的 /health/... 路由被顺带公开。"
 
 # ===================== 7. 需要登录的写操作（含私有读） =====================
 protected:

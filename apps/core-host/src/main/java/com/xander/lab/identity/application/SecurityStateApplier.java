@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.OptionalLong;
+
 /**
  * 把一条账号安全状态变更落到<b>本实例</b>的安全平面（V9 §27 / §28.2 / §48）。
  *
@@ -25,6 +27,20 @@ import org.springframework.stereotype.Component;
  * 关闭（{@code ConnectionRegistry.closeAll} 也会在句柄集合为空时返回 0）。
  * 这是"至少一次投递"能安全成立的前提 —— 见
  * {@link com.xander.lab.identity.infrastructure.SecurityEventOutboxMapper#claimDue}。</p>
+ *
+ * <h3>版本单调（V11 §27.1 第 6 步）</h3>
+ * <p>封禁方向带一道版本闸门：仅当 {@code incoming.securityVersion > cached.securityVersion}
+ * 时才应用。它防的是"一条迟到的重放把缓存里的版本号改回旧值" —— 版本号被 §87 的
+ * {@code admin_ban_*} 指标用来按版本下钻，回退会让指标读到过期版本。</p>
+ * <p><b>解封方向刻意没有闸门</b>：缓存只为被封禁账号保存版本号，解封即从缓存移除，
+ * 所以解封时根本<b>没有</b>可比较的 cached version。给解封也加闸门需要为每个曾经
+ * 出现过的账号常驻一个版本号（内存随历史账号数增长），代价与收益不成比例。
+ * 解封方向的顺序性由 {@code change_seq} 保证（见
+ * {@link SecurityStateBootstrap} 里对"分配顺序即提交顺序"的论证）。</p>
+ * <p>⚠️ 已知残留：一条<b>迟到且版本更低的封禁事件</b>，若该账号此刻在缓存里
+ * <b>不存在</b>（已被解封），闸门无法拒绝它，账号会被重新封禁。这需要为"已解封账号"
+ * 也保留版本号才能修，属独立改动，已登记在
+ * {@code docs/migration/admin-ban-security-plane.md} 的「已知缺口」表。</p>
  *
  * <h3>本实例语义（Wave 0A 的能力边界）</h3>
  * <p>本方法<b>只影响调用方所在实例</b>。跨实例传播不是它的职责：Wave 0A 由每个实例
@@ -69,6 +85,13 @@ public class SecurityStateApplier {
             securityStateCache.markEnabled(accountId);
             // 解封不恢复任何已撤销的刷新会话，也不重连任何连接 —— 解封不等于免登录。
             return wasDisabled ? Outcome.NEWLY_ENABLED : Outcome.NONE;
+        }
+
+        // V11 §27.1 第 6 步：仅当 incoming > cached 时才应用。
+        OptionalLong cachedVersion = securityStateCache.versionOf(accountId);
+        if (cachedVersion.isPresent() && cachedVersion.getAsLong() >= securityVersion) {
+            // 迟到的一次重放：缓存里已经是更新（或同版本）的状态。不改版本号、不重复断连。
+            return Outcome.NONE;
         }
 
         securityStateCache.markDisabled(accountId, securityVersion);

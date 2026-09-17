@@ -360,6 +360,39 @@ assertEquals(EXPECTED, found);
 - 定时/后台长任务返回任务/运行 ID，不把远端完成前的时间挂在请求上。
 - 新增私有接口：必须在 `AuthInterceptor` 补齐鉴权并同步测试。
 
+### ⚠️ 新增一个 HTTP 路由要动**三份**登记，少一份门禁就红
+
+2026-09-17 加 `GET /health/ready` 时实测：
+
+| 文件 | 谁维护 | 不动会怎样 |
+|---|---|---|
+| `docs/route-inventory.yaml` | **`scan.py` 生成** | `route-inventory-drift` FAIL（提示 `re-run scripts/migration/scan.py`） |
+| `docs/api-migration.yaml` | **`scan.py` 生成**（合并时保留人工字段） | `api-migration-key-coverage` FAIL |
+| `docs/auth-policy.yaml` | **手工** | `auth-policy-coverage` FAIL |
+
+`auth-policy-coverage` 的判据值得记：**每条 GET 路由都必须被一条显式规则命中**，
+因为 v1 拦截器对未匹配的 GET **fail-open**。而 `rule_matches` 里 `path:` 是
+**精确相等**（`rule_match["path"] == path`），所以 `/health` 这条规则**不会**覆盖
+`/health/ready` —— 必须各写一条。写新规则时优先用精确 `path` 而不是 `path_pattern`：
+`/health/*` 会把将来任何新增的 `/health/...` 路由顺带公开。
+
+顺带：改任何 Java 文件的行号都会让 `scheduled-ownership.yaml` 的 `scan_ref` 失效，
+所以跑 `scan.py` 是常规动作，不是特例。
+
+## 存活探针 vs 就绪探针（V11 §27.1）
+
+- **存活与就绪必须是两个端点。** `GET /health` 是存活，`docker-compose.yml` 的
+  healthcheck 正在用它；把"未就绪即 503"塞进去，一次正常启动会被判为不健康并**反复重启**。
+  就绪另开一个端点（本项目是 `GET /health/ready`）。
+- **端口监听 ≠ 可以接流量。** 内嵌 Servlet 容器在 Spring 容器 refresh **期间**就开始监听，
+  而 `ApplicationRunner` 在 refresh **之后**才跑。所以"某个初始化完成前不接流量"
+  **只能**由负载均衡侧的就绪探针保证，不能靠端口是否打开来判断，也不能靠
+  `@PostConstruct` 的时序。
+- 需要"接流量前必须完成"的初始化，用 `implements ApplicationRunner`：此时全部 bean 就绪、
+  事务代理可用。**不要**用 `@PostConstruct`（bean 创建期，与其它 bean 的依赖顺序脆弱）。
+- 初始化失败的默认选择是 **fail-fast（抛异常让进程退出）**，而不是"起来但标记未就绪"：
+  后者只在就绪探针真的接线了才等价于 fail-closed。取舍要写在类注释里，并登记部署侧待办。
+
 ## SQL 与迁移
 
 - 每张表、每一列都要有**中文 `COMMENT`**，解释枚举/外键/单位/归属/生命周期，不重复字段名。
@@ -381,6 +414,17 @@ assertEquals(EXPECTED, found);
 - 可重试变更要有幂等键（DB 唯一约束或原子 Redis）；状态机用条件更新（含期望前态），0 行更新 = 竞争或已完成。
 - 状态/阶段定义成常量或枚举并文档化转移，禁止散落字符串字面量。
 - 调度器：轮询原子认领、有界批量、多实例不重复；单条失败不中断整批。
+- **按游标增量拉取的游标，其"下界"必须偏小、不能偏大。** 2026-09-17 做启动
+  Bootstrap 时用到的推理：`account_security_state.change_seq` 由单行序列表
+  `UPDATE ... SET seq = LAST_INSERT_ID(seq + 1)` 分配，该语句对那一行加**排他锁并持有到
+  事务提交** ⇒ **分配顺序 = 提交顺序**。所以"快照读到的最大 `change_seq`"是一个安全的
+  下界：快照之后提交的变更必然大于它。反过来取"表里/序列里的最大值"就可能在
+  "已分配未提交"的窗口里跳过一条变更 —— 而下游会**安静地**收敛到"没有变化"。
+  推广：任何"先快照再增量"的恢复逻辑，都要能说清下界为什么不会跳过在途事务。
+- **快照与水位必须来自同一次读。** 两次读之间会落进"两次读之间提交的变更"。
+  最稳的强制方式是**只发一条 SELECT**（本项目把水位取为快照行的最大 `change_seq`，
+  偏小但绝不会偏大），这样"同一一致性点"由**构造**保证，与隔离级别、
+  是否读副本都无关；退而求其次才是在一个显式 REPEATABLE READ 事务里读两次。
 
 ## 凭据与安全
 
@@ -428,6 +472,22 @@ assertEquals(EXPECTED, found);
 - 控制器测试覆盖校验、鉴权、归属、真实 HTTP 状态。
 - 单元测试不依赖网络/生产凭据/真邮箱/真发布账号；确定性、相互独立、清理 ThreadLocal/静态状态。
 - 修 bug 必须带回归测试；禁止为过构建删弱测试。
+- **"删掉它不会有别的症状"的约束必须有专门测试。** 判断方法：把那段代码删掉，
+  问"除了某个测试之外还有别的东西会红吗"。若没有，就**必须**有一个测试专门钉它。
+  本项目实例（2026-09-17）：`SecurityStateReconciler` 的两个 `@Scheduled` 方法上的
+  `if (!readiness.isReady()) return;` —— 删掉它，全量 1214 个用例里只有
+  `SecurityStateReconcilerTest` 的 2 个会红（`*DoesNothingBeforeThePlaneIsReady`），
+  而这条约束是 V11 §27.1 的硬性要求。写测试前先做一次"假设删掉"的推演，能直接
+  告诉你该写什么。
+- **状态上不可观测的判据，用 spy 钉"有没有调用写入方法"。** 有些判据的两种分支
+  产生**完全相同**的状态（例：版本闸门 `cached >= incoming` 里的同版本重放，
+  写不写都是同一个版本号），靠断言状态永远区分不出来。做法是把被测的协作对象换成
+  `spy(realInstance)`，断言 `verify(cache, never()).markDisabled(id, version)` ——
+  spy 委托真实对象，行为不变，但调用记录可观测。
+- **注入验证之后要核对"变红的正好是预期的那几个"**，不是"有红的就行"。
+  本项目两次注入的期望值与实测：去掉 reconciler 闸门 ⇒ 2 红（两个
+  `*DoesNothingBeforeThePlaneIsReady`）；去掉版本闸门 ⇒ 3 红（`SecurityStateApplierTest` 2 +
+  `SecurityStateBootstrapTest` 1）。数量或名字对不上，说明测试之间串了或判据写歪了。
 
 ## 验证门禁（改动后必须执行并贴结果，不要直接宣布完成）
 

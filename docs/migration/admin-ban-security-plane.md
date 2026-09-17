@@ -1,10 +1,11 @@
-# 封禁与长连接安全平面（V9 §26 / §27 / §48 / §49–§52）
+# 封禁与长连接安全平面（V9 §26 / §27 / §48 / §49–§52；V11 §27.1）
 
 本文描述「管理员封禁一个账号」到「该账号在全部宿主上的长连接被终止」的完整链路，
 以及每一步落在哪个文件、由哪个门禁守住。
 
 对应 V9 章节：§2.3（能力守恒）、§12（能力不丢）、§21（共享内核边界）、
-§26（封禁事务）、§27（事件传播）、§28（5 秒预算）、§48–§52（本地 deny cache 与连接注册表）。
+§26（封禁事务）、§27（事件传播）、§28（5 秒预算）、§48–§52（本地 deny cache 与连接注册表）；
+对应 V11 章节：§27.1（实例启动 Bootstrap，见 §3.6）。
 
 ---
 
@@ -12,6 +13,8 @@
 
 封禁由**一个 MySQL 事务**负责「状态正确」，由**每个宿主自己的对账循环**负责
 「传播到位」。事务内不触碰任何其它进程 —— 这是它能扛住「提交后立刻崩溃」的原因。
+**实例启动时**由 `SecurityStateBootstrap` 在接流量之前把本地 deny cache 建好，
+所以「重启后有一段封禁失效的窗口」这件事不存在。
 
 ```
                        ┌─────────────────────────────────────────┐
@@ -35,6 +38,9 @@
         │  手段 A：reconciler 命中 → closeAll 主动断开已建立的流       │
         │  手段 B：每一帧出站前（含心跳）O(1) 校验                     │
         └───────────────────────────────────────────────────────────┘
+
+        宿主启动时（接流量之前，V11 §27.1）：
+        NOT_READY → 快照 → replay → 游标 → READY → 才进负载均衡
 ```
 
 ---
@@ -144,9 +150,17 @@
 所以**游标只有一个所有者：`SecurityStateReconciler`**。
 `SecurityEventOutboxPublisherTest#neverAdvancesTheReconcilerCursor` 守住这条。
 
+⚠️ 这句话只在**运行期**成立。启动期游标归 `SecurityStateBootstrap`（见 §3.6）：
+两个调度方法在 `NOT_READY` 期间直接返回，把启动期的安全平面让给 bootstrap 独占。
+否则调度器可能早于 `ApplicationRunner` 执行，与 bootstrap 并发推进游标，
+「先快照后重放」这个顺序就不再成立。
+
 **二、顺手刷新 `markSynced`。** §87 的 `securityStateAge` 可能被用于
 fail-closed 判定，把它刷成「刚刚同步过」会**掩盖一个已经停摆的 reconciler**。
 由 `#neverFakesTheSyncTimestamp` 守住。
+
+（bootstrap 里那次 `markSynced` 不违反这一条：它是启动期唯一一次真实同步，
+不是"顺手"刷新。）
 
 ### 失败处理与 `DEAD`
 
@@ -172,6 +186,102 @@ fail-closed 判定，把它刷成「刚刚同步过」会**掩盖一个已经停
 被 reconciler 与 publisher **共用**。两边各写一遍的话，Wave 1 换投递时
 就会有人只改一边：结果是快路径能标记但不断连、或兜底路径能断连但漏标记 ——
 两条路径都「看起来在工作」，缺陷只在多实例 + 已建立连接时暴露。
+
+`SecurityStateApplier.apply` 同时是 **V11 §27.1 第 6 步**（版本单调）的唯一落点：
+封禁方向带一道闸门，仅当 `incoming.securityVersion > cached.securityVersion` 时才应用。
+解封方向**刻意没有**闸门 —— 缓存只为被封禁账号保存版本号，解封即移除，
+根本没有可比较的 cached version（详见该类的 Javadoc 与 §5 的残留项）。
+
+---
+
+## 3.6 实例启动 Bootstrap：`SecurityStateBootstrap`（V11 §27.1，硬性）
+
+`identity/application/SecurityStateBootstrap`，`implements ApplicationRunner`，
+是 V11 §27.1 九步的落点：
+
+| 步 | 动作 | 载体 |
+|---|---|---|
+| 1 | `readiness = NOT_READY` | `SecurityPlaneReadiness` 的初始态 |
+| 2 | 读取 high-watermark `E0` | 见下方「水位从哪来」 |
+| 3 | 加载 `account_security_state` 快照 | `AccountSecurityStateMapper.listDisabled()` |
+| 4 | 建立 `LocalSecurityStateCache` | `SecurityStateCache.replaceAll` |
+| 5 | replay（游标 > `E0`） | `SecurityStateMapper.pullChangesAfter` |
+| 6 | 仅当 `incoming.version > cached.version` 才应用 | `SecurityStateApplier.apply` 内的闸门 |
+| 7 | 游标推进到已处理的最大位置 | `SecurityStateCache.advanceCursor` |
+| 8 | `readiness = READY` | `SecurityPlaneReadiness.markReady` |
+| 9 | 才允许进入服务发现 / 负载均衡 | `GET /health/ready`（见下） |
+
+### 没有它会发生什么
+
+实例启动后 `SecurityStateCache` 是**空的**。一个已被封禁的账号拿着一张仍然有效的
+JWT 就能被放行，直到 reconciler 在 1.5 秒后第一次收敛。这 1.5 秒里封禁是失效的，
+而且失败得很安静 —— 这正是 V9-1 风险项描述的场景。
+
+### ⚠️ 第 9 步的强制力来自探针，不来自端口
+
+`ApplicationRunner` 在容器 refresh 之后运行，而**内嵌 Servlet 容器在 refresh 期间
+就已经开始监听端口**。也就是说，即使有了 bootstrap，在它跑完之前 HTTP 端口照样
+能建立 TCP 连接。「不接流量」只能由**负载均衡侧的就绪探针**保证。因此新增了：
+
+| 端点 | 语义 | 状态码 |
+|---|---|---|
+| `GET /health` | **存活**。语义与状态码不变（Redis 可达即 200），只多报一个 `securityPlane` 字段 | 200 / 503（Redis 不可达） |
+| `GET /health/ready` | **就绪**。安全平面 `READY` **且** Redis 可达才 200 | 200 / 503 |
+
+两个探针刻意分开：`docker-compose.yml` 的 healthcheck 用的是 `/health`，
+若把它改成就绪语义，一次正常启动会被判为不健康并触发重启。
+
+⚠️ **部署侧尚未接线**：仓库里没有任何编排文件把就绪探针指向 `/health/ready`。
+在那之前，第 9 步靠 bootstrap 的 fail-fast 兜底（见下）。这是待办项。
+
+### ⚠️ 失败即拒绝启动（fail-fast）
+
+snapshot 读不到（数据库不可用、权限缺失、表结构不对）时，bootstrap **抛出异常**，
+让进程退出，而不是「起来但没就绪」。理由：一个 deny cache 读不出来的实例，
+「不接流量」必须成立；而就绪探针还没接线时，「起来但没就绪」实际等于「起来就接流量」。
+
+### 水位 `E0` 从哪来：一个查询，一个一致性点
+
+§27.1 要求快照与水位取自**同一一致性点**，否则两次读之间的新封禁会被永久漏掉。
+本实现的做法是**只发一条查询**（`listDisabled()`），把 `E0` 取为这些行里最大的
+`change_seq`。这样「同一一致性点」不靠事务隔离级别保证，而靠**构造**保证 ——
+单条 SELECT 本身就是一个一致性点，READ COMMITTED / REPEATABLE READ / 从副本读都一样成立。
+
+`E0` 可能**偏小但绝不会偏大**，这是安全的方向（多 replay 几行是幂等的，漏封禁才是事故）。
+证明依赖 `security_state_sequence` 的分配语句
+`UPDATE ... SET seq = LAST_INSERT_ID(seq + 1)` 对该单行**加排他锁并持有到事务提交**，
+因此 **`change_seq` 的分配顺序与提交顺序一致**：快照能看见的每一行都满足
+`change_seq < c`（`c` 为快照之后提交的某次变更），于是 `E0 < c`，那条变更必然落在
+replay 区间内。`SecurityStateBootstrapTest` 里
+`theWatermarkIsDerivedFromTheSameReadAsTheSnapshot` 与
+`anEmptySnapshotStillReplaysFromZeroSoNoChangeCanBeSkipped` 守住这两条。
+
+### ⚠️ replay 的取数源是 `account_security_state`，不是 `security_event_outbox`
+
+V11 修订说明声称新增了 §27.0 的 `security_event` 表作为「Bootstrap 与 reconcile 的
+取数来源」，但 V11 正文里**没有**这一节，仓库里也没有这张表。
+`security_event_outbox` **不能**当 replay 源：它是投递机制而不是只追加的事件日志 ——
+行会被标成 `PUBLISHED`、会退避、会判 `DEAD`，而且由 `global_once` 的单消费者领取。
+
+真正的 SOT 是 `account_security_state`（其 `change_seq` 就是全局单调变更序号），
+所以 §27.1 的 "eventId" 在本仓库里**映射为 `change_seq`**，replay 就是按
+`change_seq` 的增量拉取。该映射与 §27.0 缺失一事登记在 §5。
+
+### 为什么 bootstrap 与 reconciler 不会互相打架
+
+| 组件 | 运行窗口 | 对缓存的动作 |
+|---|---|---|
+| `SecurityStateBootstrap` | 启动，`NOT_READY` 期间 | `replaceAll` + `advanceCursor` + `markSynced` + `markReady` |
+| `SecurityStateReconciler` | `READY` 之后 | `apply` + `advanceCursor` + `markSynced` |
+| `SecurityEventOutboxPublisher` | 全程（**不**设闸门） | `apply` |
+
+reconciler 的两个 `@Scheduled` 方法在 `NOT_READY` 期间直接 `return`：调度器在容器
+refresh 期间就已启动，可能早于 `ApplicationRunner`，并发时 `advanceCursor` 会把游标
+推到 bootstrap 尚未覆盖的位置。启动期漏掉的收敛由 bootstrap 自己做（同一件事），
+所以跳过不损失收敛能力。
+
+publisher 刻意**不设闸门**：它在启动期投递是无害的（`apply` 幂等，且 bootstrap 之后
+的 replay 会覆盖同一区间），而拦住它只会推迟发件箱排空、让表变大。
 
 ---
 
@@ -218,10 +328,18 @@ WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | **快路径只对抢到锁的实例生效** | Wave 0A 的投递目标是本实例，其余实例靠 reconciler 兜底（延迟 1.5 秒，未超 5 秒预算）。多实例快路径要等 Wave 1 的 Redis PubSub | 已知，Wave 1 |
+| **就绪探针未接线** | §27.1 第 9 步要求「READY 才进负载均衡」，但仓库里没有任何编排文件把探针指向 `GET /health/ready`。在接线之前，第 9 步靠 bootstrap 的 fail-fast 兜底（读不到快照就拒绝启动），所以「先接流量再填 cache」不会发生，但**「启动慢」会表现为容器重启循环** | 待办（部署侧） |
+| **V11 §27.0 `security_event` 表不存在** | V11 修订说明声称新增该表作为 Bootstrap/reconcile 的取数源，但正文无此节、仓库无此表。当前把 §27.1 的 "eventId" 映射为 `account_security_state.change_seq`（SOT 上的全局单调变更序号），语义等价且不需要新表；若将来真引入独立事件日志，需复核这个映射 | 已记录，映射成立 |
+| **迟到且版本更低的封禁事件** | `SecurityStateApplier` 的版本闸门只在缓存里**已有**该账号时才生效。若账号已被解封（缓存里不存在），一条迟到的旧封禁事件无法被拒绝，账号会被重新封禁。修它需要为「已解封账号」也保留版本号（内存随历史账号数增长），代价与收益不成比例 | 已知，低风险，需独立改动 |
+| **bootstrap 的水位偏小** | `E0` 取快照行的最大 `change_seq`，历史上被封禁过又解封的账号（`disabled = 0` 的行）不计入，所以启动时会多扫一遍 `account_security_state`。这是刻意选的安全方向（偏小只多扫，偏大才漏封禁） | 设计取舍 |
 | `shedlock.enabled` 默认 `false` | 单实例下无影响；**多实例前必须置 true 并校准 `lockAtMostFor`**（当前 7+1 个任务的取值是按任务间隔启发式给的，未按实测运行时长校准） | 切流前 |
 | `next_attempt_at` 写端用 JVM 时钟 | `applyState` 插入时用 `LocalDateTime.now(clock)`，而领取条件用 `NOW(3)`（DB 时钟）。退避路径已改为 DB 时钟（`NOW(3) + INTERVAL ? MICROSECOND`），只有**首次**插入仍用 JVM 时钟；时钟偏差只会让事件早投或略晚投，不影响正确性 | 已知，低风险 |
-| `SecurityStateCache` 无持久化 | 实例重启后靠 `fullReconcile`（5 分钟）重新收敛，重启后最坏 5 分钟窗口 | 设计取舍 |
 | `contract-changes.yaml` 的 `security-plane-fail-closed` | §28.2 的 stale fail-closed 与 §103 互相否定（security plane 与 refresh 表同库），Wave 2 放行评审前必须二选一 | 待对齐 |
+
+> `SecurityStateCache` 无持久化原本是这里的一行缺口（「实例重启后靠 `fullReconcile`
+> 5 分钟重新收敛，最坏 5 分钟窗口」）。V11 §27.1 的启动 Bootstrap 把它**关闭**了：
+> 重启后的缓存由快照 + replay 在接流量之前建好，不再有窗口。缓存仍然不持久化 ——
+> 现在这是纯粹的取舍（启动多读一次表），而不再是缺口。
 
 ---
 
@@ -236,6 +354,12 @@ java ... -Dtest=UserAdminServiceTest test
 
 # 本地安全平面应用逻辑（标记 + 断连的组合顺序与幂等性）
 java ... -Dtest=SecurityStateApplierTest test
+
+# 启动 Bootstrap（§27.1 九步：快照 / 水位 / 分页 replay / 就绪门禁 / fail-fast）
+java ... -Dtest=SecurityStateBootstrapTest test
+
+# 就绪标记与两个探针（存活 vs 就绪的状态码语义）
+java ... -Dtest=SecurityPlaneReadinessTest,HealthControllerTest test
 
 # 快路径投递器（含 neverAdvancesTheReconcilerCursor / 判死边界 / 单条失败不阻塞整批）
 java ... -Dtest=SecurityEventOutboxPublisherTest test
