@@ -9,7 +9,7 @@ import com.xander.lab.agent.domain.AgentAttachment;
 import com.xander.lab.agent.domain.AgentMemory;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
-import com.xander.lab.publishing.application.BlogMediaService;
+import com.xander.lab.content.api.MediaAssetPort;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -26,15 +26,15 @@ public class RememberTool implements AgentTool {
     private final AgentMemoryService memoryService;
     private final AgentMessageMapper messageMapper;
     private final ObjectMapper objectMapper;
-    private final BlogMediaService mediaService;
+    private final MediaAssetPort mediaAssetPort;
 
     @Autowired
     public RememberTool(AgentMemoryService memoryService, AgentMessageMapper messageMapper,
-                        ObjectMapper objectMapper, BlogMediaService mediaService) {
+                        ObjectMapper objectMapper, MediaAssetPort mediaAssetPort) {
         this.memoryService = memoryService;
         this.messageMapper = messageMapper;
         this.objectMapper = objectMapper;
-        this.mediaService = mediaService;
+        this.mediaAssetPort = mediaAssetPort;
     }
 
     /** Compatibility constructor for focused memory tests without conversation persistence. */
@@ -112,8 +112,8 @@ public class RememberTool implements AgentTool {
 
         Long mediaAssetId = args.hasNonNull("mediaAssetId")
                 ? Long.valueOf(args.path("mediaAssetId").asLong(0)) : latestImageAssetId(context);
-        if (mediaAssetId != null && mediaAssetId > 0 && mediaService != null
-                && mediaService.getOwnedImage(context.userId(), mediaAssetId) == null) {
+        if (mediaAssetId != null && mediaAssetId > 0 && mediaAssetPort != null
+                && mediaAssetPort.findOwned(context.userId(), mediaAssetId) == null) {
             throw new IllegalArgumentException("图片素材不属于当前用户，无法写入记忆");
         }
         AgentMemory saved = mediaAssetId != null && mediaAssetId > 0

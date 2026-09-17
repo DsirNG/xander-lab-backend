@@ -1,9 +1,10 @@
 package com.xander.lab.agent.application;
 
 import com.xander.lab.agent.domain.AgentAttachment;
+import com.xander.lab.content.api.MediaAssetPort;
+import com.xander.lab.content.api.StoredImage;
 import com.xander.lab.integration.api.OssPort;
 import com.xander.lab.integration.api.UploadResponse;
-import com.xander.lab.publishing.application.BlogMediaService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,11 +23,11 @@ public class AgentAttachmentService {
             "ppt", "pptx", "csv", "xls", "xlsx", "tsv", "java", "js", "jsx", "ts", "tsx", "py", "css");
 
     private final OssPort ossPort;
-    private final BlogMediaService mediaService;
+    private final MediaAssetPort mediaAssetPort;
 
-    public AgentAttachmentService(OssPort ossPort, BlogMediaService mediaService) {
+    public AgentAttachmentService(OssPort ossPort, MediaAssetPort mediaAssetPort) {
         this.ossPort = ossPort;
-        this.mediaService = mediaService;
+        this.mediaAssetPort = mediaAssetPort;
     }
 
     /** Uploads one bounded, model-supported attachment outside any database transaction. */
@@ -49,9 +50,11 @@ public class AgentAttachmentService {
             throw new IllegalStateException("无法读取附件内容", e);
         }
         UploadResponse uploaded = ossPort.upload(content, name, contentType, "agent/" + userId + "/");
-        if (mediaService != null && contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
-            var asset = mediaService.saveAgentUploadedImage(userId, uploaded);
-            return new AgentAttachment(uploaded.getUrl(), name, contentType, uploaded.getSize(), asset.getId());
+        if (mediaAssetPort != null && contentType.toLowerCase(Locale.ROOT).startsWith("image/")) {
+            var asset = mediaAssetPort.recordStored(userId, new StoredImage(
+                    uploaded.getUrl(), uploaded.getOriginalName(), uploaded.getStoredName(),
+                    uploaded.getSize(), uploaded.getContentType()));
+            return new AgentAttachment(uploaded.getUrl(), name, contentType, uploaded.getSize(), asset.id());
         }
         return new AgentAttachment(uploaded.getUrl(), name, contentType, uploaded.getSize());
     }

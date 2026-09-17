@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.content.api.MediaAssetPort;
+import com.xander.lab.content.api.MediaAssetRef;
 import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
-import com.xander.lab.publishing.application.BlogMediaService;
-import com.xander.lab.publishing.domain.BlogMediaAsset;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -37,16 +37,16 @@ public class ImageGenerationTool implements AgentTool {
                     + "如果包含文字，确保文字简短清晰。要求：";
 
     private final BlogAgentImageClient imageClient;
-    private final BlogMediaService mediaService;
+    private final MediaAssetPort mediaAssetPort;
     private final BlogAgentProperties properties;
     private final BillingService billingService;
     private final ObjectMapper objectMapper;
 
-    public ImageGenerationTool(BlogAgentImageClient imageClient, BlogMediaService mediaService,
+    public ImageGenerationTool(BlogAgentImageClient imageClient, MediaAssetPort mediaAssetPort,
                                BlogAgentProperties properties, BillingService billingService,
                                ObjectMapper objectMapper) {
         this.imageClient = imageClient;
-        this.mediaService = mediaService;
+        this.mediaAssetPort = mediaAssetPort;
         this.properties = properties;
         this.billingService = billingService;
         this.objectMapper = objectMapper;
@@ -104,9 +104,12 @@ public class ImageGenerationTool implements AgentTool {
         String title = defaultText(args.path("title").asText(), "AI 生成图片");
         String fileName = "agent-image-" + System.currentTimeMillis() + "." + generated.extension();
         String meta = writeMeta(title, prompt);
-        BlogMediaAsset asset;
+        MediaAssetRef asset;
         try {
-            asset = mediaService.saveAgentImage(userId, null, fileName, generated, meta);
+            // 只把字节与类型送进内容域：usage / model 属于计费口径，端口故意不携带，
+            // 留在调用方（见 ImageGenerationTool 下方 chargeTokens）。
+            asset = mediaAssetPort.recordGenerated(userId, null, fileName,
+                    generated.bytes(), generated.contentType(), meta);
         } catch (RuntimeException exception) {
             log.warn("agent image asset save failed userId={} type={} message={}",
                     userId, exception.getClass().getSimpleName(), safeLogMessage(exception));
@@ -114,22 +117,22 @@ public class ImageGenerationTool implements AgentTool {
         }
         try {
             billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
-                    "agent-image:" + asset.getId(), "asset:" + asset.getId(),
+                    "agent-image:" + asset.id(), "asset:" + asset.id(),
                     generated.usage(), generated.model(), "智能体生成图片");
         } catch (RuntimeException exception) {
             log.warn("agent image billing failed userId={} assetId={} type={} message={}",
-                    userId, asset.getId(), exception.getClass().getSimpleName(), safeLogMessage(exception));
+                    userId, asset.id(), exception.getClass().getSimpleName(), safeLogMessage(exception));
             throw new IllegalStateException("图片已经生成并保存，但积分扣费记录失败", exception);
         }
 
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
-        outcome.put("assetId", asset.getId());
-        outcome.put("url", asset.getUrl());
+        outcome.put("assetId", asset.id());
+        outcome.put("url", asset.url());
         outcome.put("title", title);
-        outcome.put("width", asset.getWidth() == null ? -1 : asset.getWidth());
-        outcome.put("height", asset.getHeight() == null ? -1 : asset.getHeight());
-        outcome.put("contentType", defaultText(asset.getContentType(), ""));
+        outcome.put("width", asset.width() == null ? -1 : asset.width());
+        outcome.put("height", asset.height() == null ? -1 : asset.height());
+        outcome.put("contentType", defaultText(asset.contentType(), ""));
         outcome.put("hint", "图片已生成并保存到你的素材库。如需生成其他图片，请继续描述要求。");
         return outcome;
     }

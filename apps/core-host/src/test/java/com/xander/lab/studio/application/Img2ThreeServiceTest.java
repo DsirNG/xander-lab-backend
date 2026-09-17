@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.publishing.application.BlogMediaService;
+import com.xander.lab.content.api.MediaAssetPort;
 import com.xander.lab.studio.api.Img2ThreeTaskVO;
 import com.xander.lab.studio.domain.Img2ThreeTask;
 import com.xander.lab.studio.infrastructure.Img2ThreeModelClient;
@@ -67,7 +67,7 @@ class Img2ThreeServiceTest {
         ImageIO.write(image, "png", imagePath.toFile());
 
         Img2ThreeTaskMapper taskMapper = mock(Img2ThreeTaskMapper.class);
-        BlogMediaService mediaService = mock(BlogMediaService.class);
+        MediaAssetPort mediaAssetPort = mock(MediaAssetPort.class);
         Img2ThreeModelClient modelClient = mock(Img2ThreeModelClient.class);
         Img2ThreePipeline pipeline = mock(Img2ThreePipeline.class);
         ObjectMapper objectMapper = new ObjectMapper();
@@ -111,7 +111,7 @@ class Img2ThreeServiceTest {
 
         Img2ThreeService service = new Img2ThreeService(
                 taskMapper,
-                mediaService,
+                mediaAssetPort,
                 modelClient,
                 pipeline,
                 reliefGenerator,

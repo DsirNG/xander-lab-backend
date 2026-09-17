@@ -9,7 +9,7 @@ feature; deployment and database topology stay unchanged.
 - `virtualpay` (new): owns personal-entity Mini Program virtual-payment products, orders, XPay signing, delivery notifications, and active order reconciliation. It uses a fresh `wx.login` code per checkout; `identity` exchanges and verifies the resulting openid/session_key, and session_key is never persisted. Delivery changes `sys_user` subscription fields only through `SubscriptionEntitlementService`; client payment callbacks never grant benefits. Apply `virtual_pay_migration.sql` and configure the MP delivery URL before enabling it.
 - `agent` (new): owns durable orchestration conversations, messages, replayable SSE events, model decisions, execution journals (`agent_run`, `agent_step`, `agent_tool_invocation`), and the registry of user-scoped tools. `AgentRunLifecycle` owns fenced run claims, cancellation, lease renewal, terminal transitions and stale-run recovery; `AgentEventProjector` owns active-run message fencing and legacy event projection; `AgentTurnCoordinator` owns claimed-turn lease and terminal-failure coordination. The compatibility conversation facade delegates these boundaries. A `done=true` model decision is delivered directly: the module does not run a generic plan/card/failure self-check loop that issues hidden retry calls. The module does not own the business state created by a tool.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions.
-- `publishing` (migrated): owns blog posts, categories, tags, view records, publication commands, generic publication contracts, durable publication records, and blog media uploads.
+- `publishing` (migrated): owns blog posts, categories, tags, view records, publication commands, generic publication contracts, durable publication records, and blog media uploads. The media library implements `content.api.MediaAssetPort`; its MyBatis entity `BlogMediaAsset` stays inside `publishing.domain` and is mapped to `content.api.MediaAssetRef` at the port boundary, so `agent`/`blogagent`/`studio` no longer import it.
 - `automation` (migrated): owns email reminders, recurring content plans (`blog_content_plan`), durable plan runs (`blog_plan_run`), the plan poller with atomic claiming and stale-claim recovery, and user notifications (`blog_notification`). Runs a headless pipeline: generation via `blogagent`, a fail-closed compliance gate, local/CSDN publication via `publishing`/`integration`, then reschedules the plan. Per-user SSE pushes live updates; the notification table is the durable fallback for offline users.
 - `integration` (migrated): owns MCP protocol adapters, OSS/file/mail delivery adapters, and vendor-specific integrations such as the complete CSDN MCP flow and the Juejin MCP flow.
 - `studio` (migrated): owns FlowCraft projects, canvases and snapshots, plus the image-to-3D task pipeline and model client.
@@ -36,6 +36,18 @@ API adapters call application services. Application services coordinate domain
 state through infrastructure adapters. Scheduling and publishing may invoke the
 blog-agent application API, but the blog agent must not own schedules or
 platform credentials.
+
+Cross-domain calls follow two standing decisions, both recorded in
+[`docs/migration/adr-contract-boundaries.md`](migration/adr-contract-boundaries.md):
+contract modules must stay serialization-framework agnostic (Jackson belongs to
+inbound/outbound adapters), and cross-domain communication must use
+consumer-owned contracts — a domain entity must never cross a bounded-context
+boundary. In practice that means a cross-domain caller depends on a
+`contracts/*-api` port and a `*Ref`/DTO value type, while the owning module
+keeps its entity and maps explicitly at the boundary (for example
+`publishing.domain.BlogMediaAsset` → `content.api.MediaAssetRef` behind
+`content.api.MediaAssetPort`). There is deliberately no `common-model` /
+`shared-dto` module.
 
 `agent` invokes business capabilities only through `AgentTool` adapters. Every
 turn exposes the full registered tool set: skills change how the model works,
@@ -78,8 +90,8 @@ tool rules. Uploaded executable skills are not supported. The
 durable blog task ID; ownership of the generated task, sources, versions, and
 publication hand-off remains in `blogagent`. Additional adapters delegate to
 the owning modules without duplicating their state: `image_generate` renders an
-illustration through the blog-agent image client and persists it via
-`publishing` media storage; `publish_post` hands a task or post to the
+illustration through the blog-agent image client and persists it via the
+`content-api` `MediaAssetPort` implemented by `publishing`; `publish_post` hands a task or post to the
 `publishing`/`integration` sync services and charges the platform flat rate;
 `query_posts` reads the user's own posts through `publishing`; `schedule_plan`
 and `email_reminder` create durable records in `automation`. Agent tools never

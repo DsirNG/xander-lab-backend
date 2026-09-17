@@ -4,8 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.publishing.application.BlogMediaService;
-import com.xander.lab.publishing.domain.BlogMediaAsset;
+import com.xander.lab.content.api.MediaAssetPort;
+import com.xander.lab.content.api.MediaAssetRef;
 import com.xander.lab.billing.application.BillingService;
 import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.common.ModelCallResult;
@@ -27,6 +27,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.time.LocalDateTime;
@@ -43,7 +44,7 @@ public class Img2ThreeService {
     private static final int MAX_SPEC_REPAIR_ATTEMPTS = 2;
 
     private final Img2ThreeTaskMapper taskMapper;
-    private final BlogMediaService mediaService;
+    private final MediaAssetPort mediaAssetPort;
     private final Img2ThreeModelClient modelClient;
     private final Img2ThreePipeline pipeline;
     private final Img2ThreeReliefGenerator reliefGenerator;
@@ -56,15 +57,30 @@ public class Img2ThreeService {
         if (userId == null) {
             throw new IllegalArgumentException("未登录或登录已过期");
         }
+        // 端口只收字节：先按 getSize() 卡上限再读，否则一个 100MB 的请求会被整份读进内存
+        // 才被拒（spring.servlet.multipart.max-file-size 是 100MB，媒体库只收 10MB）。
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("仅支持 PNG、JPEG、WebP 或 GIF 图片");
+        }
+        if (file.getSize() > MediaAssetPort.MAX_IMAGE_BYTES) {
+            throw new IllegalArgumentException("图片大小不能超过 10MB");
+        }
+        byte[] content;
+        try {
+            content = file.getBytes();
+        } catch (IOException e) {
+            throw new IllegalArgumentException("无法读取图片内容", e);
+        }
         // OSS is a remote network call. Keep it outside a database transaction.
-        BlogMediaAsset asset = mediaService.uploadImage(userId, file);
+        MediaAssetRef asset = mediaAssetPort.uploadImage(userId, content,
+                file.getOriginalFilename(), file.getContentType());
         Img2ThreeTask task = new Img2ThreeTask();
         task.setUserId(userId);
         task.setStatus("created");
         task.setStage("analyze");
         task.setTitle(titleFromFileName(file.getOriginalFilename()));
-        task.setReferenceMediaUrl(asset.getUrl());
-        task.setReferenceMediaAssetId(asset.getId());
+        task.setReferenceMediaUrl(asset.url());
+        task.setReferenceMediaAssetId(asset.id());
         transactionTemplate.executeWithoutResult(status -> taskMapper.insert(task));
         return toVo(task);
     }

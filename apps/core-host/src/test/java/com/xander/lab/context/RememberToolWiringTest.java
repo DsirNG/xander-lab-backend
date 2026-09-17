@@ -5,7 +5,7 @@ import com.xander.lab.agent.application.AgentMemoryService;
 import com.xander.lab.agent.application.AgentToolRegistry;
 import com.xander.lab.agent.application.RememberTool;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
-import com.xander.lab.publishing.application.BlogMediaService;
+import com.xander.lab.content.api.MediaAssetPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,7 +28,7 @@ class RememberToolWiringTest {
     @MockBean
     private AgentMessageMapper messageMapper;
     @MockBean
-    private BlogMediaService mediaService;
+    private MediaAssetPort mediaAssetPort;
 
     @Autowired
     private AgentToolRegistry registry;

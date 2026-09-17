@@ -9,8 +9,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.agent.domain.AgentAttachment;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.infrastructure.AgentMessageMapper;
-import com.xander.lab.publishing.application.BlogMediaService;
-import com.xander.lab.publishing.domain.BlogMediaAsset;
+import com.xander.lab.content.api.MediaAssetPort;
+import com.xander.lab.content.api.MediaAssetRef;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -20,13 +20,13 @@ import java.util.List;
 @Component
 public class ImageResendTool implements AgentTool {
     private final AgentMessageMapper messageMapper;
-    private final BlogMediaService mediaService;
+    private final MediaAssetPort mediaAssetPort;
     private final ObjectMapper objectMapper;
 
-    public ImageResendTool(AgentMessageMapper messageMapper, BlogMediaService mediaService,
+    public ImageResendTool(AgentMessageMapper messageMapper, MediaAssetPort mediaAssetPort,
                            ObjectMapper objectMapper) {
         this.messageMapper = messageMapper;
-        this.mediaService = mediaService;
+        this.mediaAssetPort = mediaAssetPort;
         this.objectMapper = objectMapper;
     }
 
@@ -54,14 +54,14 @@ public class ImageResendTool implements AgentTool {
 
     @Override
     public JsonNode execute(AgentToolContext context, JsonNode args, ProgressListener onProgress) {
-        BlogMediaAsset generated = null;
+        MediaAssetRef generated = null;
         AgentAttachment attachment;
         String source = args.path("source").asText("");
         if ("asset_id".equals(source)) {
-            generated = mediaService.getOwnedImage(context.userId(), args.path("assetId").asLong(0));
+            generated = mediaAssetPort.findOwned(context.userId(), args.path("assetId").asLong(0));
             if (generated == null) throw new IllegalArgumentException("找不到属于当前用户的图片素材");
-            attachment = new AgentAttachment(generated.getUrl(), generated.getOriginalName(),
-                    generated.getContentType(), generated.getSize() == null ? 0L : generated.getSize());
+            attachment = new AgentAttachment(generated.url(), generated.originalName(),
+                    generated.contentType(), generated.size() == null ? 0L : generated.size());
         } else if ("latest_uploaded".equals(source)) {
             attachment = latestUploaded(context);
             if (attachment == null) throw new IllegalArgumentException("当前会话没有可重新发送的用户图片");
@@ -75,7 +75,7 @@ public class ImageResendTool implements AgentTool {
         result.put("title", attachment.name());
         result.put("contentType", attachment.contentType());
         result.put("name", attachment.name());
-        if (generated != null) result.put("assetId", generated.getId());
+        if (generated != null) result.put("assetId", generated.id());
         return result;
     }
 

@@ -106,4 +106,4 @@ scheduled:
     trigger: "fixedDelay = 60_000"
     logical_owner: studio
     file: apps/core-host/src/main/java/com/xander/lab/studio/application/Img2ThreeService.java
-    line: 90
+    line: 106

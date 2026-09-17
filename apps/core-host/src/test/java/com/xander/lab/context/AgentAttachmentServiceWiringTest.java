@@ -1,8 +1,8 @@
 package com.xander.lab.context;
 
 import com.xander.lab.agent.application.AgentAttachmentService;
+import com.xander.lab.content.api.MediaAssetPort;
 import com.xander.lab.integration.api.OssPort;
-import com.xander.lab.publishing.application.BlogMediaService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -18,7 +18,7 @@ class AgentAttachmentServiceWiringTest {
     private OssPort ossPort;
 
     @MockBean
-    private BlogMediaService mediaService;
+    private MediaAssetPort mediaAssetPort;
 
     @Autowired
     private AgentAttachmentService attachmentService;

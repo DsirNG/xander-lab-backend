@@ -118,9 +118,76 @@ curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新�
 
    注入验证方法：加一个 `default` 方法（这样实现类不用改，只有宽度测试会红）。
 
+   **⚠️ 反射检查参数类型时，数组要先 `getComponentType()`。**
+   `byte[].class.getName()` 返回 **`"[B"`**，不是 `"java.…"`。所以
+   `name.startsWith("java.")` 这种写法会把端口**自己选的** `byte[]` 签名判成"泄漏了框架类型"，
+   测试一跑就红，而红的原因看起来像"代码错了"：
+
+   ```java
+   Class<?> type = parameter.isArray() ? parameter.getComponentType() : parameter;
+   assertTrue(type.isPrimitive() || name.startsWith("java.")
+           || name.startsWith("com.xander.lab.content.api."));
+   ```
+
+4. **同一个方法名、两个重载、返回类型不同 —— 这是保留同域实体访问的正规手法。**
+   Java 不能只靠返回类型重载，所以参数表必须不同：
+
+   ```java
+   @Override public MediaAssetRef  uploadImage(Long, byte[], String, String)  // 端口，跨域
+            public BlogMediaAsset uploadImage(Long, MultipartFile)            // 同域（BlogMediaController）
+   ```
+
+   两者都调同一个私有实现体，**不复制校验逻辑**；`requireUser` 放在两个入口而不是实现体里，
+   是为了让"登录先于参数"这个检查顺序在入口上看得见。
+   **每个入口的检查顺序要与改造前逐条一致**（登录 → 类型 → 大小），否则
+   `IllegalStateException` 与 `IllegalArgumentException` 会互换，HTTP 状态码跟着变 ——
+   而编译器不会告诉你。
+
 **⚠️ 扩展现有契约不需要构建接线。** 新建 `contracts/<name>/` 要改四处（见下），
 但往**已存在**的契约里加类型是零成本：模块已接线、包已登记。
 `core-api` 承接 `identity` 的类型、`content-api` 承接 `publishing` 的类型，都是这一类。
+**先确认"已有契约里是不是已经有同一能力的类型"** —— 2026-09-17 那次，决策说的是
+"建 `publishing-api`"，落地时发现 `content-api` 本来就是发布契约（已装
+`BlogPublisher` / `PublishCommand` / `PublishResult`），扩展它就行，省掉四处接线。
+
+**⚠️ 契约不能依赖契约。** `contract-dependency-boundary` 只允许 JDK + 本包
+（`CONTRACT_ALLOWED_IMPORT_PREFIXES`），并**拒绝任何非 test 作用域的 POM 依赖** ——
+Maven 编排不了 test-only 的跨契约依赖，所以门禁干脆全禁。后果是字段相同的类型要各写一份：
+`content-api` 不能复用 `integration.api.UploadResponse`，只能自己定义 `StoredImage`。
+**遇到这种情况改设计，不要放宽门禁** —— 放宽的那一刻 ADR-1 就只剩文档里一句话了。
+（"契约能不能依赖契约"本身仍是未拍板的问题，见
+`docs/migration/adr-contract-boundaries.md` §5。）
+
+**⚠️ 实体不能进契约 —— 它带的是持久化注解。** `BlogMediaAsset` 带 `@TableName` /
+`@TableId`（MyBatis），搬进契约等于把 MyBatis 拖进所有消费者。正确做法：实体留在
+`domain`，在端口边界显式映射成 `*Ref`。映射要**逐个字段手写**，不要
+`BeanUtils.copyProperties` / 反射 —— 字段名对不上时反射版本静默留 `null`，手写版本编译期报错。
+
+**⚠️ 前端可见的类型：镜像还是收窄，是一次 §11 决定，不能顺手做。**
+`BlogAgentTaskVO.illustrations` 是线上契约。13 个字段**逐一同名同类型**地镜像
+⇒ 序列化 JSON 与改造前完全一致 ⇒ 这次提交可以被证明是**纯重构**，
+`docs/contract-changes.yaml` **不需要**加条目。收窄（只留前端真读的 3 个）**也能做**，
+但那是独立的 §11 变更，**必须**进登记表。
+**选镜像，并在注释里写明为什么** —— 否则下一个人会以为那 10 个多余字段是疏忽。
+
+**⚠️ 循环依赖靠"端口只收真正用到的字段"来断。** 2026-09-17 的环：
+`BlogMediaService.saveAgentImage(..., GeneratedImage, ...)` 收了**下游**类型，
+于是 `publishing` 反过来 import `blogagent`。拆法不是"把 `GeneratedImage` 搬进契约"
+（它带 `ModelUsage`，有 `fromJson(JsonNode)`，Jackson 泄漏），而是看内容域
+**真正读了哪两个字段**（`bytes()` / `contentType()`），按那两个字段收参。
+**usage / model 这类"属于另一件事的口径"故意不上端口**，留在调用方 ——
+`ImageGenerationTool` 自己 `chargeTokens(..., generated.usage(), generated.model(), ...)`。
+
+**⚠️ 端口收 `byte[]` 时，上限检查的责任转移到调用方 —— 这是个真实的坑。**
+
+```text
+spring.servlet.multipart.max-file-size = 100MB
+端口 MAX_IMAGE_BYTES                    =  10MB
+```
+
+调用方若先 `file.getBytes()` 再交给端口，100MB 的请求会被**整份读进内存**才被拒（10 倍放大）。
+所以：端口上**公开**这个常量（`long MAX_IMAGE_BYTES = 10L * 1024 * 1024`，避免三个调用方各抄一份），
+并且每个调用方**必须**在 `getBytes()` **之前**用 `file.getSize()` 先卡一道。
 
 **`SHARED_KERNEL` 里契约的包名可能要带点。** §18 的 8 个契约里有 4 个
 （`agent-api` / `automation-api` / `integration-api` / `studio-api`）的名字同时是业务域，
@@ -310,6 +377,32 @@ python scripts/migration/ci_gates.py
 **改了任何 POM 或新增模块时，先跑门禁再跑 Maven。** `xml-authoring-safety` 与
 `dockerfile-module-coverage` 覆盖的失败都是"反应堆在编译任何类之前整体失败"，
 跑一次门禁几秒钟就能拿到精确到行号的报错，而 `mvn` 要先走完一轮启动。
+
+### ⚠️ 在 `@Scheduled` 方法**上方**加行，会让清单失效
+
+`docs/scheduled-inventory.yaml` 记录每个 `@Scheduled` 的**行号**。2026-09-17：
+在 `Img2ThreeService.create` 里加了约 16 行 ⇒ `@Scheduled` 从第 90 行挪到 106 行 ⇒
+门禁 `scheduler-lock-scope-consistency` FAIL：
+
+```
+stale scheduled-inventory.yaml for ['img2three-service'] -- re-run scripts/migration/scan.py
+```
+
+修法：`python scripts/migration/scan.py`（同时刷新 `scheduled-ownership.yaml` 里的
+`scan_ref` 指针）。**注意它会一并重写 `docs/cross-domain-imports.yaml`** ——
+那个文件同时是**基线**，所以扫描完**必须看 diff**，别当成纯噪声提交。
+反过来也有用：这一条 FAIL 恰好证明门禁在守，不是恒真。
+
+### ⚠️ 不要用 `**/target/surefire-reports` 数测试
+
+仓库根有一个**单模块时代的残留 `target/`**（148 个 `TEST-*.xml`，含已搬走的
+`identity.security.JwtUtilTest` / `UserContextTest` 等旧包名）。任何
+`glob("**/target/surefire-reports/TEST-*.xml")` 都会把 `apps/core-host/target/`
+和根 `target/` **一起数进去**，虚增约 1074，而结果看起来完全正常。
+
+正确做法二选一：按 mtime 过滤到本次运行，或者直接读 maven 输出里的 `Results:` 行
+（**逐模块打印，总数要相加**）。同理，`apps/core-host/target/` 里也可能留着**改名前的**
+旧包测试报告（如 `identity.security.*` → `auth.core.*`），数出来会比实际多。
 
 ### 门禁本身也要验证：注入法
 

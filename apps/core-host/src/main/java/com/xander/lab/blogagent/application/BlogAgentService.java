@@ -16,7 +16,6 @@ import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.blogagent.domain.BlogAgentSource;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.blogagent.domain.BlogAgentVersion;
-import com.xander.lab.publishing.domain.BlogMediaAsset;
 import com.xander.lab.blogagent.domain.BlogAgentMessage;
 import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
@@ -26,9 +25,10 @@ import com.xander.lab.blogagent.infrastructure.BlogAgentSourceMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentTaskMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentVersionMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentMessageMapper;
-import com.xander.lab.publishing.application.BlogMediaService;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
+import com.xander.lab.content.api.MediaAssetPort;
+import com.xander.lab.content.api.MediaAssetRef;
 import com.xander.lab.content.api.PublishCommand;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -65,7 +65,7 @@ public class BlogAgentService {
     private final BlogService blogService;
     private PublicationService publicationService;
     private final BlogAgentImageClient imageClient;
-    private final BlogMediaService mediaService;
+    private final MediaAssetPort mediaAssetPort;
     private final BlogAgentProperties properties;
     private final BlogAgentMessageMapper messageMapper;
     private final BlogAgentEventService eventService;
@@ -393,7 +393,7 @@ public class BlogAgentService {
                 .eq(BlogAgentSource::getTaskId, taskId).orderByAsc(BlogAgentSource::getId)));
         vo.setVersions(versionMapper.selectList(new LambdaQueryWrapper<BlogAgentVersion>()
                 .eq(BlogAgentVersion::getTaskId, taskId).orderByDesc(BlogAgentVersion::getVersionNo)));
-        vo.setIllustrations(mediaService.getTaskImages(userId, taskId));
+        vo.setIllustrations(mediaAssetPort.listByTask(userId, taskId));
         vo.setMessages(messageMapper.selectList(new LambdaQueryWrapper<BlogAgentMessage>()
                 .eq(BlogAgentMessage::getTaskId, taskId).orderByAsc(BlogAgentMessage::getId)));
         return vo;
@@ -557,10 +557,10 @@ public class BlogAgentService {
             try {
                 // Reuse an existing agent image with the same illustration
                 // title before spending another model generation on it.
-                BlogMediaAsset reused = mediaService.findReusableAgentImage(userId, title);
+                MediaAssetRef reused = mediaAssetPort.findReusableGenerated(userId, title);
                 String markdown;
                 if (reused != null) {
-                    markdown = "![" + alt + "](" + reused.getUrl() + ")";
+                    markdown = "![" + alt + "](" + reused.url() + ")";
                 } else {
                     BlogAgentImageClient.GeneratedImage generated = imageClient.generate(
                             "为中文知识博客生成一张准确、克制、专业的知识插图。画面必须服务于理解，不要添加水印。"
@@ -572,8 +572,9 @@ public class BlogAgentService {
                             "prompt", prompt,
                             "model", generated.model(),
                             "size", properties.getImageSize()));
-                    BlogMediaAsset asset = mediaService.saveAgentImage(userId, taskId, fileName, generated, meta);
-                    markdown = "![" + alt + "](" + asset.getUrl() + ")";
+                    MediaAssetRef asset = mediaAssetPort.recordGenerated(userId, taskId, fileName,
+                            generated.bytes(), generated.contentType(), meta);
+                    markdown = "![" + alt + "](" + asset.url() + ")";
                     billingService.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
                             "illustration:" + taskId + ":" + (index + 1), "task:" + taskId,
                             generated.usage(), generated.model(), "知识插图生成");

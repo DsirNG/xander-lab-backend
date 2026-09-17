@@ -22,6 +22,27 @@
         dependency pointing the wrong way across a service boundary, so the port and its data
         move to a module both sides may depend on.
 
+        Members added in the media cut: MediaAssetPort, MediaAssetRef, StoredImage.
+        Callers live in three deployment units (agent / blogagent / studio) and previously
+        imported the concrete @Service BlogMediaService plus the MyBatis entity BlogMediaAsset.
+        The entity cannot be a contract type at all -- it carries @TableName / @TableId -- so
+        it stays in publishing.domain and the service maps it at the boundary.
+
+        This cut also broke a cycle. BlogMediaService took
+        blogagent.infrastructure.BlogAgentImageClient.GeneratedImage, so the content domain
+        imported blogagent while blogagent imported BlogMediaService. The port now takes
+        byte[] + contentType instead: the content domain only ever used those two fields, and
+        the rest of GeneratedImage (usage / model / extension) stays with the producer.
+        GeneratedImage itself could not move here -- it carries com.xander.lab.common.ModelUsage,
+        which is Jackson-bearing.
+
+        Two architectural decisions are frozen here and enforced by this module's package-info:
+        ADR-1, contracts stay serialization-framework agnostic (no Jackson, no annotations on
+        DTOs, no JsonNode); ADR-2, cross-domain traffic uses consumer-owned contracts and domain
+        entities never cross a bounded-context boundary. A third one is still open: whether a
+        contract may depend on another contract. Today the gate says no, which is why StoredImage
+        exists rather than reusing integration.api.UploadResponse.
+
         Zero dependencies, and that is the point. A contract that drags in a framework cannot
         be depended on by every service, and V9 §19 is explicit that the WebFlux Gateway must
         stay free of spring-webmvc. Nothing here may gain a compile dependency without a

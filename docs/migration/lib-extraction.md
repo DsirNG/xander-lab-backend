@@ -610,6 +610,46 @@ api_statements                     38 -> 38
 属于契约变更，要么把 DTO 的字段名与实体**逐一镜像**并用测试钉住序列化结果，
 要么走 §11 流程。**这是一个决定，不是重构的顺带产物。**
 
+### 3septies.8 这一刀已经做完（2026-09-17）
+
+决策落定为"**镜像**"：`MediaAssetRef` 13 个字段与实体逐一同名同类型，
+所以序列化出的 JSON 与改造前完全一致 —— 这次提交可以被证明是**纯重构**，
+`docs/contract-changes.yaml` **故意没有**加条目（判据见
+[`adr-contract-boundaries.md`](adr-contract-boundaries.md) §2.5 / §2.6）。
+
+**没有新建 `publishing-api`**：`contracts/content-api` 本来就是发布契约
+（已装 `BlogPublisher` / `PublishCommand` / `PublishResult` / `PublishingLimits`），
+按 §91「契约按能力命名」扩展它即可 —— 因此**不用改构建接线**。
+
+新增三个契约类型：`MediaAssetRef`（引用）、`StoredImage`（见下）、
+`MediaAssetPort`（6 方法 + `MAX_IMAGE_BYTES` 常量）。
+
+环的拆法：端口按内容域**真正用到**的字段收参，只取
+`generated.bytes()` 与 `generated.contentType()`，于是
+`GeneratedImage` 的 import 消失。**它不能搬进契约**，因为它带
+`com.xander.lab.common.ModelUsage`（有 `fromJson(JsonNode)`，Jackson 泄漏）。
+
+`StoredImage` 存在的原因是**契约不能依赖契约**：最省事的写法是复用
+`integration.api.UploadResponse`，但 `contract-dependency-boundary` 只允许
+JDK + 本包，且拒绝任何非 test 作用域的 POM 依赖。
+
+实测收益：
+
+```
+agent      -> publishing    9 -> 3     （跨部署单元，仍是全仓最大剩余跨单元边）
+blogagent  -> publishing    5 -> 2     （同单元）
+studio     -> publishing    2 -> 0     （跨部署单元，边消失）
+publishing -> blogagent     1 -> 0     （同单元，边消失 —— 环断了）
+
+implementation_statements          86 -> 74  (-12)
+implementation_edges               33 -> 31
+cross_deployment_unit_statements   62 -> 54  (-8)
+cross_deployment_unit_edges        22 -> 21
+```
+
+⚠️ 12 条里只有 8 条跨单元。**耦合图形状未变**（`deployment-unit-coupling`
+仍报 4 个单元同一个 SCC）—— `studio -> publishing` 归零**没有**让 studio 变叶子。
+
 
 ## 3sexies. 第四个业务契约：`contracts/payment-api`（计费词表）
 

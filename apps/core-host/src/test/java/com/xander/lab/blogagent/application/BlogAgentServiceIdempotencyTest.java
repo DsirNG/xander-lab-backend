@@ -7,7 +7,7 @@ import com.xander.lab.blogagent.infrastructure.BlogAgentModelClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
 import com.xander.lab.blogagent.infrastructure.BlogAgentLeaseScheduler;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
-import com.xander.lab.publishing.application.BlogMediaService;
+import com.xander.lab.content.api.MediaAssetPort;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.blogagent.infrastructure.BlogAgentMessageMapper;
@@ -75,7 +75,7 @@ class BlogAgentServiceIdempotencyTest {
                 transactionTemplate,
                 mock(BlogService.class),
                 mock(BlogAgentImageClient.class),
-                mock(BlogMediaService.class),
+                mock(MediaAssetPort.class),
                 properties,
                 mock(BlogAgentMessageMapper.class),
                 mock(BlogAgentEventService.class),
