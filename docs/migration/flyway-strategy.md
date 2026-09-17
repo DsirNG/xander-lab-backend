@@ -320,8 +320,8 @@ restore_drill_date
 | GRANT 脚本未实际执行 | `migrations/grants/*.sql` 已生成，但 Wave 0A 不拆进程，所以没有账号被创建 | Wave 1 |
 | `baseline-schema.sql` 未生成 | §64 第 1 步需要线上 schema 快照用于 drift 比对，当前 `migrations/legacy/` 只有 `AUDIT.md` 与 `SHA256SUMS` | 首次 baseline 时 |
 | binlog 状态未核实 | §31 把"binlog 开启"列为前置项，当前未记录实际状态 | Wave 2 |
-| `flyway.enabled=true` 无门禁 | 见 §7 第 4 条 | Wave 0B |
-| `SHA256SUMS` 无门禁 | `migrations/legacy/SHA256SUMS` 已生成，但 `gate_flyway_validation` 只查版本号唯一性，不校验哈希 → 历史脚本被改动不会被发现 | Wave 0B |
+| `flyway.enabled=true` 无门禁 | 见 §7 第 4 条。Flyway 尚未接入构建，所以这条门禁**现在无法生效**（属性还不存在）；等 Wave 1 接线时补 | Wave 1 接线时 |
+| ~~`SHA256SUMS` 无门禁~~ | **已补**：`gate_flyway_validation` 现在校验归档清单（见 §10） | ✅ Wave 0B 已完成 |
 
 ---
 
@@ -331,18 +331,55 @@ restore_drill_date
 # 历史脚本审计数据（AUDIT.md 是否与 80 个脚本的实际内容一致）
 python scripts/migration/audit_legacy_sql.py
 
-# 版本号唯一性 + versioned / legacy 脚本计数（门禁 flyway-validation）
-python scripts/migration/ci_gates.py
+# 两道判据：版本号唯一性 + 归档清单冻结（门禁 flyway-validation）
+python scripts/migration/ci_gates.py flyway-validation
 
 # GRANT 脚本与 table-ownership.yaml 的一致性
 # 注意：gen_grants.py 没有 --check，它是「重写」语义 —— 必须靠 git diff 判断有无漂移
 python scripts/migration/gen_grants.py && git diff --stat migrations/grants/
 ```
 
-⚠️ `gate_flyway_validation`（`ci_gates.py` L461）当前只校验
-**版本号唯一性 + 脚本计数**，它**不校验 `SHA256SUMS`**。
+### 10.1 `gate_flyway_validation` 的两道判据
 
-`migrations/legacy/SHA256SUMS` 记录 80 个脚本的哈希，
-是"归档不得被修改"的唯一凭据 —— 如果有人改了
-`src/main/resources/db/*.sql` 里的历史脚本，SHA256SUMS 会对不上，
-**但当前没有任何门禁会发现**。这条检查应当进入 CI（见 §9）。
+**判据一：`migrations/versioned/V*.sql` 命名合法 + 版本号唯一。**
+Flyway 撞到重复版本会在**启动时**失败，而那时已经在部署窗口里了。
+
+**判据二：归档清单仍然为真。** 这是本节的重点。`migrations/legacy/SHA256SUMS`
+记录 `apps/core-host/src/main/resources/db/` 下 80 个历史脚本的 sha256，
+是"归档不得被修改"的唯一凭据。这三件事都要查：
+
+1. 清单里的每个文件都要在磁盘上；
+2. 磁盘上的每个 `*.sql` 都要在清单里（否则"新加一个归档脚本"无人察觉）；
+3. 逐个比对哈希。
+
+第 2 条不能省：`audit_legacy_sql.py` 是**手工运行**的，不会自己再跑一遍，
+所以只比哈希的话，新增文件不会有任何症状。
+
+### 10.2 ⚠️ 哈希算法必须与生成方逐字节一致（否则 30 个假失败）
+
+门禁里的哈希**必须**和 `audit_legacy_sql.py` 用同一种算法：
+
+```python
+path.read_text(encoding="utf-8", errors="replace").encode("utf-8")   # ✅
+path.read_bytes()                                                    # ❌
+```
+
+前者走 Python 的**通用换行**（`\r\n` 归一成 `\n`），后者是磁盘上的原始字节。
+本仓库 `core.autocrlf=true`，checkout 之后 **80 个文件里有 30 个带 CRLF**，
+而这 30 个恰好就是两种算法结果不同的全部 —— 用 `read_bytes()` 会报
+**30 个假失败**，看起来像"归档被大规模篡改"，实际什么都没发生。
+（实测：`raw-byte hash != text-read hash` 的文件数 = 30 = 含 CRLF 的文件数。）
+
+这与 `backend-norms` 里那条"还原后不要用原始字节 sha256 证明还原成功"是同一个坑。
+
+### 10.3 注入验证（4 条路径都实测过）
+
+| 注入 | 期望 | 实测 |
+|---|---|---|
+| 往一个归档脚本追加一行注释 | 哈希不符 | ✅ `content changed (recorded 8439f06e3a6e, now 8d722d4a8755)` |
+| 在 `db/` 新建一个清单外的 `.sql` | 清单缺条目 | ✅ `zzz_injected_probe.sql: in db/ but absent from SHA256SUMS` |
+| 把某个归档脚本移走 | 清单多条目 | ✅ `..._agent_quiz_card_migration.sql: in SHA256SUMS but absent from db/` |
+| 移走 `SHA256SUMS` 本身 | 清单缺失 | ✅ `migrations\legacy\SHA256SUMS is missing` |
+
+四条都逐字节还原后回到 PASS。**注入用的那个文件是带 CRLF 的**（第 1 条），
+所以这一条同时证明了算法选择是对的 —— 否则它会先报一个假失败。

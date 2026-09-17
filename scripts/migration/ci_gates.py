@@ -17,6 +17,7 @@ not fail the build — they are printed so they cannot be forgotten.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -37,6 +38,8 @@ import scan  # noqa: E402
 REPO = scan.REPO
 DOCS = REPO / "docs"
 CAPABILITY_LOCK = DOCS / "capability-baseline.lock"
+# The frozen-history manifest for the 80 archived SQL scripts (V9 §64 step 3).
+LEGACY_SUMS = REPO / "migrations" / "legacy" / "SHA256SUMS"
 
 # Shared-kernel violations that exist today and are scheduled for Wave 0B.
 # The gate fails only when a NEW violation appears, so the baseline cannot rot
@@ -841,7 +844,63 @@ def gate_gateway_stream_proxy_config() -> None:
     report(gate, True, "stream proxy settings present")
 
 
+def _archived_script_problems() -> tuple[list[str], int]:
+    """V9 §64：那 80 个历史脚本是**冻结的历史**，改了必须有人发现。
+
+    ``migrations/legacy/SHA256SUMS`` 记录 ``apps/core-host/src/main/resources/db/``
+    下每个归档脚本的 sha256。这些脚本**不会被重放**（Flyway 从线上 schema baseline），
+    所以改动它们不会让任何构建或测试失败 —— 只会让"生产库当初到底执行了什么"
+    与仓库里的记录**静默分叉**。审计脚本是手工运行的，不会自己再跑一遍。
+
+    ⚠️ **哈希算法必须与生成方 ``audit_legacy_sql.py`` 逐字节一致**，即
+    ``path.read_text(encoding="utf-8", errors="replace").encode("utf-8")``，
+    **不是** ``read_bytes()``。前者走 Python 的通用换行（把 ``\\r\\n`` 归一成 ``\\n``），
+    后者是磁盘上的原始字节。本仓库 ``core.autocrlf=true``，checkout 之后
+    80 个文件里有 30 个带 CRLF —— 用 ``read_bytes()`` 会报 **30 个假失败**。
+    这条是实测过的（见 ``docs/migration/lib-extraction.md``）。
+
+    判据：清单里的每个文件都要在；磁盘上的每个 ``*.sql`` 都要在清单里；
+    逐个比对哈希。三件事都做，否则"新增一个归档脚本"会无人察觉。
+    """
+    if not LEGACY_SUMS.exists():
+        return [f"{LEGACY_SUMS.relative_to(REPO)} is missing"], 0
+
+    recorded: dict[str, str] = {}
+    for lineno, line in enumerate(LEGACY_SUMS.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        parts = line.split("  ", 1)
+        if len(parts) != 2:
+            return [f"SHA256SUMS:{lineno}: expected '<sha256>  <file>'"], 0
+        recorded[parts[1].strip()] = parts[0].strip()
+
+    db_dir = Path(scan.DB_DIR)
+    on_disk = sorted(path.name for path in db_dir.glob("*.sql"))
+    problems: list[str] = []
+
+    for name in sorted(set(recorded) - set(on_disk)):
+        problems.append(f"{name}: in SHA256SUMS but absent from {db_dir.name}/")
+    for name in sorted(set(on_disk) - set(recorded)):
+        problems.append(f"{name}: in {db_dir.name}/ but absent from SHA256SUMS")
+    for name in sorted(set(on_disk) & set(recorded)):
+        actual = hashlib.sha256(
+            (db_dir / name).read_text(encoding="utf-8", errors="replace").encode("utf-8")
+        ).hexdigest()
+        if actual != recorded[name]:
+            problems.append(
+                f"{name}: content changed (recorded {recorded[name][:12]}, now {actual[:12]})"
+            )
+    return problems, len(recorded)
+
+
 def gate_flyway_validation() -> None:
+    """V9 §62 / §64：Flyway 接线与"冻结历史"两道判据。
+
+    判据一：``migrations/versioned/V*.sql`` 命名合法且版本号唯一
+    （Flyway 遇到重复版本会在启动时失败，而那时已经在部署窗口里了）。
+
+    判据二：归档脚本清单仍然为真（见 ``_archived_script_problems``）。
+    """
     gate = "flyway-validation"
     migrations = REPO / "migrations"
     if not migrations.exists():
@@ -849,8 +908,6 @@ def gate_flyway_validation() -> None:
         return
     versioned = sorted((migrations / "versioned").glob("V*.sql")) \
         if (migrations / "versioned").exists() else []
-    legacy = sorted((migrations / "legacy").glob("*.sql")) \
-        if (migrations / "legacy").exists() else []
     versions: list[str] = []
     problems: list[str] = []
     for path in versioned:
@@ -862,10 +919,16 @@ def gate_flyway_validation() -> None:
     duplicates = sorted({v for v in versions if versions.count(v) > 1})
     if duplicates:
         problems.append(f"duplicate versions: {duplicates}")
+
+    archived_problems, archived_count = _archived_script_problems()
+    problems.extend(archived_problems)
+
     if problems:
         report(gate, False, "; ".join(problems))
         return
-    report(gate, True, f"{len(versioned)} versioned + {len(legacy)} legacy scripts, versions unique")
+    report(gate, True,
+           f"{len(versioned)} versioned scripts (versions unique); "
+           f"{archived_count} archived scripts match migrations/legacy/SHA256SUMS")
 
 
 def gate_stream_ban_boundary_coverage() -> None:

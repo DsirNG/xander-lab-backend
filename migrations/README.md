@@ -37,7 +37,7 @@ migrations/
 ├── README.md                     本文件
 ├── legacy/                       历史 80 脚本的归档与审计（不执行）
 │   ├── AUDIT.md                  脚本审计报告（§64 step 3）
-│   └── SHA256SUMS                80 个脚本的校验和
+│   └── SHA256SUMS                80 个脚本的校验和（由门禁校验，见「硬规则」第 6 条）
 ├── versioned/                    基线之后的新迁移（§64 step 4）
 │   ├── V2026091500__baseline.sql
 │   ├── V2026091501__auth_refresh_session.sql
@@ -102,3 +102,9 @@ GRANT 脚本由 `docs/table-ownership.yaml` 生成，见 `grants/`。
 3. **业务服务不拿 DDL 权限**（§102 禁止项）。
 4. **Migration failure 阻断所有依赖新 schema 的服务发布**（§65）。
 5. **发布顺序**：先 migrate → 再部署服务（§65 / §96 第 1 步）。
+6. **`legacy/` 归档脚本不允许修改。** 它们**不会被重放**（基线取自线上 schema），
+   所以改动它们不会让任何构建或测试失败 —— 只会让"生产库当初执行了什么"
+   与仓库记录**静默分叉**。`legacy/SHA256SUMS` 是唯一凭据，由
+   `ci_gates.py flyway-validation` 校验（清单完整性 + 逐个哈希）。
+   ⚠️ 改了脚本要重新生成清单，而不是改哈希：`python scripts/migration/audit_legacy_sql.py`。
+   细节见 `docs/migration/flyway-strategy.md` §10。
