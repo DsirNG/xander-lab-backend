@@ -25,7 +25,8 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 ⚠️ **"8 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过多轮：
 `core-api` 加过 `UserLookupPort`（§3septies），`automation-api` 加过 `NotificationPort`（§3duodecies），
 `recitation-api` 加过 `RecitationQuizPort`（§3quaterdecies），
-`blogagent-api` 加过 `BlogAgentImagePort`（§3sexdecies）。
+`blogagent-api` 加过 `BlogAgentImagePort`（§3sexdecies），
+`integration-api` 加过 `CsdnBlogSyncPort` / `JuejinBlogSyncPort` + `BlogSyncResult`（§3novemdecies）。
 扩展是**零构建接线**的 —— 不新增模块，四处构建接线一处都不用改。
 `recitation-api` 是**第十刀**（§3terdecies），也是第一个"建新模块"的刀自 `automation-api` 之后；
 它的测验能力扩展是**第十一刀**（§3quaterdecies），又回到零接线。
@@ -39,9 +40,14 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 零构建接线（契约模块与 POM 一行没改），而收益是消费方**少了一个协作者**
 （它原来自己复制了一遍身份解析，`JwtUtil` 只为那一行而存在）；
 ⚠️ 顺带把 `dinqor-core-host` 送出了 Wave 2 强连通分量 —— 锁住它的只有这一条 1 语句的边。
+**第十六刀**（§3novemdecies）把 `agent -> integration` 的 2 条语句抽成
+`CsdnBlogSyncPort` / `JuejinBlogSyncPort`（**两个**端口，不是一个带 `platform` 参数的端口）+
+一个等价 DTO `BlogSyncResult` —— `agent` 的出边**全部归零**，
+⭐ **`dinqor-agent` 在实现层与 api 层都只剩 0 条边，彻底离开跨域边表**，
+它的抽取不再需要任何契约工作。
 
-⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十五刀）；
-`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第二十二刀）。
+⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十六刀）；
+`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第二十三刀）。
 两者都对，只是分母不同。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
@@ -67,7 +73,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | 契约模块 | 状态 | 内容 | 跨部署单元实现依赖的收益 |
 |---|---|---|---|
 | `content-api` | **已完成** | 第一刀：`BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits`。第二刀：`MediaAssetPort` `MediaAssetRef` `StoredImage`。第三刀：`ContentPostPort` `PublicationPort` `ContentPost` `ContentPostPage` `ContentPostInput` `ContentPostQuery` `ContentPostStatus` | 第一刀：`integration → publishing` 22 → 5；总计 −18 条跨单元 import。第二刀：`publishing ↔ blogagent` 环拆成单向；跨单元 −8。第三刀：`integration → publishing` 5 → 0（api 11 → 0）、`agent → publishing` 3 → 0、`profile → publishing` 1 → 0 —— **`publishing` 跨单元入边归零**；总计 **−9**（跨单元 −9） |
-| `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
+| `integration-api` | **已完成**（两刀） | 第二刀（§3quater）：`OssPort`（对象存储端口）`UploadResponse`。**第十六刀（§3novemdecies）再加 `CsdnBlogSyncPort` / `JuejinBlogSyncPort`（站外同步，各 2 个方法）+ `BlogSyncResult`（`PublishResult` 的等价 DTO）**。⚠️ 是**两个**端口而不是一个带 `platform` 参数的端口（§3novemdecies.2）；⚠️ 掘金那两个参数跨域**今天一律传 `null`** 但留在端口上（§3novemdecies.3） | 第二刀：`knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8**。第十六刀：`agent → integration` 2 → **0（边整条消失）**，`automation → integration` 6 → 5；总计再 **−3**（跨单元 −3）。⚠️ `api_statements` / `api_edges` **一条都没动**（这一刀全是 impl 语句）。图形状：**`dinqor-agent` 在实现层与 api 层都只剩 0 条边**，彻底离开跨域边表 |
 | `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）**；**`AccessTokenLookupPort`（访问令牌身份端口，第十四刀加；第十五刀接入第二个消费方）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；`agent → identity` **两条边归零**（2 → 0，第十四刀）；`integration → identity` **归零**（1 → 0，第十五刀）；跨部署单元累计 **−11**；总计 **−17** |
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
 | `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。**第九刀再加 `NotificationPort`（写一条持久化用户通知）+ 两个从实体搬来的常量**。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | 第八刀：`agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元。**第九刀（零接线扩展，§3duodecies）**：`knowledgebase → automation` 2 → **0（边整条消失）**，总计再 **−2**（跨单元 −2）；`api_statements` **16 → 16 不变**（消费方 import 的是 `.application` / `.domain`，从没碰过 `.api`）。图形状：`knowledgebase` 变成**纯汇点**（整个域从清单里消失）；`automation` 扇入只剩 `admin`（SSE，要框架类型）与 `integration`（模板真环） |
@@ -2810,6 +2816,204 @@ refresh 令牌返回 `null` 且**不查 Redis** / subject 非数字返回 `null`
 
 ---
 
+## 3novemdecies. 第十六刀：站外同步抽成 `CsdnBlogSyncPort` / `JuejinBlogSyncPort` —— `agent` 的出边全部归零，`dinqor-agent` 完全离开跨域边表
+
+> 契约刀次 = 第十六刀（ADR §16）。Wave 0B 总刀次 = **第二十三刀**（见 `v9-wave0a.md` §34）。
+
+### 3novemdecies.1 目标边：两条 import 都在**同一个文件**里
+
+`agent -> integration` 是 **2 条实现语句**，两条都在
+`agent.application.PublishPostTool`（第 13、14 行）：它直接 import 了
+`integration.mcp.csdn.application.CsdnBlogSyncService` 与
+`integration.mcp.juejin.application.JuejinBlogSyncService` —— 两个具体 `@Service` 类。
+
+⚠️ **本刀是 §3octodecies 的直接后续**：上一刀的"下一刀"第一条就写着
+"做完 **`agent` 的出边全部归零**"。`agent` 此前只剩这一条边，所以这一刀
+**把 `dinqor-agent` 从跨域边表里彻底划掉**。
+
+### 3novemdecies.2 ⚠️ 形状决定一：这是**两个**端口，不是一个带 `platform` 参数的端口
+
+第一直觉是一个端口加一个 `platform` 字符串参数。**否掉了**，三条理由：
+
+1. **参数表不同，合并就要么造假要么变宽。** 掘金要求自己的分类与标签 id
+   （`juejinCategoryId` / `juejinTagIds`），CSDN 没有这两个概念。合并成一个端口，
+   CSDN 那条路就必须收下两个它永远不用的参数（**端口变宽**），或者端口只带交集、
+   把掘金指定分类/标签的能力砍掉（**能力静默降级**，§2.3 禁止）。
+2. **域自己就是这么分的。** `integration` 域为两个平台各有一套
+   `*CredentialService` / `*BlogSyncService` / `*BlogSyncController` /
+   `*McpApplicationService`，两套凭证存储、两套限流。端口跟着域的真实分解走。
+3. **零适配器。** 每个端口的方法表与它对应实现类的公开方法**逐字相同**，
+   实现类加一句 `implements` 就够了 —— 不需要新增一个按平台字符串分派的中间类，
+   也就没有"分派写错只在运行时才炸"的新缝。
+
+**判据：合并只有当"合并后的签名对每一个实现都是它真正需要的形状"时才正确。**
+⚠️ 这偏离了 §3quater.5 草拟的单数名 `BlogSyncPort`（`CredentialPort` 同样是草稿单数、
+同样是两套）—— 草稿是在"还没看参数表"的时候写的。
+
+### 3novemdecies.3 ⚠️ 形状决定二：端口留住了跨域消费方"现在一律传 `null`"的那两个参数
+
+`JuejinBlogSyncPort.sync` 的 `juejinCategoryId` / `juejinTagIds`，在**两个跨域消费方**
+那里**今天全是 `null`**（`PublishPostTool` 与 `BlogPlanRunService` 各一处，都是 `(null, null)`）。
+
+按"没人用就砍掉"的直觉，这两个参数该删。**没删**，理由：
+
+- **同域的前端 HTTP 层会传真实值。** 跨进程之后，端口是那条路径**唯一能穿过**的形状 ——
+  砍掉参数等于把 HTTP 路径的能力一起砍掉。
+- ⇒ **判据：一个参数该不该留在端口上，看"它有没有具名消费方"，不看"它现在有没有跨域消费方"。**
+  砍掉一个"今天没人传"的参数，就是让能力在拆服务时**静默消失**（§2.3）。
+
+### 3novemdecies.4 ⚠️ 形状决定三：契约不许依赖契约 ⇒ `BlogSyncResult` 是 `PublishResult` 的等价 DTO
+
+端口返回的平台结果，实现类手里的是 `content-api` 的 `PublishResult`
+（`platform` / `externalId` / `url`）。**契约不许依赖契约**（ADR-2）⇒
+`integration-api` 自带一个 `BlogSyncResult`，**分量名与顺序逐字相同**。
+
+这是**第二次**遇到同一个形状（第一次是 `ModelUsage` → `TokenUsage`，
+第三次是 `ModelUsage` → `BlogAgentImageUsage`）。
+
+- **换算落在一处**：实现类里的私有 `toContract`，三个分量**逐个具名**写出
+  （都是 `String`，按位置写会编译通过、换位只在运行时才炸）。
+- ⚠️ **两份投影必须一起改**，而且"两个投影在共享字段上相等"的断言
+  **只能写在实现类的测试里** —— 只有实现类同时看得见两个类型。
+
+### 3novemdecies.5 ⚠️ 代价：实现类必须改返回类型，于是同域 **5 个**消费方跟着改
+
+Java 不许"同名同参、只差返回值"的重载 ⇒ `sync` / `findSucceeded` 只能返回契约的
+`BlogSyncResult`，实现类的**公开方法签名**跟着变，于是同域消费方也要跟着换类型：
+
+| 消费方 | 改动 |
+|---|---|
+| `CsdnBlogSyncController` | `Result<PublishResult>` → `Result<BlogSyncResult>` |
+| `JuejinBlogSyncController` | 同上 |
+| `CsdnMcpApplicationService` | `syncOwnedPost` 的返回类型 |
+| `JuejinMcpApplicationService` | `publishArticle` / `syncOwnedPost` |
+| `DualPublishMcpApplicationService` | 局部变量类型 |
+
+⚠️ **`grep` 的目标要选"那个类型"而不是"那个类"。** 第一遍按服务类名找只得到 4 个消费方；
+编译前按 `PublishResult` 再 `grep` 一次，才多出 `DualPublishMcpApplicationService`
+（它调 `CsdnMcpApplicationService.syncOwnedPost`，自己不是 SyncService 的消费方）。
+
+### 3novemdecies.6 ⭐ 实测收益：`dinqor-agent` 完全离开跨域边表
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 29 | **26** |
+| `implementation_edges` | 13 | **12** |
+| `cross_deployment_unit_statements` | 12 | **9** |
+| `cross_deployment_unit_edges` | 6 | **5** |
+| `api_statements` | 9 | 9（不动） |
+| `api_edges` | 6 | 6（不动） |
+
+`agent -> integration` **整条边消失**，`automation -> integration` 6 → 5。
+
+⭐⭐ **`dinqor-agent` 现在在实现层**出边 0、入边 0**，在 api 层同样一条边都没有** ——
+它不再出现在边表里。⇒ **`dinqor-agent` 的抽取不再需要任何契约工作**，
+`deployment-unit-coupling` 的分量只剩 `{content-automation, core-host, platform-integration}`。
+
+### 3novemdecies.7 测试
+
+两个 SyncService 改造前**没有自己的测试**（只被 `PublishPostToolTest` 间接覆盖）。
+它们现在是契约端口的实现，所以补了两个测试类：
+
+| 测试类 | 用例 | 钉住什么 |
+|---|---|---|
+| `CsdnBlogSyncServiceTest` | 7 | 两份投影的换算；幂等键的**负号**；取 `categoryName` 而不是 `category`；软删与不存在同路径拒绝；`postId == null` 短路 |
+| `JuejinBlogSyncServiceTest` | 10 | 同上 + 标签回落（`null` 与**空列表**都回落）与分类直通 |
+
+契约侧三个测试类（`BlogSyncResultTest` 4 / `CsdnBlogSyncPortTest` 6 / `JuejinBlogSyncPortTest` 7）
+与一个共用的 `ContractShape`（与 `blogagent-api` 那个同名类是同一条判据的第二次落地 ——
+两个契约模块在 test scope 上互不可见，只能各带一份）。
+
+| 计数 | 前 | 后 |
+|---|---|---|
+| `contracts/integration-api` | 3 | **20** |
+| `apps/core-host` | 1194 | **1212** |
+| 全反应堆 | 1420 | **1455**（0 fail） |
+| 26 门禁 | 24 pass / 0 fail / 2 skip | 24 pass / 0 fail / 2 skip |
+| `contract-dependency-boundary` | 8 模块 / 58 源文件 | 8 模块 / **61** 源文件 |
+
+⚠️ **`PortDelegationTransactionTest.theAuditedClassListIsComplete` 先红了。**
+加完 `implements` 还没跑注入，它就报"端口实现类的清单与实际不符" ——
+类路径扫描发现了两个没被审到的实现。**这是那条双向完整性判据第二次当场付费**
+（第一次是逮到漏写 `RecitationService`）。已把两个类加进 `PORT_IMPLEMENTATIONS`，
+并同步类注释里"全仓 N 个端口实现"的计数（15 → 17）。
+
+### 3novemdecies.8 注入验证：九次，其中三次**第一遍量不到 core-host**
+
+| # | 注入 | 契约模块红 | `core-host` 红 | 合计 |
+|---|---|---|---|---|
+| A | 消费方不再传 `(null, null)`，把文章分类塞进掘金分类参数 | 0 | 2 | 2 |
+| B | CSDN 幂等键丢掉负号（`-postId` → `postId`，与本站发布撞键） | 0 | 2 | 2 |
+| C | CSDN 取 `category` 而不是 `categoryName`（相邻的两个 `String`） | 0 | 2 | 2 |
+| D | 两份投影的换算把 `platform` 与 `url` 对调（三个 `String`） | 0 | 4 | 4 |
+| E | CSDN `findSucceeded` 丢掉 `postId == null` 短路（下一句要算 `-postId`，NPE） | 0 | 2 | 2 |
+| F | 掘金不再用调用方给的 tag id，一律回落到文章自己的标签 | 0 | 2 | 2 |
+| G | 端口加一个 `default` 方法（不通知任何实现就扩大契约面） | **6** | 0 | 6 |
+| H | 端口首参名字改成 `postId`（类型仍是 `Long`，只断言类型会绿着过） | **2** | 0 | 2 |
+| I | `BlogSyncResult` 把 `url` 与 `externalId` 两个分量对调 | **4** | **7** | 11 |
+
+**⚠️ G / H / I 的 `core-host` 列是第一遍量不到的，原因不是测试弱，是量法：**
+
+- `contracts/integration-api` 在反应堆里排在 `apps/core-host` **前面**。契约模块一红，
+  `core-host` 的测试**一个都没跑**。
+- 加 `-fae` **不够**：`-fae` 只续跑"**不依赖**失败模块"的模块，而 `core-host`
+  恰恰依赖 `integration-api`，照样被跳过。第一遍（无 `-fae`）G/H/I 报 3 / 1 / 2，
+  第二遍（`-fae`）报 6 / 2 / 4 —— **都只是契约模块那一半**。
+- **修法**：把 `-Dtest` 收窄到 `core-host` 自己的四个测试类，让契约模块
+  **一个测试都匹配不到**（因此永远不会红）。补测结果：**G = 0、H = 0、I = 7**。
+  ⚠️ 这时契约模块连 `Tests run` 行都不打印 ⇒ **"没有汇总行"必须判成"0 个测试"，
+  不是"编译失败"**（第一版脚本混了这两件事，报了个假的 `-1`）。
+
+这条量法本身值得记，因为它给的是**假的低分**：只由契约模块反射测试守着的注入
+（G / H）看起来"只影响 6 个 / 2 个测试"，真正的影响面是**所有实现方与所有消费方**。
+
+**⭐ 顺带确认**：G / H 在 `core-host` 侧**真的是 0** —— 端口加 `default` 方法、
+端口首参改名，消费方的 Mockito 桩**一个都不动**（Mockito 按位置匹配，实现类自己声明参数名，
+都不看接口的参数名）。⇒ 这两个形状**只有契约模块的反射测试在守**，
+`assertNoDefaultMethods` / `assertFirstParameterIsTheCallerId` 不是锦上添花，是**唯一**的守卫。
+
+⚠️ **两个把这次测量卡住的工具坑**（已写进 `notes/repo-workflow.md`）：
+①**`sha1sum` ≠ `git hash-object`**（前者对原始字节、后者对 `blob <len>\0` + 内容且做 CRLF→LF 归一，
+同一文件两个值 `60a4fe6b…` / `5c7408d4…`）⇒ 还原判据要写清用哪个算法、全程只用同一个；
+②**注入脚本不要自己起 `bash`**（沙箱里 `subprocess("bash", ...)` 解析成 WSL 的 `bash.exe`，
+被程序黑名单拦掉、脚本静默退出），改成脚本只改文件、`mvn` 由外层 shell 跑。
+
+### 3novemdecies.9 为什么没有加 `contract-changes.yaml` 条目
+
+与 §3septdecies.9 / §3octodecies.9 同一条理由：**线上形状没变**。
+两个 HTTP 控制器的响应类型从 `Result<PublishResult>` 变成 `Result<BlogSyncResult>`，
+但两份 record 的分量名与顺序逐字相同（`platform` / `externalId` / `url`），
+Jackson 按分量名序列化 ⇒ **JSON 逐字节不变**。
+
+⇒ **判据是"线上 JSON 变了没有"，不是"Java 类型名变了没有"。**
+`contract-changes-completeness` 仍报 14 条，`api-migration-key-coverage` 仍报
+213 条覆盖全部路由 —— 两条都 PASS。
+
+### 3novemdecies.10 刻意没做的事
+
+- **`automation → integration` 的剩下 5 条没碰。** 卡在 `CsdnCredentialService` /
+  `JuejinCredentialService` / `MailService` 上，与本刀不是同一种形状
+  （凭证服务的端口形状还没设计；`MailService` 卡在
+  `automation.domain.EmailReminderMailTemplates` 这个**反向依赖**上，要改 API 而不是加端口）。
+- **两个 SyncService 的 `toContract` 私有助手没有合并成共用的工具类。**
+  两个类分属两个包，共用要么新开一个公共包、要么放宽可见性。三行 × 2 的重复比一个新缝便宜。
+- **没有顺手收窄 `PublishResult`。** 它是 `content-api` 的既有契约，本刀只是多了一个读者。
+
+### 3novemdecies.11 下一刀
+
+剩余跨单元实现边（**5 条**）：`automation → integration` 5、`admin → automation` 1、
+`identity → integration` 1、`integration → automation` 1、`studio → blogagent` 1。
+
+1. **`studio → blogagent`（1）** —— 先侦察，可能很便宜。
+2. **`automation → integration`（5）** —— 目前最大；2 条是凭证服务（要新设计端口形状），
+   1 条是 `MailService`（卡在邮件模板的反向依赖上，要改 API 而不是加端口）。
+3. **`admin → automation`（1）** —— 需要 SSE 广播端口。
+4. **`identity → integration`（1）** —— 与 `integration → automation` 构成**真环**，要一起看。
+
+⚠️ **`dinqor-agent` 已经可以从边表里划掉**（§3novemdecies.6）—— 它的抽取不再需要任何契约工作。
+
+---
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`
@@ -3093,6 +3297,15 @@ python scripts/migration/ci_gates.py
 后面的模块根本不跑。所以在反应堆里跑注入验证，只能证明"没有别的模块先炸"，
 不能证明"只有那个测试类红" —— 得用 `-pl contracts/content-api test` 单独跑一次。
 
+⚠️ **`-fae` 救不了"依赖方"**（§3novemdecies.8 实测）。`mvn -fae test` 只续跑
+"**不依赖**失败模块"的模块；`apps/core-host` 依赖 `contracts/integration-api`，
+所以契约模块一红，`core-host` 照样被整块跳过 —— 契约侧注入**永远量不到 core-host**，
+记下的红数是**下界**。修法是把 `-Dtest` 收窄到**依赖方自己的测试类**，
+让契约模块**一个测试都匹配不到**（因此永远不会红）。⚠️ 此时契约模块连 `Tests run`
+行都不打印 ⇒ **"没有汇总行"必须判成"0 个测试"，不是"编译失败"**。
+⚠️ 另：**`sha1sum` ≠ `git hash-object`**（前者对原始字节、后者对 `blob <len>\0` + 内容
+且先做 CRLF→LF 归一），还原判据必须写清用哪一个、全程只用同一个。
+
 `shared-kernel-classification`：`libs/` 与 `contracts/` 实际提供的每个
 `com.xander.lab.<pkg>` 包都必须在 `SHARED_KERNEL` 里。见 §6 的说明与注入验证。
 
@@ -3145,7 +3358,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **12** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → 15 → 13 → **12**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` 9/9、`identity` **8**/**0**、`blogagent` 5/3、`automation` 2/2、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）、**`agent → identity` 已归零**（2/0 → 0/0，见 §3septdecies）、**`integration → identity` 已归零**（1/0 → 0/0，见 §3octodecies）⇒ **`identity` 作为目标域的跨单元边全部归零**（剩余 8 条 impl 全是同单元边：`virtualpay` 5 / `admin` 2 / `profile` 1）。⚠️ `agent` 作为**来源域**只剩 1 条出边（`agent → integration` 2 条）、`integration` 也只剩 1 条出边（`integration → automation` 1 条）。当前最大的跨单元边是 `automation -> integration` 6 条（卡在 `MailService`，§3quater.5） | Wave 0B 剩余 |
+| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **9** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → 15 → 13 → 12 → **9**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` **6/6**、`blogagent` 5/1、`identity` **8**/**0**、`publishing` 4/**0**、`automation` 2/2、`virtualpay` 1/0、`admin` 0/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）、**`agent → identity` 已归零**（2/0 → 0/0，见 §3septdecies）、**`integration → identity` 已归零**（1/0 → 0/0，见 §3octodecies）⇒ **`identity` 作为目标域的跨单元边全部归零**（剩余 8 条 impl 全是同单元边：`virtualpay` 5 / `admin` 2 / `profile` 1）。**`agent → integration` 已归零**（2/0 → 0/0，见 §3novemdecies）⇒ ⭐ **`agent` 作为来源域在实现层与 api 层都一条出边都没有了**。⚠️ 当前最大的跨单元边是 `automation -> integration` **5** 条（卡在 `MailService` 与两个凭证服务，§3quater.5 / §3novemdecies.10） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

@@ -7,10 +7,10 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 29
-  implementation_edges: 13
-  cross_deployment_unit_statements: 12
-  cross_deployment_unit_edges: 6
+  implementation_statements: 26
+  implementation_edges: 12
+  cross_deployment_unit_statements: 9
+  cross_deployment_unit_edges: 5
   api_statements: 9
   api_edges: 6
   shared_kernel_sources:
@@ -35,7 +35,7 @@ edges:
     to_unit: dinqor-platform-integration
     crosses_deployment_unit: true
     api_statements: 0
-    implementation_statements: 6
+    implementation_statements: 5
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogContentPlanService.java
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogPlanRunService.java
@@ -71,15 +71,6 @@ edges:
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminUserController.java
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
-  - from: agent
-    to: integration
-    from_unit: dinqor-agent
-    to_unit: dinqor-platform-integration
-    crosses_deployment_unit: true
-    api_statements: 0
-    implementation_statements: 2
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
   - from: automation
     to: publishing
     from_unit: dinqor-content-automation

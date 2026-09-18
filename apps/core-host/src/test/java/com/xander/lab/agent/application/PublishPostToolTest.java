@@ -9,9 +9,9 @@ import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.content.api.ContentPost;
 import com.xander.lab.content.api.ContentPostPort;
 import com.xander.lab.content.api.ContentPostStatus;
-import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
-import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
-import com.xander.lab.content.api.PublishResult;
+import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.integration.api.CsdnBlogSyncPort;
+import com.xander.lab.integration.api.JuejinBlogSyncPort;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +29,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * {@link PublishPostTool} 的两条本地文章来源。
+ * {@link PublishPostTool} 的两条本地文章来源与两条站外同步出口。
  *
  * <p>本工具有两条取文章的路：{@code taskId} 走 {@link BlogAgentPort}（返回契约类型
  * {@link BlogAgentPostView}），{@code postId} 走 {@link ContentPostPort}（返回契约类型
@@ -39,7 +39,13 @@ import static org.mockito.Mockito.when;
  *
  * <p>⚠️ 本类 mock 的是<b>端口</b>而不是 {@code BlogAgentService}，而且 {@code 42L}（userId）
  * 与 {@code 9L}（taskId）保持**互不相同** —— 端口是 {@code (userId, taskId)}、域侧是
- * {@code (taskId, userId)}，两个字面量一旦相同，换位写反就没有任何断言会红。</p>
+ * {@code (taskId, userId)}，两个字面量一旦相同，换位写反就没有任何断言会红。
+ * 站外同步同理 mock {@link CsdnBlogSyncPort} / {@link JuejinBlogSyncPort} 而不是
+ * {@code integration} 域那两个具体 {@code @Service}。</p>
+ *
+ * <p>⚠️ {@code findSucceeded} 用 {@code null} 表示"没有成功记录"，所以凡是断言"查不到"的用例
+ * 都<b>显式</b> stub 成 {@code null}：Mockito 对未 stub 的返回给的是包装类型的零值，
+ * 这条测试今天靠"返回类型是自定义对象 ⇒ 默认就是 null"侥幸成立，写出来才不依赖这个巧合。</p>
  */
 class PublishPostToolTest {
 
@@ -61,7 +67,7 @@ class PublishPostToolTest {
                 });
         PublishPostTool tool = new PublishPostTool(
                 blogAgentPort, mock(ContentPostPort.class),
-                mock(CsdnBlogSyncService.class), mock(JuejinBlogSyncService.class),
+                mock(CsdnBlogSyncPort.class), mock(JuejinBlogSyncPort.class),
                 mock(BillingPort.class));
         tool.execute(USER_ID,
                 JsonNodeFactory.instance.objectNode().put("taskId", TASK_ID), new RecordingProgress());
@@ -78,7 +84,7 @@ class PublishPostToolTest {
 
         PublishPostTool tool = new PublishPostTool(
                 blogAgentPort, mock(ContentPostPort.class),
-                mock(CsdnBlogSyncService.class), mock(JuejinBlogSyncService.class), billing);
+                mock(CsdnBlogSyncPort.class), mock(JuejinBlogSyncPort.class), billing);
         JsonNode result = tool.execute(USER_ID,
                 JsonNodeFactory.instance.objectNode().put("taskId", TASK_ID), new RecordingProgress());
 
@@ -99,14 +105,14 @@ class PublishPostToolTest {
         ContentPostPort contentPostPort = mock(ContentPostPort.class);
         ContentPost post = contractPost(5L, "CSDN 同步", "摘要", "正文", false, false);
         when(contentPostPort.findOwned(USER_ID, 5L)).thenReturn(post);
-        CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
+        CsdnBlogSyncPort csdn = mock(CsdnBlogSyncPort.class);
         when(csdn.sync(eq(USER_ID), eq(5L)))
-                .thenReturn(new PublishResult("csdn", "123", "https://csdn.example.com/123"));
+                .thenReturn(new BlogSyncResult("csdn", "123", "https://csdn.example.com/123"));
         BillingPort billing = mock(BillingPort.class);
 
         PublishPostTool tool = new PublishPostTool(
                 mock(BlogAgentPort.class), contentPostPort, csdn,
-                mock(JuejinBlogSyncService.class), billing);
+                mock(JuejinBlogSyncPort.class), billing);
         JsonNode result = tool.execute(USER_ID,
                 JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn"),
                 new RecordingProgress());
@@ -120,6 +126,39 @@ class PublishPostToolTest {
     }
 
     /**
+     * 掘金分支走的是<b>另一个</b>端口，而且参数表与 CSDN 不同：多两个掘金专有的分类/标签。
+     *
+     * <p>本工具传的是 {@code (null, null)} —— "用文章自己的分类与标签名，由发布器解析成
+     * 掘金 tag_id"。这条断言把这两个 {@code null} <b>逐字钉住</b>：
+     * 谁把它们换成文章自己的分类/标签值，掘金的解析路径就变了，
+     * 而这里的字面量比较会先红。端口上之所以保留这两个参数而不是砍掉，也是这条测试的另一半理由
+     * （同域的前端 HTTP 层会传真实值，见 {@link JuejinBlogSyncPort} 的类注释）。</p>
+     */
+    @Test
+    void syncsExistingPostToJuejinWithTheArticlesOwnCategoryAndTags() {
+        ContentPostPort contentPostPort = mock(ContentPostPort.class);
+        when(contentPostPort.findOwned(USER_ID, 6L))
+                .thenReturn(contractPost(6L, "掘金同步", "摘要", "正文", false, false));
+        JuejinBlogSyncPort juejin = mock(JuejinBlogSyncPort.class);
+        when(juejin.sync(USER_ID, 6L, null, null))
+                .thenReturn(new BlogSyncResult("juejin", "jj-6", "https://juejin.cn/post/6"));
+        BillingPort billing = mock(BillingPort.class);
+
+        PublishPostTool tool = new PublishPostTool(mock(BlogAgentPort.class), contentPostPort,
+                mock(CsdnBlogSyncPort.class), juejin, billing);
+        JsonNode result = tool.execute(USER_ID,
+                JsonNodeFactory.instance.objectNode().put("postId", 6L).put("platform", "juejin"),
+                new RecordingProgress());
+
+        assertThat(result.path("ok").asBoolean()).isTrue();
+        assertThat(result.path("externalId").asText()).isEqualTo("jj-6");
+        assertThat(result.path("url").asText()).isEqualTo("https://juejin.cn/post/6");
+        assertThat(result.path("hint").asText()).contains("juejin");
+        verify(juejin).sync(USER_ID, 6L, null, null);
+        verify(billing).chargeFlat(eq(USER_ID), eq("juejin-publish"), any(), any(), anyLong(), any());
+    }
+
+    /**
      * 幂等分支读的是 {@code csdnSynced} —— {@link ContentPost} 里 {@code csdnSynced} 与
      * {@code juejinSynced} 是相邻的 {@code Boolean}，位置写反不会编译报错，只会让本工具
      * 对着掘金的状态判 CSDN 的幂等。分量顺序由 {@code ContentPostTest} 钉住。
@@ -129,12 +168,12 @@ class PublishPostToolTest {
         ContentPostPort contentPostPort = mock(ContentPostPort.class);
         when(contentPostPort.findOwned(USER_ID, 5L))
                 .thenReturn(contractPost(5L, "已同步", null, null, true, false));
-        CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
+        CsdnBlogSyncPort csdn = mock(CsdnBlogSyncPort.class);
         BillingPort billing = mock(BillingPort.class);
 
         PublishPostTool tool = new PublishPostTool(
                 mock(BlogAgentPort.class), contentPostPort, csdn,
-                mock(JuejinBlogSyncService.class), billing);
+                mock(JuejinBlogSyncPort.class), billing);
         JsonNode result = tool.execute(USER_ID,
                 JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn"),
                 new RecordingProgress());
@@ -149,7 +188,7 @@ class PublishPostToolTest {
     void rejectsMissingTaskAndPost() {
         PublishPostTool tool = new PublishPostTool(
                 mock(BlogAgentPort.class), mock(ContentPostPort.class),
-                mock(CsdnBlogSyncService.class), mock(JuejinBlogSyncService.class),
+                mock(CsdnBlogSyncPort.class), mock(JuejinBlogSyncPort.class),
                 mock(BillingPort.class));
         assertThatThrownBy(() -> tool.execute(USER_ID,
                 JsonNodeFactory.instance.objectNode(), new RecordingProgress()))
@@ -162,11 +201,11 @@ class PublishPostToolTest {
         ContentPostPort contentPostPort = mock(ContentPostPort.class);
         when(contentPostPort.findOwned(USER_ID, 5L))
                 .thenReturn(contractPost(5L, "CSDN 同步", null, null, false, false));
-        CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
+        CsdnBlogSyncPort csdn = mock(CsdnBlogSyncPort.class);
         when(csdn.findSucceeded(USER_ID, 5L))
-                .thenReturn(new PublishResult("csdn", "123", "https://csdn.example.com/123"));
+                .thenReturn(new BlogSyncResult("csdn", "123", "https://csdn.example.com/123"));
         PublishPostTool tool = new PublishPostTool(mock(BlogAgentPort.class), contentPostPort, csdn,
-                mock(JuejinBlogSyncService.class), mock(BillingPort.class));
+                mock(JuejinBlogSyncPort.class), mock(BillingPort.class));
 
         JsonNode result = tool.reconcile(new AgentToolContext(USER_ID, 7L, 3L, "invocation-1"),
                 JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn"))
@@ -181,9 +220,11 @@ class PublishPostToolTest {
         ContentPostPort contentPostPort = mock(ContentPostPort.class);
         when(contentPostPort.findOwned(USER_ID, 5L))
                 .thenReturn(contractPost(5L, "CSDN 同步", null, null, false, false));
-        CsdnBlogSyncService csdn = mock(CsdnBlogSyncService.class);
+        CsdnBlogSyncPort csdn = mock(CsdnBlogSyncPort.class);
+        // 显式 stub 成 null：契约用 null 表示"没有成功记录"，不靠 Mockito 的默认值。
+        when(csdn.findSucceeded(USER_ID, 5L)).thenReturn(null);
         PublishPostTool tool = new PublishPostTool(mock(BlogAgentPort.class), contentPostPort, csdn,
-                mock(JuejinBlogSyncService.class), mock(BillingPort.class));
+                mock(JuejinBlogSyncPort.class), mock(BillingPort.class));
 
         assertThat(tool.reconcile(new AgentToolContext(USER_ID, 7L, 3L, "invocation-1"),
                 JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn")))
@@ -203,7 +244,7 @@ class PublishPostToolTest {
         when(blogAgentPort.findPublishedPost(eq(USER_ID), eq(TASK_ID)))
                 .thenReturn(generatedPost(TASK_ID, "已发布", ContentPostStatus.PUBLISHED));
         PublishPostTool tool = new PublishPostTool(blogAgentPort, mock(ContentPostPort.class),
-                mock(CsdnBlogSyncService.class), mock(JuejinBlogSyncService.class),
+                mock(CsdnBlogSyncPort.class), mock(JuejinBlogSyncPort.class),
                 mock(BillingPort.class));
 
         JsonNode result = tool.reconcile(new AgentToolContext(USER_ID, 7L, 3L, "invocation-1"),

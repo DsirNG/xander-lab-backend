@@ -15,8 +15,9 @@ import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
+import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.integration.api.JuejinBlogSyncPort;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
-import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.publishing.application.BlogService;
@@ -51,7 +52,7 @@ public class BlogPlanRunService {
     private final BlogService blogService;
     private final CsdnCredentialService csdnCredentialService;
     private final JuejinCredentialService juejinCredentialService;
-    private final JuejinBlogSyncService juejinBlogSyncService;
+    private final JuejinBlogSyncPort juejinBlogSyncPort;
     private final BlogPlanSseService sseService;
     private final RecitationMaterialPort materialPort;
     private final TransactionTemplate transactionTemplate;
@@ -264,7 +265,14 @@ public class BlogPlanRunService {
 
     /** Best-effort 掘金 sync: mirrors the locally published post to the user's
      * 掘金 account. A 掘金 failure never fails the run; the run stays SUCCEEDED
-     * with the failure recorded on the run row plus a notification. */
+     * with the failure recorded on the run row plus a notification.
+     *
+     * <p>走 {@link JuejinBlogSyncPort} 而不是 {@code integration} 域的具体 {@code @Service}：
+     * 本类在 {@code dinqor-content-automation}、实现在 {@code dinqor-platform-integration}。
+     * 本类是这个端口的<b>第二个</b>跨域消费方（第一个是 {@code agent} 的
+     * {@code PublishPostTool}）—— 接入代价只是换一个注入类型，端口、POM、构建接线一处没动，
+     * 这是对"端口按能力归位、不按第一个调用方归位"这条判据最诚实的检验。
+     * 两个 {@code null} 与 {@code PublishPostTool} 传的一样：用文章自己的分类与标签名。</p> */
     private void publishJuejin(Long runId, BlogContentPlan plan) {
         Long userId = plan.getUserId();
         if (!juejinCredentialService.isAuthorized(userId)) {
@@ -277,7 +285,7 @@ public class BlogPlanRunService {
             if (run.getLocalPostId() == null) {
                 throw new IllegalStateException("本地文章不存在，无法同步掘金");
             }
-            PublishResult result = juejinBlogSyncService.sync(
+            BlogSyncResult result = juejinBlogSyncPort.sync(
                     userId, run.getLocalPostId(), null, null);
             transactionTemplate.executeWithoutResult(status -> {
                 BlogPlanRun latest = requireRun(runId);

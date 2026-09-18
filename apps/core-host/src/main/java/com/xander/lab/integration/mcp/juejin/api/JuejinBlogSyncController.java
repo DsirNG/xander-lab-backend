@@ -2,8 +2,8 @@ package com.xander.lab.integration.mcp.juejin.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.auth.core.UserContext;
+import com.xander.lab.integration.api.BlogSyncResult;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
-import com.xander.lab.content.api.PublishResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,7 +28,7 @@ public class JuejinBlogSyncController {
      * are resolved to Juejin tag ids via the synced category/tag catalog.
      */
     @PostMapping("/{postId}/sync/juejin")
-    public Result<PublishResult> sync(@PathVariable Long postId,
+    public Result<BlogSyncResult> sync(@PathVariable Long postId,
                                       @RequestBody(required = false) Map<String, Object> body) {
         List<String> tagIds = null;
         if (body != null && body.get("juejinTagIds") instanceof List<?> tags) {

@@ -10,9 +10,9 @@ import com.xander.lab.blogagent.spi.BlogAgentPostView;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.content.api.ContentPost;
 import com.xander.lab.content.api.ContentPostPort;
-import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
-import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
-import com.xander.lab.content.api.PublishResult;
+import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.integration.api.CsdnBlogSyncPort;
+import com.xander.lab.integration.api.JuejinBlogSyncPort;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -36,24 +36,31 @@ import java.util.Optional;
  * <b>不为了统一返回类型把整个 {@code BlogPostVO}（17 个字段）搬上端口</b>。
  * 归一放在工具内部而不是端口上，是因为 {@code LocalPost} 是**本工具的概念**
  * （"一条本地文章，来源不限"），把它塞进 blogagent 的契约等于让 blogagent 替内容域发言。</p>
+ *
+ * <p>站外同步走两个端口（{@link CsdnBlogSyncPort} / {@link JuejinBlogSyncPort}）而不是
+ * {@code integration} 域那两个具体 {@code @Service}：本工具在 {@code dinqor-agent}，
+ * 实现类在 {@code dinqor-platform-integration}，拆完是两个进程。
+ * 本工具<b>是这两个端口的第一个跨域消费方</b>，第二个是
+ * {@code automation} 的 {@code BlogPlanRunService}（掘金那条）—— 端口按能力归在
+ * {@code integration-api}，不按第一个调用方归位，所以第二个消费方接入的代价只是换个注入类型。</p>
  */
 @Component
 public class PublishPostTool implements AgentTool {
 
     private final BlogAgentPort blogAgentPort;
     private final ContentPostPort contentPostPort;
-    private final CsdnBlogSyncService csdnBlogSyncService;
-    private final JuejinBlogSyncService juejinBlogSyncService;
+    private final CsdnBlogSyncPort csdnBlogSyncPort;
+    private final JuejinBlogSyncPort juejinBlogSyncPort;
     private final BillingPort billingPort;
 
     public PublishPostTool(BlogAgentPort blogAgentPort, ContentPostPort contentPostPort,
-                           CsdnBlogSyncService csdnBlogSyncService,
-                           JuejinBlogSyncService juejinBlogSyncService,
+                           CsdnBlogSyncPort csdnBlogSyncPort,
+                           JuejinBlogSyncPort juejinBlogSyncPort,
                            BillingPort billingPort) {
         this.blogAgentPort = blogAgentPort;
         this.contentPostPort = contentPostPort;
-        this.csdnBlogSyncService = csdnBlogSyncService;
-        this.juejinBlogSyncService = juejinBlogSyncService;
+        this.csdnBlogSyncPort = csdnBlogSyncPort;
+        this.juejinBlogSyncPort = juejinBlogSyncPort;
         this.billingPort = billingPort;
     }
 
@@ -121,11 +128,11 @@ public class PublishPostTool implements AgentTool {
                 .put("title", defaultText(local.title(), ""))
                 .put("platform", platform);
         if ("csdn".equals(platform)) {
-            PublishResult result = csdnBlogSyncService.findSucceeded(context.userId(), local.id());
+            BlogSyncResult result = csdnBlogSyncPort.findSucceeded(context.userId(), local.id());
             if (result == null) return Optional.empty();
             fillPlatformResult(outcome, result);
         } else if ("juejin".equals(platform)) {
-            PublishResult result = juejinBlogSyncService.findSucceeded(context.userId(), local.id());
+            BlogSyncResult result = juejinBlogSyncPort.findSucceeded(context.userId(), local.id());
             if (result == null) return Optional.empty();
             fillPlatformResult(outcome, result);
         } else if (local.status() == null || local.status() != 1) {
@@ -169,7 +176,7 @@ public class PublishPostTool implements AgentTool {
                     return outcome;
                 }
                 onProgress.onProgress("正在同步到 CSDN…");
-                PublishResult result = csdnBlogSyncService.sync(userId, local.id());
+                BlogSyncResult result = csdnBlogSyncPort.sync(userId, local.id());
                 chargePlatformPublish(userId, BillingBiz.CSDN_PUBLISH, local.id(), "CSDN 发布成功");
                 fillPlatformResult(outcome, result);
             } else if ("juejin".equals(platform)) {
@@ -178,7 +185,9 @@ public class PublishPostTool implements AgentTool {
                     return outcome;
                 }
                 onProgress.onProgress("正在同步到掘金…");
-                PublishResult result = juejinBlogSyncService.sync(userId, local.id(), null, null);
+                // 两个 null 是"用文章自己的分类与标签名"：与 BlogPlanRunService 传的一样，
+                // 也是端口上保留那两个参数的掘金特有能力的默认用法。
+                BlogSyncResult result = juejinBlogSyncPort.sync(userId, local.id(), null, null);
                 chargePlatformPublish(userId, BillingBiz.JUEJIN_PUBLISH, local.id(), "掘金发布成功");
                 fillPlatformResult(outcome, result);
             } else {
@@ -225,7 +234,7 @@ public class PublishPostTool implements AgentTool {
                 post.csdnSynced(), post.juejinSynced());
     }
 
-    private void fillPlatformResult(ObjectNode outcome, PublishResult result) {
+    private void fillPlatformResult(ObjectNode outcome, BlogSyncResult result) {
         if (result == null) return;
         outcome.put("externalId", defaultText(result.externalId(), ""));
         outcome.put("url", defaultText(result.url(), ""));

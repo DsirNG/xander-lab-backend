@@ -662,6 +662,10 @@ public EmailReminderView create(Long userId, EmailReminderDraft draft) {
 ②**委托必须带注解**（判据是"方法体是否只有一次同类自调用"，不是"名字是否在某张表里"）；
 ③**反向 sanity**（确认真的扫到了类）。
 ⚠️ 完整性那条**当场就还了本钱**：加 `RecitationService` 时忘了列进清单，全量跑时正是它变红。
+**第二次付费**（2026-09-18 第十六刀）：`CsdnBlogSyncService` / `JuejinBlogSyncService` 加上
+`implements <契约端口>` 之后，还没跑注入就先被它拦住 ——
+报"端口实现类的清单与实际不符"。**动作**：把新实现类加进 `PORT_IMPLEMENTATIONS`
+（含 import），并同步类注释里那句"全仓 N 个端口实现"的计数。
 
 （先例：2026-09-17 第十刀，`EmailReminderService` 2 处 + `BlogContentPlanService` 3 处共 5 个方法缺注解。
 详见 `adr-contract-boundaries.md` §9.8 / §9.9。）
@@ -701,6 +705,60 @@ public EmailReminderView create(Long userId, EmailReminderDraft draft) {
 对调时，它会和"逐字段落点"测试**同时**变红，而工具侧与前端侧的测试全绿
 （2026-09-17 第十一刀实测）。**凡新增一份投影都要配一条**（`ContentPost` / `MediaAssetRef`
 收窄时会再次遇到）。
+
+**⚠️ 契约不许依赖契约 ⇒ 契约自带等价 DTO，换算落实现边界。**
+
+同一个形状在**两个契约模块**里各有一份时（如 `content.api.PublishResult` 与
+`integration.api.BlogSyncResult`，分量逐字相同：`platform` / `externalId` / `url`），
+**不许**让 `integration-api` 把 `content-api` 写进 POM —— 那会让两个契约绑成一个，
+任一方的服务要独立升级都得连带另一方（ADR-2）。
+
+规矩：
+
+1. **换算只允许有一处**，住在**实现类**里（`CsdnBlogSyncService.toContract`）。
+2. **分量逐个点名，不要靠位置**：三个都是 `String`，位置写错编译器不会有任何意见。
+   ```java
+   // ✅
+   return new BlogSyncResult(result.platform(), result.externalId(), result.url());
+   // ❌ 靠位置 ⇒ platform 与 url 对调不会有任何编译错误
+   ```
+3. **"两个投影在共享字段上相等"的断言住在实现类的测试里** ——
+   **只有实现同时看得见两份类型**，契约侧只能钉自己那一半（分量名与顺序）。
+   ⚠️ 测试常量必须**互不相同**，否则断言退化成"永远通过"。
+4. ⚠️ 这类重复是 ADR-2 的**已知代价**（ADR 待办第 2 项：契约能否依赖契约，未拍板）。
+   **每多一份就多一处必须成对改的地方。**
+
+**⚠️ 抽端口可能逼实现类改返回类型，于是同域消费方要跟着改 —— 判断是不是"纯重构"看线上 JSON。**
+
+实现类一旦 `implements` 端口，它的公开方法返回类型就必须是**契约类型**
+（不能继续返回域侧类型）。于是同域消费方（含 HTTP 控制器）跟着换类型：
+
+```java
+public Result<PublishResult> sync(...)  →  public Result<BlogSyncResult> sync(...)
+```
+
+⚠️ **这仍然是镜像、不进 `docs/contract-changes.yaml`**，只要两个 record 的**分量名与顺序逐字相同**
+（Jackson 按分量名序列化 ⇒ HTTP 响应体一个字段都没变）。
+**判据是"线上 JSON 变了没有"，不是"Java 类型名变了没有"。** 动手前先 diff 两份 record 的分量表。
+
+**⭐ "一个能力一个端口" ≠ "一个平台一个端口"；当平台名是本域词汇表时，就是两个端口。**
+
+第十六刀（站外同步）在这条上犹豫过，第一直觉是"一个 `BlogSyncPort` + `platform` 参数"。
+**判据是参数表**：掘金的 `sync` 多收分类 id 与标签 id，CSDN 没有这两个概念 ⇒
+合并端口只有两条路 —— **要么让 CSDN 收下它永远不用的参数（端口变宽），
+要么砍掉掘金的能力（静默降级，V9 §2.3 禁止）**。加上域自己就是两套
+（两套凭证 / 两个 controller / 两个 MCP 应用服务），所以是 `CsdnBlogSyncPort` + `JuejinBlogSyncPort`。
+
+附带收益：两个端口的方法表与各自实现**逐字相同** ⇒ 实现类只加一句 `implements`，
+**不需要一个按平台字符串分派的中间类**，也就没有"分派写错只在运行时才炸"的新缝。
+
+⚠️ **反面判据**：只有当合并后的签名对**每一个**实现都是它真正需要的形状时，才该合并。
+
+⚠️ **"跨域消费方当前传什么"不是端口宽度的判据。**
+两个跨域消费方传的都是 `(null, null)`（用文章自己的分类与标签名），但那两个参数**仍留在端口上**：
+同域的前端 HTTP 层会传真实值，拆服务后端口是那条路径唯一能穿过的形状。
+**按"没人用"砍参数 = 让能力在拆服务时静默消失。** 问的是"**它有没有具名消费方**"，
+不是"**它现在有没有跨域消费方**"。
 
 **⚠️ "同名不同签名"只在**真的冲突**时才需要处理，不要为了对称去改没冲突的东西。**
 

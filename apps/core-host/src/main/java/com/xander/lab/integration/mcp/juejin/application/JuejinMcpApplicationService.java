@@ -5,7 +5,7 @@ import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.content.api.ContentPost;
 import com.xander.lab.content.api.ContentPostInput;
-import com.xander.lab.content.api.PublishResult;
+import com.xander.lab.integration.api.BlogSyncResult;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -37,13 +37,13 @@ public class JuejinMcpApplicationService {
      * Publishes a raw article to Juejin. A local blog draft is created first so the
      * publication attempt is durable and idempotent, then the draft is synced to Juejin.
      */
-    public PublishResult publishArticle(String title, String content, String summary,
+    public BlogSyncResult publishArticle(String title, String content, String summary,
                                         String juejinCategoryId, List<String> juejinTagIds) {
         Long userId = requireUserId();
         ContentPostInput request = new ContentPostInput(title, summary, content, null, null, null);
         ContentPost localDraft = blogMcpService.create(request, false);
         try {
-            PublishResult result = juejinBlogSyncService.sync(userId, localDraft.id(), juejinCategoryId, juejinTagIds);
+            BlogSyncResult result = juejinBlogSyncService.sync(userId, localDraft.id(), juejinCategoryId, juejinTagIds);
             billingPort.chargeFlat(userId, BillingBiz.JUEJIN_PUBLISH, "juejin:" + localDraft.id(),
                     "post:" + localDraft.id(), billingPort.flatPoints(BillingBiz.JUEJIN_PUBLISH), "掘金发布成功");
             return result;
@@ -53,9 +53,9 @@ public class JuejinMcpApplicationService {
     }
 
     /** Syncs one owned local blog post to Juejin. */
-    public PublishResult syncOwnedPost(Long postId, String juejinCategoryId, List<String> juejinTagIds) {
+    public BlogSyncResult syncOwnedPost(Long postId, String juejinCategoryId, List<String> juejinTagIds) {
         Long userId = requireUserId();
-        PublishResult result = juejinBlogSyncService.sync(userId, postId, juejinCategoryId, juejinTagIds);
+        BlogSyncResult result = juejinBlogSyncService.sync(userId, postId, juejinCategoryId, juejinTagIds);
         billingPort.chargeFlat(userId, BillingBiz.JUEJIN_PUBLISH, "juejin:" + postId,
                 "post:" + postId, billingPort.flatPoints(BillingBiz.JUEJIN_PUBLISH), "掘金发布成功");
         return result;

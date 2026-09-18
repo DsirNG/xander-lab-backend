@@ -11,8 +11,9 @@ import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
+import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.integration.api.JuejinBlogSyncPort;
 import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
-import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
@@ -49,7 +50,7 @@ class BlogPlanRunServiceTest {
     @Mock private BlogService blogService;
     @Mock private CsdnCredentialService csdnCredentialService;
     @Mock private JuejinCredentialService juejinCredentialService;
-    @Mock private JuejinBlogSyncService juejinBlogSyncService;
+    @Mock private JuejinBlogSyncPort juejinBlogSyncPort;
     @Mock private BlogContentPlanMapper planMapper;
     @Mock private com.xander.lab.automation.infrastructure.BlogPlanSseService sseService;
     @Mock private RecitationMaterialPort materialPort;
@@ -59,7 +60,7 @@ class BlogPlanRunServiceTest {
         wireTransactionTemplate();
         return new BlogPlanRunService(runMapper, planMapper, notificationMapper, agentService,
                 publicationService, blogService, csdnCredentialService, juejinCredentialService,
-                juejinBlogSyncService, sseService, materialPort, transactionTemplate);
+                juejinBlogSyncPort, sseService, materialPort, transactionTemplate);
     }
 
     private void wireTransactionTemplate() {
@@ -256,13 +257,13 @@ class BlogPlanRunServiceTest {
         when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
                 .thenReturn(new PublishResult("local", "58", null));
         when(juejinCredentialService.isAuthorized(7L)).thenReturn(true);
-        when(juejinBlogSyncService.sync(7L, 58L, null, null))
-                .thenReturn(new PublishResult("juejin", "jj-58", "https://juejin.cn/post/58"));
+        when(juejinBlogSyncPort.sync(7L, 58L, null, null))
+                .thenReturn(new BlogSyncResult("juejin", "jj-58", "https://juejin.cn/post/58"));
 
         BlogPlanRunService service = newService();
         service.executeRun(runRow(), plan(false, true));
 
-        verify(juejinBlogSyncService).sync(7L, 58L, null, null);
+        verify(juejinBlogSyncPort).sync(7L, 58L, null, null);
         BlogPlanRun updated = updatedRun();
         assertThat(updated.getStatus()).isEqualTo(BlogPlanRun.STATUS_SUCCEEDED);
         assertThat(updated.getJuejinStatus()).isEqualTo(BlogPlanRun.JUEJIN_SUCCEEDED);
@@ -286,7 +287,7 @@ class BlogPlanRunServiceTest {
         when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
                 .thenReturn(new PublishResult("local", "59", null));
         when(juejinCredentialService.isAuthorized(7L)).thenReturn(true);
-        when(juejinBlogSyncService.sync(any(Long.class), any(Long.class), any(), any()))
+        when(juejinBlogSyncPort.sync(any(Long.class), any(Long.class), any(), any()))
                 .thenThrow(new RuntimeException("juejin 502"));
 
         BlogPlanRunService service = newService();
@@ -325,7 +326,7 @@ class BlogPlanRunServiceTest {
         BlogPlanRun updated = updatedRun();
         assertThat(updated.getJuejinStatus()).isEqualTo(BlogPlanRun.JUEJIN_FAILED);
         assertThat(updated.getJuejinErrorCode()).isEqualTo("AUTH_REQUIRED");
-        verify(juejinBlogSyncService, org.mockito.Mockito.never()).sync(any(), any(), any(), any());
+        verify(juejinBlogSyncPort, org.mockito.Mockito.never()).sync(any(), any(), any(), any());
     }
 
     @Test

@@ -2666,7 +2666,252 @@ bash 版踩过两次（引用未定义变量、还原锚点不唯一），Python
 
 ---
 
-## 16. 待办
+## 16. 落地记录（十三）：站外同步抽成 `CsdnBlogSyncPort` / `JuejinBlogSyncPort` —— `agent` 的出边全部归零，`dinqor-agent` 完全离开跨域边表
+
+### 16.1 目标边：两条 import 都在同一个文件里
+
+`agent → integration` 剩 2 条实现语句，都在
+`agent/application/PublishPostTool.java` 的第 13/14 行：
+
+```java
+import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
+import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
+```
+
+`integration` 域被跨域引用的 7 个类型里，这两个正是 `lib-extraction.md` §3quater.5
+点名"**不能直接搬、必须先抽端口**"的那两个（具体类，内部依赖 MyBatis-Plus mapper、
+`javax.crypto`、Jackson 与各自的 `infrastructure` 包）。
+
+### 16.2 ⚠️ 形状决定一：这是**两个**端口，不是一个带 `platform` 参数的端口
+
+第一直觉是"一个 `BlogSyncPort` + `platform` 参数" —— 仓里已有先例
+（`PublicationPort.publish(command, "csdn")` 就是平台当参数），而且跨域消费方
+`PublishPostTool` 本来就按 `platform` 分支。**否掉了**，三条理由：
+
+1. **参数表不同，合并要么造假要么变宽。** 掘金的 `sync` 多收
+   `juejinCategoryId` / `juejinTagIds`（掘金要求自己的分类与标签 id），而 CSDN 没有这两个概念。
+   合并成一个端口，CSDN 那条路就必须收下两个它永远不用的参数（端口变宽），
+   或者端口只带交集、把掘金的能力砍掉（能力静默降级，§2.3 禁止）。
+2. **域自己就是这么分的。** `integration` 为两个平台各有一套
+   `*CredentialService` / `*BlogSyncService` / `*BlogSyncController` /
+   `*McpApplicationService` —— 两套凭证存储、两套限流、两套 MCP 应用服务。
+   端口跟着域的真实分解走，而不是把域合并成它没有的样子。
+3. **零适配器。** 每个端口的方法表与它对应实现类的公开方法**逐字相同**，
+   实现类加一句 `implements` 就够了 —— **不需要一个按平台字符串分派的中间类**，
+   也就没有"分派写错只在运行时才炸"的新缝。
+
+代价是两个几乎同形的接口（`findSucceeded` 那一行完全一样），共享同一个
+`BlogSyncResult`。
+
+**反面判据**：只有当合并后的签名对**每一个**实现都是它真正需要的形状时，才该合并。
+⚠️ 计划文档（§18 / `lib-extraction.md` §3quater.5）把名字草拟成单数的 `BlogSyncPort`，
+这里**偏离了那个草稿**；`CredentialPort` 同样是草稿里的单数（也是两个平台两套）。
+
+### 16.3 ⚠️ 形状决定二：端口留住了跨域消费方"现在一律传 `null`"的那两个参数
+
+`PublishPostTool` 与 `BlogPlanRunService` 调掘金同步时传的都是 `(null, null)` ——
+"用文章自己的分类与标签名，由发布器解析成掘金 tag_id"。
+所以 `juejinCategoryId` / `juejinTagIds` 在**跨域**路径上今天是死参数。
+
+**它们仍然留在端口上**，因为判据不是"现在有没有人用"，而是"**拆服务之后这条路还走不走得通**"：
+同域的前端 HTTP 层（`JuejinBlogSyncController`）会传真实值，而跨进程之后端口是那条路径
+唯一能穿过的形状 —— 砍掉参数就是让"指定掘金分类/标签"这项能力在拆服务时**静默消失**。
+
+⇒ 记成规则：**问一个参数该不该留，问的是"它有没有具名消费方"，不是"它现在有没有跨域消费方"。**
+
+### 16.4 ⚠️ 形状决定三：契约不许依赖契约 ⇒ `BlogSyncResult` 是 `PublishResult` 的等价 DTO
+
+两个 SyncService 现在返回 `content.api.PublishResult`
+（`record PublishResult(String platform, String externalId, String url)`）。
+端口的返回类型必须是**本模块**的类型：`integration-api` 一旦把 `content-api`
+写进 POM，两个契约就绑成了一个（ADR-2）。
+
+所以 `integration.api.BlogSyncResult` 是**逐字相同的第二份**，
+**换算只有一处**（`CsdnBlogSyncService.toContract` / `JuejinBlogSyncService.toContract`），
+三个分量**逐个点名**而不是靠位置 —— 三个都是 `String`，位置写错编译器不会有任何意见。
+
+⚠️ 这是本仓库**第二次**"契约自带等价 DTO"（第一次是 `blogagent.spi` 的
+`TokenUsage` / `BlogAgentImageUsage`，§13.5）。它是 ADR-2 的已知代价：
+**每多一份就多一处必须成对改的地方。** 判据见待办第 2 项（契约能否依赖契约，仍未拍板）。
+
+### 16.5 ⚠️ 代价：实现类必须改返回类型，于是同域 5 个消费方跟着改
+
+Java 不允许"同名同参只差返回值"的重载，所以实现类一旦 `implements` 端口，
+它原来的 `public PublishResult sync(...)` 就必须变成 `public BlogSyncResult sync(...)`。
+受影响的**同域**消费方（都在 `dinqor-platform-integration`，拆完还在一个进程里，
+所以它们继续注入具体类）：
+
+| 文件 | 改了什么 |
+|---|---|
+| `csdn/api/CsdnBlogSyncController` | `Result<PublishResult>` → `Result<BlogSyncResult>` |
+| `csdn/application/CsdnMcpApplicationService` | `syncOwnedPost` 返回类型 |
+| `juejin/api/JuejinBlogSyncController` | `Result<PublishResult>` → `Result<BlogSyncResult>` |
+| `juejin/application/JuejinMcpApplicationService` | `publishArticle` / `syncOwnedPost` |
+| `dual/application/DualPublishMcpApplicationService` | 局部变量类型 |
+
+⚠️ **这仍然是镜像、不进 `contract-changes.yaml`**：两个 record 的分量名与顺序逐字相同，
+Jackson 按分量名序列化 ⇒ **HTTP 响应体一个字段都没变**。
+判据是"**线上 JSON 变了没有**"，不是"Java 类型名变了没有"。
+（`dual` 那一处是 `grep` 出来的 —— 它不在最初的清单里，见 §16.10。）
+
+### 16.6 ⭐ 实测收益：`dinqor-agent` 完全离开跨域边表
+
+| 边 | 实现语句 | 跨部署单元 |
+|---|---|---|
+| `agent → integration` | 2 → **0** | 边**整条消失** |
+| `automation → integration` | 6 → 5 | 仍跨单元（顺带接上，见下） |
+| **合计** | **29 → 26** | **12 → 9**（跨单元） |
+
+```
+implementation_statements            29 → 26  (-3)
+implementation_edges                 13 → 12  (-1)
+cross_deployment_unit_statements     12 →  9  (-3)
+cross_deployment_unit_edges           6 →  5  (-1)
+api_statements                        9 →  9  (未变)
+api_edges                             6 →  6  (未变)
+```
+
+⭐⭐ **本刀真正的结果不是那 3 条语句，而是 `dinqor-agent` 从边表里彻底消失了。**
+它是 `agent` 唯一还指向别的单元的域，而 `agent` 自己没有入边 ⇒
+现在**出入边都是 0**（impl 与 api 两层都是）。也就是说
+**`dinqor-agent` 这个部署单元已经完全没有跨域实现依赖，只剩下对契约的依赖** ——
+Wave 2 拆它的时候不需要再动任何一行代码，只剩装配。
+
+`automation → integration` 的 6 → 5 是**顺带**做的：`BlogPlanRunService` 的掘金那一条
+本来就要接端口（否则 `JuejinBlogSyncPort` 会变成"只有一个消费方"的端口，
+与 §7「一个能力一个端口」的判据自相矛盾）。它是纯类型替换，可证。
+
+### 16.7 测试
+
+两个 SyncService 在改造前**没有自己的测试**（只被 `PublishPostToolTest` 间接覆盖）。
+它们现在是契约端口的实现，所以补了两个测试类：
+
+| 测试类 | 用例 | 钉住什么 |
+|---|---|---|
+| `CsdnBlogSyncServiceTest` | 7 | 两份投影的换算；幂等键的**负号**；取 `categoryName` 而不是 `category`；软删与不存在同路径拒绝；`postId == null` 短路 |
+| `JuejinBlogSyncServiceTest` | 10 | 同上 + 标签回落（`null` 与**空列表**都回落）与分类直通 |
+
+契约侧三个测试类（`BlogSyncResultTest` 4 / `CsdnBlogSyncPortTest` 6 / `JuejinBlogSyncPortTest` 7）
+与一个共用的 `ContractShape`（与 `blogagent-api` 那个同名类是同一条判据的第二次落地 ——
+两个契约模块在 test scope 上互不可见，只能各带一份）。
+
+⚠️ `PublishPostToolTest` 原来**没有掘金分支的执行测试**（只测 CSDN），补了一条，
+它同时把"跨域传的那两个 `null`"逐字钉住。
+
+| 计数 | 前 | 后 |
+|---|---|---|
+| `contracts/integration-api` | 3 | **20** |
+| `apps/core-host` | 1194 | **1212** |
+| 全反应堆 | 1420 | **1455**（0 fail） |
+| 26 门禁 | 24 pass / 0 fail / 2 skip | 24 pass / 0 fail / 2 skip |
+| `contract-dependency-boundary` | 8 模块 / 58 源文件 | 8 模块 / **61** 源文件 |
+
+⚠️ **`PortDelegationTransactionTest.theAuditedClassListIsComplete` 先红了。**
+加完 `implements` 还没跑注入，它就报"端口实现类的清单与实际不符" ——
+类路径扫描发现了两个没被审到的实现。**这是那条双向完整性判据第二次当场付费**
+（第一次是逮到漏写 `RecitationService`）。已把两个类加进 `PORT_IMPLEMENTATIONS`，
+并同步类注释里"全仓 N 个端口实现"的计数（15 → 17）。
+
+### 16.8 注入验证：九次，其中三次**第一遍量不到 core-host**
+
+九次注入全部生效、全部逐字节还原（判据是 `git hash-object` 前后相同）。
+注入前基线：`CsdnBlogSyncPort.java` = `5c7408d4…`（5322B）、
+`JuejinBlogSyncPort.java` = `ed6b9634…`（4137B）、`BlogSyncResult.java` = `bbc7244b…`（1831B）。
+
+| # | 注入 | 契约模块红 | `core-host` 红 | 合计 |
+|---|---|---|---|---|
+| A | 消费方不再传 `(null, null)`，把文章分类塞进掘金分类参数 | 0 | 2 | 2 |
+| B | CSDN 幂等键丢掉负号（`-postId` → `postId`，与本站发布撞键） | 0 | 2 | 2 |
+| C | CSDN 取 `category` 而不是 `categoryName`（相邻的两个 `String`） | 0 | 2 | 2 |
+| D | 两份投影的换算把 `platform` 与 `url` 对调（三个 `String`） | 0 | 4 | 4 |
+| E | CSDN `findSucceeded` 丢掉 `postId == null` 短路（下一句要算 `-postId`，NPE） | 0 | 2 | 2 |
+| F | 掘金不再用调用方给的 tag id，一律回落到文章自己的标签 | 0 | 2 | 2 |
+| G | 端口加一个 `default` 方法（不通知任何实现就扩大契约面） | **6** | 0 | 6 |
+| H | 端口首参名字改成 `postId`（类型仍是 `Long`，只断言类型会绿着过） | **2** | 0 | 2 |
+| I | `BlogSyncResult` 把 `url` 与 `externalId` 两个分量对调 | **4** | **7** | 11 |
+
+G / H / I 落在 `contracts/integration-api`，其余六个落在 `apps/core-host`。
+
+**⚠️ 这张表里 G / H / I 的 `core-host` 列是第一遍量不到的。** 原因不是测试写得弱，是**量法**：
+
+- `contracts/integration-api` 在反应堆里排在 `apps/core-host` **前面**。契约模块一旦变红，
+  整条反应堆就停在那里，`core-host` 的测试**一个都没跑**。
+- 加 `-fae`（fail at end）**不够**。`-fae` 只续跑"**不依赖**失败模块"的那些模块；
+  `apps/core-host` 恰恰依赖 `contracts/integration-api`，所以照样被跳过。
+  第一遍（无 `-fae`）G/H/I 报 3 / 1 / 2，第二遍（`-fae`）报 6 / 2 / 4 —— **都只是契约模块那一半**。
+- **修法**：把 `-Dtest` 收窄到 `core-host` 自己的四个测试类
+  （`PublishPostToolTest` / `BlogPlanRunServiceTest` / `CsdnBlogSyncServiceTest` / `JuejinBlogSyncServiceTest`），
+  于是契约模块**一个测试都匹配不到**（因此永远不会红），`core-host` 就能照常跑。
+  补测结果：**G = 0、H = 0、I = 7**。
+  ⚠️ 这时契约模块连 `Tests run` 行都不打印，**"没有汇总行"必须判成"0 个测试"而不是"编译失败"**
+  —— 第一版脚本把这两件事混在一起，报了个假的 `-1`。
+
+这条量法本身值得记下来，因为它给的是**假的低分**：一个只由契约模块反射测试守着的注入
+（G / H）看起来"只影响 6 个 / 2 个测试"，而它真正的影响面是**所有实现方与所有消费方**，
+只不过那些测试在反应堆里排在后面、根本没机会跑。
+
+**⭐ 顺带确认了一件好事**：G / H 在 `core-host` 侧真的是 0。
+端口加 `default` 方法、端口首参改名，**消费方的 Mockito 桩一个都不动**
+（Mockito 按位置匹配、实现类自己声明参数名，都不看接口的参数名）——
+所以这两个形状**只有契约模块的反射测试在守**，`CsdnBlogSyncPortTest` /
+`JuejinBlogSyncPortTest` 里那两条断言（`assertNoDefaultMethods`、
+`assertFirstParameterIsTheCallerId`）不是锦上添花，是**唯一**的守卫。
+
+**⚠️ 两个把这次测量卡住的工具坑（都已记进 `notes/repo-workflow.md`）：**
+
+1. **`sha1sum` ≠ `git hash-object`。** 同一个文件，前者对**原始字节**算，
+   后者对 `blob <len>\0` + 内容算、并且会先做 CRLF→LF 归一。
+   `CsdnBlogSyncPort.java` 两个值分别是 `60a4fe6b…` 与 `5c7408d4…`。
+   手上同时有这两个值时，会把它误判成"文件被改过、内容不对了"。
+   **还原判据必须写清用的是哪一个算法，且全程只用同一个。**
+2. **注入脚本不要自己起 `bash`。** 在沙箱里 `subprocess("bash", ...)` 里的 `bash`
+   解析成了 WSL 的 `bash.exe`，被程序黑名单直接拦掉，脚本以 `EXIT=1` 静默退出。
+   改成脚本**只负责改文件 / 还原文件**、`mvn` 由外层 shell 跑，就通了。
+
+### 16.9 为什么没有加 `contract-changes.yaml` 条目
+
+与 §14.9 / §15.9 同一条理由：**线上形状没变**。
+两个 HTTP 控制器的响应类型从 `Result<PublishResult>` 变成 `Result<BlogSyncResult>`，
+但两份 record 的分量名与顺序逐字相同（`platform` / `externalId` / `url`），
+Jackson 按分量名序列化 ⇒ **JSON 逐字节不变**。
+
+`contract-changes-completeness` 仍报 14 条，`api-migration-key-coverage` 仍报
+213 条覆盖全部路由 —— 两条都 PASS。
+
+### 16.10 刻意没做的事
+
+- **`automation → integration` 的剩下 5 条没碰。** 它卡在 `CsdnCredentialService` /
+  `JuejinCredentialService` / `MailService` 上，与本刀不是同一种形状
+  （凭证服务的端口形状还没设计，`MailService` 卡在
+  `automation.domain.EmailReminderMailTemplates` 这个反向依赖上）。
+- **两个 SyncService 的 `toContract` 私有助手没有合并成共用的工具类。**
+  两个类分属 `mcp.csdn.application` 与 `mcp.juejin.application` 两个包，
+  共用要么新开一个公共包、要么把可见性放宽。三行 × 2 的重复比一个新缝便宜。
+- **没有把端口做成 `platform()` 键 + `List<端口>` 注入。** 那是 `BlogPublisher` 的形状，
+  但它会把"按平台分派"这件事推给**每一个**消费方，而本刀的两个消费方本来就按平台分支
+  （`PublishPostTool`）或写死平台（`BlogPlanRunService`）—— 分派写在消费方是重复，写在实现侧是一次。
+
+⚠️ **`grep` 漏了一个同域消费方。** 最初按 `CsdnBlogSyncService|JuejinBlogSyncService`
+找消费方，得到 4 个；编译前再 `grep PublishResult` 才多出
+`dual/application/DualPublishMcpApplicationService`（它调的是 `CsdnMcpApplicationService.syncOwnedPost`，
+不直接提这两个服务）。**教训：改一个返回类型时，`grep` 的目标是"那个类型"而不是"那个类"。**
+
+### 16.11 下一刀
+
+剩余跨单元实现边（**5 条**）：`automation → integration` 5、`admin → automation` 1、
+`identity → integration` 1、`integration → automation` 1、`studio → blogagent` 1。
+
+1. **`studio → blogagent`（1）** —— 先侦察，可能很便宜。
+2. **`automation → integration`（5）** —— 目前最大；其中 2 条是凭证服务（要新设计端口形状），
+   1 条是 `MailService`（卡在邮件模板的反向依赖上，要改 API 而不是加端口）。
+3. **`admin → automation`（1）** —— 需要 SSE 广播端口。
+4. **`identity → integration`（1）** —— 与 `integration → automation` 构成真环，要一起看。
+
+⚠️ **`dinqor-agent` 已经可以从边表里划掉了**（§16.6）—— 它的抽取不再需要任何契约工作。
+
+---
+
+## 17. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -2707,8 +2952,13 @@ bash 版踩过两次（引用未定义变量、还原锚点不唯一），Python
 | 35 | **⚠️ MyBatis-Plus 的 `getParamNameValuePairs()` 是惰性填充的** —— 参数只在 SQL 片段被渲染时才进 map，而 mapper 是 mock，永远不会渲染 ⇒ 直接读 map 拿到空集 | **本刀踩到**（§15.8）：`verify(grantMapper).selectList(argWithUserIdValue(777L))` 红了，报"参数不同"。**修法：先显式调一次 `getSqlSegment()` 再读 map** —— 仓里既有 8 处同类断言都是这么写的（`KnowledgeIngestionServiceTest` / `KnowledgeQuizServiceTest` / `Img2ThreeServiceTest` …）。**下次要断言"查询条件里带了某个值"时，照抄那个形状** |
 | 36 | **⚠️ 注入脚本的"删除式注入"：还原锚点必然是正向锚点的子串** | **本刀踩到**（§15.9）：脚本第一次跑到 B 就**主动中止**（前置断言发现"还原锚点在注入前出现 1 次"），没有带着残留继续 —— 断言生效了，但规则需要细化。⇒ 两条路：①给每条注入声明"还原锚点注入前的期望次数"（0 或 1），再用**施加后**的 `fwd==0 && mut==1` 消歧；②改用**非子串**的变异（如把 `userId == null` 改成 `authorization == null`，即"守错了变量"）。本刀选了①。另：本刀注入脚本改用 Python 后踩到新坑 —— **`mvn.sh` 是 shell 脚本，Windows 的 `CreateProcess` 不能直接 exec**（`WinError 193`），必须内联 `mvn.sh` 里那条 java 命令行并注明与它保持同步 |
 | 37 | **⭐ 抽端口的收益不总是"少一条 import"：第二个消费方接入时可能顺带删掉一个协作者** | **本刀实例**（§15.3）：`McpOAuthService` 的 `jwtUtil` **只为那一行解析而存在**，改完之后字段 / import / 构造参数 / 测试里的 `@Mock` 一起去掉。⚠️ 这种收益**看不出来**：指标只降 1，而消费方少了一份复制逻辑、少了一条"主体是数字"的隐含假设。**每接一个消费方，都要问一次"这个端口让它少知道了什么"** |
+| 38 | **⚠️ "一个能力一个端口" ≠ "一个平台一个端口"** —— 但当平台名是本域词汇表、且各平台的参数表不同时，就该是**两个**端口 | **本刀拍板**（§16.2）：合并 CSDN 与掘金只有两条路 —— 要么让 CSDN 收下 `juejinCategoryId` / `juejinTagIds`（**端口变宽**），要么砍掉掘金指定分类/标签的能力（**静默降级**）。⇒ **判据是参数表**：只有当合并后的签名对**每一个**实现都是它真正需要的形状时才合并。附带收益：两个端口的方法表与各自实现逐字相同 ⇒ 实现类只加一句 `implements`，**不需要按平台字符串分派的中间类**。⚠️ 这偏离了 `lib-extraction.md` §3quater.5 草拟的单数名 `BlogSyncPort`（`CredentialPort` 同样是草稿单数、也是两套） |
+| 39 | **⚠️ 端口上一个参数该不该留，看"它有没有具名消费方"，不看"它现在有没有跨域消费方"** | **本刀拍板**（§16.3）：掘金那两个参数在跨域路径上**今天全是 `null`**，但同域的前端 HTTP 层会传真实值，而跨进程后端口是那条路径唯一能穿过的形状。**按"没人用"砍参数 = 让能力在拆服务时静默消失**（§2.3） |
+| 40 | **⚠️ 抽端口可能逼实现类改返回类型 ⇒ 同域消费方要跟着改；判据是"线上 JSON 变了没有"，不是"Java 类型名变了没有"** | **本刀实例**（§16.4 / §16.5）：Java 不许"同名同参只差返回值"的重载 ⇒ `sync` 只能返回契约的 `BlogSyncResult`（契约不许依赖契约），5 个同域消费方跟着换类型（含 2 个 HTTP 控制器）。**仍是镜像、不进 `contract-changes.yaml`**：两份 record 分量名逐字相同 ⇒ JSON 逐字节不变。⚠️ **`grep` 的目标要选"那个类型"而不是"那个类"** —— 本刀第一遍按服务类名找只得到 4 个消费方，编译前按 `PublishResult` 再 `grep` 才多出 `DualPublishMcpApplicationService` |
+| 41 | **⚠️ 多模块注入验证：`-fae` 不够，还要把 `-Dtest` 收窄到"依赖方自己的测试类"** | **本刀踩到**（§16.8）：注入同时落在 `contracts/integration-api` 与 `apps/core-host`，而契约模块在反应堆里排在**前面** ⇒ 契约侧一红 maven 就中断，`core-host` 的测试根本不跑，记下的红数是**下界**。⚠️ 加 `-fae`（fail at end）**仍然不够** —— `-fae` 只续跑"**不依赖**失败模块"的模块，而 `core-host` 恰恰依赖 `integration-api`，照样被跳过。**修法**：把 `-Dtest` 收窄到 `core-host` 自己的测试类，让契约模块**一个测试都匹配不到**（因此永远不会红）。此时契约模块连 `Tests run` 行都不打印 ⇒ **"没有汇总行"必须判成"0 个测试"，不是"编译失败"**（第一版脚本混了这两件事，报了个假的 `-1`）。另：逐模块的 `Tests run` 汇总行要**累加**，只看最后一行会漏掉另一个模块 |
+| 42 | **⚠️ `sha1sum` ≠ `git hash-object`，同一文件两个值** —— 前者对**原始字节**算，后者对 `blob <len>\0` + 内容算且会先做 CRLF→LF 归一 | **本刀踩到**（§16.8）：`CsdnBlogSyncPort.java` 两个值分别是 `60a4fe6b…` 与 `5c7408d4…`，手上同时有这两个值时把**没被改过**的文件误判成"内容不对了"，白查了一轮。⇒ **还原判据必须写清用的是哪一个算法，且全程只用同一个**（本仓统一用 `git hash-object`）。⚠️ 与第 33 / 36 项同族：**"脚本跑完了"不等于"注入生效了、也还原了"**，但这一条是"判据本身用错了算法"，比前两条更难发现 —— 因为它不会报错，只会让你去查一个不存在的问题 |
 
-### 16.1 第 1 项的边界（明确不许顺手放宽）
+### 17.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -2719,7 +2969,7 @@ bash 版踩过两次（引用未定义变量、还原锚点不唯一），Python
 
 ---
 
-## 17. 一句话记法
+## 18. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

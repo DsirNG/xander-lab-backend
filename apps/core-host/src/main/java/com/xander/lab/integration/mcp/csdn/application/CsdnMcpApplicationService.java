@@ -4,8 +4,8 @@ import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService;
+import com.xander.lab.integration.api.BlogSyncResult;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
-import com.xander.lab.content.api.PublishResult;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -25,9 +25,9 @@ public class CsdnMcpApplicationService {
         return csdnAuthorizationService.start(requireUserId());
     }
 
-    public PublishResult syncOwnedPost(Long postId) {
+    public BlogSyncResult syncOwnedPost(Long postId) {
         Long userId = requireUserId();
-        PublishResult result = csdnBlogSyncService.sync(userId, postId);
+        BlogSyncResult result = csdnBlogSyncService.sync(userId, postId);
         billingPort.chargeFlat(userId, BillingBiz.CSDN_PUBLISH, "csdn:" + postId,
                 "post:" + postId, billingPort.flatPoints(BillingBiz.CSDN_PUBLISH), "CSDN 发布成功");
         return result;

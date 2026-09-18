@@ -13,14 +13,31 @@
     <artifactId>integration-api</artifactId>
     <name>integration-api</name>
     <description>
-        Service-to-service contract for object storage (V9 §18 / §91).
+        Service-to-service contracts for the integration domain (V9 §18 / §91).
 
-        Members: OssPort (the storage port) and UploadResponse (what an upload returns).
-        Both were reached for from four other future deployment units -- agent,
-        knowledgebase, publishing and recitation all injected the concrete OssService and
+        Members: OssPort (the storage port), UploadResponse (what an upload returns),
+        CsdnBlogSyncPort, JuejinBlogSyncPort and BlogSyncResult.
+
+        OssPort and UploadResponse were reached for from four other future deployment units --
+        agent, knowledgebase, publishing and recitation all injected the concrete OssService and
         read its UploadResponse. After the split that is four services depending on another
         service's implementation class, so the port and its result type move to a module
         every side may depend on.
+
+        The two blog-sync ports come from the same judgement on a different capability. agent
+        (dinqor-agent) and automation (dinqor-content-automation) both injected the concrete
+        CsdnBlogSyncService / JuejinBlogSyncService that live in dinqor-platform-integration.
+
+        Deliberately two ports and not one port taking a platform string. Juejin's sync takes a
+        category id and tag ids that CSDN has no concept of, so a merged port would either force
+        the CSDN path to accept two parameters it never uses or drop a capability Juejin really
+        has. Each port's method table is byte-for-byte its implementation's public surface, so
+        the implementation just adds an "implements" clause -- there is no platform-dispatching
+        adapter that could be wrong at runtime. The shared result shape is one record.
+
+        BlogSyncResult duplicates content-api's PublishResult on purpose: contracts must not
+        depend on contracts (ADR-2), so each side carries an equivalent DTO and the conversion
+        lives at the implementation boundary.
 
         Package note: this module's package is com.xander.lab.integration.api, which sits
         inside the integration domain's own namespace because V9 §18 names the module
@@ -35,7 +52,8 @@
         Spring's MultipartFile: a contract is depended on by every service, including the
         WebFlux Gateway, so a Spring web type here would put spring-web on all of them and
         would also be the wrong shape for a call that has to survive becoming a network
-        call. Callers holding a MultipartFile convert at the call site.
+        call. Callers holding a MultipartFile convert at the call site. The sync ports take
+        java.util.List only, which is JDK.
 
         UploadResponse is hand written rather than lombok annotated on purpose: this is a
         wire contract, so its shape should be readable without knowing lombok's defaults,

@@ -4,7 +4,7 @@ import com.xander.lab.content.api.ContentPost;
 import com.xander.lab.content.api.ContentPostInput;
 import com.xander.lab.integration.mcp.blog.application.BlogMcpApplicationService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnMcpApplicationService;
-import com.xander.lab.content.api.PublishResult;
+import com.xander.lab.integration.api.BlogSyncResult;
 import com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -23,7 +23,7 @@ public class DualPublishMcpApplicationService {
     public DualPublishResult publish(ContentPostInput request) {
         ContentPost localPost = blogMcpService.create(request, true);
         try {
-            PublishResult csdn = csdnMcpService.syncOwnedPost(localPost.id());
+            BlogSyncResult csdn = csdnMcpService.syncOwnedPost(localPost.id());
             return new DualPublishResult(localPost.id(), true, csdn.externalId(), csdn.url(), null);
         } catch (RuntimeException exception) {
             return new DualPublishResult(localPost.id(), false, null, null,
