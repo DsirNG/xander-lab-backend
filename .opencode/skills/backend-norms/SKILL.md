@@ -1107,6 +1107,48 @@ return new BlogAgentImage(generated.bytes(), ..., generated.model(), properties.
 而客户端会在多个候选端点间**回退重试** —— 兜底端点生成的图被记成首选模型的名字，
 网关路径下配置值还可能是空白。真相永远是**提供方报的那个**（只有它知道这次实际发生了什么）。
 
+### ⚠️ 借"配置"不是借"能力"：先判它是**契约问题**还是**运维问题**
+
+上面那条讲的是"抽了端口之后，消费方不要绕回去读配置"。反过来还有一类边，
+**它从一开始就不是能力调用，而是"另一个域的一个值"**（凭证 / 端点 / 开关 / 限额）：
+
+```java
+private final Img2ThreeProperties properties;          // 本域，prefix = img2three
+private final BlogAgentProperties blogAgentProperties; // ❌ 另一个域的配置类
+
+private String resolveApiKey() { return hasText(properties.getApiKey()) ? properties.getApiKey()
+                                                                        : blogAgentProperties.getApiKey(); }
+```
+
+⚠️ **这类边不要抽端口。** 它要的是"同一个值在两个服务里都要有"，不是"一个服务向另一个服务要东西"。
+为"借凭证"立一个端口，等于把"两个域共用一套上游凭证"**合法化** —— 而配置清单里
+（`docs/config-ownership.yaml`）它们往往记成**两家各自的** `service_private` / `secret`。
+真正的解法是**搬到配置层**（嵌套占位符），拆服务后由运维 / Nacos 承担：
+
+```yaml
+img2three:
+  agent:
+    api-key: ${IMG2THREE_AGENT_API_KEY:${blog.agent.api-key:}}   # ✅ 回落的是**属性名**
+    # api-key: ${IMG2THREE_AGENT_API_KEY:${BLOG_AGENT_API_KEY:}} # ❌ 环境变量名，本地部署回落不到
+```
+
+⚠️ **写属性名不是环境变量名** —— 这条**写错了不会报错**：profile 文件（如 `application-local.yml`）
+是把值直接写在 `blog.agent.api-key` 上的，写环境变量名 ⇒ 那份配置**回落不到**，
+而没有任何东西会报错。必须有测试钉住（用 `YamlPropertySourceLoader` 加载**真实交付的**
+`application.yml` + `PropertySourcesPropertyResolver` 解析，再叠一个模拟的 profile 源）。
+
+**判据**：一条跨域边问自己 —— 它在"**借能力**"还是"**借配置**"？
+借能力 ⇒ 抽端口（`contracts/`）；借配置 ⇒ 搬进 YAML 占位符（**零 Java 契约改动**）。
+
+⚠️ **代价：可测性会丢。** 直接 `new XxxProperties()` 不经过任何 YAML ⇒ "回落真的存在"在单测里
+**无法表达**。⇒ **守卫必须跟着一起搬**（同"一份实体两份投影必须配跨投影断言"）：
+搬到哪里，就在哪里补一条读**真实配置文件**的测试，否则搬完就没人看了。
+
+⚠️ **顺带检查这个盲区**：扫描器数的是 Java import ⇒ 一行 import 换成一行 YAML 占位符之后，
+指标如实下降，而**耦合只是换了地方**（`cross-domain-imports.yaml` 里一个字都看不到）。
+`config-ownership.yaml` 是唯一可能承载这类引用的地方，但它今天只记 `owner` / `classification` /
+`nacos_group`，**不记"这个键的默认值引用了哪个键"**。
+
 ### ⚠️ "归一参数顺序"会产生静默换位点：新重载的参数表可能与旧方法逐字相同
 
 端口把提供方的 `(taskId, userId)` 归一成 `(userId, taskId)` 时，
@@ -1128,7 +1170,7 @@ return runStreamForView(taskId, userId, onEvent, () -> false);
 这类反向断言最直接）。与"相邻同类型参数"（§5.6）、`TokenUsage` 换位（§4.6）同族：
 **两个同类型参数挨在一起时，编译器永远帮不上忙。**
 
-### ⚠️ 守卫的失败信息必须指向真正的原因（第二次踩，已成规则）
+### ⚠️ 守卫的失败信息必须指向真正的原因（第三次踩，已成规则）
 
 第一版"两个 `Long` 换位"的测试写成"用具体字面量打桩，写反了自然匹配不上"，
 结果症状是 `null` 一路传到断言里变成 **NPE** —— 报的是"某处为 null"，不是"两个 Long 换位了"。
@@ -1145,6 +1187,14 @@ when(port.publish(anyLong(), anyLong())).thenAnswer(inv -> {
 ⚠️ 同时注意**分工**：用 `any(), any()` 打桩的"逐字段落点"测试**抓不到换位**，
 换位只能由上面这条专门的测试抓。**"有一个测试覆盖了这个方法"不等于
 "这个方法的所有性质都被覆盖了"。**
+
+⚠️ **第三次踩：只能"间接断言"时，错因会伪装成外部故障。**
+`Img2ThreeModelClient.endpoints()` 是私有方法 ⇒ 测试只能通过"请求落到了哪个地址"间接断言 baseUrl。
+把 baseUrl 写错之后，用例**不是断言失败**，而是**真去请求了公网**、24 秒后以网络错误结束
+（`Errors: 1` 而非 `Failures: 1`）。**红是红了，但红的原因看起来像"网络问题"** ⇒ 下次很容易被
+当成 flaky 忽略。改法二选一：把那段逻辑抽成**可直接调用**的小函数，或给客户端注入固定的短超时。
+⇒ **判据：一条测试的失败信息里，出现"网络 / 超时 / IO"这类字眼时，先问一句
+"它真的在测外部依赖吗"，还是"我在间接断言某个本地值"。**
 
 ## 验证门禁（改动后必须执行并贴结果，不要直接宣布完成）
 
@@ -1391,6 +1441,52 @@ if applied.count(fwd) != 0 or applied.count(mut) != 1: abort()   # ← 消歧点
 ⚠️ `mvn` 的控制台在 UTF-8 管道里是 GBK 乱码（`ÊÇ default ·½·¨`），
 但**测试名与 ASCII 断言值可读**（`expected: <size> but was: <model>`），
 足够给每次注入归因，不要因为乱码就放弃归因。
+
+**⚠️ 第四次踩（同族、不同因）：注入锚点必须对"行尾已归一"的文本匹配。**
+本仓工作区 **CRLF / LF 混杂**（2026-09-18 实测同一刀的两个目标文件：
+`apps/core-host/src/main/resources/application.yml` 是 **LF**、
+`.../studio/infrastructure/Img2ThreeModelClient.java` 是 **CRLF**）。
+锚点通常以 `\n` 结尾写 ⇒ 在 CRLF 文件里 `…));\r\n` **不含**子串 `…));\n`，
+`text.count(anchor)` 得 **0**，脚本报"锚点出现 0 次，期望 1 次"并中止 ——
+**看起来像"锚点写错了"，实际是行尾不匹配。**
+
+```python
+def read_exact(path):
+    data = path.read_bytes()
+    crlf = b"\r\n" in data
+    return data, (b"\r\n" if crlf else b"\n")
+
+def write_exact(path, text, eol):
+    path.write_bytes(text.encode("utf-8").replace(b"\r\n", b"\n").replace(b"\n", eol))
+# 读时归一成 \n 再匹配；写回时按**记录下来的原行尾**还原，保持文件逐字节不变
+```
+
+⚠️ **顺带一条读数坑**：**Git Bash 里 `grep -c $'\r'` 判 CRLF 不可信** —— 对纯 LF 文件也会报
+满行数（实测 `application.yml` 是 LF，却报 CRLF=284）。要**用 Python 数 `b"\r\n"` 的字节数**：
+
+```python
+d = pathlib.Path(p).read_bytes()
+print(d.count(b"\r\n"), d.count(b"\n") - d.count(b"\r\n"))   # CRLF 数 / 裸 LF 数
+```
+
+**⚠️ 第五次踩：注入脚本不要在前台跑 —— 被 SIGTERM 会把目标文件留在注入态。**
+六条注入约 **4.5 分钟**，超过默认前台超时 ⇒ 前台跑会在中途被 SIGTERM，
+而脚本**恰好在"已注入、未还原"之间被杀**，目标文件留在**注入态**（实测残留了其中一条）。
+
+**规矩**：
+1. 注入脚本一律 `run_in_background: true`。
+2. **任何中断（超时、手动 kill、报错）之后，第一件事是比 blob**，不是重跑：
+   `git hash-object <file>` 与基线逐字节比（⚠️ 不要用 `sha1sum`，见下）。
+3. 残留的注入要**用脚本自己的 restore 分支**还原（只有它知道归一后的锚点），然后**再比一次 blob**。
+4. 至此"脚本跑完了 ≠ 注入生效了、也还原了"已有**五个变体**：①还原锚点不唯一（污染其后所有注入）；
+   ②脚本自身 bug 导致回滚段不执行；③脚本自起 `bash` 被黑名单拦掉、静默退出；
+   ④锚点行尾不匹配、静默 0 命中；⑤脚本被 SIGTERM、留在注入态。
+
+**⚠️ `sha1sum` ≠ `git hash-object`（同一文件两个值）。** 前者对**原始字节**算；
+后者对 `blob <len>\0` + 内容算，且**先做 CRLF→LF 归一**。2026-09-18 实测同一个文件两个值
+（`60a4fe6b…` / `5c7408d4…`）⇒ 会把**没被改过**的文件误判成"内容不对了"，白查一轮。
+**还原判据必须写清用哪个算法，且全程只用同一个**（本仓统一 `git hash-object`）。
+这条比"还原锚点不唯一"更隐蔽：**它不会报错，只会让你去查一个不存在的问题**。
 
 **⚠️ 注入验证要**专门测 pass 路径**，不能只测 FAIL 路径。**
 只证明"能拦"是不够的：门禁的**通过消息**也可能一直在说谎，而它不影响判定，
