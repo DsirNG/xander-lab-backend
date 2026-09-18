@@ -1,11 +1,11 @@
 package com.xander.lab.integration.mcp.security.application;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.xander.lab.identity.application.AuthService;
-import com.xander.lab.auth.core.JwtUtil;
+import com.xander.lab.core.api.AccessTokenLookupPort;
 import com.xander.lab.integration.mcp.security.McpOAuthException;
 import com.xander.lab.integration.mcp.security.McpOAuthProperties;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
@@ -71,15 +71,14 @@ class McpOAuthServiceTest {
     @Mock McpOAuthGrantMapper grantMapper;
     @Mock McpOAuthTokenMapper tokenMapper;
     @Mock StringRedisTemplate redisTemplate;
-    @Mock AuthService authService;
-    @Mock JwtUtil jwtUtil;
+    @Mock AccessTokenLookupPort accessTokenLookupPort;
 
     McpOAuthService service;
 
     @BeforeEach
     void setUp() {
         service = new McpOAuthService(properties, clientMapper, grantMapper, tokenMapper,
-                redisTemplate, new ObjectMapper().registerModule(new JavaTimeModule()), authService, jwtUtil);
+                redisTemplate, new ObjectMapper().registerModule(new JavaTimeModule()), accessTokenLookupPort);
         when(properties.isEnabled()).thenReturn(true);
         when(properties.getAccessTokenTtlSeconds()).thenReturn(3600);
         when(properties.getRefreshTokenTtlSeconds()).thenReturn(2592000);
@@ -220,8 +219,7 @@ class McpOAuthServiceTest {
     }
 
     private void mockWebLogin() {
-        when(authService.validateAccessToken(anyString())).thenReturn(true);
-        when(jwtUtil.getSubject(anyString())).thenReturn("123");
+        when(accessTokenLookupPort.resolveUserId(anyString())).thenReturn(123L);
     }
 
     private void seedAuthorizationRequest() {
@@ -321,6 +319,40 @@ class McpOAuthServiceTest {
 
         assertEquals(Set.of("blog:read", "blog:write"), view.scopes());
         assertEquals(Set.of("blog:read"), view.previouslyGranted());
+    }
+
+    @Test
+    void revokeClientGrantRejectsWhenThePortSaysTheTokenIsNotAnIdentity() {
+        when(accessTokenLookupPort.resolveUserId("web-token")).thenReturn(null);
+
+        McpOAuthException error = assertThrows(McpOAuthException.class,
+                () -> service.revokeClientGrant(CLIENT_ID, "Bearer web-token"));
+
+        assertEquals("login_required", error.error());
+        assertEquals(401, error.status());
+        verify(grantMapper, org.mockito.Mockito.never()).selectOne(any());
+    }
+
+    @Test
+    void revokeClientGrantRequiresABearerPrefixedHeader() {
+        assertThrows(McpOAuthException.class, () -> service.revokeClientGrant(CLIENT_ID, "web-token"));
+        assertThrows(McpOAuthException.class, () -> service.revokeClientGrant(CLIENT_ID, null));
+        verify(accessTokenLookupPort, org.mockito.Mockito.never()).resolveUserId(anyString());
+    }
+
+    @Test
+    void listClientGrantsScopesTheQueryToTheUserIdThePortReturned() {
+        when(accessTokenLookupPort.resolveUserId("web-token")).thenReturn(777L);
+        when(grantMapper.selectList(any())).thenReturn(List.of());
+
+        service.listClientGrants("Bearer web-token");
+
+        ArgumentCaptor<LambdaQueryWrapper<McpOAuthGrant>> captor =
+                ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(grantMapper).selectList(captor.capture());
+        captor.getValue().getSqlSegment();   // ⚠️ 必须先渲染一次，MyBatis-Plus 是惰性收集参数的
+        assertTrue(captor.getValue().getParamNameValuePairs().containsValue(777L),
+                "查询条件必须用端口返回的 userId（777），不是常量");
     }
 
     @Test

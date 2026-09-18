@@ -35,9 +35,13 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 `core-api` 是**第十四刀**（§3septdecies），加 `AccessTokenLookupPort` ——
 这是**第一个"产出"调用方身份**的端口（所以守卫是反的），也是第一个消费方在
 `api/` 层（WebSocket 握手拦截器）而不是工具/服务里的刀。
+**第十五刀**（§3octodecies）是把同一个端口接给**第二个消费方** `McpOAuthService` ——
+零构建接线（契约模块与 POM 一行没改），而收益是消费方**少了一个协作者**
+（它原来自己复制了一遍身份解析，`JwtUtil` 只为那一行而存在）；
+⚠️ 顺带把 `dinqor-core-host` 送出了 Wave 2 强连通分量 —— 锁住它的只有这一条 1 语句的边。
 
-⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十四刀）；
-`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第二十一刀）。
+⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十五刀）；
+`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第二十二刀）。
 两者都对，只是分母不同。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
@@ -64,7 +68,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 |---|---|---|---|
 | `content-api` | **已完成** | 第一刀：`BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits`。第二刀：`MediaAssetPort` `MediaAssetRef` `StoredImage`。第三刀：`ContentPostPort` `PublicationPort` `ContentPost` `ContentPostPage` `ContentPostInput` `ContentPostQuery` `ContentPostStatus` | 第一刀：`integration → publishing` 22 → 5；总计 −18 条跨单元 import。第二刀：`publishing ↔ blogagent` 环拆成单向；跨单元 −8。第三刀：`integration → publishing` 5 → 0（api 11 → 0）、`agent → publishing` 3 → 0、`profile → publishing` 1 → 0 —— **`publishing` 跨单元入边归零**；总计 **−9**（跨单元 −9） |
 | `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
-| `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）**；**`AccessTokenLookupPort`（访问令牌身份端口，第十四刀加）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；`agent → identity` **两条边归零**（2 → 0，第十四刀）；跨部署单元累计 **−10**；总计 **−16** |
+| `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）**；**`AccessTokenLookupPort`（访问令牌身份端口，第十四刀加；第十五刀接入第二个消费方）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；`agent → identity` **两条边归零**（2 → 0，第十四刀）；`integration → identity` **归零**（1 → 0，第十五刀）；跨部署单元累计 **−11**；总计 **−17** |
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
 | `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。**第九刀再加 `NotificationPort`（写一条持久化用户通知）+ 两个从实体搬来的常量**。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | 第八刀：`agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元。**第九刀（零接线扩展，§3duodecies）**：`knowledgebase → automation` 2 → **0（边整条消失）**，总计再 **−2**（跨单元 −2）；`api_statements` **16 → 16 不变**（消费方 import 的是 `.application` / `.domain`，从没碰过 `.api`）。图形状：`knowledgebase` 变成**纯汇点**（整个域从清单里消失）；`automation` 扇入只剩 `admin`（SSE，要框架类型）与 `integration`（模板真环） |
 | `recitation-api` | **已完成**（两刀） | 第十刀（§3terdecies）：`RecitationMaterialPort`（背诵材料能力端口，4 个方法）+ `MaterialView`（收窄的读模型，9 分量）/ `MaterialDraft`（4）/ `MaterialFilter`（4）。第十一刀（§3quaterdecies）：`RecitationQuizPort`（测验能力端口，2 个方法 + 2 个常量）+ `QuizSessionView`（15，全带）/ `QuizAttemptView`（收窄，6，`items` 走**文本** `itemsJson`）/ `QuizOutcomeView`（收窄，10）/ `GradedItemDraft`（4）。包是 `com.xander.lab.recitation.spi`，**不是** `.recitation.api`（同因：那个包是 6 个前端 HTTP 文件的家）。⚠️ 第十一刀**删掉了两个域内 record**（`QuizSession` / `QuizOutcome`，同域生产消费方为零）而不是搬走 | 材料刀：`automation → recitation` 2 → **0（边整条消失）**、`agent → recitation` 4 → 2；总计 **−4**（跨单元 −4），`api_statements` 16 → 13（−3）。测验刀：`agent → recitation` 2 → **0（边整条消失）**，总计 **−2**（跨单元 −2），`api_statements` 13 → 12（−1）。图形状：**`content-automation ↔ core-host` 不再是互依对**（互依对 3 → 2，`MUTUAL_UNIT_PAIRS` 删掉那对，门禁主动报出过期条目）；`recitation` 成为**零跨域消费方**的域 |
@@ -2648,6 +2652,164 @@ refresh 令牌返回 `null` 且**不查 Redis** / subject 非数字返回 `null`
 
 ---
 
+## 3octodecies. 第十五刀：`McpOAuthService` 接入 `AccessTokenLookupPort` —— 第二个消费方，以及一条 1 语句的边锁住了整个 `dinqor-core-host`
+
+> 契约刀次 = 第十五刀（ADR §15）。Wave 0B 总刀次 = **第二十二刀**（见 `v9-wave0a.md` §33）。
+
+### 3octodecies.1 目标边：import / 字段 / 调用三处
+
+`integration -> identity` 是 **1 条实现语句**，全部落在
+`integration.mcp.security.application.McpOAuthService`：import（第 7 行）、
+字段（第 63 行）、调用（第 312 行）。本刀是 §3septdecies 的**直接后续** ——
+第十四刀把端口建在 `core-api` 时就写明了"这个能力不止一个消费方"，
+本刀去兑现它。
+
+⚠️ `profile -> identity`（1 impl，`ProfileOverviewService.getUserInfo`）**不在本刀范围内**：
+那是**另一种能力**（拿用户资料，不是验令牌），且同单元。
+
+### 3octodecies.2 ⚠️ 这一刀不是"把布尔换成 null 判断"：消费方复制了一份身份解析
+
+`requireWebUser` 原文是两步：`authService.validateAccessToken(token)` 判有效性，
+再 `Long.parseLong(jwtUtil.getSubject(token))` **自己又解析一遍主体**。
+这两步**合起来就是** `resolveUserId`。也就是说 `integration` 不只问了一个布尔，
+它**重新实现了一遍身份解析**，还必须知道「用户 id 是 JWT 的数字形式主体」这条实现细节。
+
+⇒ 本刀的实际形状是**删掉一份复制品**。
+
+### 3octodecies.3 ⭐ 顺带的收获：`JwtUtil` 这个协作者从消费方整个消失
+
+`jwtUtil` 在 `McpOAuthService` 里**只有那一行**在用。字段 / import / 构造参数
+（`@RequiredArgsConstructor`，它是最后一个字段 ⇒ 只少一个尾参）/ 测试里的 `@Mock` 一起去掉。
+
+⚠️ **抽端口的收益不总是"少一条 import"**：这一刀里消费方少了一个协作者、
+少了一份解析逻辑、少了一条隐含假设 —— 而这些**指标看不出来**（只降 1）。
+
+### 3octodecies.4 ⚠️ 消掉一条潜在故障路径：非数字主体从 500 变成 401
+
+旧写法 `validateAccessToken` 通过后直接 `Long.parseLong(...)`，主体非数字 ⇒
+`NumberFormatException` 冒到顶层 ⇒ **500**。新写法端口内部 `try/catch` 后返回 `null`
+⇒ 消费方抛 `McpOAuthException(401)`。按 §3septdecies.4 的等价性证明这条路径**今天不可达**，
+但端口让它在结构上不可能发生 —— 消费方再也拿不到"半验证通过"的中间状态。
+
+### 3octodecies.5 ⭐ 端口设计被验证：**零构建接线**
+
+`integration` 是第二个消费方。接入它只需要改消费方自己：
+`contracts/core-api` **一行没动**（无新方法 / 无新类型 / 无新模块），
+`pom.xml` **一行没动**（同属 `apps/core-host`，`core-api` 早就是依赖）。
+这正是"端口建在 `core-api` 而不是 `agent-api`"的回报 ——
+若建在 `agent-api`，今天 `integration` 要么依赖 `agent-api`（为一个与 agent 无关的能力），
+要么再造一个同能力的新契约（两份契约描述同一能力，Javadoc 迟早漂移）。
+**判据：一个能力一个端口；第二个消费方接入时的成本，是对这条判据最诚实的检验。**
+
+### 3octodecies.6 测试
+
+`apps/core-host` 1191 → **1194**（`McpOAuthServiceTest` 20 → **23**，+3）：
+
+1. `revokeClientGrantRejectsWhenThePortSaysTheTokenIsNotAnIdentity` —— 端口答不上来时
+   必须 `login_required` / **401**，且**不许碰 mapper**；
+2. `revokeClientGrantRequiresABearerPrefixedHeader` —— 非 `Bearer ` 前缀在**调端口之前**就拒；
+3. `listClientGrantsScopesTheQueryToTheUserIdThePortReturned` —— **端口返回的 777
+   必须出现在查询条件里**（钉住"用的是端口返回值，不是常量"）。
+
+⚠️ 第 3 条一开始写成 `verify(grantMapper).selectList(argThat(w -> w.getParamNameValuePairs()
+.containsValue(777L)))`，**红了**。原因是 MyBatis-Plus 的 `getParamNameValuePairs()`
+**惰性填充**：参数只在 SQL 片段被渲染时才进 map，而 mapper 是 mock，永远不会渲染。
+仓里既有 8 处同类断言都是**先显式调一次 `getSqlSegment()`** 再读 map。
+（已写进 `backend-norms`。）
+
+### 3octodecies.7 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 30 | **29** |
+| `implementation_edges` | 14 | **13** |
+| `cross_deployment_unit_statements` | 13 | **12** |
+| `cross_deployment_unit_edges` | 7 | **6** |
+| `api_statements` | 9 | 9（不动） |
+| `api_edges` | 6 | 6（不动） |
+
+`integration -> identity` **整条边消失** ⇒ **`identity` 作为目标域的跨单元边全部归零**
+（剩 `virtualpay` 5 / `admin` 2 / `profile` 1 全是同单元边）。
+
+### 3octodecies.8 ⭐⭐ 图形状突变：一条 1 语句的边锁住了整个 `dinqor-core-host`
+
+改完后 `deployment-unit-coupling` 门禁报 `dinqor-core-host` **也脱离了** Wave 2 强连通分量，
+并要求从 `MUTUAL_UNIT_PAIRS` 里删掉 `('dinqor-core-host', 'dinqor-platform-integration')`
+（**两个方向都删**）。原因只有一条：单元级边 `platform-integration -> core-host`
+的**全部内容就是这一条 1 语句的边**。
+
+⚠️ 此前一直把图形状读成"core-host、content-automation、platform-integration 是一团"；
+实际成环的是 `content-automation -> platform-integration`（6）与
+`platform-integration -> content-automation`（1）这一对。
+**`core-host` 的成员资格完全挂在一条大小为 1 的边上。**
+
+⇒ **教训**：**强连通分量的成员资格可以挂在一条大小为 1 的边上**；
+每次动跨单元边之后要**重新推导**图形状，不能沿用上一刀的形状结论。
+剩余分量 = `{content-automation, platform-integration}`；
+**`dinqor-agent` 与 `dinqor-core-host` 现在都可以被单独抽取**。
+
+### 3octodecies.9 为什么没有加 `contract-changes.yaml` 条目
+
+契约模块**一个字都没改**（没有新方法、新字段、新分量）。本刀只是让一个消费方
+从"依赖实现类"改成"依赖已有契约" —— 契约的**公共面**没动，所以没有契约变更要登记。
+
+### 3octodecies.10 注入验证：四次
+
+| # | 注入 | 实测红 |
+|---|---|---|
+| A | 消费方不再调用端口，`userId` 写死 `123L` | **2** |
+| B | 消费方丢掉 `null` 守卫（忘了端口可以答不上来） | **1** |
+| C | 消费方把整个 `Authorization` 头传给端口（忘了剥 `Bearer `） | **2** |
+| D | 消费方把 `401` 改成 `403` | **1** |
+
+⚠️ **两次实测与直觉不符**（本仓第三次 / 第四次）：
+- **A 红两处**：写死 `123L` 之后 `pendingAuthorization` 那条用例**恰好**也是 `123L`
+  （`mockWebLogin` 用的就是 `123L`）⇒ 它绿着过；红的是
+  `listClientGrantsScopesTheQueryToTheUserIdThePortReturned` 与
+  `revokeClientGrantRejectsWhenThePortSaysTheTokenIsNotAnIdentity`。
+- **C 红两处**（直觉是 1）：⚠️⚠️ 这条照出了一条更重要的规则 —— 失败信息是
+  `Expected McpOAuthException to be thrown, but nothing was thrown`，只能由
+  **`userId` 非 null** 解释；而测试里没有任何 stub 匹配 `resolveUserId("Bearer web-token")`。
+  查 Mockito 5.7.0 源码（`org.mockito.internal.util.Primitives`）：
+  `PRIMITIVE_OR_WRAPPER_DEFAULT_VALUES.put(Long.class, 0L)` ⇒
+  **未 stub 的 `Long` 返回值是 `0L`，不是 `null`**。
+  而本端口用 `null` 表示"这个令牌不构成有效身份" ⇒ **未 stub 的 mock 会伪装成
+  "答上来了、用户 id 是 0"**，`if (userId == null)` 守卫**一次都不会被触发，而测试照常绿**。
+  ⇒ **判据：凡"用 `null` 表达失败"的契约方法，测试里必须显式 stub 成 `null`**，
+  绝不能让未 stub 的默认值替它回答（`Long`/`Integer` → `0`，`Boolean` → `false`，
+  `String`/对象 → `null`）。已写进 `backend-norms`。
+
+⚠️ **D 是有意加的一条守卫强度探针**：`401` 不是"随便一个错误码"，它是 MCP 客户端协议的
+一部分（`login_required` + 401）。只断言 `assertThrows(McpOAuthException.class)` 抓不到它，
+必须有 `assertEquals(401, error.status())`。
+
+⚠️ 本刀注入脚本改用 **Python**（`D:/blog/.workbuddy-ai/tmp/inject15.py`）：bash 版踩过两次
+（引用未定义变量、还原锚点不唯一），Python 版可以把"两条锚点动手前数一遍出现次数"
+与"每条注入后立刻比对 blob"写成**前置断言 + 后置断言**，失败即 `return`，不会带着残留继续。
+⚠️ 但脚本第一版在 B 上**主动中止**：B 是"删除式注入"（把丢守卫建模成删掉一行），
+它的还原锚点必然是正向锚点的子串 ⇒ 前置断言拒绝执行。已按"给每条注入声明还原锚点的
+期望出现次数、再用**施加后**的计数消歧"修正（已写进 `backend-norms`）。
+
+### 3octodecies.11 刻意没做的事
+
+- `profile -> identity`（1 impl）：另一种能力，且同单元。
+- `agent -> integration`（2 impl）：`PublishPostTool`，另一条边、另一个消费方。
+- `automation -> integration`（6 impl）：卡在 `MailService` 的 API 变更上，不是纯抽端口。
+- `McpOAuthService` 里 `jwtUtil` 的其它潜在用法：确认过**没有**。
+
+### 3octodecies.12 下一刀
+
+剩余跨单元实现边（**6 条**）：`automation → integration` 6、`agent → integration` 2、
+`admin → automation` 1、`identity → integration` 1、`integration → automation` 1、
+`studio → blogagent` 1。
+
+1. **`agent → integration`（2）** —— `PublishPostTool`；做完 **`agent` 的出边全部归零**。
+2. **`studio → blogagent`（1）** —— 先侦察，可能很便宜。
+3. **`automation → integration`（6）** —— 最大，卡在 `MailService` 的 API 变更上。
+4. **`admin → automation`（1）** —— 需要 SSE 广播端口。
+
+---
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`
@@ -2842,7 +3004,7 @@ python scripts/migration/ci_gates.py
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
 类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
 只看最后那个 `Results:` 会以为"测试变少了"。
-**要核对的是各模块之和。**最新一轮（§3septdecies 之后，2026-09-18）：
+**要核对的是各模块之和。**最新一轮（§3octodecies 之后，2026-09-18）：
 
 | 模块 | Tests run |
 |---|---|
@@ -2855,8 +3017,15 @@ python scripts/migration/ci_gates.py
 | `contracts/automation-api` | 31 |
 | `contracts/recitation-api` | 35 |
 | `contracts/blogagent-api` | 26 |
-| `apps/core-host` | 1191 |
-| **合计** | **1417**（0 failures / 0 errors） |
+| `apps/core-host` | 1194 |
+| **合计** | **1420**（0 failures / 0 errors） |
+
+第十五刀的增量（1417 → 1420）：
+
+* `apps/core-host` 1191 → **1194**（+3）：`McpOAuthServiceTest` 20 → **23** ——
+  端口答不上来时必须 401 且不碰 mapper、非 `Bearer ` 前缀在调端口之前就拒、
+  **端口返回的 userId 必须出现在查询条件里**（§3octodecies.6）。
+  契约模块与其它模块**一行没改**（零构建接线）。
 
 第十四刀的增量（1407 → 1417）：
 
@@ -2976,7 +3145,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **13** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → 15 → **13**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` 9/9、`identity` **9**/**2**、`blogagent` 5/3、`automation` 2/2、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）、**`agent → identity` 已归零**（2/0 → 0/0，见 §3septdecies）。⚠️ `agent` 作为**来源域**现在只剩 **1 条出边**（`agent → integration` 2 条），且**零入边** —— 它是当前最接近"可整块搬走"的域。当前最大的跨单元边是 `automation -> integration` 6 条（卡在 `MailService`，§3quater.5） | Wave 0B 剩余 |
+| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **12** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → 15 → 13 → **12**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` 9/9、`identity` **8**/**0**、`blogagent` 5/3、`automation` 2/2、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）、**`agent → identity` 已归零**（2/0 → 0/0，见 §3septdecies）、**`integration → identity` 已归零**（1/0 → 0/0，见 §3octodecies）⇒ **`identity` 作为目标域的跨单元边全部归零**（剩余 8 条 impl 全是同单元边：`virtualpay` 5 / `admin` 2 / `profile` 1）。⚠️ `agent` 作为**来源域**只剩 1 条出边（`agent → integration` 2 条）、`integration` 也只剩 1 条出边（`integration → automation` 1 条）。当前最大的跨单元边是 `automation -> integration` 6 条（卡在 `MailService`，§3quater.5） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

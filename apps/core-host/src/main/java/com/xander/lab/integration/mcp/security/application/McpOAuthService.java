@@ -4,8 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.xander.lab.identity.application.AuthService;
-import com.xander.lab.auth.core.JwtUtil;
+import com.xander.lab.core.api.AccessTokenLookupPort;
 import com.xander.lab.integration.mcp.security.McpOAuthException;
 import com.xander.lab.integration.mcp.security.McpOAuthProperties;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
@@ -60,8 +59,7 @@ public class McpOAuthService {
     private final McpOAuthTokenMapper tokenMapper;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
-    private final AuthService authService;
-    private final JwtUtil jwtUtil;
+    private final AccessTokenLookupPort accessTokenLookupPort;
 
     /** Registers an RFC 7591 public client. Client secrets are intentionally never issued. */
     public RegisteredClient registerClient(String clientName, List<String> redirectUris) {
@@ -306,11 +304,25 @@ public class McpOAuthService {
                 .set(McpOAuthToken::getRevokedAt, LocalDateTime.now()));
     }
 
+    /**
+     * 把 {@code Authorization: Bearer <DinQorAI 访问令牌>} 换成用户 id。
+     *
+     * <p>这里曾经自己做两步：{@code authService.validateAccessToken(token)} 判有效性，
+     * 再 {@code Long.parseLong(jwtUtil.getSubject(token))} 解析主体。那两步合起来
+     * <b>就是</b> {@code AccessTokenLookupPort.resolveUserId} —— 也就是说这个消费方
+     * 复制了一份身份解析，还得知道「用户 id 是数字形式的主体」这条实现细节，
+     * 于是 {@code jwtUtil} 也只为了这一行而存在。</p>
+     *
+     * <p>现在只依赖契约端口，{@code jwtUtil} 这个协作者从本类里彻底消失。
+     * ⚠️ 顺带消掉一条潜在故障路径：旧写法在「令牌校验通过、但主体不是数字」时会抛
+     * {@code NumberFormatException}（500），新写法返回 401。按端口提供方的等价性证明，
+     * 今天这两条路径不可达，但端口让它结构上不可能发生。</p>
+     */
     private Long requireWebUser(String authorization) {
         if (authorization == null || !authorization.startsWith("Bearer ")) throw new McpOAuthException("login_required", 401, "DinQorAI login is required");
-        String token = authorization.substring(7);
-        if (!authService.validateAccessToken(token)) throw new McpOAuthException("login_required", 401, "DinQorAI login is required");
-        return Long.parseLong(jwtUtil.getSubject(token));
+        Long userId = accessTokenLookupPort.resolveUserId(authorization.substring(7));
+        if (userId == null) throw new McpOAuthException("login_required", 401, "DinQorAI login is required");
+        return userId;
     }
 
     private McpOAuthClient requireActiveClient(String clientId) {

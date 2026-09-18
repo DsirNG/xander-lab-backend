@@ -647,11 +647,21 @@ WAVE2_UNITS = (
 # stop checking the graph: the component of a unit nobody depends on can never gain a
 # member, so `joined` would always be empty and a new unit joining the *real* component
 # would go unreported.
+#
+# ⚠️ dinqor-core-host also left the component on 2026-09-18, and it left because of a
+# *single* implementation statement: platform-integration -> core-host was nothing but
+# `McpOAuthService` importing `identity.application.AuthService` (the `integration ->
+# identity` edge, 1 impl). The graph had been read as "core-host, content-automation and
+# platform-integration are one tangle", but core-host's membership rested entirely on that
+# one line -- platform-integration -> content-automation + content-automation ->
+# platform-integration are what actually form the cycle. Lesson: a strongly-connected
+# component's membership can hinge on an edge of size 1, so re-derive it after every cut
+# instead of assuming the previous shape still holds.
+# Pairs are ordered (the baseline keeps direction) and the criterion is bidirectional, so
+# removing a pair means removing BOTH directions.
 MUTUAL_UNIT_PAIRS = frozenset({
     ("dinqor-content-automation", "dinqor-platform-integration"),
-    ("dinqor-core-host", "dinqor-platform-integration"),
     ("dinqor-platform-integration", "dinqor-content-automation"),
-    ("dinqor-platform-integration", "dinqor-core-host"),
 })
 
 

@@ -860,6 +860,61 @@ grep -rn "\.openQuiz(\|\.recordQuiz(\|\.listQuizzes(" apps/core-host/src --inclu
   预期 1 红，实测 1 FAIL + **1 ERROR** —— 那个 ERROR 是测试自己的缺陷（见下条）。
   注入验证的价值有一半在于它会顺带照出测试的毛病。
 
+### ⚠️⚠️ 契约用 `null` 表示失败时，测试里**必须显式 stub 成 `null`**
+
+**Mockito 对未 stub 的返回值给的是"包装类型的零值"，不是 `null`。**
+Mockito 5.7.0 源码 `org.mockito.internal.util.Primitives`：
+
+```java
+PRIMITIVE_OR_WRAPPER_DEFAULT_VALUES.put(Long.class, 0L);
+PRIMITIVE_OR_WRAPPER_DEFAULT_VALUES.put(Integer.class, 0);
+PRIMITIVE_OR_WRAPPER_DEFAULT_VALUES.put(Boolean.class, false);
+// String / 自定义对象 → null
+```
+
+所以当契约写成 `Long resolveUserId(String token)` 且**用 `null` 表示"答不上来"**时：
+
+```java
+// ❌ 没有这条 stub 时，resolveUserId(任何未匹配的实参) 返回 0L —— 一个"合法"的用户 id
+when(accessTokenLookupPort.resolveUserId("web-token")).thenReturn(null);
+// 于是被测代码里的 `if (userId == null) throw ...` 一次都不会触发，测试却照常绿。
+```
+
+**2026-09-18 实测（`McpOAuthServiceTest`）**：注入"消费方忘了剥掉 `Bearer ` 前缀"之后，
+实参从 `"web-token"` 变成 `"Bearer web-token"` ⇒ 窄 stub 失配 ⇒ mock 返回 `0L` ⇒
+`null` 守卫静默失效 ⇒ 两处红。**这正是"守卫从未执行过、而门禁全绿"那一族缺陷。**
+
+判据：
+- 契约方法**用 `null` 表达失败**（返回 `Long` / `Integer` / `Boolean` / 对象）时，
+  每个相关用例都要有**显式**的 `thenReturn(null)`（或 `thenReturn(<对象>)`）；
+- **不要**靠"没写 stub 所以是 null"—— 对包装类型这是错的；
+- 断言守卫**真的生效**时，别只断言"抛了异常"，把**错误码/状态**也断言上
+  （例：`assertEquals(401, error.status())`）—— 状态码也是协议的一部分。
+
+### ⚠️ 断言"查询条件里带上了某个值"时，必须先调一次 `getSqlSegment()`
+
+MyBatis-Plus 的 `LambdaQueryWrapper` / `LambdaUpdateWrapper` 是**惰性**收集参数的：
+`eq(...)` / `set(...)` 只把参数存成一个待求值的 lambda，**真正的 `formatParam` 要等 SQL 片段
+被渲染时才跑**。而 mapper 是 mock，永远不会渲染 ⇒ 直接读 `getParamNameValuePairs()`
+拿到的是**空 Map**，断言会以"参数不同"的形式失败，看起来像业务逻辑错了。
+
+```java
+// ❌ 拿到空 Map，必然红（2026-09-18 在 McpOAuthServiceTest 上实测）
+verify(grantMapper).selectList(argThat(w ->
+        w.getParamNameValuePairs().containsValue(777L)));
+
+// ✅ 先渲染一次，再读 Map —— 仓里既有 8 处同类断言都是这个形状
+ArgumentCaptor<LambdaQueryWrapper<McpOAuthGrant>> captor =
+        ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+verify(grantMapper).selectList(captor.capture());
+captor.getValue().getSqlSegment();   // ⚠️ 这一行是必须的，调用它有副作用（填充参数表）
+assertTrue(captor.getValue().getParamNameValuePairs().containsValue(777L));
+```
+
+先例：`KnowledgeIngestionServiceTest`、`KnowledgeQuizServiceTest`、`Img2ThreeServiceTest`、
+`RecitationWorkerTest`。**这类断言的用途**：钉住"用的是端口/方法返回的那个值，
+而不是写死的常量"—— 只断言"调用发生了"抓不到写死常量。
+
 ### ⚠️ 用反射钉契约形状时：按**名字**取方法，不要按下标
 
 ```java
@@ -1224,6 +1279,34 @@ patch "$SERVICE" '        if (!validateAccessToken(accessToken)) {
 两个都必须是 1；**每条注入跑完立刻做一次 blob 级还原校验**，不要等脚本收尾统一查 ——
 否则一条还原失败会**污染后面所有注入的结果**（它们的"变红"来自前一条的残留）。
 这也说明"六次注入各红了几处"这张表，只有在**每条都独立还原成功**时才成立。
+
+**⚠️ 第三次踩（同族、不同因）："删除式注入"的还原锚点必然是正向锚点的子串。**
+2026-09-18 把"丢掉 `null` 守卫"建模成**删掉一行**，于是
+正向锚点 = `resolve 行 + 守卫行`、还原锚点 = `resolve 行` ——
+而 `resolve 行` 本来就在文件里（它是正向锚点的一部分）⇒
+"还原锚点在注入前出现 0 次"这条前置断言立刻失败，脚本**主动中止**（断言生效了，
+但规则需要细化）。两条路：
+
+```python
+# ① 给每条注入声明"还原锚点在注入前的期望次数"（普通注入 0、删除式注入 1），
+#    再用**施加后**的计数消歧：施加后必须 fwd==0 且 mut==1，
+#    否则说明还原锚点在别处也出现，替换会打到错误的位置。
+INJECTIONS = [(name, fwd, mut, mut_before), ...]
+if src.count(fwd) != 1: abort()
+if src.count(mut) != mut_before: abort()
+write(src.replace(fwd, mut, 1))
+if applied.count(fwd) != 0 or applied.count(mut) != 1: abort()   # ← 消歧点
+
+# ② 或者改用**非子串**的变异：把 `userId == null` 改成 `authorization == null`
+#    （"守错了变量"），语义等价但两个锚点互不为子串，规则不用放宽。
+```
+
+**⚠️ 注入脚本用 Python 写时：`mvn.sh` 是 shell 脚本，Windows 的 `CreateProcess`
+不能直接 exec 它**（`OSError: [WinError 193] %1 不是有效的 Win32 应用程序`）。
+必须在脚本里**内联 `mvn.sh` 里那条完整 java 命令行**（`-classpath plexus-classworlds` +
+`-Dclassworlds.conf` + `-Dmaven.home` + `-Dmaven.multiModuleProjectDirectory` + 主类），
+并注明"内容需与 `mvn.sh` 保持同步"。Python 版的好处是可以把前置/后置断言写成
+`return` 早退，而不是 bash 的 `set -e` + 事后人工检查。
 
 ⚠️ `mvn` 的控制台在 UTF-8 管道里是 GBK 乱码（`ÊÇ default ·½·¨`），
 但**测试名与 ASCII 断言值可读**（`expected: <size> but was: <model>`），
