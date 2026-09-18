@@ -1,6 +1,6 @@
 package com.xander.lab.integration.mail;
 
-import com.xander.lab.automation.domain.EmailReminderMailTemplates;
+import com.xander.lab.integration.api.MailPort;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,26 +11,28 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 
 /**
- * Shared mail delivery service for verification codes and system notifications.
+ * Mail delivery. Implements {@link MailPort} for callers in other deployment units.
+ *
+ * <p>⚠️ 这里<b>只做投递</b>，不做渲染。提醒邮件的模板、显示时区格式化与 PLAIN/HTML 归一化
+ * 全部在调用方一侧（{@code automation.domain.EmailReminderMailRenderer}）。
+ * 改造前它们住在这个类里，于是本类必须 import
+ * {@code automation.domain.EmailReminderMailTemplates}（业务域类型）、
+ * 并读 {@code email-reminder.display-zone}（配置台账里 owner 记在 content-automation 名下的键）
+ * ——提供方反过来依赖消费方，而且读的是别人的配置。</p>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class MailService {
+public class MailService implements MailPort {
 
     private final JavaMailSender mailSender;
 
     @Value("${mail.from}")
     private String from;
 
-    @Value("${email-reminder.display-zone:Asia/Shanghai}")
-    private String reminderDisplayZone;
-
+    @Override
     public void sendSimpleMail(String to, String subject, String content) {
         try {
             SimpleMailMessage message = new SimpleMailMessage();
@@ -46,6 +48,7 @@ public class MailService {
         }
     }
 
+    @Override
     public void sendVerificationCode(String email, String code) {
         String subject = LoginVerificationMailTemplates.buildSubject();
         String plainText = LoginVerificationMailTemplates.buildPlainText(code);
@@ -70,58 +73,16 @@ public class MailService {
     }
 
     /**
-     * PLAIN (no markup): body text only.
-     * HTML: custom HTML as-is, or wrapped by a selected layout template.
+     * HTML 正文 + 纯文本兜底的多段投递。
+     *
+     * <p>⚠️ 这里<b>不认识模板、也不认识时区</b>——{@code plainText} 与 {@code html}
+     * 都是调用方渲染好的成品。改造前这个位置是
+     * {@code sendReminderMail(..., scheduledAt, contentType, templateId)}，
+     * 六个参数里四个只服务于渲染，而渲染需要业务域的模板类与别人家的配置键。</p>
      */
-    public void sendReminderMail(String to, String subject, String userMessage, Instant scheduledAt) {
-        sendReminderMail(
-                to,
-                subject,
-                userMessage,
-                scheduledAt,
-                null,
-                EmailReminderMailTemplates.TEMPLATE_NONE
-        );
-    }
-
-    public void sendReminderMail(String to, String subject, String userMessage, Instant scheduledAt,
-                                 String contentType, String templateId) {
+    @Override
+    public void sendHtmlMail(String to, String subject, String plainText, String html) {
         try {
-            String normalizedType = EmailReminderMailTemplates.resolveEffectiveContentType(
-                    contentType, templateId, userMessage
-            );
-            String normalizedTemplate = EmailReminderMailTemplates.normalizeTemplateId(templateId);
-
-            if (EmailReminderMailTemplates.CONTENT_PLAIN.equals(normalizedType)) {
-                String plainBody = userMessage == null ? "" : userMessage;
-                sendSimpleMail(to, subject, plainBody);
-                log.info("[Mail] 定时提醒发送成功：task recipient={}, contentType=PLAIN", to);
-                return;
-            }
-
-            ZoneId displayZone = ZoneId.of(reminderDisplayZone);
-            String formattedTime = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-                    .withZone(displayZone)
-                    .format(scheduledAt);
-            String bodyHtml = EmailReminderMailTemplates.resolveBodyHtml(userMessage, normalizedType);
-            String html = EmailReminderMailTemplates.buildHtml(
-                    normalizedTemplate,
-                    subject,
-                    bodyHtml,
-                    formattedTime,
-                    displayZone.getId()
-            );
-            String plainText = EmailReminderMailTemplates.resolvePlainText(
-                    userMessage,
-                    normalizedType,
-                    EmailReminderMailTemplates.TEMPLATE_NONE.equals(normalizedTemplate)
-                            ? ""
-                            : formattedTime,
-                    EmailReminderMailTemplates.TEMPLATE_NONE.equals(normalizedTemplate)
-                            ? ""
-                            : displayZone.getId()
-            );
-
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(
                     message,
@@ -133,11 +94,10 @@ public class MailService {
             helper.setSubject(subject);
             helper.setText(plainText, html);
             mailSender.send(message);
-            log.info("[Mail] 定时提醒发送成功：task recipient={}, contentType=HTML, template={}",
-                    to, normalizedTemplate);
+            log.info("[Mail] HTML 邮件发送成功：{} -> {}", from, to);
         } catch (Exception e) {
-            log.error("[Mail] 定时提醒发送失败：recipient={}, reason={}", to, e.getMessage());
-            throw new RuntimeException("定时提醒邮件发送失败", e);
+            log.error("[Mail] HTML 邮件发送失败：{}", e.getMessage());
+            throw new RuntimeException("邮件发送失败，请稍后重试", e);
         }
     }
 }

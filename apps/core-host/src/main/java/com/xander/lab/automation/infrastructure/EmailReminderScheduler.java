@@ -1,11 +1,12 @@
 package com.xander.lab.automation.infrastructure;
 
+import com.xander.lab.automation.domain.EmailReminderMailRenderer;
 import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
 import com.xander.lab.automation.domain.EmailReminderTask;
 import com.xander.lab.automation.infrastructure.EmailReminderTaskMapper;
 import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.payment.api.BillingPort;
-import com.xander.lab.integration.mail.MailService;
+import com.xander.lab.integration.api.MailPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,8 +34,18 @@ public class EmailReminderScheduler {
             "发送进程意外中断，任务已停止以避免重复发送，请手动恢复后重试";
 
     private final EmailReminderTaskMapper taskMapper;
-    private final MailService mailService;
+    private final MailPort mailPort;
     private final BillingPort billingPort;
+
+    /**
+     * 提醒邮件的展示时区。
+     *
+     * <p>⚠️ 这个键的 owner 是 content-automation（见 {@code docs/config-ownership.yaml}），
+     * 而改造前它由 {@code integration.mail.MailService} 读取 —— 那是"integration 读
+     * automation 的配置"。渲染搬回本域之后，读它的人与拥有它的人终于是同一个。</p>
+     */
+    @Value("${email-reminder.display-zone:Asia/Shanghai}")
+    private String displayZone;
 
     @Value("${email-reminder.batch-size:20}")
     private int batchSize;
@@ -84,14 +95,31 @@ public class EmailReminderScheduler {
         try {
             // SMTP is deliberately performed after the atomic claim and without
             // a surrounding database transaction.
-            mailService.sendReminderMail(
-                    task.getRecipientEmail(),
+            //
+            // ⚠️ 渲染在本域完成（模板、展示时区、PLAIN/HTML 归一化都归 automation），
+            // 邮件端口只收渲染好的成品 —— 它不认识模板，也不认识时区。
+            EmailReminderMailRenderer.Rendered rendered = EmailReminderMailRenderer.render(
                     task.getSubject(),
                     task.getMessage(),
-                    task.getScheduledAt(),
                     task.getContentType(),
-                    task.getTemplateId()
+                    task.getTemplateId(),
+                    task.getScheduledAt(),
+                    displayZone
             );
+            if (rendered.html()) {
+                mailPort.sendHtmlMail(
+                        task.getRecipientEmail(),
+                        task.getSubject(),
+                        rendered.plainText(),
+                        rendered.htmlBody()
+                );
+            } else {
+                mailPort.sendSimpleMail(
+                        task.getRecipientEmail(),
+                        task.getSubject(),
+                        rendered.plainText()
+                );
+            }
             Instant nextScheduledAt = null;
             String frequency = task.getFrequency() == null
                     ? EmailReminderScheduleCalculator.FREQ_ONCE

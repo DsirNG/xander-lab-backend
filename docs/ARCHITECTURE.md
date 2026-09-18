@@ -245,10 +245,18 @@ empty except for shared infrastructure:
    `MultipartFile` — a contract is depended on by every service including the
    WebFlux gateway, and a `MultipartFile` cannot be sent over a network call
    anyway. `OssService.upload(MultipartFile, String)` survives as an in-domain
-   convenience for `FileController`. The remaining five types (CSDN/Juejin
-   credential and sync services, `MailService`) stay where they are: they are
-   concrete implementations, and `MailService` additionally imports
-   `automation.domain.EmailReminderMailTemplates`, which a contract may not do.
+   convenience for `FileController`. This module has grown since, always by the same
+   rule: an `integration` type that a *different* deployment unit injects gets a
+   port. `OssPort` came first; then `CsdnBlogSyncPort` / `JuejinBlogSyncPort` with
+   `BlogSyncResult` for the off-site sync services; and now `MailPort`, which also
+   let `MailService` shed its reminder-rendering half — the
+   `automation.domain.EmailReminderMailTemplates` import and the
+   `email-reminder.display-zone` key it was reading out of another domain's
+   configuration. That removal is what deleted the last `integration → automation`
+   statement. What is left in `integration` and still crossed by another unit is the
+   CSDN/Juejin **credential** services (`automation` injects both, 4 statements);
+   they are concrete classes, so they need ports rather than a move. Each cut is
+   recorded in `docs/migration/lib-extraction.md`.
 
 9. `contracts/core-api` holds the runtime model-routing SPI (`ModelGateway`), its
    `ModelEndpoint` record, and `FeatureModelNotConfiguredException`. Like item 7
@@ -322,8 +330,46 @@ empty except for shared infrastructure:
     port's *width* is an invariant nothing else guards: adding a `default` method
     compiles, moves no metric, and trips no gate, yet each method is another way
     around the boundary. `UserLookupPortTest` therefore reflects over the declared
-    methods and asserts there is exactly one — verified by injection, where a second
-    `default` method left the build green and every other test passing.
+   methods and asserts there is exactly one — verified by injection, where a second
+   `default` method left the build green and every other test passing.
+
+12. `contracts/integration-api` also holds `MailPort` — three methods, and the most
+    useful thing about it is what it does *not* carry. It replaces
+    `integration.mail.MailService`, a concrete `@Service` that three callers in two
+    other deployment units injected (`identity.AuthService` sends login verification
+    codes; `automation.EmailReminderScheduler` sends due reminders). The direction is
+    what made this cut interesting: `MailService` had
+    `sendReminderMail(to, subject, userMessage, scheduledAt, contentType, templateId)`,
+    and the last four parameters existed only to **render** — normalise PLAIN/HTML,
+    format the send time in the display zone, choose a branded layout, build a
+    plain-text fallback. Rendering needs `automation.domain.EmailReminderMailTemplates`
+    (another domain's business type) and the `email-reminder.display-zone` key, whose
+    `owner` in `docs/config-ownership.yaml` is `content-automation`. The provider
+    therefore depended on the consumer *and* read the consumer's configuration: that
+    was the entire `integration → automation` edge, and the last leg of the last cycle
+    in the deployment-unit graph.
+
+    The split criterion is "what does this reminder look like" versus "put it in the
+    mail". The first is an `automation` concept (`EmailReminderTask`,
+    `EmailReminderService` and `EmailReminderScheduler` all live there), so rendering
+    moved back as `automation.domain.EmailReminderMailRenderer` — a pure function that
+    takes the display zone id as a `String` and resolves it *inside* the HTML branch,
+    so a bad `display-zone` cannot kill plain-text reminders. `MailPort.sendHtmlMail`
+    then takes two **finished** bodies, and `MailPort` has no time parameter at all.
+
+    Two smaller things came out of the same cut. `MailService` had **no test class** —
+    it implemented no contract, so its body was only ever exercised as a mock inside
+    its callers' tests; `MailServiceTest` now asserts that both finished bodies reach
+    the MIME tree verbatim. And the port deliberately takes no `userId`, which
+    `MailPortTest` pins as a *negative* assertion: the verification code is sent before
+    login, and delivery does not need to know who the recipient is, so "add the caller
+    id for consistency" is exactly the change that would write a false signal into the
+    contract.
+
+    Effect: cross-unit implementation statements 8 → 5, cross-unit edges 4 → 2, and
+    every Wave 2 unit became a singleton component — the remaining graph is the chain
+    `core-host → content-automation → platform-integration`, which admits a
+    topological extraction order where the cycle admitted none.
 
 ## Agent HTTP, SSE, and WebSocket Contract
 

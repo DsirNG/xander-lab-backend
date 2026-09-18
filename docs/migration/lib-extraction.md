@@ -3196,6 +3196,217 @@ B 会**绿着过**，而本地部署的 img2three 会静默失去凭证。
 
 ---
 
+## 3unvicies. 第十八刀：`MailPort` —— 一个**枢纽**上的三条边，跨单元实现图变成**无环链**
+
+### 3unvicies.1 目标边：三条边都经过同一个类
+
+`integration.mail.MailService` 是本刀之前唯一一个**同时参与三条跨单元边**的类型：
+
+| 边 | 语句 | 落点 |
+|---|---|---|
+| `automation → integration` | 1 | `EmailReminderScheduler` 调 `sendReminderMail(...)` |
+| `identity → integration` | 1 | `AuthService` 调 `sendVerificationCode(...)` |
+| `integration → automation` | 1 | **反向**：`MailService` import `automation.domain.EmailReminderMailTemplates` |
+
+⭐ 第三条与第一条闭成一个**真环**，也是当时跨单元实现图里**最后**一个环。
+ADR §7.12 早就写下"要断环必须改 `MailService` 的 API（让调用方把渲染好的正文传进来），
+不是加个端口就行"；`contracts/automation-api/pom.xml` 与它的 `package-info` 里也各留了一段
+同样的说明。**本刀就是那一刀**，两处说明已改成"已做"。
+
+### 3unvicies.2 ⚠️ 侦察结论：真环的成因不是"互相调用"，是"提供方替消费方渲染"
+
+```java
+sendReminderMail(String to, String subject, String userMessage,
+                 Instant scheduledAt, String contentType, String templateId)
+```
+
+六个参数里只有 `to` / `subject` 是**投递**需要的；后四个**只服务于渲染**
+（归一化内容类型、按显示时区格式化时间、挑品牌化 HTML 版式、生成纯文本兜底）。
+而渲染要用的两样东西**都不是 integration 的**：
+
+- `automation.domain.EmailReminderMailTemplates` —— 另一个域的**业务类型**（ADR-2 直接禁止）；
+- `email-reminder.display-zone` —— `docs/config-ownership.yaml` 里 **owner 记在
+  `content-automation` 名下**的键。⭐ **台账是对的，代码是错的。**
+
+⇒ 这不是"两个服务互相调用"（拆完后 A 调 B、B 调 A 是正常的），而是
+**提供方在替消费方做消费方的业务**。判据：
+
+> **渲染**（"这封提醒长什么样"）是 automation 的业务概念；
+> **投递**（"把它送出去"）才是 integration 的能力。
+
+⚠️ 这条判据与本仓既有布局吻合：`integration/mail/` 里**本来就**住着
+`LoginVerificationMailTemplates` —— "邮件模板住在邮件包里"是本仓既有做法。
+真正的错位只有一处：**提醒**的模板住在 `automation`，而它的渲染却在邮件包里。
+
+### 3unvicies.3 ⭐ 形状决定：端口只带"发什么"，不带"怎么渲染"
+
+```java
+void sendSimpleMail(String to, String subject, String content);
+void sendVerificationCode(String email, String code);
+void sendHtmlMail(String to, String subject, String plainText, String html);
+```
+
+端口上**没有 `Instant`、没有 `contentType`、没有 `templateId`、没有 `displayZone`**。
+一旦它们回来，提供方就要重新 import 业务域的模板类、重新读别人家的配置键 ——
+反向边与"读别人的配置"会**一起**复活。
+
+⚠️ **没有把 `sendSimpleMail` 与 `sendHtmlMail` 合并成一个带 `html` 可选参数的方法**：
+载体不同（`SimpleMailMessage` vs MIME multipart），而且 `html == null` 时"退回纯文本"
+这种隐式回退会让**"渲染失败"看起来像"这封邮件本来就没有正文"**。
+
+三个方法各有**具名消费方**：`sendSimpleMail` → `EmailReminderScheduler` 的 PLAIN 分支
+（以及同单元的 `RedisHealthMonitor`）；`sendVerificationCode` → `identity.AuthService`；
+`sendHtmlMail` → `EmailReminderScheduler` 的 HTML 分支。
+⚠️ `sendVerificationCode` 看似"就是 `sendHtmlMail` 的一个特例"，但它的正文**在提供方内部生成**，
+所以它是"发一封特定业务的邮件"而不是"投递"。
+
+### 3unvicies.4 ⚠️ 刻意不收 `userId` —— 由**反向**守卫钉住
+
+`sendVerificationCode` 发生在**登录之前**，那时还没有身份；另外两个是**传输**，
+归属判定在 `automation` 自己的库里、调本端口**之前**就做完了。
+⚠️ 但"别的端口都收 `userId`"这条**一致性**会诱使后来者顺手补上，补完之后
+编译过、指标不动、**26 条门禁全绿**、消费方的 Mockito 桩一个都不用改。
+⇒ `MailPortTest.takesNoCallerIdAndThatIsDeliberate`（`assertNoParameterIsNamed`）钉住。
+这是"端口收不收身份要成对守卫"（§3septdecies 定下）的**第三个**实例。
+
+### 3unvicies.5 ⚠️ 代价：改 API 而不是加端口 ⇒ 消费方跟着改
+
+| 改动 | 文件 |
+|---|---|
+| `MailService` 收窄成只投递 + `implements MailPort` | `integration/mail/MailService.java` |
+| 渲染搬回本域（纯函数、无字段、无 Spring） | `automation/domain/EmailReminderMailRenderer.java`（**新增**） |
+| 调度器依赖端口、自己渲染 | `automation/infrastructure/EmailReminderScheduler.java` |
+| `AuthService` 依赖端口 | `identity/application/AuthService.java` |
+| 端口实现清单 +1 | `migration/PortDelegationTransactionTest.java` |
+
+⚠️ **两处行为细节被逐字保留**：①`ZoneId.of(displayZone)` 原本就在 HTML 分支**里面**，
+所以 `display-zone` 配错时**纯文本提醒不受影响** ⇒ 渲染器收 `String displayZoneId`
+而不是 `ZoneId`（收 `ZoneId` 会把解析提到调用点，纯文本提醒跟着一起炸）；
+②选了 `"none"`（不要版式）时**纯文本兜底里不带时间与时区**。
+分别由 `invalidDisplayZoneOnlyBreaksTheHtmlPath` 与
+`noneTemplateKeepsTimeOutOfThePlainTextFallback` 钉住 —— 后者是搬家时最容易被"顺手统一"掉的一处。
+
+⚠️ 邮件失败文案变了（`"定时提醒邮件发送失败"` → `"邮件发送失败，请稍后重试"`），
+但**落库的错误文本没变**：`EmailReminderScheduler.rootMessage(e)` 取的是**根因**消息
+（SMTP 异常本身），不是包装层。这正是那条 `rootMessage` 循环存在的理由。
+
+### 3unvicies.6 顺手补掉**两条零覆盖**
+
+| 此前 | 为什么没人发现 |
+|---|---|
+| `MailService` **没有测试类** | 它没实现任何契约 ⇒ 方法体只在三个消费方的测试里以 **mock** 出现，**真实实现一次都没被跑过** |
+| `sendReminderMail` 的渲染逻辑**零断言** | 只被调度器间接走到，而调度器的测试把邮件服务整个 mock 掉了 |
+
+⇒ 新增 `MailServiceTest`（4 条）与 `EmailReminderMailRendererTest`（6 条）。
+⚠️ 与"把域内方法提升成契约实现时先查它有没有测试"同源：
+**抽端口会让原本不重要的东西变重要**，而"没人写那条断言"不会有任何东西报错。
+
+⭐ **`MailServiceTest` 第一版就红了一条，而且红得有价值**：`sendVerificationCode` 的
+HTML 正文里，验证码是**逐位放进不同的 `<span>`** 的（`buildDigitCells`），
+所以 HTML 原文里**根本不含**连续子串 `246810`。第一版对两份正文都断言
+`contains("246810")` ⇒ 红。判据改成"纯文本按**连续子串**判、HTML 按**剥掉标签与空白后的文本**判"，
+并把"HTML 是逐位渲染的"这个既有形状一起钉住。
+
+### 3unvicies.7 实测收益：跨单元实现图变成**无环链**
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 25 | **22** |
+| `implementation_edges` | 11 | **9** |
+| `cross_deployment_unit_statements` | 8 | **5** |
+| `cross_deployment_unit_edges` | 4 | **2** |
+| `api_statements` / `api_edges` | 9 / 6 | 9 / 6（**不动**） |
+
+三条边**全部消失**（`identity → integration`、`integration → automation` 归零，
+`automation → integration` 5 → 4），剩下两条构成一条**链**：
+
+```text
+dinqor-core-host ──1──▶ dinqor-content-automation ──4──▶ dinqor-platform-integration
+```
+
+⇒ **每一个 Wave 2 单元都是单元素分量，跨单元实现图无环。**
+`MUTUAL_UNIT_PAIRS` **清空**。环的作用是**否认抽取顺序**；链给了一个。
+
+### 3unvicies.8 注入验证：八次
+
+`-Dtest` 收窄到"依赖方自己的测试类"（待办 41 的规矩）。
+
+| # | 注入 | 落在 | 实测红 |
+|---|---|---|---|
+| A | `MailPort` 上加一个带 `templateId` 的 **`default`** 重载 | `MailPort` | **4** |
+| B | `MailPort` + `MailService` 把 `sendHtmlMail` 的 `plainText` / `html` 换位 | 契约 + 实现 | **1** |
+| C | `MailService` 去掉 `implements MailPort`（连带删三个 `@Override`） | `MailService` | **2** |
+| D | 渲染器删掉 PLAIN 早退分支 | `EmailReminderMailRenderer` | **5** |
+| E | 渲染器把 `wrapped` 恒置 `true` | `EmailReminderMailRenderer` | **1** |
+| F | 渲染器把 `ZoneId.of` 提到 PLAIN 分支之前 | `EmailReminderMailRenderer` | **1** |
+| G | 调度器把 html / plain 两个投递分支互换 | `EmailReminderScheduler` | **3** |
+| J | `MailService` 重新 import automation 的域类型（不使用） | `MailService` | **门禁 2 条** |
+
+⭐ **A 最有价值**：它把"端口变宽"做成一次**编译通过、指标不动、26 门禁全绿、
+消费方 mock 一个都不用改**的改动 —— 只有反射测试能守。
+
+⭐ **B 证明反射断言有独立价值**：换位后行为测试 `MailServiceTest` **4/4 全绿**
+（它断言"两份正文都在"，与顺序无关），只有按**参数名**钉的 `MailPortTest` 红了。
+⚠️ 第一遍 `-Dtest=MailPortTest,MailServiceTest` 时 `MailServiceTest` **根本没跑**
+（`integration-api` 一红，依赖它的 `core-host` 整块跳过）⇒ "它绿着"是**没跑**不是**通过**。
+第二遍单独跑才拿到 4/4。**跨模块注入时，"某个测试没红"必须先确认它跑了**（待办 41 第二次）。
+
+⭐⭐ **J 把两条门禁分开了**：
+
+| 门禁 | 注入后直接跑 | 注入后**先 `scan.py` 再**跑 |
+|---|---|---|
+| `cross-domain-import-baseline` | **FAIL** | **PASS**（23/10/6/3） |
+| `deployment-unit-coupling` | **FAIL** | **FAIL** |
+
+⇒ 前者的红只是"改了代码没重跑 `scan.py`"（它的基线是 `scan.py` 的产物）；
+后者的基线是代码里的常量 `MUTUAL_UNIT_PAIRS` ⇒ **清空后的基线确实是最严的形式**。
+
+八条注入全部逐字节还原。⚠️ 两条工具坑：①**注入脚本的前置断言要按形状分开写**
+（`fwd` 与 `mut` 互为子串时对称判据会在某一个方向恒假 —— 本刀 J 的**还原**被自己的断言卡住，
+`MailService` 留在注入态；第十七刀踩的是另一半边）；②**注入要红在判据上，不能红在编译上**
+（C 第一版只删 `implements` ⇒ 三个 `@Override` 编译失败，测的是 javac 不是判据）。
+
+### 3unvicies.9 为什么没有加 `contract-changes.yaml` 条目
+
+同 §3bis / §3nonies / … / §3vicies：`contract-changes.yaml` 登记的是**前端可见契约的变化**。
+`MailPort` 是**服务间**契约，路由 / 响应形状 / 错误码 / 前端可见类型**一个都没动**；
+`MailService` 的收窄也只影响 Java 调用方。`contract-changes-completeness` 仍报 14 条。
+
+⚠️ 与前面几刀**不同的一点**：本刀动了 `integration → automation` 这条**反向边**，
+按 V9 §2.3 的元规则值得问一句"这算不算能力变化"。结论是**不算**：
+`MailService` 的**能力**（能发邮件）没变，变的是**它的参数表**，而它没有前端可见入口。
+真正被削掉的是一处**架构违规**。
+
+### 3unvicies.10 ⚠️ 刻意没做的事 / 残留
+
+- **没有把 `RedisHealthMonitor` 改成依赖 `MailPort`**：它注入的是具体类 `MailService`，
+  但它在 `common`，与 `integration` 同属 `dinqor-core-host` —— 收它不减任何跨单元边。
+  ADR 待办 30 记的那件事（"让它依赖 `AlertPort` 并移出 `common`"）是**另一刀**。
+- **`email-reminder.display-zone` 的归属没动**：改造后读它的人（`EmailReminderScheduler`）
+  与 owner（`content-automation`）终于是同一个，但 `config-ownership.yaml` 里那条记录
+  **一个字都没改**（本来就记对了）。⚠️ 与 §3vicies.10 的 `img2three` 那条不同：
+  那里是"默认值指向别人的环境变量"，这里**没有这种引用**。
+- **`MailPort` 上没有 `default` 方法**，也没有任何"以后可能会用"的方法 ——
+  端口宽度由 `MailPortTest` 用反射钉住，注入 A 证明它接着线。
+
+### 3unvicies.11 下一刀
+
+剩余跨单元实现边 **2 条 / 5 语句**：
+
+1. **`automation → integration`（4）** —— **全部**是凭证服务：
+   `BlogContentPlanService` / `BlogPlanRunService` 各 import
+   `CsdnCredentialService` / `JuejinCredentialService`。形状与 `OssPort` 同族，
+   且有 §3sexdecies.2 的先例（一个平台一个端口）⇒ 很可能是两套 `CredentialPort`。
+   ⚠️ 本文 §3quater.5 的草稿写的是单数 `CredentialPort`，取这一刀时先复核。
+2. **`admin → automation`（1）** —— `AdminNotificationController`，需要 SSE 广播端口。
+   ⚠️ 契约不许带框架类型 ⇒ 端口**不能**直接返回 `SseEmitter`。这是 `automation` 的
+   **最后一条入边**，收掉它 `automation` 就成了**零跨域消费方**的域。
+
+⚠️ 两条都收掉之后**跨单元实现边归零**，`cross-domain-imports.yaml` 里只剩同单元的边；
+`deployment-unit-coupling` 的三条判据将全部只剩"不许变坏"的含义。
+
+---
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`

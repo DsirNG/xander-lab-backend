@@ -13,7 +13,7 @@ import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient.WechatSession;
 import com.xander.lab.auth.core.JwtUtil;
-import com.xander.lab.integration.mail.MailService;
+import com.xander.lab.integration.api.MailPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -49,7 +49,7 @@ public class AuthService implements AccessTokenLookupPort {
             Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
     private final JwtUtil jwtUtil;
-    private final MailService mailService;
+    private final MailPort mailPort;
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
     private final PasswordEncoder passwordEncoder;
@@ -74,7 +74,7 @@ public class AuthService implements AccessTokenLookupPort {
         redisTemplate.opsForValue().set(key, code, Constants.CODE_EXPIRE_MINUTES, TimeUnit.MINUTES);
 
         // 发送邮件
-        mailService.sendVerificationCode(email, code);
+        mailPort.sendVerificationCode(email, code);
 
         log.info("[Auth] 验证码已发送至 {}", email);
     }

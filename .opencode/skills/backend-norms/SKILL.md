@@ -1149,6 +1149,62 @@ img2three:
 `config-ownership.yaml` 是唯一可能承载这类引用的地方，但它今天只记 `owner` / `classification` /
 `nacos_group`，**不记"这个键的默认值引用了哪个键"**。
 
+### ⚠️ 提供方替消费方"渲染" ⇒ 提供方依赖消费方：先问"这段逻辑留在这里，提供方要知道什么"
+
+第三类跨域边，既不是"借能力"也不是"借配置"，而是**提供方把消费方的业务逻辑焊进了自己的方法里**。
+2026-09-18 第十八刀的样本：
+
+```java
+// integration.mail.MailService —— 提供方
+public void sendReminderMail(String to, String subject, String userMessage,
+                             Instant scheduledAt, String contentType, String templateId)
+```
+
+六个参数里只有 `to` / `subject` 是**投递**需要的；后四个**只服务于渲染**。而渲染需要：
+
+- `automation.domain.EmailReminderMailTemplates` —— 另一个域的**业务类型**（ADR-2 禁止）；
+- `email-reminder.display-zone` —— `config-ownership.yaml` 里 **owner 记在
+  `content-automation` 名下**的键。⭐ **台账是对的，代码是错的**：读它的人与拥有它的人不是同一个。
+
+⇒ 这闭成一个**真环**（automation 调 `MailService`，`MailService` 回头调 automation 渲染）。
+
+**判据**：
+
+> **"这封提醒长什么样"** 是消费方的业务概念 ⇒ 渲染留在消费方；
+> **"把它送出去"** 才是提供方的能力 ⇒ 端口只收**渲染好的成品**。
+
+```java
+void sendHtmlMail(String to, String subject, String plainText, String html);  // ✅ 两份成品
+```
+
+⚠️ **这类边不要抽"把原参数表搬过去"的端口** —— 那只是把违规换个地方。
+`sendReminderMail` 的六个参数**一个都不该上端口**：端口上出现 `scheduledAt` / `contentType` /
+`templateId`，提供方就要重新 import 业务域的模板类、重新读别人家的配置键，**反向边原样复活**。
+
+⚠️ 落地时会发现"这不是加个端口就行，是改 API"：调用方要自己渲染。
+**先查它有没有测试** —— 第十八刀的 `MailService` **一个测试类都没有**（它没实现任何契约，
+方法体只在消费方的 mock 里出现过），那段渲染逻辑也**零断言**（调度器的测试把邮件服务整个 mock 掉了）。
+抽端口会让原本不重要的东西变重要，而"没人写那条断言"不会有任何东西报错。
+
+⚠️ 顺带一条：**两处行为细节必须在搬家时逐字保留** —— ①`ZoneId.of` 原本就在 HTML 分支
+**里面**（所以时区配错不影响纯文本提醒）；②选了"不要版式"时纯文本兜底里**不带时间与时区**。
+前者决定新函数收 `String displayZoneId` 而不是 `ZoneId`（收 `ZoneId` 会把解析提到调用点）。
+
+### ⚠️ 断言"某段文本出现在 HTML 正文里"不能按原文子串判
+
+邮件 / 报表这类**逐位渲染**的正文会把连续串打散。2026-09-18 第十八刀实测：
+`LoginVerificationMailTemplates.buildDigitCells` 把验证码的**每一位**放进自己的 `<span>`，
+于是 HTML 原文里**根本不含**连续子串 `246810`，`contains("246810")` 断言会红 ——
+**红得对**，红的是断言而不是代码。
+
+```java
+String collapsed = html.replaceAll("<[^>]*>", "").replaceAll("\\s+", "");
+assertTrue(collapsed.contains("246810"));   // ✅ 剥掉标签与空白后判
+```
+
+**判据**：凡对 HTML 正文做"包含"断言，先问一句"它是不是被拆开渲染的"。
+⚠️ 纯文本那一份仍按**连续子串**判 —— 两份正文的判法**本来就不同**，不要"统一"掉。
+
 ### ⚠️ "归一参数顺序"会产生静默换位点：新重载的参数表可能与旧方法逐字相同
 
 端口把提供方的 `(taskId, userId)` 归一成 `(userId, taskId)` 时，
@@ -1522,6 +1578,57 @@ detail = f"{recomputed} implementation statements across {len(base_edges)} edges
 两种情况都要写进记录 —— 前者的证据是门禁名，后者的证据是**测试方法名 + 行号**。
 反过来说，凡是"只有测试能守"的不变量，测试**必须**存在且必须钉到**完整签名**
 （见前面端口宽度那条），否则这个不变量实际上无人看守。
+
+### ⚠️ 注入脚本的前置断言必须按注入的**形状**分开写
+
+「锚点必须唯一」「每条注入后立刻校验 blob」已经成规矩，但 2026-09-18 第十八刀又踩到一个变体：
+**`fwd` 与 `mut` 会互为子串，而且方向不同。**
+
+| 形状 | 例子 | `fwd` 与 `mut` 的关系 | 施加后 `n_fwd` | 单靠 `n_fwd == 1` 能发现"已施加"吗 |
+|---|---|---|---|---|
+| 换位式 | 两个相邻 `String` 互换 | 不相交 | 0 | ✅ 能 |
+| 删除式 | 删掉一个早退分支 / 删掉 `implements` | `mut` ⊂ `fwd` | 0 | ✅ 能 |
+| **插入式** | 在方法后面**追加**一个重载 / 追加一行 import | `fwd` ⊂ `mut` | **仍是 1** | ❌ **不能** |
+
+⇒ 只写 `n_fwd == 1` 会漏掉"插入式已施加"；而补一条"`n_mut == 0`"又会在**删除式的还原方向**上
+恒假（`mut` 是 `fwd` 的子串，还原时 `n_mut` 恒为 1），把一次正常还原判成"状态不明"。
+**两种错法各踩过一次** —— 第十七刀是"删除式的还原锚点是正向锚点的子串"，
+第十八刀是"插入式的正向锚点是还原锚点的子串"。
+
+```python
+src, dst = (fwd, mut) if mode == "apply" else (mut, fwd)
+if text.count(src) != 1:
+    abort("锚点不唯一")
+if mode == "apply" and fwd in mut and text.count(dst) != 0:
+    abort("插入式：目标态已存在 ⇒ 文件可能已是注入态")
+# 换位式 / 删除式不需要第二条：施加后 src 计数变 0，第一条已经覆盖
+```
+
+⚠️ 另：**注入脚本不要在前台跑。** 第十八刀八条约 8.5 分钟，前台会被 SIGTERM
+并把目标文件**留在注入态**（第十七刀实测残留 E）。必须后台跑；任何中断后第一件事是比 blob。
+
+### ⚠️ 门禁的"进度提示"也会只朝一个方向看 —— 图形状变了它就失真，而它仍然报 PASS
+
+「判据只朝一个方向看」已记过三次（`util` 死条目、`deployment-unit-coupling` 判据 2 根取
+`WAVE2_UNITS[0]`、端口首参只断言类型）。2026-09-18 第十八刀发现**第四种**：
+这次出问题的不是判定，而是**通过消息里的那句话**。
+
+```python
+wave2_component = max(components.values(), key=len)          # 挑"那个分量"
+outside = sorted(set(WAVE2_UNITS) - wave2_component)
+detail = f"{len(wave2_component)} of {len(WAVE2_UNITS)} Wave 2 unit(s) in one component ..."
+```
+
+这段代码假设"存在一个非平凡分量"。当**所有分量都是单元素**时，`max` 会按迭代顺序任选一个，
+于是打印 **"1 of 4 Wave 2 unit(s) in one component"** 并把另外 3 个列进 `outside` ——
+读起来像"还有一个单元缠着"，而事实是**四个都可以单独抽取**。门禁照旧 PASS。
+
+**判据**：任何形如 `max(...)` / `[0]` / `len(x) > 1` 的**摘要式**提示，都要问一句
+"它假设了什么形状？这个假设还成立吗？"。真值改变了就**显式分支**，
+不要让它继续用旧假设去总结新状态。
+
+⚠️ 同族教训：**判据的失败信息要指向真正的原因**（前面那条），
+这一条说的是**通过信息** —— 它不影响判定，所以永远不会有人因为"它红了"去修它。
 
 ### ⚠️ 判据的"基线"必须来自判据之外，否则它永远绿
 

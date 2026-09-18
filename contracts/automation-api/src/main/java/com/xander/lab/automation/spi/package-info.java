@@ -87,11 +87,15 @@
  * <ul>
  *   <li>SSE 广播端口（{@code admin} 要）。它要的是 {@code SseEmitter}（框架类型），
  *       形状与本模块三个端口完全不同，单独一刀。</li>
- *   <li>邮件模板。{@code integration.mail.MailService} import 了
+ *   <li><s>邮件模板。{@code integration.mail.MailService} import 了
  *       {@code automation.domain.EmailReminderMailTemplates}，这是<b>反方向</b>，
  *       而且闭成了一个真环：automation 的 {@code EmailReminderScheduler} 调
- *       {@code MailService#sendReminderMail}，后者又回头调 automation 渲染正文。
- *       断环要改 {@code MailService} 的 API，单独一刀做。</li>
+ *       {@code MailService#sendReminderMail}，后者又回头调 automation 渲染正文。</s>
+ *       ✅ <b>第十八刀已断</b>：渲染搬回 automation（{@code EmailReminderMailRenderer}），
+ *       {@code MailService} 收窄成"只投递"并实现 {@code integration-api} 的 {@code MailPort}。
+ *       ⚠️ <b>断环没有落在这个模块里</b>，这是对的 —— mail 能力属于提供方（integration），
+ *       端口就该记在 {@code integration-api}；往 {@code automation-api} 放一个"邮件端口"
+ *       等于把消费方的契约面变成"我调过谁"的清单。</li>
  * </ul>
  */
 package com.xander.lab.automation.spi;

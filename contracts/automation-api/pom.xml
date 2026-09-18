@@ -79,13 +79,16 @@
           when that layer itself is split in Wave 2.
         - The SSE broadcast port that admin needs. It would have to expose SseEmitter, a
           framework type, so its shape is nothing like these three ports; it is a separate cut.
-        - The email-reminder mail template. integration.mail.MailService imports
-          automation.domain.EmailReminderMailTemplates, which is the reverse direction and
-          closes a real automation &lt;-&gt; integration cycle: automation's
-          EmailReminderScheduler calls MailService#sendReminderMail, which calls back into
-          automation to render the body. Breaking that cycle is a separate cut because it
-          changes MailService's API, and it is recorded in
-          docs/migration/lib-extraction.md.
+        - The email-reminder mail template. integration.mail.MailService used to import
+          automation.domain.EmailReminderMailTemplates, which was the reverse direction and
+          closed a real automation &lt;-&gt; integration cycle: automation's
+          EmailReminderScheduler called MailService#sendReminderMail, which called back into
+          automation to render the body. That cycle was broken by cut 18, and NOT here:
+          rendering moved to automation (EmailReminderMailRenderer) and MailService was
+          narrowed to plain delivery behind contracts/integration-api's MailPort, so the port
+          carries no rendering parameter at all. Nothing was added to this module, and that is
+          the right outcome -- automation-api is a consumer-side contract, and the mail
+          capability belongs to the provider.
 
         Cut 10 added NotificationPort (knowledgebase -&gt; automation, 2 statements, one file).
         It was a zero-wiring extension: no new module, no new dependency, nothing to add to

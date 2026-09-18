@@ -603,8 +603,6 @@ WAVE2_UNITS = (
 #
 # Shape of the graph, and why it matters for Wave 2:
 #
-#   * Two pairs are mutual: content-automation <-> platform-integration and
-#     core-host <-> platform-integration.
 #   * agent <-> platform-integration WAS one of them, and the agent-api cut ended it:
 #     integration used to implement agent's AgentTool / AgentDynamicToolSource and call
 #     AgentToolRegistry, which was 5 implementation statements one way. They now go through
@@ -620,19 +618,38 @@ WAVE2_UNITS = (
 #     content-automation's *only* remaining implementation edge to core-host: automation's
 #     BlogContentPlanService and BlogPlanRunService called recitation's RecitationService,
 #     2 statements, now going through recitation.spi. So content-automation <-> core-host is
-#     no longer mutual either -- content-automation now reaches core-host in no way at all,
-#     while core-host still reaches content-automation twice (studio -> blogagent and
-#     admin -> automation). Both directions are deleted from this baseline for the same
-#     reason as the agent pair.
-#   * Consequence: agent is no longer in the Wave 2 strongly-connected component. The old
-#     chord cycle closed through the platform-integration -> agent leg, so removing that
-#     leg is exactly what broke it. agent is now a singleton component, which is the same
-#     precondition bloghtml has and the reason it can be extracted on its own.
-#   * The remaining component is {content-automation, core-host, platform-integration}:
-#     two mutually-dependent pairs, so none of those three is a leaf. Note the cycle no
-#     longer needs a content-automation -> core-host leg: content-automation is held in it
-#     only through platform-integration, and the one-way core-host -> content-automation
-#     edges are no longer part of any cycle.
+#     no longer mutual either, and both directions were deleted for the same reason as the
+#     agent pair. At that point core-host still reached content-automation twice
+#     (studio -> blogagent and admin -> automation), which is what kept the three-unit
+#     component alive.
+#   * Consequence of the agent cut: agent left the Wave 2 strongly-connected component. The
+#     old chord cycle closed through the platform-integration -> agent leg, so removing that
+#     leg is exactly what broke it. agent became a singleton component, the same
+#     precondition bloghtml has.
+#   * The integration-api sync cut (CSDN/Juejin, 2026-09-18) removed agent's last outgoing
+#     statements *and* the last platform-integration -> core-host statement
+#     (`McpOAuthService` importing `identity.application.AuthService`), so core-host left
+#     the component as well.
+#   * The studio -> blogagent cut (2026-09-18) then removed one of core-host's two
+#     remaining ways of reaching content-automation: `Img2ThreeModelClient` no longer reads
+#     blogagent's `BlogAgentProperties`, the fallback moved into `application.yml`.
+#   * ⭐ The MailPort cut (2026-09-18) removed the last leg of the last cycle:
+#     `integration.mail.MailService` imported `automation.domain.EmailReminderMailTemplates`
+#     to render reminder bodies, and that was the only platform-integration ->
+#     content-automation implementation statement. Rendering moved back to `automation`
+#     (`EmailReminderMailRenderer`) and the port only carries finished bodies. What is left
+#     is a pure chain -- core-host -> content-automation -> platform-integration, 1 and 4
+#     statements -- so **every Wave 2 unit is now a singleton component** and the graph is
+#     acyclic. A cycle is what denies an extraction order; the chain gives one.
+#
+# ⚠️ MUTUAL_UNIT_PAIRS is now EMPTY and must stay empty. The criterion below is
+# bidirectional, so a pair reappearing is reported as `added` and fails the gate -- an
+# empty baseline is the strictest form of this check, not a disabled one.
+#
+# ⚠️ With every component of size 1, `outside` ("Wave 2 units minus the largest component")
+# is no longer a meaningful summary: it names three units as "left the component" when all
+# four are extractable. The detail string special-cases that below rather than printing a
+# number that reads as "one unit is still tangled".
 #
 # This is NOT itself a defect. After the split these become ordinary service-to-service
 # calls, and A calling B while B calls A is normal. What it does mean is that the remaining
@@ -659,10 +676,12 @@ WAVE2_UNITS = (
 # instead of assuming the previous shape still holds.
 # Pairs are ordered (the baseline keeps direction) and the criterion is bidirectional, so
 # removing a pair means removing BOTH directions.
-MUTUAL_UNIT_PAIRS = frozenset({
-    ("dinqor-content-automation", "dinqor-platform-integration"),
-    ("dinqor-platform-integration", "dinqor-content-automation"),
-})
+#
+# EMPTY since the MailPort cut (2026-09-18) broke the last cycle. Both directions of the
+# content-automation <-> platform-integration pair were deleted together, as the criterion
+# requires. Do not repopulate this to "make the gate pass" -- an empty baseline means any
+# new mutual pair is reported, which is the point.
+MUTUAL_UNIT_PAIRS: frozenset[tuple[str, str]] = frozenset()
 
 
 def gate_deployment_unit_coupling() -> None:
@@ -773,13 +792,23 @@ def gate_deployment_unit_coupling() -> None:
     # Report the MEASURED component, not len(WAVE2_UNITS): agent left on 2026-09-17, so
     # printing the constant would overstate the component by one and hide real progress.
     wave2_component = max(components.values(), key=len)
-    outside = sorted(set(WAVE2_UNITS) - wave2_component)
-    detail = (f"{len(wave2_component)} of {len(WAVE2_UNITS)} Wave 2 unit(s) in one component "
-              f"({len(mutual)} mutually-dependent pair(s)); "
-              f"{bloghtml_unit} still isolated")
-    if outside:
-        detail += (f"; {outside} left the component (no unit points back at them) and can "
-                   f"now be extracted alone")
+    # ⚠️ Once every component is a singleton, `outside` stops meaning "the units that left
+    # the component": `max` breaks ties on iteration order, so it would name
+    # len(WAVE2_UNITS) - 1 arbitrary units and the line would read as "one unit is still
+    # tangled" when in fact none is. The acyclic state gets its own sentence.
+    if len(wave2_component) == 1:
+        detail = (f"0 of {len(WAVE2_UNITS)} Wave 2 unit(s) share a component "
+                  f"({len(mutual)} mutually-dependent pair(s)); every unit is a singleton "
+                  f"and the cross-unit implementation graph is acyclic, so no unit can "
+                  f"block another's extraction; {bloghtml_unit} still isolated")
+    else:
+        outside = sorted(set(WAVE2_UNITS) - wave2_component)
+        detail = (f"{len(wave2_component)} of {len(WAVE2_UNITS)} Wave 2 unit(s) in one component "
+                  f"({len(mutual)} mutually-dependent pair(s)); "
+                  f"{bloghtml_unit} still isolated")
+        if outside:
+            detail += (f"; {outside} left the component (no unit points back at them) and can "
+                       f"now be extracted alone")
     if cleared:
         detail += (f"; {len(cleared)} pair(s) no longer mutual, delete both directions "
                    f"from MUTUAL_UNIT_PAIRS: {cleared}")

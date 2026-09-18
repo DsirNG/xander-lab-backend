@@ -1,6 +1,7 @@
 package com.xander.lab.integration.api;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -72,6 +73,35 @@ final class ContractShape {
                     method.getName() + " 的第一个参数必须叫 userId（实际叫 "
                             + method.getParameters()[0].getName() + "）。"
                             + "它必须是调用方身份 —— 归属判定全靠它。");
+        }
+    }
+
+    /**
+     * 这个端口里<b>不许</b>出现名为 {@code name} 的参数。
+     *
+     * <p>这是 {@link #assertFirstParameterIsTheCallerId} 的<b>反向</b>判据，两者服务同一件事：
+     * 让"这个端口收不收调用方 id"变成一个被显式断言过的决定，而不是一处可以随手的改动。</p>
+     *
+     * <p>为什么反向判据是必需的：{@code MailPort} 是一次<b>传输</b>，它不知道也不需要知道
+     * 收件人是谁 —— 归属判定（"这个提醒是不是你的"）在调用方自己的库里、在调本端口<b>之前</b>
+     * 就做完了；而 {@code sendVerificationCode} 发生在<b>登录之前</b>，那时还没有身份。
+     * 但"别的端口都收 userId"这条一致性会诱使后来者"顺手补上" —— 补完之后多出一个没人读的参数，
+     * 而"这里需要身份"这个错误信号会被写进契约，下一个读代码的人会去找它到底在哪儿被用上。
+     * 没有这条断言，那种改动是全绿的。</p>
+     *
+     * @param name 不许出现的参数名，如 {@code userId}
+     */
+    static void assertNoParameterIsNamed(Class<?> contract, String name) {
+        for (Method method : contract.getDeclaredMethods()) {
+            if (method.isSynthetic()) continue;
+            for (Parameter parameter : method.getParameters()) {
+                assertFalse(name.equals(parameter.getName()),
+                        contract.getSimpleName() + "." + method.getName() + " 里出现了一个叫 " + name
+                                + " 的参数。这个端口的提供方是无状态的传输层，不需要身份；"
+                                + "归属判定在调用方自己那一侧、调本端口之前就做完了。"
+                                + "加一个没人读的参数不是「一致性」，而是把「这里需要身份」这个错误信号"
+                                + "写进契约 —— 要么删掉它，要么先证明这个端口里真的有一步要用到它。");
+            }
         }
     }
 

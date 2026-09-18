@@ -29,7 +29,7 @@ scheduled:
     trigger: "fixedDelayString = \"${email-reminder.poll-interval-ms:10000}\", initialDelayString = \"${email-reminder.initial-delay-ms:15000}\""
     logical_owner: automation
     file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java
-    line: 51
+    line: 62
   - id: redis-health-monitor
     class: com.xander.lab.common.RedisHealthMonitor
     method: checkRedis

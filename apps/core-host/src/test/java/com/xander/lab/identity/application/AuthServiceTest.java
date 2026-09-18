@@ -10,7 +10,7 @@ import com.xander.lab.identity.infrastructure.UserMapper;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient.WechatSession;
 import com.xander.lab.auth.core.JwtUtil;
-import com.xander.lab.integration.mail.MailService;
+import com.xander.lab.integration.api.MailPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -43,7 +43,7 @@ import org.mockito.ArgumentCaptor;
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
     @Mock private JwtUtil jwtUtil;
-    @Mock private MailService mailService;
+    @Mock private MailPort mailPort;
     @Mock private UserMapper userMapper;
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOperations;
@@ -58,7 +58,7 @@ class AuthServiceTest {
     @BeforeEach
     void setUp() {
         billingPort = mock(BillingPort.class);
-        service = new AuthService(jwtUtil, mailService, userMapper, redisTemplate, passwordEncoder,
+        service = new AuthService(jwtUtil, mailPort, userMapper, redisTemplate, passwordEncoder,
                 billingPort, wechatMiniAppClient, accountMergeMapper);
         // 速率限制默认放行（increment 返回 1），只被涉及限流的用例使用
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
@@ -203,7 +203,7 @@ class AuthServiceTest {
 
         verify(valueOperations).set(eq(Constants.REDIS_CODE_PREFIX + "alice@example.com"), anyString(),
                 eq(Constants.CODE_EXPIRE_MINUTES), eq(TimeUnit.MINUTES));
-        verify(mailService).sendVerificationCode(eq("alice@example.com"), anyString());
+        verify(mailPort).sendVerificationCode(eq("alice@example.com"), anyString());
     }
 
     @Test
