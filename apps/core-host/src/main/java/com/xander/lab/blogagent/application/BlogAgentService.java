@@ -8,6 +8,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentSessionVO;
+import com.xander.lab.blogagent.spi.BlogAgentImage;
+import com.xander.lab.blogagent.spi.BlogAgentImagePort;
+import com.xander.lab.blogagent.spi.BlogAgentImageUsage;
 import com.xander.lab.blogagent.spi.BlogAgentPort;
 import com.xander.lab.blogagent.spi.BlogAgentPostView;
 import com.xander.lab.blogagent.spi.BlogAgentTaskDraft;
@@ -58,7 +61,7 @@ import java.util.function.BiConsumer;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class BlogAgentService implements BlogAgentPort {
+public class BlogAgentService implements BlogAgentPort, BlogAgentImagePort {
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
 
     private final BlogAgentTaskMapper taskMapper;
@@ -775,6 +778,44 @@ public class BlogAgentService implements BlogAgentPort {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
         return task.getPublishedPostId() == null ? null
                 : toPostView(blogService.getBlogById(task.getPublishedPostId()));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>图片能力与任务能力<b>共用同一个实现类</b>，但走的是两个端口：提供方是
+     * {@code BlogAgentImageClient}（一个具体客户端），不是本类自己的领域方法。
+     * 这一行就是全部 —— 端口只把"能力"过界。</p>
+     */
+    @Override
+    public boolean isEnabled() {
+        return imageClient.isEnabled();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>换算落在这一处：{@code BlogAgentImageClient.GeneratedImage}（域内类型，带
+     * {@code ModelUsage}）→ {@link BlogAgentImage}（契约类型，带 {@link BlogAgentImageUsage}）。
+     * 两者前五个分量<b>逐位同名同序</b>，所以这是一次位置映射；{@code size} 是契约侧新增的，
+     * 由这里从 {@code properties.getImageSize()} 填 —— <b>这正是"消费方不必读
+     * {@code @ConfigurationProperties}"的意思</b>：配置项留在提供方，只有它的取值过界。</p>
+     *
+     * <p>⚠️ {@code model} 取 {@code generated.model()}，<b>不是</b>
+     * {@code properties.getImageModel()}。客户端会在候选端点之间兜底重试，真正产出这张图的
+     * 可能是兜底端点；而走管理台网关路径时 {@code properties.getImageModel()} 甚至可能是空的。
+     * 同域的插图路径（{@code generateIllustrations}）一直是写 {@code generated.model()} 的，
+     * 这一刀把同一个口径带给了跨域消费方。</p>
+     */
+    @Override
+    public BlogAgentImage generate(String prompt) {
+        BlogAgentImageClient.GeneratedImage generated = imageClient.generate(prompt);
+        ModelUsage usage = generated.usage();
+        return new BlogAgentImage(generated.bytes(), generated.contentType(), generated.extension(),
+                usage == null ? BlogAgentImageUsage.NONE
+                        : new BlogAgentImageUsage(usage.inputTokens(), usage.cachedTokens(),
+                                usage.outputTokens()),
+                generated.model(), properties.getImageSize());
     }
 
     private BlogAgentTask requireOwnedTask(Long taskId, Long userId) {

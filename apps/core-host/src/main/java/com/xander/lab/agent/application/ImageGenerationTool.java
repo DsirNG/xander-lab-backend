@@ -4,14 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.xander.lab.blogagent.spi.BlogAgentImage;
+import com.xander.lab.blogagent.spi.BlogAgentImagePort;
+import com.xander.lab.blogagent.spi.BlogAgentImageUsage;
 import com.xander.lab.content.api.MediaAssetPort;
 import com.xander.lab.content.api.MediaAssetRef;
 import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.payment.api.TokenUsage;
-import com.xander.lab.common.ModelUsage;
-import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
-import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -38,18 +38,15 @@ public class ImageGenerationTool implements AgentTool {
                     + "画面主次分明、层次丰富，不要添加水印。"
                     + "如果包含文字，确保文字简短清晰。要求：";
 
-    private final BlogAgentImageClient imageClient;
+    private final BlogAgentImagePort imageGenerationPort;
     private final MediaAssetPort mediaAssetPort;
-    private final BlogAgentProperties properties;
     private final BillingPort billingPort;
     private final ObjectMapper objectMapper;
 
-    public ImageGenerationTool(BlogAgentImageClient imageClient, MediaAssetPort mediaAssetPort,
-                               BlogAgentProperties properties, BillingPort billingPort,
-                               ObjectMapper objectMapper) {
-        this.imageClient = imageClient;
+    public ImageGenerationTool(BlogAgentImagePort imageGenerationPort, MediaAssetPort mediaAssetPort,
+                               BillingPort billingPort, ObjectMapper objectMapper) {
+        this.imageGenerationPort = imageGenerationPort;
         this.mediaAssetPort = mediaAssetPort;
-        this.properties = properties;
         this.billingPort = billingPort;
         this.objectMapper = objectMapper;
     }
@@ -89,13 +86,13 @@ public class ImageGenerationTool implements AgentTool {
         if (!StringUtils.hasText(prompt)) {
             throw new IllegalArgumentException("图片生成工具缺少参数 prompt");
         }
-        if (!imageClient.isEnabled()) {
+        if (!imageGenerationPort.isEnabled()) {
             throw new IllegalStateException("图片生成模型尚未配置，暂不能生成图片");
         }
         onProgress.onProgress("正在根据描述生成图片…");
-        BlogAgentImageClient.GeneratedImage generated;
+        BlogAgentImage generated;
         try {
-            generated = imageClient.generate(TOOL_IMAGE_STYLE + prompt);
+            generated = imageGenerationPort.generate(TOOL_IMAGE_STYLE + prompt);
         } catch (RuntimeException exception) {
             log.warn("agent image model call failed userId={} type={} message={}",
                     userId, exception.getClass().getSimpleName(), safeLogMessage(exception));
@@ -105,11 +102,11 @@ public class ImageGenerationTool implements AgentTool {
 
         String title = defaultText(args.path("title").asText(), "AI 生成图片");
         String fileName = "agent-image-" + System.currentTimeMillis() + "." + generated.extension();
-        String meta = writeMeta(title, prompt);
+        String meta = writeMeta(title, prompt, generated.model(), generated.size());
         MediaAssetRef asset;
         try {
             // 只把字节与类型送进内容域：usage / model 属于计费口径，端口故意不携带，
-            // 留在调用方（见 ImageGenerationTool 下方 chargeTokens）。
+            // 留在调用方（见下方 chargeTokens）。
             asset = mediaAssetPort.recordGenerated(userId, null, fileName,
                     generated.bytes(), generated.contentType(), meta);
         } catch (RuntimeException exception) {
@@ -118,13 +115,13 @@ public class ImageGenerationTool implements AgentTool {
             throw new IllegalStateException("图片已经生成，但保存到素材库失败", exception);
         }
         try {
-            // 网关口径 ModelUsage -> 计费契约口径 TokenUsage：分量同名同序，所以这是一次
-            // 直接映射。契约不能依赖带 Jackson 的 xander-model（ADR-1），换算只能落在边界上。
-            ModelUsage billed = generated.usage();
+            // 契约口径 BlogAgentImageUsage -> 计费契约口径 TokenUsage：分量同名同序，所以这是一次
+            // 直接映射。两个契约都不许依赖对方（只允许 JDK + 本包），换算只能落在边界上。
+            // 端口保证 usage 非空（没拿到用量时给 NONE），所以这里不做 null 兜底。
+            BlogAgentImageUsage billed = generated.usage();
             billingPort.chargeTokens(userId, BillingBiz.BLOG_AGENT_ILLUSTRATION,
                     "agent-image:" + asset.id(), "asset:" + asset.id(),
-                    billed == null ? TokenUsage.NONE
-                            : new TokenUsage(billed.inputTokens(), billed.cachedTokens(), billed.outputTokens()),
+                    new TokenUsage(billed.inputTokens(), billed.cachedTokens(), billed.outputTokens()),
                     generated.model(), "智能体生成图片");
         } catch (RuntimeException exception) {
             log.warn("agent image billing failed userId={} assetId={} type={} message={}",
@@ -144,14 +141,22 @@ public class ImageGenerationTool implements AgentTool {
         return outcome;
     }
 
-    private String writeMeta(String title, String prompt) {
+    /**
+     * 素材的 {@code meta}。{@code model} 与 {@code size} 取自<b>端口返回的结果</b>，
+     * 不是 {@code blog.agent} 的配置项 —— 配置留在提供方（见 {@code BlogAgentImagePort}）。
+     *
+     * <p>⚠️ {@code model} 记的是<b>实际产出这张图的端点模型</b>。提供方会在候选端点之间兜底重试，
+     * 所以它可能是兜底端点而不是首选端点；走管理台网关路径时配置里的首选模型甚至可能是空的。
+     * 改这一处之前，这里写的是配置值，于是一次兜底生成会把兜底端点的产物记成首选模型的名字。</p>
+     */
+    private String writeMeta(String title, String prompt, String model, String size) {
         try {
             return objectMapper.writeValueAsString(Map.of(
                     "title", title,
                     "prompt", prompt,
                     "style", "tool",
-                    "model", defaultText(properties.getImageModel(), ""),
-                    "size", defaultText(properties.getImageSize(), "")));
+                    "model", defaultText(model, ""),
+                    "size", defaultText(size, "")));
         } catch (Exception e) {
             log.debug("agent image generation meta serialization failed: {}", e.getMessage());
             return "{}";

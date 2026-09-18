@@ -21,9 +21,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 而且就算有也不能用 —— 用被测方的函数去算判据，等于让它自己给自己打分。
  * 这一点和门禁校验生成物清单那条规矩是同一条。</p>
  *
- * <p>与 {@code contracts/recitation-api} 里的同名类基本相同，只有包名与
- * {@link #assertFirstParameterIsTheCallerId} 这一条是新的：契约模块之间不能互相依赖
- * （只允许 JDK + 本包），所以这份小工具每个契约模块各留一份。</p>
+ * <p>与 {@code contracts/recitation-api} 里的同名类基本相同，只有包名、
+ * {@link #assertFirstParameterIsTheCallerId} 与 {@link #assertNoParameterIsNamed} 这三处不同：
+ * 契约模块之间不能互相依赖（只允许 JDK + 本包），所以这份小工具每个契约模块各留一份。</p>
+ *
+ * <p>⚠️ 那两条参数判据是<b>一对</b>：一个断言"这个端口收了名为 {@code userId} 的调用方 id"，
+ * 另一个断言"这个端口里根本没有叫 {@code userId} 的参数"。有了反向的那条，
+ * "收不收身份"才是一个被断言过的决定，而不是一处可以随手的改动 ——
+ * 这正是本项目反复踩的"判据只朝一个方向看"。</p>
  */
 final class ContractShape {
 
@@ -100,6 +105,35 @@ final class ContractShape {
                             + "只断言\"类型是 Long\"是不够的：publish(Long taskId, Long userId) "
                             + "同样满足那个断言。要么把参数名改成 userId，要么把它挪到第二位"
                             + "并让真正的 userId 排第一 —— 四个既有契约都是这个形状。");
+        }
+    }
+
+    /**
+     * 端口的<b>任何</b>方法都不得有一个叫 {@code name} 的参数。
+     *
+     * <p>这是 {@link #assertFirstParameterIsTheCallerId} 的<b>反向</b>判据，两者服务同一件事：
+     * 让"这个端口收不收调用方 id"变成一个被显式断言过的决定，而不是一处可以随手的改动。</p>
+     *
+     * <p>为什么反向判据是必需的：{@code BlogAgentImagePort} 的提供方是一次无状态的模型调用，
+     * 它不需要身份，而真正需要身份的两步（存素材、扣积分）在别的端口上、且都显式收了
+     * {@code userId}。但"别的端口都收 userId"这条一致性会诱使后来者"顺手补上" ——
+     * 补完之后多出一个没人读的参数，而"这里需要身份"这个错误信号会被写进契约，
+     * 下一个读代码的人会去找它到底在哪儿被用上。没有这条断言，那种改动是全绿的。</p>
+     *
+     * @param name 不许出现的参数名，如 {@code userId}
+     */
+    static void assertNoParameterIsNamed(Class<?> type, String name) {
+        for (Method method : type.getDeclaredMethods()) {
+            if (method.isSynthetic()) continue;
+            for (Parameter parameter : method.getParameters()) {
+                assertFalse(name.equals(parameter.getName()),
+                        type.getSimpleName() + "." + method.getName() + " 里出现了一个叫 " + name
+                                + " 的参数。这个端口的提供方是无状态的模型调用，不需要身份；"
+                                + "真正需要身份的两步（存素材、扣积分）在 MediaAssetPort / BillingPort 上，"
+                                + "它们都显式收了 userId。加一个没人读的参数不是「一致性」，"
+                                + "而是把「这里需要身份」这个错误信号写进契约 —— 要么删掉它，"
+                                + "要么先证明这个端口里真的有一步要用到它。");
+            }
         }
     }
 

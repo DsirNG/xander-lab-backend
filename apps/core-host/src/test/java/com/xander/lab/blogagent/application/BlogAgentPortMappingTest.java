@@ -11,9 +11,12 @@ import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.blogagent.infrastructure.BlogAgentSourceMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentTaskMapper;
 import com.xander.lab.blogagent.infrastructure.BlogAgentVersionMapper;
+import com.xander.lab.blogagent.spi.BlogAgentImage;
+import com.xander.lab.blogagent.spi.BlogAgentImageUsage;
 import com.xander.lab.blogagent.spi.BlogAgentPostView;
 import com.xander.lab.blogagent.spi.BlogAgentTaskDraft;
 import com.xander.lab.blogagent.spi.BlogAgentTaskView;
+import com.xander.lab.common.ModelUsage;
 import com.xander.lab.content.api.MediaAssetPort;
 import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.publishing.api.BlogPostVO;
@@ -29,6 +32,7 @@ import java.util.function.BooleanSupplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -221,11 +225,158 @@ class BlogAgentPortMappingTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // ===== 图片能力（同一模块的第二个端口）=====
+    // BlogAgentImageClient.GeneratedImage（域内类型，带 ModelUsage）
+    //   -> BlogAgentImage（契约类型，带 BlogAgentImageUsage）
+
+    /**
+     * 逐分量落点。六个字面量<b>互不相同</b>，所以任何一处错位都会红。
+     *
+     * <p>⚠️ 三个 {@code long} 尤其危险：它们是相邻的同类型分量，重排不会有任何编译错误，
+     * 只会让用量按错误的口径记账 —— 而 token 记错不抛异常，只静默少记或多记。
+     * 三个值刻意取成互不相同，逐位断言。</p>
+     *
+     * <p>⚠️ 位置 2、3（{@code contentType} / {@code extension}）与位置 5、6
+     * （{@code model} / {@code size}）各是两个相邻的 {@code String}，同样逐位断言。</p>
+     */
+    @Test
+    void everyImageComponentComesFromItsOwnSourceField() {
+        BlogAgentImageClient imageClient = mock(BlogAgentImageClient.class);
+        BlogAgentProperties properties = mock(BlogAgentProperties.class);
+        when(properties.getImageSize()).thenReturn("1536x1024");
+        when(imageClient.generate("拼好的 prompt")).thenReturn(new BlogAgentImageClient.GeneratedImage(
+                new byte[]{7, 8, 9}, "image/webp", "webp", new ModelUsage(120, 20, 80), "端点模型字段"));
+
+        BlogAgentService service = newService(mock(BlogAgentTaskMapper.class),
+                mock(BlogService.class), imageClient, properties);
+
+        BlogAgentImage image = service.generate("拼好的 prompt");
+
+        assertThat(image.bytes()).isEqualTo(new byte[]{7, 8, 9});
+        assertThat(image.contentType()).isEqualTo("image/webp");
+        assertThat(image.extension()).isEqualTo("webp");
+        assertThat(image.usage().inputTokens()).isEqualTo(120);
+        assertThat(image.usage().cachedTokens()).isEqualTo(20);
+        assertThat(image.usage().outputTokens()).isEqualTo(80);
+        assertThat(image.model()).isEqualTo("端点模型字段");
+        assertThat(image.size()).isEqualTo("1536x1024");
+    }
+
+    /**
+     * ⚠️ <b>回归守卫</b>：{@code model} 必须来自<b>生成结果</b>，不是配置项。
+     *
+     * <p>提供方的 {@code generate} 会在候选端点之间<b>兜底重试</b>，所以真正产出这张图的可能是
+     * 兜底端点；走管理台网关路径时 {@code properties.getImageModel()} 甚至可能是空的。
+     * 下面两个字面量刻意不同，取错会红。</p>
+     *
+     * <p>改这一处之前，跨域的 {@code ImageGenerationTool} 写进素材 meta 的是<b>配置里的首选模型</b>，
+     * 于是"兜底端点生成的图"会被记成首选模型的名字 —— 而图片已经生成、已经入库，没人会发现。
+     * 同域的插图路径（{@code generateIllustrations}）一直是写 {@code generated.model()} 的，
+     * 这一刀把同一个口径带给了跨域消费方。</p>
+     */
+    @Test
+    void imageModelComesFromTheGeneratedResultNotFromTheConfiguration() {
+        BlogAgentImageClient imageClient = mock(BlogAgentImageClient.class);
+        BlogAgentProperties properties = mock(BlogAgentProperties.class);
+        when(properties.getImageModel()).thenReturn("配置里的首选模型");
+        when(imageClient.generate(anyString())).thenReturn(new BlogAgentImageClient.GeneratedImage(
+                new byte[]{1}, "image/png", "png", ModelUsage.NONE, "实际兜底端点模型"));
+
+        BlogAgentImage image = newService(mock(BlogAgentTaskMapper.class), mock(BlogService.class),
+                imageClient, properties).generate("prompt");
+
+        assertThat(image.model()).isEqualTo("实际兜底端点模型");
+    }
+
+    /**
+     * {@code size} 由提供方适配器从 {@code BlogAgentProperties} 填 —— 这正是"消费方不必读
+     * {@code @ConfigurationProperties}"的意思：配置项留在提供方，只有它的<b>取值</b>过界。
+     */
+    @Test
+    void imageSizeComesFromTheConfigurationBecauseTheClientDoesNotReportIt() {
+        BlogAgentImageClient imageClient = mock(BlogAgentImageClient.class);
+        BlogAgentProperties properties = mock(BlogAgentProperties.class);
+        when(properties.getImageSize()).thenReturn("1024x1024");
+        when(imageClient.generate(anyString())).thenReturn(new BlogAgentImageClient.GeneratedImage(
+                new byte[]{1}, "image/png", "png", ModelUsage.NONE, "m"));
+
+        BlogAgentImage image = newService(mock(BlogAgentTaskMapper.class), mock(BlogService.class),
+                imageClient, properties).generate("prompt");
+
+        assertThat(image.size()).isEqualTo("1024x1024");
+    }
+
+    /**
+     * 提供方拿到 {@code null} 用量时必须给 {@link BlogAgentImageUsage#NONE}，不能把 {@code null}
+     * 过界。
+     *
+     * <p>契约承诺 {@code usage()} 非空（没拿到用量时给 {@code NONE}），所以消费方直接读三个分量、
+     * 不做兜底。这条就是那个承诺的守卫：改坏了的症状是消费方在扣费那一步 NPE ——
+     * 图片已经生成、已经入库，却因为记账抛异常让整次工具调用失败。</p>
+     */
+    @Test
+    void nullUsageBecomesNoneRatherThanNull() {
+        BlogAgentImageClient imageClient = mock(BlogAgentImageClient.class);
+        when(imageClient.generate(anyString())).thenReturn(new BlogAgentImageClient.GeneratedImage(
+                new byte[]{1}, "image/png", "png", null, "m"));
+
+        BlogAgentImage image = newService(mock(BlogAgentTaskMapper.class), mock(BlogService.class),
+                imageClient, mock(BlogAgentProperties.class)).generate("prompt");
+
+        assertThat(image.usage()).isSameAs(BlogAgentImageUsage.NONE);
+        assertThat(image.usage().isEmpty()).isTrue();
+    }
+
+    /**
+     * prompt <b>原样</b>透传 —— 适配器不许加风格前缀。
+     *
+     * <p>措辞是渲染方的策略：独立配图工具拼 {@code TOOL_IMAGE_STYLE}，同域的博客插图拼
+     * "准确、克制、专业的知识插图"。两者刻意不同，端口不替任何一方决定。
+     * 用<b>精确字符串</b>打桩（而不是 {@code anyString()}）就是在断言"没加前缀也没截断"。</p>
+     */
+    @Test
+    void generatePassesThePromptThroughUnchanged() {
+        BlogAgentImageClient imageClient = mock(BlogAgentImageClient.class);
+        String prompt = "原样传过来的 prompt，不许被加前缀";
+        when(imageClient.generate(prompt)).thenReturn(new BlogAgentImageClient.GeneratedImage(
+                new byte[]{1}, "image/png", "png", ModelUsage.NONE, "m"));
+
+        newService(mock(BlogAgentTaskMapper.class), mock(BlogService.class),
+                imageClient, mock(BlogAgentProperties.class)).generate(prompt);
+
+        verify(imageClient).generate(prompt);
+    }
+
+    /** {@code isEnabled} 直接转发：未配置时是 {@code false}，不是异常。 */
+    @Test
+    void isEnabledForwardsTheClientsAnswerWithoutSwallowingIt() {
+        BlogAgentImageClient enabled = mock(BlogAgentImageClient.class);
+        when(enabled.isEnabled()).thenReturn(true);
+        BlogAgentImageClient disabled = mock(BlogAgentImageClient.class);
+        when(disabled.isEnabled()).thenReturn(false);
+
+        assertThat(newService(mock(BlogAgentTaskMapper.class), mock(BlogService.class),
+                enabled, mock(BlogAgentProperties.class)).isEnabled()).isTrue();
+        assertThat(newService(mock(BlogAgentTaskMapper.class), mock(BlogService.class),
+                disabled, mock(BlogAgentProperties.class)).isEnabled()).isFalse();
+    }
+
     /**
      * 真实实例只给两个真的会被用到的依赖打桩，其余为 null —— 这些方法不碰它们。
      * 写成一个方法而不是用 {@code @InjectMocks}，是为了让"这个测试到底依赖哪些协作者"一眼可见。
      */
     private static BlogAgentService newService(BlogAgentTaskMapper taskMapper, BlogService blogService) {
+        return newService(taskMapper, blogService, mock(BlogAgentImageClient.class),
+                mock(BlogAgentProperties.class));
+    }
+
+    /**
+     * 图片能力那两个方法碰的是 {@code imageClient} 与 {@code properties} 两个字段，
+     * 所以这个重载把它们暴露出来。其余 12 个依赖仍然是 mock —— 这两个方法不碰它们。
+     */
+    private static BlogAgentService newService(BlogAgentTaskMapper taskMapper, BlogService blogService,
+                                              BlogAgentImageClient imageClient,
+                                              BlogAgentProperties properties) {
         return new BlogAgentService(taskMapper,
                 mock(BlogAgentSourceMapper.class),
                 mock(BlogAgentVersionMapper.class),
@@ -233,9 +384,9 @@ class BlogAgentPortMappingTest {
                 new ObjectMapper(),
                 mock(TransactionTemplate.class),
                 blogService,
-                mock(BlogAgentImageClient.class),
+                imageClient,
                 mock(MediaAssetPort.class),
-                mock(BlogAgentProperties.class),
+                properties,
                 mock(BlogAgentMessageMapper.class),
                 mock(BlogAgentEventService.class),
                 mock(BlogAgentLeaseScheduler.class),

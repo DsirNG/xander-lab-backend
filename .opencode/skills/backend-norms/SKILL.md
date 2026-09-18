@@ -321,6 +321,20 @@ private BlogPostVO createBlog(Long userId, ContentPostInput input, ...) { ... } 
 （`payment-api` 那次 `TokenUsage` 三个相邻 `long` 可以用全不相同的值，所以一组就够 ——
 `Boolean` 是特例，别照抄"一组就够"的结论。）
 
+**⚠️ 当契约 record 与它镜像的域内 record 并存时，新分量只能追加在末尾。**
+`BlogAgentImage`(6) 镜像 `GeneratedImage`(5)，前五个**逐位对齐**，唯一的新字段 `size`
+追加在最后：
+
+```java
+// GeneratedImage:   bytes, contentType, extension, usage, model
+// BlogAgentImage:   bytes, contentType, extension, usage, model, size
+```
+
+把 `size` 插在 `model` 旁边（"它俩都是元信息，放一起"）会让换算从"逐位直接映射"
+变成"错位映射"，**而编译器不会响** —— 两个位置都是 `String`，换过去照样编译，
+只是把尺寸写成模型名。**判据**：一条专门断言"前 n 个分量逐位对齐、新分量在末尾"的测试
+（`imageKeepsSizeLastSoTheFirstFiveStayPositionallyAligned`）。
+
 **⚠️ 词表类进契约，但不要改成枚举。** `ContentPostStatus`（`DRAFT=0` / `PUBLISHED=1` /
 `TRASHED=-1`）进契约是因为两个 agent 工具各自把 `"draft" ⇄ 0` 写了一遍。
 但 `blog_post.status` 是 **`int` 列**，MyBatis 投影与线上 JSON 都按数字走，换枚举会同时改
@@ -911,6 +925,74 @@ assertEquals("userId", method.getParameters()[0].getName(),
 # 确认 -parameters 生效
 javap -v -p contracts/<x>-api/target/classes/com/xander/lab/<x>/spi/<X>Port.class | grep MethodParameters
 ```
+
+### ⚠️ "端口收不收 `userId`"必须是一对守卫：正面一条，反面一条
+
+只写正面那条（"第一个参数是调用方 id"）时，**"所有端口都收 `userId`"是一个
+没人反对就会漂移的一致性论点** —— 下一位读者看到别的端口都收，就会给新端口也加一个。
+
+而那个参数可能**没有任何一步会去读它**。`BlogAgentImagePort` 就是这种端口：
+提供方是一次**无状态的模型调用**（不落库、不看 `UserContext`、不分片），
+真正需要身份的两步在**别的端口**上，且都显式收了：
+
+```java
+mediaAssetPort.recordGenerated(userId, ...);   // 存素材
+billingPort.chargeTokens(userId, ...);         // 扣积分
+```
+
+⚠️ **加一个没人读的参数不是"一致性"，而是把"这里需要身份"这个错误信号写进契约。**
+它会误导下一个实现者去猜这个参数该做什么，而契约里没有任何东西能纠正他。
+
+所以反面守卫是必需的：
+
+```java
+// ContractShape
+static void assertNoParameterIsNamed(Class<?> type, String name) {
+    for (Method method : type.getDeclaredMethods()) {
+        if (method.isSynthetic()) continue;
+        for (Parameter parameter : method.getParameters()) {
+            assertFalse(name.equals(parameter.getName()), ...);
+        }
+    }
+}
+
+// BlogAgentImagePortTest
+@Test void takesNoCallerIdAndThatIsDeliberate() {
+    assertNoParameterIsNamed(BlogAgentImagePort.class, "userId");
+}
+```
+
+**判据**：每新增一个端口，都要显式回答"收不收身份"，并把答案写成守卫 ——
+收就正面断言参数名，不收就反面断言不存在。**没有第三种状态。**
+
+⚠️ 验证方式与正面守卫相同：注入一个 `default void track(Long userId)`，
+期望**这条反面守卫变红**（2026-09-18 实测红了 3 处，其中一处正是它）。
+
+### ⚠️ 消费方不得读提供方的 `@ConfigurationProperties`
+
+端口如果只回最少的载荷（比如只回 `byte[]`），消费方可能还得知道 `model` / `size`
+才能把元信息写进自己的记录 —— 而它唯一的来源是提供方的 `@ConfigurationProperties`。
+
+⚠️ **一旦消费方去读提供方的配置，提供方的"配置"就变成了跨域契约。**
+配置可以改名、可以给默认值、可以整段不存在（网关路径下 `blog.agent` 就不配），契约不行。
+而且这会让 `blog.agent.*` 的任何一个键变成**事实上的公共 API**。
+
+```java
+// ❌ 消费方 import 提供方的配置类
+import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
+String model = properties.getImageModel();
+
+// ✅ 提供方的适配器把"这次实际用了什么"填进返回值
+return new BlogAgentImage(generated.bytes(), ..., generated.model(), properties.getImageSize());
+```
+
+**判据**：`grep -rn "ConfigurationProperties" <consumer-package>` 在消费方一侧应为空。
+**默认做法是让提供方把它填进返回值**，而不是让消费方去读配置。
+
+⚠️ 同族陷阱：**提供方报的值与消费方配置的值同名时，必须明确谁是真相。**
+`ImageGenerationTool` 曾把素材 `meta.model` 记成 `properties.getImageModel()`（配置里的**首选**模型），
+而客户端会在多个候选端点间**回退重试** —— 兜底端点生成的图被记成首选模型的名字，
+网关路径下配置值还可能是空白。真相永远是**提供方报的那个**（只有它知道这次实际发生了什么）。
 
 ### ⚠️ "归一参数顺序"会产生静默换位点：新重载的参数表可能与旧方法逐字相同
 

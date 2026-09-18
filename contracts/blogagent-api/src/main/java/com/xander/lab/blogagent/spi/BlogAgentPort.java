@@ -50,10 +50,11 @@ import java.util.function.BooleanSupplier;
  *
  * <h2>刻意不在这里的</h2>
  * <ul>
- *   <li>图片生成（{@code ImageGenerationTool} 走 {@code blogagent.infrastructure}）。形状不同
- *       —— 是一个具体客户端 + 一个 {@code @ConfigurationProperties}，而且它自带一个决定：
- *       生成的图片以 {@code byte[]} 过界，用量要以三 long 的记录过界（{@code ModelUsage}
- *       住在 {@code libs/xander-model}，契约不许依赖带 Jackson 的库，ADR-1）。单独一刀。</li>
+ *   <li>图片生成。它是**另一个端口**（{@link BlogAgentImagePort}）而不是本端口的一个方法：
+ *       提供方是 {@code blogagent.infrastructure.BlogAgentImageClient} —— 一个具体客户端
+ *       加一个 {@code @ConfigurationProperties}，形状与这里五个"对用户资源做事"的方法完全不同，
+ *       而且它是无状态的模型调用，连 {@code userId} 都不收。硬塞进来会让本端口的方法集
+ *       变成两种形状的混合体，"端口宽度 = 调用方适配器被迫实现的成员集"这条判据也就失效了。</li>
  *   <li>{@code generateTopicSeries}：唯一调用方是 {@code automation.BlogContentPlanService}，
  *       与 blogagent **同属 {@code dinqor-content-automation}** ⇒ 改它不动任何跨单元指标。</li>
  *   <li>{@code listSessions} / {@code reviseStream} / {@code reviewCompliance} /

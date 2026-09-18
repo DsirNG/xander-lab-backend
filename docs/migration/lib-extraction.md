@@ -24,15 +24,17 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 
 ⚠️ **"8 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过多轮：
 `core-api` 加过 `UserLookupPort`（§3septies），`automation-api` 加过 `NotificationPort`（§3duodecies），
-`recitation-api` 加过 `RecitationQuizPort`（§3quaterdecies）。
+`recitation-api` 加过 `RecitationQuizPort`（§3quaterdecies），
+`blogagent-api` 加过 `BlogAgentImagePort`（§3sexdecies）。
 扩展是**零构建接线**的 —— 不新增模块，四处构建接线一处都不用改。
 `recitation-api` 是**第十刀**（§3terdecies），也是第一个"建新模块"的刀自 `automation-api` 之后；
 它的测验能力扩展是**第十一刀**（§3quaterdecies），又回到零接线。
-`blogagent-api` 是**第十二刀**（§3quinquiesdecies），**第二个"建新模块"的刀** ——
-这一刀的看点是**参数顺序归一**，以及随之暴露的"守卫只朝一个方向看"（第三次实例）。
+`blogagent-api` 是**第十二刀**（§3quinquiesdecies）**建模块**，看点是把参数顺序归一到 `(userId, ...)`，
+以及随之暴露的"守卫只朝一个方向看"（第三次实例）；
+它的图片能力扩展是**第十三刀**（§3sexdecies），是**第一个不收 `userId` 的端口**。
 
-⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十二刀）；
-`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第十九刀）。
+⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十三刀）；
+`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第二十刀）。
 两者都对，只是分母不同。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
@@ -63,7 +65,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
 | `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。**第九刀再加 `NotificationPort`（写一条持久化用户通知）+ 两个从实体搬来的常量**。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | 第八刀：`agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元。**第九刀（零接线扩展，§3duodecies）**：`knowledgebase → automation` 2 → **0（边整条消失）**，总计再 **−2**（跨单元 −2）；`api_statements` **16 → 16 不变**（消费方 import 的是 `.application` / `.domain`，从没碰过 `.api`）。图形状：`knowledgebase` 变成**纯汇点**（整个域从清单里消失）；`automation` 扇入只剩 `admin`（SSE，要框架类型）与 `integration`（模板真环） |
 | `recitation-api` | **已完成**（两刀） | 第十刀（§3terdecies）：`RecitationMaterialPort`（背诵材料能力端口，4 个方法）+ `MaterialView`（收窄的读模型，9 分量）/ `MaterialDraft`（4）/ `MaterialFilter`（4）。第十一刀（§3quaterdecies）：`RecitationQuizPort`（测验能力端口，2 个方法 + 2 个常量）+ `QuizSessionView`（15，全带）/ `QuizAttemptView`（收窄，6，`items` 走**文本** `itemsJson`）/ `QuizOutcomeView`（收窄，10）/ `GradedItemDraft`（4）。包是 `com.xander.lab.recitation.spi`，**不是** `.recitation.api`（同因：那个包是 6 个前端 HTTP 文件的家）。⚠️ 第十一刀**删掉了两个域内 record**（`QuizSession` / `QuizOutcome`，同域生产消费方为零）而不是搬走 | 材料刀：`automation → recitation` 2 → **0（边整条消失）**、`agent → recitation` 4 → 2；总计 **−4**（跨单元 −4），`api_statements` 16 → 13（−3）。测验刀：`agent → recitation` 2 → **0（边整条消失）**，总计 **−2**（跨单元 −2），`api_statements` 13 → 12（−1）。图形状：**`content-automation ↔ core-host` 不再是互依对**（互依对 3 → 2，`MUTUAL_UNIT_PAIRS` 删掉那对，门禁主动报出过期条目）；`recitation` 成为**零跨域消费方**的域 |
-| `blogagent-api` | **已完成** | 第十二刀（§3quinquiesdecies）：`BlogAgentPort`（博客生成能力端口，5 个方法）+ `BlogAgentTaskDraft`（2）/ `BlogAgentTaskView`（4）/ `BlogAgentPostView`（5）。包是 `com.xander.lab.blogagent.spi`，**不是** `.blogagent.api`（同因：那个包是 5 个前端 HTTP 文件的家）。⚠️ 这一刀**归一了参数顺序**（提供方是 `(taskId, userId)`，端口统一 `(userId, taskId)`）—— 并因此发现既有的"首参必须是调用方 id"守卫**只断言类型**，对 `publish(Long taskId, Long userId)` 是**绿的** | `agent → blogagent` 4/2 → **2/0**（剩 `ImageGenerationTool`，见 §13 待办 27）；**`agent → publishing`（0/1）整条边消失**（`PublishPostTool` 是 `BlogPostVO` 的唯一跨域读者）；总计 **−2**（跨单元 −2），`api_statements` 12 → 9（−3）。⚠️ **两条边数指标一个都没动**（16 / 9）—— 见 §3quinquiesdecies.8 |
+| `blogagent-api` | **已完成**（两刀） | 第十二刀（§3quinquiesdecies）：`BlogAgentPort`（博客生成能力端口，5 个方法）+ `BlogAgentTaskDraft`（2）/ `BlogAgentTaskView`（4）/ `BlogAgentPostView`（5）。包是 `com.xander.lab.blogagent.spi`，**不是** `.blogagent.api`（同因：那个包是 5 个前端 HTTP 文件的家）。⚠️ 第十二刀**归一了参数顺序**（提供方是 `(taskId, userId)`，端口统一 `(userId, taskId)`）—— 并因此发现既有的"首参必须是调用方 id"守卫**只断言类型**，对 `publish(Long taskId, Long userId)` 是**绿的**。第十三刀（§3sexdecies）：`BlogAgentImagePort`（图片生成能力端口，2 个方法）+ `BlogAgentImage`（6）/ `BlogAgentImageUsage`（3 long）。⚠️ 这是**第一个不收 `userId` 的端口**，理由是提供方是无状态的模型调用；守卫因此**反过来写**（断言"没有参数叫 userId"） | 第十二刀：`agent → blogagent` 4/2 → **2/0**（剩 `ImageGenerationTool`）；**`agent → publishing`（0/1）整条边消失**（`PublishPostTool` 是 `BlogPostVO` 的唯一跨域读者）；总计 **−2**（跨单元 −2），`api_statements` 12 → 9（−3）。⚠️ **两条边数指标一个都没动**（16 / 9）。第十三刀：`agent → blogagent` 2/0 → **0/0（边整条消失）**，总计再 **−2**（跨单元 −2）；`implementation_edges` 16 → **15**、`cross_deployment_unit_edges` 9 → **8**；`api_statements` **9 → 9 不变**（这一刀全是 impl 语句）。⚠️ 顺带修了一处缺陷：素材 meta 里的 `model` 记的是配置里的首选模型而不是实际端点模型 |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
 | `payment-api` | **已完成** | `BillingBiz`（`points_ledger.biz_type` 词表）；**`BillingPort`（积分账本端口）+ `TokenUsage`（用量 DTO）** | 词表那一刀：`agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7）。端口那一刀：`agent 3→0`、`integration 2→0`、`automation 1→0`、`blogagent 1→0`、`identity 1→0`、`profile 1→0`、`studio 1→0` —— **7 条边全部归零**，总计再 **−10**（跨单元 −7）。两刀合计 **−18**（跨单元 −14） |
@@ -2185,6 +2187,289 @@ runStream(Long userId, Long taskId, BiConsumer<String, String> onEvent, BooleanS
 4. **`automation → integration`（6）** —— 目前最大的跨单元边，但卡在 `MailService` 的
    API 变更上（模板环，§3quater.5），不是纯粹的"抽端口"。
 
+**结果：第 1 项已做完（§3sexdecies）。** `agent → blogagent` **整条边消失**，
+`agent` 对 `blogagent` 的依赖归零。剩 `identity` 2 与 `integration` 2 —— **两条都跨部署单元**。
+
+---
+
+## 3sexdecies. 第十三刀：`blogagent-api` 的图片能力 —— 一个不收 `userId` 的端口
+
+### 3sexdecies.1 目标边
+
+`agent → blogagent` 剩 **2 impl / 0 api**，两条语句都在 `ImageGenerationTool` 里，是两个 import：
+
+```java
+import com.xander.lab.blogagent.infrastructure.BlogAgentImageClient;
+import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
+```
+
+⚠️ **包名是 `infrastructure`**，不是上一刀消费的 `application`。
+这一刀的消费方**绕过了 `BlogAgentService`**，直接拿基础设施层的两个类：
+
+| 类型 | 形状 | 判据 |
+|---|---|---|
+| `BlogAgentImageClient` | `@Component` 具体类（RestClient + HttpClient + 端点回退 + 下载 URL 校验 + 10MB 上限） | 具体实现 ⇒ **抽端口**（ADR-2 判据②） |
+| `BlogAgentProperties` | `@Data @Component @ConfigurationProperties(prefix = "blog.agent")` | 配置类 ⇒ **本来就不该过界**（见 §3sexdecies.6） |
+
+### 3sexdecies.2 侦察：`GeneratedImage` 只有两处消费方，一处跨域一处同域
+
+- **跨域**：`agent.ImageGenerationTool`（这一刀要动的）；
+- **同域**：`blogagent.BlogAgentService.generateIllustrations`（不动）。
+
+⇒ 同域那条路径继续直接调 `imageClient` ⇒ **域内 record `GeneratedImage` 一个字都不用改**。
+这是"一半的价值来自没碰的东西"的又一例：改完 `agent → blogagent` 归零，
+而 blogagent 域内部一行没动。
+
+### 3sexdecies.3 ⚠️ 形状决定一：这是**第二个端口**，不是往 `BlogAgentPort` 加两个方法
+
+最省事的做法是给 `BlogAgentPort` 加 `isImageEnabled()` / `generateImage(...)`。**没这么做。**
+
+判据是端口设计的老规则：**端口宽度 = 调用方适配器被迫实现的成员集。**
+`BlogAgentPort` 现有的 5 个方法形状是"用户拥有的资源上的域方法"（都收 `userId`，
+都落到 `BlogAgentTaskMapper` / `blogService`）。而图片能力的形状是"一个具体客户端 + 一份配置"，
+既不落库也不认人。混进一个接口，`BlogAgentService` 就得同时扮演两种角色，
+而**下一位读者会以为这 7 个方法是同一种东西**。
+
+```java
+public interface BlogAgentImagePort {
+    boolean isEnabled();
+    BlogAgentImage generate(String prompt);
+}
+```
+
+⚠️ 收益：**扩契约模块加第二个端口，构建接线是零**（不新增模块 ⇒ 根 POM、应用 POM、
+`scan.py` 的 `SHARED_KERNEL`、Dockerfile 四处一个都不用改）。同
+`core-api` + `UserLookupPort`、`automation-api` + `NotificationPort`、
+`recitation-api` + `RecitationQuizPort` 的先例。
+
+### 3sexdecies.4 ⚠️ 形状决定二：图片以 `byte[]` 过界
+
+契约不能带 Jackson（ADR-1）⇒ 也就不能带 `InputStream` / `Resource` / 任何序列化容器。
+先例已有：`MediaAssetPort.recordGenerated(userId, ..., byte[] bytes, ...)`。
+
+⚠️ 代价必须写下来：10MB 上限、下载 URL 校验、内容类型嗅探**全部留在提供方**
+（`BlogAgentImageClient`）。契约只承诺"给你一份字节和它的元信息"。
+
+### 3sexdecies.5 ⚠️ 形状决定三：`ModelUsage` 带 Jackson ⇒ 契约自带三 long 的等价 DTO
+
+`GeneratedImage` 的第 4 个分量是 `com.xander.lab.common.ModelUsage` ——
+它**本身是干净的**（纯 record、无注解），但住在 `libs/xander-model`，
+而那个模块声明了 `jackson-databind`（同一模块里还有 `ModelUsage.fromJson(JsonNode)`
+和 `ModelCallResult.payload`）。
+
+⚠️ **契约不能 import 一个带框架的共享库**，哪怕要用的那个类型自己是干净的。
+这是 ADR-1 从"不能 import Jackson"往前推一步的直接结果，也是 §4 踩过一次的坑
+（`payment.api.TokenUsage` 就是这么来的）。于是**又写了一个三 long 的 record**：
+
+```java
+public record BlogAgentImageUsage(long inputTokens, long cachedTokens, long outputTokens) {
+    public static final BlogAgentImageUsage NONE = new BlogAgentImageUsage(0, 0, 0);
+    public boolean isEmpty() { return inputTokens <= 0 && cachedTokens <= 0 && outputTokens <= 0; }
+}
+```
+
+它与 `payment.api.TokenUsage` **逐字段同形**。**刻意的重复，不是疏漏** ——
+契约不能依赖契约（§2.3），"同一形状写两遍"是这条规则的标准代价。
+
+⚠️ **三个相邻的 `long` 是这一刀最危险的一处**：换序能编译、能过大部分测试，
+只会在生产上静默错账。由 `imageUsageHasThreeAdjacentLongs` 钉住（分量名 + 顺序 + 类型），
+注入 C 实测 3 处红。
+
+⚠️ 还有一条容易写反的语义：`isEmpty()` 是 **"每一个分量都 ≤ 0"**，不是"有任意一个是 0"。
+一次只命中缓存的正常调用（`outputTokens == 0`）若被判成"没有用量"，那次调用就**静默不扣费**。
+`imageUsageIsEmptyOnlyWhenEveryComponentIsNonPositive` 用三组互补字面量把两个方向都钉住。
+
+### 3sexdecies.6 ⚠️ 形状决定四（这一刀真正的设计点）：消费方不读提供方的配置
+
+如果端口只回一份 `byte[]`，`ImageGenerationTool` 就得自己知道 `model` 和 `size`
+才能写进素材的 `meta`；它唯一的来源是 `BlogAgentProperties`，也就是 `blog.agent` 前缀的配置。
+
+⚠️ **一旦消费方去读提供方的 `@ConfigurationProperties`，提供方的"配置"就变成了跨域契约。**
+配置可以改名、可以给默认值、可以整段不存在（网关路径下 `blog.agent` 就不配），契约不行。
+而且这会让 `blog.agent.*` 的任何一个键变成**事实上的公共 API**。
+
+所以由**提供方的适配器**把"这次生成实际用了什么"填进结果：
+
+```java
+return new BlogAgentImage(generated.bytes(), generated.contentType(), generated.extension(),
+        usage == null ? BlogAgentImageUsage.NONE
+                : new BlogAgentImageUsage(usage.inputTokens(), usage.cachedTokens(), usage.outputTokens()),
+        generated.model(), properties.getImageSize());
+```
+
+⚠️ 两个字段来源**不一样**，而且是刻意的：`model` 取 `generated.model()`（**实际端点**报的）；
+`size` 取 `properties.getImageSize()`（客户端**不报**实际像素，只能给请求值）。
+
+⚠️ 注意 `usage == null` 必须落成 `NONE`，**不能过界成 `null`** ——
+契约承诺非空，消费方因此读三个分量时**没有兜底**。否则症状是：图片已生成已入库，
+然后在扣费那一步 NPE。
+
+### 3sexdecies.7 ⚠️ 顺手修掉一个静默缺陷：`writeMeta` 记的是首选模型，不是实际端点
+
+**这一刀在改动过程中发现的既有缺陷**，不是这一刀引入的。
+
+`ImageGenerationTool.writeMeta` 原来写 `properties.getImageModel()` —— 配置里的**首选**模型。
+而 `BlogAgentService.generateIllustrations`（同域那条）一直写 `generated.model()`。
+
+⚠️ 为什么出错：`BlogAgentImageClient` 会在**多个候选端点间回退重试**。
+首选端点失败、兜底端点成功时，产物是兜底端点生成的，`meta.model` 却记成首选模型的名字；
+网关路径下 `getImageModel()` 还可能是**空白**。
+
+⚠️ 而它是**静默**的：图片已经生成、已经入库，只有 `meta` 里那个字段是错的，
+没有任何断言、没有任何日志会响。
+
+修法：`writeMeta(String title, String prompt, String model, String size)` 改成收实际值。
+由 `imageModelComesFromTheGeneratedResultNotFromTheConfiguration` 守 ——
+把 `properties.getImageModel()` 打桩成 `"配置里的首选模型"`、`GeneratedImage.model()`
+打桩成 `"实际兜底端点模型"`，断言素材 `meta` 里是后者。注入 F 实测 2 处红。
+
+⚠️ **通用经验：提供方报的值与消费方配置的值同名时，必须明确谁是真相。**
+这里真相是提供方报的值 —— 只有它知道这次实际发生了什么。
+
+### 3sexdecies.8 ⚠️ 分量顺序：前五个与 `GeneratedImage` 逐位对齐，`size` 只能追加在末尾
+
+```java
+// GeneratedImage:   bytes, contentType, extension, usage, model
+// BlogAgentImage:   bytes, contentType, extension, usage, model, size
+public record BlogAgentImage(byte[] bytes, String contentType, String extension,
+                             BlogAgentImageUsage usage, String model, String size) { }
+```
+
+⚠️ 唯一的新字段 `size` **必须追加在末尾**。插在 `model` 旁边（"它俩都是元信息"）
+会让换算从"逐位直接映射"变成"错位映射"，**而编译器不会响** ——
+两个位置都是 `String`，换过去照样编译，只是把尺寸写成模型名。
+
+由 `imageKeepsSizeLastSoTheFirstFiveStayPositionallyAligned` 钉住；注入 D 实测 **6** 处红。
+⚠️ 2/3 位（`contentType` / `extension`）与 5/6 位（`model` / `size`）是**两对相邻 `String`**，
+注入 B 证明 2/3 位也有守卫。
+
+### 3sexdecies.9 ⚠️ 唯一不收 `userId` 的端口，以及成对的反向守卫
+
+`BlogAgentImagePort` 是这一刀之后**唯一一个不收 `userId` 的端口**。前面几个端口
+（`UserLookupPort`、`NotificationPort`、`RecitationQuizPort`、`BlogAgentPort` …）
+第一个参数都是 `userId`，而 §3quinquiesdecies.5 刚把守卫从"断言类型"改成"断言参数名"。
+
+于是出现真实风险：**下一位读者看到"别的端口都收 `userId`"，就给这个也加上。**
+而那个参数**没有任何一步会去读它** —— 提供方是一次无状态的模型调用，不落库、不看
+`UserContext`、不分片。真正需要身份的两步在**别的端口**上，且都显式收了：
+
+```java
+mediaAssetPort.recordGenerated(userId, ...);   // 存素材
+billingPort.chargeTokens(userId, ...);         // 扣积分
+```
+
+⚠️ **加一个没人读的参数不是"一致性"，而是把"这里需要身份"这个错误信号写进契约。**
+
+所以守卫这次**反着写** —— 新增 `ContractShape.assertNoParameterIsNamed(type, "userId")`：
+
+```java
+static void assertNoParameterIsNamed(Class<?> type, String name) {
+    for (Method method : type.getDeclaredMethods()) {
+        if (method.isSynthetic()) continue;
+        for (Parameter parameter : method.getParameters()) {
+            assertFalse(name.equals(parameter.getName()), ...);
+        }
+    }
+}
+```
+
+由 `BlogAgentImagePortTest.takesNoCallerIdAndThatIsDeliberate` 调用。
+**注入 E 是这一刀最有价值的一次验证**：往端口加一个 `default void track(Long userId)`，
+期望"`default` 守卫红"，实测**三处红**，其中一处正是这条反向守卫 —— 证明它真的接着线。
+
+⚠️ **结论提升为规则：端口收不收 `userId` 必须是一对守卫，正面一条、反面一条。**
+只有正面那条时，"所有端口都收"是一个**没人反对就会漂移**的一致性论点；
+配上反面那条，每个端口"要不要身份"才是一个**被断言过的决定**。
+
+### 3sexdecies.10 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 34 | **32** |
+| `implementation_edges` | 16 | **15** |
+| `cross_deployment_unit_statements` | 17 | **15** |
+| `cross_deployment_unit_edges` | 9 | **8** |
+| `api_statements` | 9 | **9**（不变） |
+| `api_edges` | 6 | **6**（不变） |
+
+`agent → blogagent` 从 **2 impl / 0 api** 到**整条边消失**。`agent` 对 `blogagent` 归零；
+`blogagent` 只剩 `automation`（同单元）与 `studio`（跨单元 1 条）两个消费方。
+
+⚠️ **与 §3quinquiesdecies.8 对照着看**：上一刀两条边数指标**一个都没动**，这一刀两条都动了。
+两次代码改动量相近（各 2 条语句），但一次"边还在"、一次"边没了"。
+**六个指标要一起看，任何一个单独看都会误判** —— 上一刀若只看 `implementation_edges`，
+会得出"什么都没发生"的错误结论。
+
+### 3sexdecies.11 为什么没有加 `contract-changes.yaml` 条目
+
+三个契约类型都是**新缝**（不是替换某个前端可见类型），而且都**收窄**了。
+按 §2.5 的分支判断：镜像才可能"序列化逐字节不变 ⇒ 可证纯重构 ⇒ 不进登记表"，
+收窄是**新形状**。但它们**不是前端可见类型** —— `BlogAgentImage` 只出现在跨进程端口上。
+
+⚠️ 与 §3quinquiesdecies.12 同款提醒：Wave 2 之后 `BlogAgentImage` 会变成**跨进程线上格式**，
+届时它的 6 个分量顺序就是线上格式，任何重排都要走 **V9 §11（契约冻结）**。
+
+### 3sexdecies.12 注入验证：六次注入
+
+| # | 注入 | 实测 |
+|---|---|---|
+| A | 端口加一个 `default boolean isDisabled()` | **2**（`declaresNoDefaultMethods` + `hasExactlyTheseTwoMethods`） |
+| B | `BlogAgentImage` 的 `contentType` 与 `extension` 对调 | **2** |
+| C | `BlogAgentImageUsage` 三个 `long` 换序 | **3** |
+| D | `BlogAgentImage` 的 `model` 与 `size` 对调 | **6** |
+| E | 端口加一个 `default void track(Long userId)` | **3**（含反向守卫） |
+| F | `generate` 改回记 `properties.getImageModel()` | **2**（含 §3sexdecies.7 那条回归守卫） |
+
+⚠️ **实测值与"想当然的期望值"不一致，这是第二次**（第一次是 §3quaterdecies 的注入 D）。
+按直觉，"`model` / `size` 对调"应只红 1 处（那条换算测试），实测红了 **6** 处 ——
+换算测试、两条专门测试、以及三条工具测试都读这两个字段。
+**期望值必须实测，不能从上一刀继承。**
+
+⚠️ **注入脚本第一次跑没有回滚**（脚本自己的 bash bug：revert 段引用了未定义变量，
+`set -u` 直接退出），注入 A 的 `default boolean isDisabled()` 留在了工作区。
+发现方式：`git status --short` + 读文件末尾。修好后重跑，脚本自检打印
+**"OK: 5 个文件全部逐字节还原（blob sha 相同）"**。
+⚠️ **注入脚本失败后必须检查工作区**，否则会把注入当代码提交。
+
+⚠️ `mvn` 控制台在 UTF-8 管道里是 GBK 乱码，但**测试名与 ASCII 断言值可读**
+（`expected: <size> but was: <model>`），足够给每次注入归因。
+
+### 3sexdecies.13 测试
+
+`blogagent-api` 15 → **26**（+11）：`BlogAgentImagePortTest`(7) 是新类；
+`RecordShapeTest` 6 → 10（+4，含 `ALL_RECORDS` 改成 5 个记录的循环）。
+`apps/core-host` 1177 → **1187**（+10）：`ImageGenerationToolTest` 2 → 6（+4，改 mock 端口）、
+`BlogAgentPortMappingTest` 7 → 13（+6，新增 4 参 `newService` 重载暴露 `imageClient` / `properties`）。
+全反应堆 1386 → **1407**（0 fail / 0 err）。
+26 门禁 → 24 pass / 0 fail / 2 skip；`contract-dependency-boundary` 报
+**8 个模块 / 57 个源文件，JDK-only**（上一刀 54）；`dockerfile-module-coverage` 仍报 12 个模块。
+
+### 3sexdecies.14 刻意没做的事
+
+- **`BlogAgentService.generateIllustrations`（同域那条）**：继续直接调 `imageClient`。
+  同域调用没有边界要守，绕一层端口只是多一层间接。这也是 `GeneratedImage` 不用改的原因。
+- **10MB 上限、下载 URL 校验、端点回退、`usage` 解析**：全部留在 `BlogAgentImageClient`。
+- **图片风格的措辞**：`TOOL_IMAGE_STYLE` 留在工具里，博客配图的措辞留在 `BlogAgentService` 里。
+  **两个措辞刻意不同**，端口只收组装好的 `prompt` —— 端口不带渲染方的策略常量。
+- **`BlogAgentProperties` 的任何其他字段**（超时、`maxIllustrations`…）：不上端口。
+  端口只暴露"这次生成实际用了什么"，不暴露"提供方怎么配置的"。
+- **`BlogAgentImageClient` 本身**：一个字没改。注入 F 之所以能改回去，是因为换算发生在服务里 ——
+  这也说明**这一刀没有动客户端的契约**。
+
+### 3sexdecies.15 下一刀
+
+剩余跨单元实现边（按语句数）：`automation → integration` 6、`agent → identity` 2、
+`agent → integration` 2、`admin → automation` 1、`identity → integration` 1、
+`integration → automation` 1、`integration → identity` 1、`studio → blogagent` 1。
+
+候选（同 §3quinquiesdecies.15，第 1 项已划掉）：
+
+1. **`agent → identity`（2）** —— 在 `agent/api/` 下，是 WebSocket 握手鉴权，
+   形状与工具类**完全不同**，要单独判断（可能落进 `xander-auth-core` 而不是契约）。
+2. **`agent → integration`（2）** —— 与 `PublishPostTool` 同一文件，可单独一刀。
+3. **`automation → integration`（6）** —— 目前最大的跨单元边，但卡在 `MailService` 的
+   API 变更上（模板环，§3quater.5），不是纯粹的"抽端口"。
+
 ---
 
 ## 4. 必须留痕的判断
@@ -2381,7 +2666,7 @@ python scripts/migration/ci_gates.py
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
 类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
 只看最后那个 `Results:` 会以为"测试变少了"。
-**要核对的是各模块之和。**最新一轮（§3quinquiesdecies 之后，2026-09-17）：
+**要核对的是各模块之和。**最新一轮（§3sexdecies 之后，2026-09-18）：
 
 | 模块 | Tests run |
 |---|---|
@@ -2393,9 +2678,20 @@ python scripts/migration/ci_gates.py
 | `contracts/agent-api` | 21 |
 | `contracts/automation-api` | 31 |
 | `contracts/recitation-api` | 35 |
-| `contracts/blogagent-api` | 15 |
-| `apps/core-host` | 1177 |
-| **合计** | **1386**（0 failures / 0 errors） |
+| `contracts/blogagent-api` | 26 |
+| `apps/core-host` | 1187 |
+| **合计** | **1407**（0 failures / 0 errors） |
+
+第十三刀的增量（1386 → 1407）：
+
+* `contracts/blogagent-api` 15 → **26**（+11）：`BlogAgentImagePortTest`(7) 是新类 ——
+  含那条**反向**守卫（断言端口里没有叫 `userId` 的参数）；
+  `RecordShapeTest` 6 → **10**（+4，两个新 record 各一条形状断言 + 一条 `size` 必须在末尾 +
+  一条"空用量只在三个分量全非正时成立"）。
+* `apps/core-host` 1177 → **1187**（+10）：`ImageGenerationToolTest` 2 → **6**（+4：
+  未配置时不调提供方、meta 记的是提供方给的模型与尺寸、空用量照样记账、风格前缀由工具拼）；
+  `BlogAgentPortMappingTest` 7 → **13**（+6：逐分量落点、`model` 来自生成结果而不是配置、
+  `size` 来自配置、`null` 用量退化成 `NONE`、prompt 原样透传、`isEnabled` 直接转发）。
 
 第十二刀的增量（1362 → 1386）：
 
@@ -2494,7 +2790,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **17** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → **17**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` 9/9、`identity` 11/3、`blogagent` 7/3、`automation` 2/2、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）。当前最大的跨单元边是 `automation -> integration` 6 条（卡在 `MailService`，§3quater.5） | Wave 0B 剩余 |
+| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **15** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → **15**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` 9/9、`identity` 11/3、`blogagent` **5**/3、`automation` 2/2、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）。当前最大的跨单元边是 `automation -> integration` 6 条（卡在 `MailService`，§3quater.5） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

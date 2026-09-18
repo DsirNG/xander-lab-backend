@@ -15,8 +15,10 @@
     <description>
         Service-to-service contract for the blog generation agent (V9 §18 / §91).
 
-        Members. BlogAgentPort (5 methods), plus the three narrowed records it carries:
-        BlogAgentTaskDraft (write), BlogAgentTaskView (read), BlogAgentPostView (read).
+        Members. BlogAgentPort (5 methods) with three narrowed records (BlogAgentTaskDraft,
+        BlogAgentTaskView, BlogAgentPostView); plus BlogAgentImagePort (2 methods) with
+        BlogAgentImage (6 components) and BlogAgentImageUsage (3 longs). Two rounds, one
+        module: the second round extends the first with zero build wiring.
 
         Why the module exists. Four statements in three files reached into blogagent's
         application layer, and two more reached into its api layer:
@@ -28,21 +30,45 @@
         BlogGenerationTool and PublishPostTool imported
         blogagent.application.BlogAgentService together with blogagent.api.*, and
         PublishPostTool additionally imported publishing.api.BlogPostVO, because that is what
-        BlogAgentService.publish returns. After the split dinqor-agent could not be built
-        without blogagent's implementation classes AND without publishing's api layer.
+        BlogAgentService.publish returns. ImageGenerationTool reached past the service into
+        blogagent.infrastructure. After the split dinqor-agent could not be built without
+        blogagent's implementation classes AND without publishing's api layer.
 
-        What this cut takes. The SERVICE capability -- the two tools that go through
-        BlogAgentService. It clears agent -> publishing outright (PublishPostTool was the only
-        cross-domain reader of BlogPostVO) and shortens agent -> blogagent from 4 to 2.
+        What this cut takes. Both capabilities. Round one took the service capability (the two
+        tools that go through BlogAgentService) and cleared agent -> publishing outright
+        (PublishPostTool was the only cross-domain reader of BlogPostVO), shortening
+        agent -> blogagent from 4 to 2. Round two took the image capability, which zeroes
+        agent -> blogagent: the edge is gone.
 
-        What it deliberately does NOT take. ImageGenerationTool's two statements, which reach
-        into blogagent.infrastructure (BlogAgentImageClient, BlogAgentProperties). That is a
-        different shape from a service port -- a concrete client plus a
-        @ConfigurationProperties bean -- and it carries its own decision: the generated image
-        travels as bytes and the token usage travels as a three-long record, because
-        ModelUsage lives in libs/xander-model and a contract may not depend on a library that
-        drags in Jackson (ADR-1). Settling that shape is a separate cut, so
-        agent -> blogagent does not reach zero here.
+        Why the image capability is a SECOND port, not a method on BlogAgentPort. Because the
+        shape is different. BlogAgentImagePort's provider is a concrete client
+        (BlogAgentImageClient: RestClient + HttpClient + endpoint fallback) plus a
+        @ConfigurationProperties bean, not a domain method on a user-owned resource. It is
+        also the one port that takes no userId, deliberately: the provider is a stateless
+        model call, and the two steps that do need identity (saving the asset, charging
+        points) are on MediaAssetPort and BillingPort, both of which take userId explicitly.
+        A guard asserts NO parameter here is named userId, so nobody "restores consistency"
+        by adding one that nothing reads.
+
+        The image capability's own two shape decisions. The generated image travels as bytes
+        (byte[]), which MediaAssetPort.recordGenerated already does, so the precedent exists.
+        The token usage travels as a three-long record, because ModelUsage lives in
+        libs/xander-model, which declares jackson-databind for ModelUsage.fromJson; a contract
+        may not depend on a library that drags in Jackson (ADR-1). Hence
+        BlogAgentImageUsage, which is deliberately shape-identical to payment.api.TokenUsage
+        and deliberately written twice: a contract may not depend on a contract.
+
+        Why BlogAgentImage carries model and size. Because the alternative is worse. If the
+        port returned only the bytes, the consumer would have to read blog.agent's
+        @ConfigurationProperties itself, which turns the provider's configuration into a
+        cross-domain contract -- and configuration is free to be renamed, defaulted or absent
+        (it is absent on the gateway path). So the provider's adapter fills in what this
+        generation actually used. Note model comes from the generated result, NOT from
+        properties.getImageModel(): the client retries across candidate endpoints, so the
+        model that produced the image may be the fallback one, and on the gateway path the
+        configured model may be blank. Recording the configured value instead was a live bug
+        in ImageGenerationTool, fixed by this cut; BlogAgentService already recorded the
+        actual model on the same-domain illustration path.
 
         Why the DTOs are NARROWED, not mirrored. The mirror rule (ADR §2.5) exists for a type
         that *replaces* a frontend-visible one: mirroring then makes "serialization is
@@ -55,6 +81,10 @@
           BlogAgentTaskView  4 of the domain entity's 25  id, title, summary, publishedPostId
           BlogAgentPostView  5 of BlogPostVO's 17         id, title, status, csdnSynced, juejinSynced
           BlogAgentTaskDraft mirrors BlogAgentTaskCreateRequest's 2 fields, without @NotBlank
+          BlogAgentImage     6  bytes, contentType, extension, usage, model, size
+                               (the first five line up positionally with the provider's
+                               GeneratedImage; size is appended at the END on purpose, so
+                               "positional" stays true)
 
         What IS pinned is the component order, by reflection, and the mapping
         entity/VO -> record, by an app-module test using mutually distinct literals.
@@ -69,10 +99,11 @@
         the annotations, and the domain-side request type stays the validated front door for
         the HTTP callers.
 
-        Why every method takes the caller id FIRST. All four earlier contracts do, and the
-        guard test that pins it asserts the first parameter's TYPE is Long -- which is a
-        weaker statement than the invariant it is named for. Four of the five methods this
-        port wraps declare their parameters the other way round on the provider side
+        Why every method of BlogAgentPort takes the caller id FIRST, and why
+        BlogAgentImagePort is the one exception. All four earlier contracts put userId first,
+        and the guard test that pins it asserts the first parameter's TYPE is Long -- which is
+        a weaker statement than the invariant it is named for. Four of the five methods
+        BlogAgentPort wraps declare their parameters the other way round on the provider side
         (publish(taskId, userId), findPublishedPost(taskId, userId),
         runStream(taskId, userId, ...)), so mirroring the provider's order would have made the
         port inconsistent while still passing that guard. Instead the port normalises to
@@ -81,6 +112,12 @@
         first parameter is NAMED userId, not merely typed Long -- javac is run with
         -parameters here, so the name survives into the class file, and that closes the gap
         between what the guard says and what it checks.
+
+        BlogAgentImagePort takes no userId at all, and that is a decision rather than an
+        oversight (see above). Its guard is therefore the REVERSE one: it asserts that no
+        parameter anywhere in that port is named userId. Without that, "consistency" would
+        creep back in as an unused parameter, and the next reader would go looking for where
+        it is used.
 
         Package note: this module's package is com.xander.lab.blogagent.spi, NOT
         com.xander.lab.blogagent.api. blogagent already owns com.xander.lab.blogagent.api as
@@ -95,12 +132,15 @@
         blogagent.application, blogagent.domain or blogagent.infrastructure).
 
         What is deliberately NOT here yet:
-        - ImageGenerationTool's image capability (see above).
         - generateTopicSeries, whose only caller is automation.BlogContentPlanService -- same
           deployment unit (both are dinqor-content-automation), so converting it would move
           no cross-unit metric. It is a candidate for a later tidy-up, not for this cut.
         - listSessions / reviseStream / reviewCompliance / findTaskByClientRequestId: their
           callers are BlogAgentController and BlogAgentService's own pipeline.
+        - blogagent's own same-domain illustration path (BlogAgentService.illustrate), which
+          keeps using BlogAgentImageClient directly. The port serves cross-domain consumers
+          only; that is also why GeneratedImage needed no change at all -- the port's adapter
+          converts, the same-domain path is untouched.
         - Any of blogagent's own api layer (com.xander.lab.blogagent.api.*). It is the
           frontend HTTP contract, a different audience, and it joins a contract module only
           when that layer itself is split in Wave 2.

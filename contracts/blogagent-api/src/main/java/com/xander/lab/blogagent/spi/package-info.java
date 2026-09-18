@@ -7,6 +7,12 @@
  *   <li>{@link com.xander.lab.blogagent.spi.BlogAgentTaskDraft} —— 创建入参（去掉 {@code jakarta.validation} 注解）</li>
  *   <li>{@link com.xander.lab.blogagent.spi.BlogAgentTaskView} —— 收窄的任务视图（域实体 25 → 4 个分量）</li>
  *   <li>{@link com.xander.lab.blogagent.spi.BlogAgentPostView} —— 收窄的已发布文章视图（{@code BlogPostVO} 17 → 5）</li>
+ *   <li>{@link com.xander.lab.blogagent.spi.BlogAgentImagePort} —— <b>图片生成能力</b>（2 条方法）。
+ *       ⚠️ 唯一一个不收 {@code userId} 的端口，理由写在它自己的 Javadoc 里，并由
+ *       {@code BlogAgentImagePortTest.takesNoCallerIdAndThatIsDeliberate} 反向守着</li>
+ *   <li>{@link com.xander.lab.blogagent.spi.BlogAgentImage} —— 一次图片生成的结果（6 个分量）</li>
+ *   <li>{@link com.xander.lab.blogagent.spi.BlogAgentImageUsage} —— 用量（3 个 long），
+ *       与 {@code payment.api.TokenUsage} 形状相同但**刻意各写一份**（契约不许依赖契约）</li>
  * </ul>
  *
  * <h2>包名：{@code blogagent.spi} 而不是 {@code blogagent.api}</h2>
@@ -33,14 +39,17 @@
  *       不要 import 别的契约模块。</li>
  *   <li><b>不许有 {@code default} 方法</b>。加一个 default 是"端口变宽"最隐蔽的形式：
  *       能编译、指标不动、26 条门禁全绿，只有反射测试会红。</li>
- *   <li><b>改动形状 = ADR §11</b>。这里所有类型都是**新缝**上的收窄类型，前端看不见它们，
+ *   <li><b>改动形状 = V9 §11（契约冻结）</b>。这里所有类型都是**新缝**上的收窄类型，前端看不见它们，
  *       所以不涉及"序列化逐字节不变"的证明；但一旦某个类型开始**替代**前端可见的类型，
  *       就必须按镜像规则逐字段同名，并进 {@code contract-changes.yaml}。</li>
  * </ul>
  *
  * <h2>这一刀拆掉了什么</h2>
+ * <p>同一个契约模块做了两轮（零构建接线：扩展已有模块，四处接线一处都不用改）。
+ * 第一轮建任务能力，第二轮补图片能力。两轮合计 <b>4 条实现语句 + 3 条 api 语句</b>，
+ * 跨 3 个文件、2 条边：</p>
  * <table>
- *   <caption>2 条实现语句 + 3 条 api 语句，跨 3 个文件</caption>
+ *   <caption>消费方与其原来 import 的类型</caption>
  *   <tr><th>文件</th><th>原来 import</th></tr>
  *   <tr><td>{@code BlogGenerationTool}</td>
  *       <td>{@code blogagent.application.BlogAgentService}（impl）、
@@ -49,22 +58,24 @@
  *   <tr><td>{@code PublishPostTool}</td>
  *       <td>{@code blogagent.application.BlogAgentService}（impl）、
  *           {@code publishing.api.BlogPostVO}（**另一条边**：{@code agent -> publishing}）</td></tr>
+ *   <tr><td>{@code ImageGenerationTool}</td>
+ *       <td>{@code blogagent.infrastructure.BlogAgentImageClient}（impl）、
+ *           {@code blogagent.infrastructure.BlogAgentProperties}（impl）</td></tr>
  * </table>
- * <p>改完之后依赖方向是 {@code agent -&gt; blogagent-api &lt;- blogagent}，
- * 并且 {@code agent -&gt; publishing} 整条消失（{@code PublishPostTool} 是
- * {@code BlogPostVO} 唯一的跨域读者）。</p>
+ * <p>改完之后依赖方向是 {@code agent -&gt; blogagent-api &lt;- blogagent}；
+ * {@code agent -&gt; publishing} 整条消失（{@code PublishPostTool} 是 {@code BlogPostVO}
+ * 唯一的跨域读者）；{@code agent -&gt; blogagent} 也**整条消失**（4/2 → 0/0）。</p>
  *
  * <h2>有意不在这次改动里的</h2>
  * <ul>
- *   <li>图片生成能力（{@code ImageGenerationTool} 走 {@code blogagent.infrastructure}）。
- *       形状与"服务端口"不同 —— 是一个具体客户端 + 一个 {@code @ConfigurationProperties}，
- *       而且它自带一个形状决定：图片以 {@code byte[]} 过界、用量以三 long 的记录过界
- *       （{@code ModelUsage} 住 {@code libs/xander-model}，带 Jackson ⇒ 契约 import 不到，
- *       ADR-1）。所以 {@code agent -> blogagent} 这一刀之后还剩 2 条，不归零。</li>
  *   <li>{@code generateTopicSeries}：唯一调用方 {@code automation.BlogContentPlanService}
  *       与 blogagent 同属 {@code dinqor-content-automation} ⇒ 改它不动任何跨单元指标。</li>
  *   <li>{@code blogagent.api} 那一层本身。它是前端 HTTP 契约，受众不同，
  *       要到 Wave 2 拆它自己的时候才进契约模块。</li>
+ *   <li>同域的 {@code BlogAgentService} 自己生成博客插图那条路径（{@code illustrate}）。
+ *       它与图片能力同域，走的是 {@code BlogAgentImageClient} 本身，不经端口 ——
+ *       端口只服务跨域消费方。⚠️ 这也是为什么 {@code GeneratedImage} 不需要改：
+ *       端口实现做换算，同域路径继续用原类型。</li>
  * </ul>
  */
 package com.xander.lab.blogagent.spi;
