@@ -1,7 +1,7 @@
 package com.xander.lab.agent.api;
 
 import com.xander.lab.agent.application.AgentConversationService;
-import com.xander.lab.identity.application.AuthService;
+import com.xander.lab.core.api.AccessTokenLookupPort;
 import com.xander.lab.common.Constants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +21,10 @@ import java.util.Map;
  * WebSocket 握手鉴权：校验 Access Token 与会话归属，把 userId / conversationId /
  * runVersion 放入会话属性供 {@link AgentStreamWebSocketHandler} 使用。
  * 握手路径不在 /api/** 下，因此不能依赖 AuthInterceptor，必须在握手阶段自行完成鉴权。
+ *
+ * <p>令牌校验走 {@link AccessTokenLookupPort}（契约），而不是 identity 的
+ * {@code AuthService}（实现）—— 握手要的只是"这个令牌是谁"，
+ * 令牌怎么签、会话登记表在哪，都不该出 identity 域。</p>
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -30,7 +34,7 @@ public class AgentStreamAuthHandshakeInterceptor implements HandshakeInterceptor
     static final String ATTR_CONVERSATION_ID = "conversationId";
     static final String ATTR_RUN_VERSION = "runVersion";
 
-    private final AuthService authService;
+    private final AccessTokenLookupPort accessTokenLookupPort;
     private final AgentConversationService conversationService;
 
     @Override
@@ -89,7 +93,7 @@ public class AgentStreamAuthHandshakeInterceptor implements HandshakeInterceptor
         if (token == null) {
             token = queryParam(request, "token");
         }
-        return token == null ? null : authService.getUserIdFromAccessToken(token);
+        return token == null ? null : accessTokenLookupPort.resolveUserId(token);
     }
 
     private String queryParam(ServerHttpRequest request, String name) {

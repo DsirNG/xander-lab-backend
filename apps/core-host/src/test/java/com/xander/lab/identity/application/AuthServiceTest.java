@@ -130,6 +130,59 @@ class AuthServiceTest {
         assertThat(service.validateAccessToken("access")).isFalse();
     }
 
+    /**
+     * {@code AccessTokenLookupPort} 的实现本体。
+     *
+     * <p>⚠️ 这几条是这一刀补的：在此之前 {@code getUserIdFromAccessToken}
+     * <b>一个测试都没有</b> —— 它只是 identity 内部的一个便捷方法，
+     * 没有测试也没人发现。现在它变成了 {@code core.api.AccessTokenLookupPort}
+     * 的实现，也就是 agent 的 WebSocket 握手唯一的身份来源，
+     * 于是"返回什么"必须是钉住的。</p>
+     */
+    @Test
+    void resolveUserIdReturnsTheSubjectOfALiveAccessToken() {
+        when(jwtUtil.isValid("access")).thenReturn(true);
+        when(jwtUtil.isRefreshToken("access")).thenReturn(false);
+        when(redisTemplate.hasKey(Constants.REDIS_TOKEN_PREFIX + "access")).thenReturn(true);
+        when(jwtUtil.getSubject("access")).thenReturn("42");
+
+        assertThat(service.resolveUserId("access")).isEqualTo(42L);
+    }
+
+    @Test
+    void resolveUserIdReturnsNullWhenTheTokenIsNoLongerARegisteredSession() {
+        when(jwtUtil.isValid("access")).thenReturn(true);
+        when(jwtUtil.isRefreshToken("access")).thenReturn(false);
+        when(redisTemplate.hasKey(Constants.REDIS_TOKEN_PREFIX + "access")).thenReturn(false);
+
+        assertThat(service.resolveUserId("access")).isNull();
+        // 登出过的令牌不该再被解析出身份 —— 这条断言是"短路"的证据：
+        // 少一次 getSubject 意味着 Redis 检查真的挡住了它。
+        verify(jwtUtil, never()).getSubject("access");
+    }
+
+    @Test
+    void resolveUserIdReturnsNullForARefreshToken() {
+        when(jwtUtil.isValid("refresh")).thenReturn(true);
+        when(jwtUtil.isRefreshToken("refresh")).thenReturn(true);
+
+        assertThat(service.resolveUserId("refresh")).isNull();
+        // refresh 令牌即使还在 Redis 里也不能当身份用，所以连 Redis 都不该查。
+        verify(redisTemplate, never()).hasKey(anyString());
+    }
+
+    @Test
+    void resolveUserIdReturnsNullWhenTheSubjectIsNotAUserId() {
+        when(jwtUtil.isValid("weird")).thenReturn(true);
+        when(jwtUtil.isRefreshToken("weird")).thenReturn(false);
+        when(redisTemplate.hasKey(Constants.REDIS_TOKEN_PREFIX + "weird")).thenReturn(true);
+        when(jwtUtil.getSubject("weird")).thenReturn("alice");
+
+        // subject 不是数字时返回 null 而不是抛 NumberFormatException ——
+        // 握手阶段收到奇怪令牌是预期结果，不是故障。
+        assertThat(service.resolveUserId("weird")).isNull();
+    }
+
     @Test
     void logoutRevokesDeviceTokenAndUserTokenMembership() {
         when(jwtUtil.isValid("access")).thenReturn(true);

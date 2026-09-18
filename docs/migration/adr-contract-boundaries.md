@@ -89,9 +89,9 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
 - `contracts/` 下 8 个模块（`core-api` / `content-api` / `integration-api` /
   `payment-api` / `agent-api` / `automation-api` / `recitation-api` / `blogagent-api`）
   目前**零 Jackson 依赖**，由门禁 `contract-dependency-boundary` 守着
-  （8 个模块 / 57 个源文件，JDK-only import + 无 compile/runtime 依赖）。
-  ⚠️ 源文件数会随每次扩契约增长（`blogagent-api` 两刀共加 6 个源文件：3 主 + 3 测试），
-  所以**引用这个数时要写清是哪一刀之后**。
+  （8 个模块 / 58 个源文件，JDK-only import + 无 compile/runtime 依赖）。
+  ⚠️ 源文件数会随每次扩契约增长（`blogagent-api` 两刀共加 6 个源文件；`core-api` 第十四刀加 1 个），
+  所以**引用这个数时要写清是哪一刀之后**。这个数只算 `src/main`，不含测试。
 - `agent-api` 是这条 ADR 最难的一次应用：要抽的端口属于 agent 的工具体系，而
   `AgentTool.parametersSchema()` 返回 `JsonNode`。**没有**放宽门禁，也没有搬 `AgentTool`，
   而是让 JSON 以文本出入端口（见 §6）。
@@ -202,7 +202,7 @@ blogagent ───→ content-api ←─── agent
 **所以它不构成一次 §11 契约变更，不该进登记表。** 这一点写在这里，
 是为了让后来的人知道"没登记"是判断，不是漏掉。
 
-> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§14 待办第 3 项），
+> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§15 待办第 3 项），
 > 那**必须**进 `contract-changes.yaml` 并走 §11 流程 —— 因为它会真的删掉
 > 前端能看到 10 个字段。
 
@@ -318,7 +318,7 @@ MediaAssetRef findReusableGenerated(Long userId, String title);
 
 > **这暴露了一个仍未拍板的问题**：契约能不能依赖契约？今天答案是**不能**
 > （Maven 无法编排 test-only 的跨契约依赖，所以门禁干脆全禁）。
-> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §14 待办。
+> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §15 待办。
 
 ### 3.5 `byte[]` 而不是 `MultipartFile`，以及 `MAX_IMAGE_BYTES`
 
@@ -555,7 +555,7 @@ api_statements / api_edges         38 / 11 (不变)
 
 **但这笔账要在拆分后重新算**：一旦 `payment-api` 作为独立版本化的 jar 发布，
 `TokenUsage` 的分量顺序就变成了跨进程的线上格式，届时任何重排都必须走 §11
-（见 §14 第 7 项）。
+（见 §15 第 7 项）。
 
 ---
 
@@ -755,7 +755,7 @@ api_edges                          11 -> 10   (-1)
 也确认（28 个能力 0 增 0 退；14 条变更全部可解析）。
 
 **⚠️ 但这笔账要在拆分后重新算**：`ContentPost` 的 17 个分量顺序与 `ContentPostPage` 的 6 个分量顺序，
-与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §14 第 7 项）。
+与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §15 第 7 项）。
 今天不登记，契约 jar 独立版本化时必须补。
 
 ---
@@ -785,7 +785,7 @@ SPI，所以看起来理所当然。问题在方向：`AgentTool` / `AgentDynami
 
 1. **`parametersSchema()` 返回 `com.fasterxml.jackson.databind.JsonNode`。** ADR-1 说契约
    必须与序列化框架无关，`CONTRACT_ALLOWED_IMPORT_PREFIXES` 只有 `java.`。搬它就必须放宽
-   门禁——而 §14.1 明写"不许为了过门禁而放宽"。
+   门禁——而 §15.1 明写"不许为了过门禁而放宽"。
 2. **它有 6 个 `default` 成员**（`promptSection` / `execute(AgentToolContext,…)` /
    `reconcile` / `approvalReason` / `readOnly`），外加嵌套的 `ProgressListener` 又有 5 个。
    搬过去等于把 agent 的整套工具词汇表塞进每个依赖方。
@@ -1129,7 +1129,7 @@ NEW  joined = ['dinqor-newbie'] -> FAIL      ← 抓到了
 
 **零接线不是"省事"，而是这一刀唯一的结构性优点。** 不新增模块 ⇒ 根 POM 的 `<modules>`、
 应用 POM 的依赖、`scan.py` 的 `SHARED_KERNEL`、**Dockerfile** 这四处**一处都不用动**
-（§15.6 记过漏 Dockerfile 会报 `Child module ... does not exist`，而且门禁发现不了）。
+（V9 §15.6 记过漏 Dockerfile 会报 `Child module ... does not exist`，而且门禁发现不了）。
 于是这次改动里没有任何"构建接线"可以出错，全部风险收敛到语义上 —— 而语义有反射测试守着。
 
 ### 8.2 侦察：为什么这一刀必须是端口，不能搬
@@ -1263,7 +1263,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
   不跨域，不上端口。
 - **`RESOURCE_KNOWLEDGE_FILE` 的归属**：它语义上更像"knowledgebase 的资源类型"而不是
   "通知表的词表"。这次按"跟着端口搬"处理（纯搬家，可证）；真要改归属是**另一个决定**，
-  记在 §14 待办里。
+  记在 §15 待办里。
 
 ### 8.11 注入验证：四次注入，逮到三个缺陷（其中两个在测试里）
 
@@ -1300,7 +1300,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
 **没修但必须记下来的一处**：第 5 次注入（把常量放回实体、让 `knowledgebase` 重新 import）
 **没有让 `cross-domain-import-baseline` 变红** —— 扫描器如实报了 42 → 43 条语句、边 18 → 19，
 门禁却报 PASS。原因是该门禁拿 `scan.py` 的产物当自己的基线，在"先 scan 后 gates"的既定流程下
-基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §14 待办第 16 项；
+基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §15 待办第 16 项；
 本刀只先把门禁 docstring 里那句"任何边增长就 FAIL"的失实保证改成实情。
 
 > 教训与 §7.10、`util` 死条目同源：**一个判据的"基线"必须来自判据之外。**
@@ -1887,7 +1887,7 @@ runStream(Long userId, Long taskId, BiConsumer<String, String> onEvent, BooleanS
 
 ⚠️ 反过来说：`BlogAgentTaskView` / `BlogAgentPostView` **在 Wave 2 之后会变成线上格式**
 （跨进程调用）。届时它们的字段顺序就是线上格式，任何重排都要走 **V9 §11（契约冻结）**。
-这一条记在 §14 待办里。
+这一条记在 §15 待办里。
 
 ### 11.10 注入验证：五次注入，每次变红的都正好是预期的那些
 
@@ -1952,7 +1952,7 @@ publish(Long taskId, Long userId) 同样满足那个断言。
 
 ## 13. 落地记录（十）：`blogagent-api` 的图片能力 —— 一个不收 `userId` 的端口，与一条反向守卫
 
-### 13.1 这一刀是 §11.11 / §14 第 27 项早就写下的待办
+### 13.1 这一刀是 §11.11 / §15 第 27 项早就写下的待办
 
 §11.11「刻意没做的事」只留了一条：`ImageGenerationTool`。第 27 项把它的形状写清楚了 ——
 **"一个具体客户端 + 一个 `@ConfigurationProperties`，不是薄壳 + 换算"**，并预告了它的两个决定。
@@ -2186,7 +2186,7 @@ static void assertNoParameterIsNamed(Class<?> type, String name) {
 
 ⚠️ 与 §11.9 同款提醒：Wave 2 之后 `BlogAgentImage` 会变成**跨进程线上格式**，
 届时它的 6 个分量顺序就是线上格式，任何重排都要走 **V9 §11（契约冻结）**。
-这一条记在 §14 待办里（与第 7、26 项同类）。
+这一条记在 §15 待办里（与第 7、26 项同类）。
 
 ### 13.12 注入验证：六次注入，每次变红的都正好是预期的那些
 
@@ -2228,7 +2228,227 @@ static void assertNoParameterIsNamed(Class<?> type, String name) {
 
 ---
 
-## 14. 待办
+## 14. 落地记录（十一）：`AccessTokenLookupPort` —— 一个**产出**身份的端口，与一条反向守卫
+
+### 14.1 目标边：两条 import 都在 `agent/api/` 下
+
+`agent → identity` 的 2 条 impl 语句分在两个文件里，但指向同一个类：
+
+```java
+// agent/api/AgentStreamAuthHandshakeInterceptor.java
+import com.xander.lab.identity.application.AuthService;
+// agent/api/AgentWebSocketConfig.java
+import com.xander.lab.identity.application.AuthService;
+```
+
+拦截器用它做握手鉴权，`AgentWebSocketConfig` 只是把它转手传给拦截器。
+**这是本项目第一个消费方在 `api/` 层的刀** —— 前面十三刀的消费方都是工具类或应用服务，
+而这次是一个 `HandshakeInterceptor`：它不在 `@Controller` 链上，
+走不到 `AuthInterceptor`，所以必须自己完成鉴权。
+
+### 14.2 侦察：`AuthService` 有三个跨域消费方，但用的是**两种能力**
+
+| 消费方 | 用到的 `AuthService` 方法 | 这其实是哪种能力 |
+|---|---|---|
+| `agent`（WS 握手） | `getUserIdFromAccessToken(String) -> Long` | **令牌 → 身份** |
+| `integration`（McpOAuth） | `validateAccessToken(String) -> boolean` | **令牌 → 有效性** |
+| `profile`（概览） | `getUserInfo(Long) -> TokenResponse.UserInfo` | 用户资料读取（**另一种能力**） |
+
+⚠️ 前两个是**同一个能力**的两种投影：`getUserIdFromAccessToken` 的第一句就是
+`if (!validateAccessToken(token)) return null;`。第三个不是 —— 它读的是用户资料，
+而且返回的是 identity 的前端类型 `TokenResponse.UserInfo`，那是另一刀的事。
+
+这个观察决定了这一刀的形状：**端口按能力定义，不按消费方定义**。
+若为 `agent` 建一个只写 `getUserIdFromAccessToken` 的契约，
+`integration` 之后就得再建一个只写 `validateAccessToken` 的契约 ——
+**同一个能力被两份契约各描述一遍**，而两份 Javadoc 描述的是同一套语义
+（签名 / 过期 / 非 refresh / 会话登记表仍在），迟早漂移。
+
+### 14.3 ⚠️ 为什么落 `core-api` 而不是 `agent-api`
+
+`core-api` 的 `package-info` 已经把判据写死了：
+
+> 放"实现跨部署单元"的类型：一个类型属于这里，判据不是"看起来像契约"，
+> 而是**它的实现跨部署单元**。
+
+以及：
+
+> §18 固定了 8 个契约名，里面**没有** identity。而 `core-api` 是 dinqor-core-host
+> 这个部署单元的契约，identity 正好住在那里 —— 与 `ModelGateway` 在同一个单元，所以判据一致。
+
+三条理由，按分量排序：
+
+1. **判据一致**：实现（`identity.application.AuthService`）在 dinqor-core-host，
+   §18 的 8 个名字里没有 identity ⇒ 与 `UserLookupPort` 落同一个模块。
+2. **`identity` 不需要新增任何模块依赖**：它已经 `implements UserLookupPort`，
+   所以 `identity → core-api` 这条编译依赖**本来就存在**。若把端口建在 `agent-api`，
+   identity 就要为了同一个能力去依赖 `agent-api`；等 `integration` 也来用，
+   再依赖 `integration-api` —— **提供方被迫依赖每一个消费方的契约**，方向就乱了。
+3. **未来宿主能直接用**：V11 §52 判定"凡承载 SSE/WS 的部署单元都必须维护 Security Local Cache"，
+   而 `core-api` 是这些单元都该依赖的模块。
+
+⚠️ 反过来说，ADR-2 的"消费方拥有"**不等于"契约要放在消费方那个域的模块里"** ——
+它说的是形状按消费方的真实需要裁剪（这里：只要一个方法、答不上来返回 `null`），
+以及契约定义在 `contracts/` 这个跨域位置上。`UserLookupPort` 就是同一个先例：
+它的消费方是 `publishing` / `components`，而它住在 `core-api`。
+
+### 14.4 ⚠️ 为什么只有这一个方法：`validateAccessToken` 与 `resolveUserId != null` 是同一个判断
+
+`integration` 现在用的是 `validateAccessToken`，看起来需要一个 `boolean` 方法。
+**没有为它加第二个方法**，因为这两个判断在本系统里**可证等价**：
+
+| 令牌类型 | 会通过 `validateAccessToken` 吗 | 依据 |
+|---|---|---|
+| access token | 会，且 subject 一定可解析 | `generateTokenResponse` 是**唯一**生产调用方，传 `String.valueOf(user.getId())` |
+| refresh token | **不会** | `jwtUtil.isRefreshToken(token)` 为真时直接 false |
+| bind token（微信绑定凭证） | **不会** | 它的 `type` 是 `bind` 不是 `refresh`，但它**不写进** `login:token:` 前缀，所以 `hasKey` 为假 |
+
+⇒ `validateAccessToken(t)` 为真 ⟺ `t` 是仍登记在册的 access token ⟹
+`Long.valueOf(subject)` 不可能抛 ⇒ `resolveUserId(t) != null`。
+
+所以 `integration` 那一刀可以直接复用本端口（`resolveUserId(t) != null`），
+不必新增方法。**这一刀没有顺手改它**，因为那是另一个消费方、另一条边，
+而且 `McpOAuthService` 在 MCP OAuth 流程里、有自己的测试 —— 混进来会让这次 diff 难以证明是纯重构。
+
+⚠️ 但要记住一个**将来的分歧点**：如果哪天出现"subject 不是数字、却仍登记在
+`login:token:` 下"的令牌类型，两个判断就会分叉（`resolveUserId` 返回 `null`
+而 `validateAccessToken` 返回 `true`）。分叉的方向是**更严**（拒绝），不是更松，
+所以不是安全问题；但那时必须重新决定，不能再靠这条等价性。
+
+### 14.5 ⚠️ 这是第一个**产出**调用方身份的端口 ⇒ 守卫是反的
+
+前几个端口的第一个参数都是调用方身份，守卫是正面的：
+`assertFirstParameterIsTheCallerId` 断言参数名是 `userId`（§11.3 把断言从"类型"改成"名字"）。
+
+本端口是**反过来**的：它的整个作用就是从令牌里**得出**身份。
+方法里出现一个 `userId` 参数，说明有人在让它做"校验这个令牌属不属于这个人" ——
+那是另一个能力，而且会诱使实现者把归属校验和令牌校验写成一步。
+
+所以守卫是：
+
+```java
+// AccessTokenLookupPortTest
+@Test void takesNoUserIdBecauseItProducesOne() {
+    // 遍历所有方法的所有参数，断言没有一个叫 userId
+}
+```
+
+**注入 B（往签名里加一个 `Long userId` 参数）实测 2 处红，其中一处正是它。**
+
+⚠️ 这一条与 §13.9 合起来才完整：**"端口收不收 `userId`"必须是一对守卫。**
+`BlogAgentImagePort` 是"不该收、断言它没收"，本端口是"不该收、而且是因为它要产出"，
+而其他端口是"该收、断言它收了"。三种情况各有一条断言，**没有第四种**。
+
+### 14.6 ⚠️ 端口实现此前**一个测试都没有**
+
+`getUserIdFromAccessToken` 在被抽成端口之前，**没有任何测试覆盖它** ——
+`AuthServiceTest` 只覆盖了 `validateAccessToken` 两条。它当时只是 identity 内部的一个便捷方法，
+没测试也没人发现。
+
+⚠️ 但抽成端口之后，它就变成了 **agent 的 WebSocket 握手唯一的身份来源**：
+它返回 `null` 就把所有连接挡在 401 上，它返回错的值就把别人的会话开给这个人。
+**"这是契约的实现"意味着它的行为必须是钉住的**，所以这一刀补了 4 条
+（活令牌返回 subject / 已登出返回 null 且短路不解析 / refresh 令牌返回 null 且不查 Redis /
+subject 非数字返回 null 而不是抛异常）。
+
+⚠️ 这正是 §9.8 那个教训的同族：**收窄/搬家之后，"原来那条断言没人写"**。
+这次不是"断言被删了"，而是**从来就没有** —— 而它以前不重要，现在重要了。
+**判据：把方法提升成契约实现时，先查它有没有测试；没有就当场补。**
+
+### 14.7 ⚠️ `PortDelegationTransactionTest` 的清单必须同步
+
+`AuthService` 现在实现了 `*Port`，于是类路径扫描会找到它。
+那个测试的 `theAuditedClassListIsComplete` 是**双向**判据（多一个少一个都红），
+所以漏加会**直接变红**，不会静默放过 —— 这次是判据自己把问题喊出来的。
+
+⚠️ 顺带记一条**没被守住**的东西：那条测试的检测器只在**同一个类**里找
+`@Transactional` 的同名方法。如果端口的实现是一个**独立的小 `@Service`**、
+它转调另一个类的富方法，检测器**看不到**。这次选"让 `AuthService` 自己实现"
+而不是新加一个适配器类，部分原因就是这个 —— 留在同类里，守卫才覆盖得到。
+
+### 14.8 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 32 | **30** |
+| `implementation_edges` | 15 | **14** |
+| `cross_deployment_unit_statements` | 15 | **13** |
+| `cross_deployment_unit_edges` | 8 | **7** |
+| `api_statements` | 9 | **9**（不变） |
+| `api_edges` | 6 | **6**（不变） |
+
+`agent → identity` **整条边消失**。`agent` 现在只剩**一条**出边：`agent → integration`（2 impl）。
+
+⚠️ 与最近两刀连起来看，三次的边数表现各不相同，**这正说明六个指标要一起看**：
+
+| 刀 | 语句 | impl 边 | 跨单元边 | 备注 |
+|---|---|---|---|---|
+| 第十二刀 | −2 | **不动** | **不动** | 一条边收窄、另一条 api-only 边消失 |
+| 第十三刀 | −2 | −1 | −1 | 边真的没了 |
+| 第十四刀 | −2 | −1 | −1 | 边真的没了 |
+
+### 14.9 为什么没有加 `contract-changes.yaml` 条目
+
+新端口是**新缝**（不是替换某个前端可见类型），且只有一个方法。
+`contract-changes.yaml` 登记的是"**改变了既有能力**的非路径型契约变更"，
+这次既没改路径、没改响应形状、也没改错误码 —— 它是把一条已有的域内调用
+换成端口调用，行为逐字不变（同一个实现方法、同样的判据、同样的 `null` 语义）。
+
+### 14.10 注入验证：六次注入，其中一次**第一遍是无效的**
+
+| # | 注入 | 期望 | 实测 |
+|---|---|---|---|
+| A | 端口加一个 `default boolean isDisabled()` | 2 | **2** |
+| B | 端口方法多收一个 `Long userId` 参数 | 2 | **2**（含反向守卫 `takesNoUserIdBecauseItProducesOne`） |
+| C | 端口参数改名 `accessToken` → `token` | 1 | **1** |
+| D | 实现永远返回 `null` | — | **2** |
+| E | 实现无视令牌、固定返回 `1L` | — | **2** |
+| F | 消费方无视端口结果、固定用 `42L` | 1 | **1** |
+
+⚠️ **E 的第一遍结果是假的。** 脚本把 D 的还原锚点写成 `            return null;`，
+而 `AuthService` 里有**三处**这一行 ⇒ `count(src) == 1` 的断言失败 ⇒ **D 没被还原**；
+接着 E 的正向锚点（`return Long.valueOf(...)`）已经被 D 改掉了 ⇒ **E 根本没生效**，
+它报出来的"2 处红"其实是 D 残留的结果。
+
+发现方式是脚本收尾的 blob 比对打印了 `FAIL: 还原不完整`，且 `git status` 里
+`AuthService.java` 仍是脏的。**用"整个方法体块"（含只此一处的 `validateAccessToken(accessToken)` 调用）
+当锚点重跑后**，D 与 E 各自生效、各自还原成功，结果都是 2 处红。
+
+⚠️ 这是**上一刀那条教训的第二次实例，但成因不同**：上一刀是脚本引用未定义变量
+（`set -u` 中途退出），这一刀是**还原锚点不唯一**。
+**共同点：脚本"跑完了"不等于"注入生效了、也还原了"。**
+判据升级为：**每条注入跑完立刻做一次 blob 级还原校验**，不要等脚本收尾统一查 ——
+否则一条还原失败会**污染后面所有注入的结果**，而表格看上去仍然"每行都有数字"。
+
+### 14.11 刻意没做的事
+
+- **V11 的 `ws-ticket` 机制**（`POST /api/v2/agents/ws-ticket` → 30–60s 一次性票据 → 握手用
+  `wss://.../ws?ticket=`）。方案里 WS 的**目标**就是这个，而它属于 V11 附录 E 的
+  "SSE / WS Token"工作流（0/5，且卡在 `apps/gateway`）。这一刀只做**行为逐字不变**的抽端口，
+  不顺手改鉴权协议 —— 改协议要动前端、要发退场日期、要过 §11。
+- **`integration` 改用本端口**：它用同一个能力（§14.4 已证明等价），但属于另一条边，单独一刀。
+- **去掉那次 Redis `hasKey`**：V11 §28.1 的意图是"发送边界 O(1) 本地 cache 校验"，
+  而 `SecurityStateCache` 已经在 `AgentWebSocketConfig` 里了。但**去掉它会改变行为**
+  （登出后不再阻止新连接），那是安全决策不是重构，不在这一刀里。
+- **`profile → identity` 的 `getUserInfo`**：那是用户资料读取，另一种能力，另一种形状。
+
+### 14.12 下一刀
+
+`agent` 只剩 `agent → integration`（2）。剩余跨单元边按语句数：
+
+`automation → integration` 6、`agent → integration` 2、`admin → automation` 1、
+`identity → integration` 1、`integration → automation` 1、`integration → identity` 1、
+`studio → blogagent` 1。
+
+1. **`integration → identity`（1）** —— **本刀的直接后续**：同一个端口、同一套判据，
+   §14.4 已经把等价性证明写好了，改一行 `validateAccessToken(token)` →
+   `resolveUserId(token) != null`。做完之后**跨单元的 identity 边全部归零**。
+2. **`agent → integration`（2）** —— 与 `PublishPostTool` 同一文件。
+3. **`automation → integration`（6）** —— 目前最大，卡在 `MailService` 的 API 变更上（模板环）。
+
+---
+
+## 15. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -2254,7 +2474,7 @@ static void assertNoParameterIsNamed(Class<?> type, String name) {
 | 20 | `KnowledgeQuizAttemptView.items` 的类型是 `Object`（**无形状字段**） | **已定**（§10.3）：契约带**文本**（`QuizAttemptView.itemsJson`），解析上移到工具。三种做法里只有这一种不假装知道历史行的形状；而"契约没法解析"正是 ADR-1 的直接后果，这次 ADR-1 不是代价而是答案 |
 | 21 | `PortDelegationTransactionTest` 的端口实现清单靠人工维护 | **已知代价**，由 `theAuditedClassListIsComplete` 的类路径扫描**双向**兜住：漏加会直接变红（本刀实测，见 §9.9）。新增端口实现时把类加进 `PORT_IMPLEMENTATIONS` |
 | 22 | **⚠️ 一份实体被投影成两份类型时，两个投影必须被测试钉成一致** —— 两边各自的测试都不会红，只有一条跨投影的断言能抓到漂移 | **已建立**（§10.4）：`RecitationQuizPortMappingTest` 里那条"契约投影与前端投影在共享字段上相等"。注入 D 证明它有独立价值。**后续凡新增一份投影（`ContentPost` / `MediaAssetRef` 收窄时也会遇到）都要配一条同款断言** |
-| 23 | `agent` 的剩余出边：`identity` 2/0、`integration` 2/0 | **部分已做**（§11 + §13）。`agent → blogagent` 4/2 → **2/0**（§11）→ **整条边消失**（§13）；`agent → publishing`（0/1）**整条消失**（§11）。**`agent` 现在只剩两条边、4 条 impl**：`identity` 2 与 `integration` 2，**两条都跨部署单元**（`agent` 在 `dinqor-agent`；`identity` 在 `dinqor-core-host`，`integration` 在 `dinqor-platform-integration`）。⚠️ `agent → identity` 那 2 条在 `agent/api/` 下（WebSocket 握手鉴权），形状与工具类完全不同，要单独判断；`agent → integration` 那 2 条与 `PublishPostTool` 同文件 |
+| 23 | `agent` 的剩余出边：`integration` 2/0 | **部分已做**（§11 + §13 + §14）。`agent → blogagent` 4/2 → **2/0**（§11）→ **整条边消失**（§13）；`agent → publishing`（0/1）**整条消失**（§11）；`agent → identity` 2/0 → **整条边消失**（§14）。**`agent` 现在只剩一条边、2 条 impl**：`agent → integration`（与 `PublishPostTool` 同文件）。⚠️ `agent` 是 `dinqor-agent` 唯一还指向别的单元的域；`agent` 自己**没有入边**，所以它可以被单独抽取 |
 | 24 | **⚠️ 端口守卫只断言"第一个参数的类型是 `Long`"** —— 而 `publish(Long taskId, Long userId)` 同样满足它，于是守卫会**绿着**放过一个它名字所禁止的形状 | **已修**（§11.2/§11.3）：守卫改钉**参数名**（javac 开了 `-parameters`，`MethodParameters` 属性在 class 文件里，已用 `javap` 实测）。这是"判据只朝一个方向看"的**第三次**实例，前两次是 `util` 死条目与 `deployment-unit-coupling` 判据 2。⚠️ 代价：这条守卫依赖 `-parameters`；删掉它守卫会**变红**（退化成 `arg0`）而不是静默放过，可以接受 |
 | 25 | **⚠️ "归一参数顺序"会产生与旧方法参数表逐字相同的新重载** ⇒ 所有原来转发到旧方法的调用点都变成**静默换位点** | **已处理**（§11.7）：`runStream` 的三参重载必须显式点名 `runStreamForView`，由 `theThreeArgumentOverloadForwardsToTheForViewMethodNotThePortMethod` 用 `never()` + `thenAnswer` 双向钉住。**下次遇到"换参数顺序"时，先 grep 所有转发点** |
 | 26 | `BlogAgentTaskView` / `BlogAgentPostView` / `BlogAgentTaskDraft` 在 Wave 2 之后会变成**跨进程线上格式** | **未定**。今天不登记（它们不是前端可见类型，见 §11.9）；拆分后任何重排都要走 §11。与第 7 项同类 |
@@ -2262,8 +2482,11 @@ static void assertNoParameterIsNamed(Class<?> type, String name) {
 | 28 | **⚠️ 顺手修掉：`ImageGenerationTool.writeMeta` 记的是配置里的首选模型，不是实际端点** —— 客户端会在多个候选端点间回退，兜底端点生成的图会被记成首选模型的名字；网关路径下配置值还可能为空 | **已修**（§13.7）：`writeMeta` 改成收实际值，`model` 取 `generated.model()`。由 `imageModelComesFromTheGeneratedResultNotFromTheConfiguration` 守（注入 F 实测 2 处红）。⚠️ **通用经验：提供方报的值与消费方配置的值同名时，必须明确谁是真相** —— 真相是提供方报的那个 |
 | 29 | **⚠️ 端口收不收 `userId` 必须是一对守卫** —— 只有正面那条时，"所有端口都收"是一个没人反对就会漂移的一致性论点 | **已建立**（§13.9）：`ContractShape.assertNoParameterIsNamed(type, "userId")` 是 `assertFirstParameterIsTheCallerId` 的反面；`BlogAgentImagePort` 是**唯一不收 `userId` 的端口**（提供方是无状态模型调用，真正要身份的两步在 `MediaAssetPort` / `BillingPort` 上）。注入 E 证明它接着线。**后续每新增一个端口，都要显式回答"收不收身份"并写进守卫** |
 | 30 | **⚠️ 消费方不得读提供方的 `@ConfigurationProperties`** —— 一旦读了，提供方的"配置"就变成跨域契约，而配置可以改名 / 给默认值 / 整段不存在 | **已定**（§13.6）：端口返回"这次生成实际用了什么"，不返回"提供方怎么配置的"。`BlogAgentProperties` 一个字段都没上端口。**下次遇到"消费方需要提供方的某个配置值"时，默认做法是让提供方把它填进返回值** |
+| 31 | `integration → identity`（1 impl，`McpOAuthService.validateAccessToken`） | **未做，但已经免费**。§14.4 已证明 `validateAccessToken(t) ≡ resolveUserId(t) != null`（唯一的生产签发方传数字 subject；refresh 与 bind 令牌都进不了 `login:token:` 前缀）。做完之后**跨单元的 identity 边全部归零** |
+| 32 | **⚠️ 把域内方法提升成契约实现时，先查它有没有测试** | **本刀踩到**（§14.6）：`getUserIdFromAccessToken` 此前**一个测试都没有**（`AuthServiceTest` 只覆盖 `validateAccessToken`）。它当便捷方法时不重要，当"agent 握手唯一的身份来源"时就必须钉住。已补 4 条。**与第 18 项（端口转调失事务）同族：抽端口会让原本不重要的东西变重要，而"没人写那条断言"不会有任何东西报错** |
+| 33 | **⚠️ 注入脚本的"还原锚点"也必须唯一，且每条注入跑完立刻做 blob 级校验** | **已修**（§14.10）。第一遍把 D 的还原锚点写成 `return null;`（文件里有 3 处）⇒ D 没还原 ⇒ E 的正向锚点失效 ⇒ **E 根本没生效，而它报出的"2 处红"是 D 的残留**。成因与上一刀（引用未定义变量）不同，但**共同点是"脚本跑完了"不等于"注入生效了、也还原了"**。判据：两条锚点动手前都数一遍出现次数，必须都是 1；每条注入后立刻校验 |
 
-### 14.1 第 1 项的边界（明确不许顺手放宽）
+### 15.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -2274,7 +2497,7 @@ static void assertNoParameterIsNamed(Class<?> type, String name) {
 
 ---
 
-## 15. 一句话记法
+## 16. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

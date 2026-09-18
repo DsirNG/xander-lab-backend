@@ -36,6 +36,22 @@
  * **不要加宽这个端口**：每多一个方法就多一条绕过边界的路，而加宽不会让任何东西报错，
  * 所以 {@code UserLookupPortTest} 把方法个数钉住了。</p>
  *
+ * <h2>为什么 {@link com.xander.lab.core.api.AccessTokenLookupPort} 也在本模块</h2>
+ *
+ * <p>判据与上面两条完全相同：实现（{@code identity.application.AuthService}）在
+ * dinqor-core-host，而 §18 的 8 个契约名里没有 identity，所以 identity 的能力落在这里。</p>
+ *
+ * <p>消费方是 {@code agent}：{@code /ws/agent} 的握手路径不在 {@code /api/**} 下，
+ * 走不到 {@code AuthInterceptor}，于是它直接注入了 {@code AuthService}
+ * —— {@code agent -> identity} 这条跨部署单元边的全部内容就是那两条 import。
+ * 现在它只依赖本端口。</p>
+ *
+ * <p>⚠️ 本端口与 {@link com.xander.lab.core.api.UserLookupPort} 有一处<b>相反</b>的地方：
+ * 它的作用是<b>从令牌得出</b>调用方身份，所以它的参数里<b>不许</b>出现 {@code userId}
+ * —— 出现就意味着有人在让它做"这个令牌属不属于这个人"，那是另一个能力。
+ * 守卫因此是反向的（{@code assertNoParameterIsNamed(port, "userId")}），
+ * 详见 {@code AccessTokenLookupPortTest}。</p>
+ *
  * <h2>硬约束（由门禁 <code>contract-dependency-boundary</code> 强制）</h2>
  *
  * <ol>

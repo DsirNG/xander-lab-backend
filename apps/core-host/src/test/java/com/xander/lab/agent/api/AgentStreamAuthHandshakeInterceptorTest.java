@@ -2,7 +2,7 @@ package com.xander.lab.agent.api;
 
 import com.xander.lab.agent.application.AgentConversationService;
 import com.xander.lab.agent.domain.AgentConversation;
-import com.xander.lab.identity.application.AuthService;
+import com.xander.lab.core.api.AccessTokenLookupPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -21,11 +21,11 @@ import static org.mockito.Mockito.when;
 
 class AgentStreamAuthHandshakeInterceptorTest {
 
-    private final AuthService authService = mock(AuthService.class);
+    private final AccessTokenLookupPort accessTokenLookupPort = mock(AccessTokenLookupPort.class);
     private final AgentConversationService conversationService = mock(AgentConversationService.class);
 
     private final AgentStreamAuthHandshakeInterceptor interceptor =
-            new AgentStreamAuthHandshakeInterceptor(authService, conversationService);
+            new AgentStreamAuthHandshakeInterceptor(accessTokenLookupPort, conversationService);
 
     private AgentConversation conversation(Long ownerId) {
         AgentConversation conversation = new AgentConversation();
@@ -47,7 +47,7 @@ class AgentStreamAuthHandshakeInterceptorTest {
 
     @Test
     void acceptsValidTokenAndOwnedConversation() {
-        when(authService.getUserIdFromAccessToken("abc")).thenReturn(42L);
+        when(accessTokenLookupPort.resolveUserId("abc")).thenReturn(42L);
         when(conversationService.get(7L, 42L)).thenReturn(conversation(42L));
         ServerHttpRequest request = request("?conversationId=7&runVersion=9", "Bearer abc");
         Map<String, Object> attributes = new HashMap<>();
@@ -63,7 +63,7 @@ class AgentStreamAuthHandshakeInterceptorTest {
 
     @Test
     void rejectsInvalidTokenWith401() {
-        when(authService.getUserIdFromAccessToken("bad")).thenReturn(null);
+        when(accessTokenLookupPort.resolveUserId("bad")).thenReturn(null);
         ServerHttpRequest request = request("?conversationId=7&runVersion=9", "Bearer bad");
         ServerHttpResponse response = mock(ServerHttpResponse.class);
 
@@ -75,7 +75,7 @@ class AgentStreamAuthHandshakeInterceptorTest {
 
     @Test
     void rejectsMissingConversationParamsWith400() {
-        when(authService.getUserIdFromAccessToken("abc")).thenReturn(42L);
+        when(accessTokenLookupPort.resolveUserId("abc")).thenReturn(42L);
         ServerHttpRequest request = request("", "Bearer abc");
         ServerHttpResponse response = mock(ServerHttpResponse.class);
 
@@ -87,7 +87,7 @@ class AgentStreamAuthHandshakeInterceptorTest {
 
     @Test
     void rejectsForeignConversationWith404() {
-        when(authService.getUserIdFromAccessToken("abc")).thenReturn(42L);
+        when(accessTokenLookupPort.resolveUserId("abc")).thenReturn(42L);
         when(conversationService.get(7L, 42L))
                 .thenThrow(new ResponseStatusException(HttpStatus.NOT_FOUND, "智能体会话不存在"));
         ServerHttpRequest request = request("?conversationId=7&runVersion=9", "Bearer abc");
@@ -101,7 +101,7 @@ class AgentStreamAuthHandshakeInterceptorTest {
 
     @Test
     void acceptsTokenFromQueryFallback() {
-        when(authService.getUserIdFromAccessToken("qtoken")).thenReturn(42L);
+        when(accessTokenLookupPort.resolveUserId("qtoken")).thenReturn(42L);
         when(conversationService.get(7L, 42L)).thenReturn(conversation(42L));
         ServerHttpRequest request =
                 request("?conversationId=7&runVersion=9&token=qtoken", null);

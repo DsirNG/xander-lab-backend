@@ -44,7 +44,7 @@ public class QrLoginService {
     public void confirm(String ticket, String bearerToken) {
         validateTicket(ticket);
         String token = bearerToken != null && bearerToken.startsWith("Bearer ") ? bearerToken.substring(7) : "";
-        Long userId = authService.getUserIdFromAccessToken(token);
+        Long userId = authService.resolveUserId(token);
         if (userId == null) throw new IllegalArgumentException("Please sign in to the mini program first");
         String key = PREFIX + ticket;
         Object current = redis.opsForHash().get(key, "status");

@@ -1200,6 +1200,31 @@ tail -8 <被注入的文件>       # 直接看注入是否还在
 脚本一旦中途退出（`set -u` / 非零退出），**必须手动查工作区再继续** ——
 `git add -A` 之前先看 `git status --short`。
 
+**⚠️ 第二次踩（同族、不同因）：还原用的锚点也必须唯一，不只是正向锚点。**
+2026-09-18 把"实现永远返回 null"注入成 `            return null;`，
+还原时拿**这同一行**去反向替换 —— 而 `AuthService` 里有**三处** `return null;`，
+`count(src) == 1` 的断言直接失败，于是**还原没执行**。更阴的是脚本接着跑下一条注入：
+它的正向锚点 `return Long.valueOf(...)` 已经被上一条改掉了，`count` 变 0，
+断言再次失败 ⇒ **那条注入根本没生效**，而它的"结果"其实是上一条的结果。
+最终 blob 比对报 `FAIL: 还原不完整`，工作区里留着一条注入。
+
+```bash
+# ❌ 锚点太短：return null; 在文件里有多处
+patch "$SERVICE" '            return null;' '            return Long.valueOf(...);'
+# ✅ 锚点取"整个方法体块"（含 validateAccessToken(accessToken) 这种只此一处的调用）
+patch "$SERVICE" '        if (!validateAccessToken(accessToken)) {
+            return null;
+        }
+        try {
+            return Long.valueOf(jwtUtil.getSubject(accessToken));
+        } catch (RuntimeException exception) {'  '<注入后的同一整块>'
+```
+
+**判据**：每条注入**在动手前**先用脚本数一遍正向锚点与还原锚点的出现次数，
+两个都必须是 1；**每条注入跑完立刻做一次 blob 级还原校验**，不要等脚本收尾统一查 ——
+否则一条还原失败会**污染后面所有注入的结果**（它们的"变红"来自前一条的残留）。
+这也说明"六次注入各红了几处"这张表，只有在**每条都独立还原成功**时才成立。
+
 ⚠️ `mvn` 的控制台在 UTF-8 管道里是 GBK 乱码（`ÊÇ default ·½·¨`），
 但**测试名与 ASCII 断言值可读**（`expected: <size> but was: <model>`），
 足够给每次注入归因，不要因为乱码就放弃归因。

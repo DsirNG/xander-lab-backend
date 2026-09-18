@@ -32,9 +32,12 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 `blogagent-api` 是**第十二刀**（§3quinquiesdecies）**建模块**，看点是把参数顺序归一到 `(userId, ...)`，
 以及随之暴露的"守卫只朝一个方向看"（第三次实例）；
 它的图片能力扩展是**第十三刀**（§3sexdecies），是**第一个不收 `userId` 的端口**。
+`core-api` 是**第十四刀**（§3septdecies），加 `AccessTokenLookupPort` ——
+这是**第一个"产出"调用方身份**的端口（所以守卫是反的），也是第一个消费方在
+`api/` 层（WebSocket 握手拦截器）而不是工具/服务里的刀。
 
-⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十三刀）；
-`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第二十刀）。
+⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十四刀）；
+`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第二十一刀）。
 两者都对，只是分母不同。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
@@ -61,7 +64,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 |---|---|---|---|
 | `content-api` | **已完成** | 第一刀：`BlogPublisher`（发布 SPI）`PublishCommand` `PublishResult` `PublishingLimits`。第二刀：`MediaAssetPort` `MediaAssetRef` `StoredImage`。第三刀：`ContentPostPort` `PublicationPort` `ContentPost` `ContentPostPage` `ContentPostInput` `ContentPostQuery` `ContentPostStatus` | 第一刀：`integration → publishing` 22 → 5；总计 −18 条跨单元 import。第二刀：`publishing ↔ blogagent` 环拆成单向；跨单元 −8。第三刀：`integration → publishing` 5 → 0（api 11 → 0）、`agent → publishing` 3 → 0、`profile → publishing` 1 → 0 —— **`publishing` 跨单元入边归零**；总计 **−9**（跨单元 −9） |
 | `integration-api` | **已完成** | `OssPort`（对象存储端口）`UploadResponse` | `knowledgebase/publishing/recitation → integration` 各 2 → **0（边归零）**；`agent → integration` 4 → 2；总计 **−8** |
-| `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；跨部署单元累计 **−8**；总计 **−14** |
+| `core-api` | **已完成** | `ModelGateway`（运行时模型路由 SPI）`ModelGateway.ModelEndpoint` `FeatureModelNotConfiguredException`；**`UserLookupPort`（用户展示名端口）**；**`AccessTokenLookupPort`（访问令牌身份端口，第十四刀加）** | `agent/blogagent/recitation/studio → admin` 四条边**全部归零**（10 → 0）；`publishing/components → identity` **两条边归零**（4 → 0）；`agent → identity` **两条边归零**（2 → 0，第十四刀）；跨部署单元累计 **−10**；总计 **−16** |
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
 | `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。**第九刀再加 `NotificationPort`（写一条持久化用户通知）+ 两个从实体搬来的常量**。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | 第八刀：`agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元。**第九刀（零接线扩展，§3duodecies）**：`knowledgebase → automation` 2 → **0（边整条消失）**，总计再 **−2**（跨单元 −2）；`api_statements` **16 → 16 不变**（消费方 import 的是 `.application` / `.domain`，从没碰过 `.api`）。图形状：`knowledgebase` 变成**纯汇点**（整个域从清单里消失）；`automation` 扇入只剩 `admin`（SSE，要框架类型）与 `integration`（模板真环） |
 | `recitation-api` | **已完成**（两刀） | 第十刀（§3terdecies）：`RecitationMaterialPort`（背诵材料能力端口，4 个方法）+ `MaterialView`（收窄的读模型，9 分量）/ `MaterialDraft`（4）/ `MaterialFilter`（4）。第十一刀（§3quaterdecies）：`RecitationQuizPort`（测验能力端口，2 个方法 + 2 个常量）+ `QuizSessionView`（15，全带）/ `QuizAttemptView`（收窄，6，`items` 走**文本** `itemsJson`）/ `QuizOutcomeView`（收窄，10）/ `GradedItemDraft`（4）。包是 `com.xander.lab.recitation.spi`，**不是** `.recitation.api`（同因：那个包是 6 个前端 HTTP 文件的家）。⚠️ 第十一刀**删掉了两个域内 record**（`QuizSession` / `QuizOutcome`，同域生产消费方为零）而不是搬走 | 材料刀：`automation → recitation` 2 → **0（边整条消失）**、`agent → recitation` 4 → 2；总计 **−4**（跨单元 −4），`api_statements` 16 → 13（−3）。测验刀：`agent → recitation` 2 → **0（边整条消失）**，总计 **−2**（跨单元 −2），`api_statements` 13 → 12（−1）。图形状：**`content-automation ↔ core-host` 不再是互依对**（互依对 3 → 2，`MUTUAL_UNIT_PAIRS` 删掉那对，门禁主动报出过期条目）；`recitation` 成为**零跨域消费方**的域 |
@@ -2470,6 +2473,179 @@ static void assertNoParameterIsNamed(Class<?> type, String name) {
 3. **`automation → integration`（6）** —— 目前最大的跨单元边，但卡在 `MailService` 的
    API 变更上（模板环，§3quater.5），不是纯粹的"抽端口"。
 
+**结果：第 1 项已做完（§3septdecies）。** `agent → identity` **整条边消失**，
+`agent` 只剩一条出边（`integration` 2）。
+
+---
+
+## 3septdecies. 第十四刀：`AccessTokenLookupPort` —— 一个**产出**身份的端口
+
+### 3septdecies.1 目标边：两条 import 都在 `agent/api/` 下
+
+`agent → identity` 的 2 条 impl 语句分在两个文件里，但指向同一个类
+`identity.application.AuthService`：`AgentStreamAuthHandshakeInterceptor`（握手鉴权用它）
+与 `AgentWebSocketConfig`（只是把它转手传进去）。
+
+⚠️ **这是第一个消费方在 `api/` 层的刀** —— 前十三刀的消费方都是工具类或应用服务。
+拦截器不在 `@Controller` 链上，走不到 `AuthInterceptor`，所以必须自己完成鉴权。
+
+### 3septdecies.2 侦察：`AuthService` 有三个跨域消费方，用的是**两种能力**
+
+| 消费方 | 用到的 `AuthService` 方法 | 这其实是哪种能力 |
+|---|---|---|
+| `agent`（WS 握手） | `getUserIdFromAccessToken(String) -> Long` | **令牌 → 身份** |
+| `integration`（McpOAuth） | `validateAccessToken(String) -> boolean` | **令牌 → 有效性** |
+| `profile`（概览） | `getUserInfo(Long) -> TokenResponse.UserInfo` | 用户资料读取（**另一种能力**） |
+
+⚠️ 前两个是**同一个能力**的两种投影：`getUserIdFromAccessToken` 的第一句就是
+`if (!validateAccessToken(token)) return null;`。这个观察决定了形状 ——
+**端口按能力定义，不按消费方定义**。若为 `agent` 建一个只写 `getUserIdFromAccessToken` 的契约，
+`integration` 之后就得再建一个只写 `validateAccessToken` 的契约，
+**同一个能力被两份契约各描述一遍**（签名 / 过期 / 非 refresh / 会话登记表仍在），迟早漂移。
+
+### 3septdecies.3 ⚠️ 为什么落 `core-api` 而不是 `agent-api`
+
+`core-api` 的 `package-info` 已把判据写死：**"一个类型属于这里，判据不是'看起来像契约'，
+而是它的实现跨部署单元"**；而且 **§18 的 8 个契约名里没有 identity**，
+`core-api` 是 dinqor-core-host 的契约，identity 正好住在那里。
+
+三条理由，按分量排序：
+
+1. **判据一致** —— 实现（`AuthService`）在 dinqor-core-host，与 `UserLookupPort` 同一个模块。
+2. **`identity` 不需要新增任何模块依赖** —— 它已经 `implements UserLookupPort`，
+   `identity → core-api` 这条编译依赖**本来就存在**。若建在 `agent-api`，
+   identity 就要为同一个能力去依赖 `agent-api`；等 `integration` 也来用，再依赖 `integration-api`
+   ⇒ **提供方被迫依赖每一个消费方的契约**。
+3. **未来宿主能直接用** —— V11 §52 判定"凡承载 SSE/WS 的部署单元都必须维护 Security Local Cache"，
+   而 `core-api` 是这些单元都该依赖的模块。
+
+⚠️ **ADR-2 的"消费方拥有"不等于"契约要放在消费方那个域的模块里"** ——
+它说的是形状按消费方的真实需要裁剪、契约定义在 `contracts/` 这个跨域位置上。
+`UserLookupPort` 就是同一个先例（消费方是 `publishing`/`components`，它住在 `core-api`）。
+
+### 3septdecies.4 ⚠️ 为什么只有这一个方法：两个判断**可证等价**
+
+`integration` 用的是 `validateAccessToken`，看起来需要一个 `boolean` 方法。**没有为它加第二个**：
+
+| 令牌类型 | 会通过 `validateAccessToken` 吗 | 依据 |
+|---|---|---|
+| access token | 会，且 subject 一定可解析 | `generateTokenResponse` 是**唯一**生产调用方，传 `String.valueOf(user.getId())` |
+| refresh token | **不会** | `isRefreshToken` 为真时直接 false |
+| bind token（微信绑定） | **不会** | `type` 是 `bind`，但它**不写进** `login:token:` 前缀，`hasKey` 为假 |
+
+⇒ `validateAccessToken(t)` ⟺ `resolveUserId(t) != null`。所以 `integration` 那一刀
+可以直接复用本端口。**这一刀没顺手改它**（另一个消费方、另一条边，`McpOAuthService` 有自己的测试）。
+
+⚠️ 记一个**将来的分歧点**：若出现"subject 非数字、却仍登记在 `login:token:` 下"的令牌类型，
+两个判断会分叉（`resolveUserId` 返回 `null`、`validateAccessToken` 返回 `true`）。
+分叉方向是**更严**，不是安全问题；但那时必须重新决定，不能再靠这条等价性。
+
+### 3septdecies.5 ⚠️ 第一个**产出**身份的端口 ⇒ 守卫是反的
+
+前几个端口的第一个参数都是调用方身份，守卫是正面的（断言参数名是 `userId`）。
+本端口**反过来**：它的作用就是从令牌里**得出**身份。方法里出现 `userId` 参数，
+说明有人在让它做"校验这个令牌属不属于这个人" —— 那是另一个能力，
+且会诱使实现者把归属校验和令牌校验写成一步。
+
+```java
+// AccessTokenLookupPortTest
+@Test void takesNoUserIdBecauseItProducesOne() { /* 遍历所有方法的所有参数，断言没有叫 userId 的 */ }
+```
+
+**注入 B（往签名里加一个 `Long userId` 参数）实测 2 处红，其中一处正是它。**
+
+⚠️ 与 §3sexdecies.9 合起来才完整：**"端口收不收 `userId`"必须是一对守卫**，且现在有三种情况 ——
+其他端口"该收、断言它收了"；`BlogAgentImagePort`"不该收、断言它没收"；
+本端口"不该收、**而且是因为它要产出**"。**没有第四种。**
+
+### 3septdecies.6 ⚠️ 端口实现此前**一个测试都没有**
+
+`getUserIdFromAccessToken` 被抽成端口之前，**没有任何测试覆盖** ——
+`AuthServiceTest` 只覆盖 `validateAccessToken` 两条。它当时只是 identity 内部的便捷方法。
+
+⚠️ 抽成端口后它变成 **agent 的 WebSocket 握手唯一的身份来源**：返回 `null` 就把所有连接挡在 401，
+返回错的值就把别人的会话开给这个人。**"这是契约的实现"意味着它的行为必须被钉住**，
+所以补了 4 条：活令牌返回 subject / 已登出返回 `null` 且**短路不解析** /
+refresh 令牌返回 `null` 且**不查 Redis** / subject 非数字返回 `null` 而不是抛异常。
+
+⚠️ 与 §3terdecies 的"端口方法自调用失事务"同族：**抽端口会让原本不重要的东西变重要，
+而"没人写那条断言"不会有任何东西报错。判据：把方法提升成契约实现时，先查它有没有测试。**
+
+### 3septdecies.7 ⚠️ `PortDelegationTransactionTest` 的清单必须同步
+
+`AuthService` 现在实现了 `*Port` ⇒ 类路径扫描会找到它 ⇒ `PORT_IMPLEMENTATIONS` 必须加它。
+那个测试的 `theAuditedClassListIsComplete` 是**双向**判据，漏加**直接变红** ——
+这次是判据自己把问题喊出来的。
+
+⚠️ 顺带记一条**没被守住**的：检测器只在**同一个类**里找 `@Transactional` 的同名方法。
+若端口实现是一个**独立的小 `@Service`**、转调另一个类的富方法，检测器**看不到**。
+这次选"让 `AuthService` 自己实现"而不是新加适配器类，部分原因就是这个 —— 留在同类里守卫才覆盖得到。
+
+### 3septdecies.8 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 32 | **30** |
+| `implementation_edges` | 15 | **14** |
+| `cross_deployment_unit_statements` | 15 | **13** |
+| `cross_deployment_unit_edges` | 8 | **7** |
+| `api_statements` | 9 | **9**（不变） |
+| `api_edges` | 6 | **6**（不变） |
+
+`agent → identity` **整条边消失**；`agent` 只剩一条出边 `agent → integration`（2 impl）。
+⚠️ 最近三刀的边数表现各不相同（第十二刀边数**不动**，第十三、十四刀各 −1），
+**六个指标要一起看**。
+
+### 3septdecies.9 为什么没有加 `contract-changes.yaml` 条目
+
+新端口是**新缝**，只有一个方法；既没改路径、没改响应形状、也没改错误码 ——
+它把一条已有的域内调用换成端口调用，行为逐字不变（同一个实现方法、同样的判据、同样的 `null` 语义）。
+
+### 3septdecies.10 注入验证：六次，其中一次**第一遍是无效的**
+
+| # | 注入 | 实测 |
+|---|---|---|
+| A | 端口加一个 `default boolean isDisabled()` | **2** |
+| B | 端口方法多收一个 `Long userId` 参数 | **2**（含反向守卫） |
+| C | 端口参数改名 `accessToken` → `token` | **1** |
+| D | 实现永远返回 `null` | **2** |
+| E | 实现无视令牌、固定返回 `1L` | **2** |
+| F | 消费方无视端口结果、固定用 `42L` | **1** |
+
+⚠️ **E 的第一遍结果是假的。** 脚本把 D 的还原锚点写成 `            return null;`，
+而 `AuthService` 里有**三处**这一行 ⇒ 还原断言失败 ⇒ **D 没被还原**；
+接着 E 的正向锚点已被 D 改掉 ⇒ **E 根本没生效**，它报的"2 处红"是 D 的残留。
+发现方式是脚本收尾 blob 比对打印 `FAIL: 还原不完整` + `git status` 里 `AuthService.java` 仍是脏的。
+用"整个方法体块"当锚点重跑后，D 与 E 各自生效、各自还原成功。
+
+⚠️ 这是上一刀那条教训的**第二次实例、成因不同**：上一刀是引用未定义变量（`set -u` 中途退出），
+这一刀是**还原锚点不唯一**。**共同点：脚本"跑完了"不等于"注入生效了、也还原了"。**
+判据升级：**两条锚点动手前都数一遍出现次数（必须都是 1）；每条注入跑完立刻做一次 blob 级校验** ——
+否则一条还原失败会**污染后面所有注入的结果**，而表格看上去仍然"每行都有数字"。
+
+### 3septdecies.11 刻意没做的事
+
+- **V11 的 `ws-ticket` 机制**（`POST /api/v2/agents/ws-ticket` → 30–60s 一次性票据 → 握手用
+  `wss://.../ws?ticket=`）。这是方案里 WS 的**目标**，属 V11 附录 E 的"SSE / WS Token"
+  工作流（0/5，卡在 `apps/gateway`）。本刀只做**行为逐字不变**的抽端口，不顺手改鉴权协议。
+- **`integration` 改用本端口**（§3septdecies.4 已证明等价）—— 另一条边，单独一刀。
+- **去掉那次 Redis `hasKey`** —— V11 §28.1 的意图是"发送边界 O(1) 本地 cache 校验"，
+  而 `SecurityStateCache` 已经在 `AgentWebSocketConfig` 里了。但去掉它**会改变行为**
+  （登出后不再阻止新连接），那是安全决策不是重构。
+- **`profile → identity` 的 `getUserInfo`** —— 用户资料读取，另一种能力、另一种形状。
+
+### 3septdecies.12 下一刀
+
+`agent` 只剩 `agent → integration`（2）。剩余跨单元边按语句数：
+`automation → integration` 6、`agent → integration` 2、`admin → automation` 1、
+`identity → integration` 1、`integration → automation` 1、`integration → identity` 1、
+`studio → blogagent` 1。
+
+1. **`integration → identity`（1）** —— **本刀的直接后续**：同一个端口、同一套判据，
+   §3septdecies.4 的等价性证明已经写好，改一行即可。做完**跨单元的 identity 边全部归零**。
+2. **`agent → integration`（2）** —— 与 `PublishPostTool` 同一文件。
+3. **`automation → integration`（6）** —— 目前最大，卡在 `MailService` 的 API 变更上（模板环）。
+
 ---
 
 ## 4. 必须留痕的判断
@@ -2666,21 +2842,31 @@ python scripts/migration/ci_gates.py
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
 类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
 只看最后那个 `Results:` 会以为"测试变少了"。
-**要核对的是各模块之和。**最新一轮（§3sexdecies 之后，2026-09-18）：
+**要核对的是各模块之和。**最新一轮（§3septdecies 之后，2026-09-18）：
 
 | 模块 | Tests run |
 |---|---|
 | `xander-auth-core` | 4 |
 | `contracts/content-api` | 67 |
 | `contracts/integration-api` | 3 |
-| `contracts/core-api` | 12 |
+| `contracts/core-api` | 18 |
 | `contracts/payment-api` | 21 |
 | `contracts/agent-api` | 21 |
 | `contracts/automation-api` | 31 |
 | `contracts/recitation-api` | 35 |
 | `contracts/blogagent-api` | 26 |
-| `apps/core-host` | 1187 |
-| **合计** | **1407**（0 failures / 0 errors） |
+| `apps/core-host` | 1191 |
+| **合计** | **1417**（0 failures / 0 errors） |
+
+第十四刀的增量（1407 → 1417）：
+
+* `contracts/core-api` 12 → **18**（+6）：`AccessTokenLookupPortTest`(6) 是新类 ——
+  方法个数、没有 `default`、签名（按名字取方法）、包与接口、
+  **反向守卫**（断言没有参数叫 `userId`）、签名里没有框架类型。
+* `apps/core-host` 1187 → **1191**（+4）：`AuthServiceTest` 29 → **33** ——
+  §3septdecies.6 补的四条端口实现测试（活令牌 / 已登出 / refresh / subject 非数字）。
+  `AgentStreamAuthHandshakeInterceptorTest` 与 `PortDelegationTransactionTest`
+  只换 mock 类型与清单，**数目不变**。
 
 第十三刀的增量（1386 → 1407）：
 
@@ -2790,7 +2976,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **15** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → **15**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` 9/9、`identity` 11/3、`blogagent` **5**/3、`automation` 2/2、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）。当前最大的跨单元边是 `automation -> integration` 6 条（卡在 `MailService`，§3quater.5） | Wave 0B 剩余 |
+| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **13** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → 15 → **13**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` 9/9、`identity` **9**/**2**、`blogagent` 5/3、`automation` 2/2、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）、**`agent → identity` 已归零**（2/0 → 0/0，见 §3septdecies）。⚠️ `agent` 作为**来源域**现在只剩 **1 条出边**（`agent → integration` 2 条），且**零入边** —— 它是当前最接近"可整块搬走"的域。当前最大的跨单元边是 `automation -> integration` 6 条（卡在 `MailService`，§3quater.5） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

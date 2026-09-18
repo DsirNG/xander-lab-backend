@@ -6,7 +6,7 @@ import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
-import com.xander.lab.identity.application.AuthService;
+import com.xander.lab.core.api.AccessTokenLookupPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +28,7 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
 
     private final AgentEventService eventService;
     private final AgentEventBus eventBus;
-    private final AuthService authService;
+    private final AccessTokenLookupPort accessTokenLookupPort;
     private final AgentConversationService conversationService;
     private final ObjectMapper objectMapper;
     private final TaskExecutor agentSseExecutor;
@@ -40,7 +40,7 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
 
     public AgentWebSocketConfig(AgentEventService eventService,
                                 AgentEventBus eventBus,
-                                AuthService authService,
+                                AccessTokenLookupPort accessTokenLookupPort,
                                 AgentConversationService conversationService,
                                 ObjectMapper objectMapper,
                                 @Qualifier("agentSseExecutor") TaskExecutor agentSseExecutor,
@@ -50,7 +50,7 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
                                 ConnectionRegistry connectionRegistry) {
         this.eventService = eventService;
         this.eventBus = eventBus;
-        this.authService = authService;
+        this.accessTokenLookupPort = accessTokenLookupPort;
         this.conversationService = conversationService;
         this.objectMapper = objectMapper;
         this.agentSseExecutor = agentSseExecutor;
@@ -63,7 +63,8 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(agentStreamWebSocketHandler(), "/ws/agent")
-                .addInterceptors(new AgentStreamAuthHandshakeInterceptor(authService, conversationService))
+                .addInterceptors(new AgentStreamAuthHandshakeInterceptor(
+                        accessTokenLookupPort, conversationService))
                 .setAllowedOriginPatterns("*");
     }
 

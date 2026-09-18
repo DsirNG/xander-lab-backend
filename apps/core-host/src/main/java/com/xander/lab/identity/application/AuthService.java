@@ -2,6 +2,7 @@ package com.xander.lab.identity.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.xander.lab.payment.api.BillingPort;
+import com.xander.lab.core.api.AccessTokenLookupPort;
 import com.xander.lab.common.Constants;
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.api.LoginRequest;
@@ -40,7 +41,7 @@ import java.util.regex.Pattern;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AuthService {
+public class AuthService implements AccessTokenLookupPort {
 
     private static final SecureRandom CODE_RANDOM = new SecureRandom();
 
@@ -807,15 +808,27 @@ public class AuthService {
     }
 
     /**
-     * 校验 Access Token 并返回其用户 ID；无效（签名/过期/已被登出）返回 null。
-     * 供非 HTTP 通道（如 WebSocket 握手）复用同一套鉴权语义。
+     * {@inheritDoc}
+     *
+     * <p>实现落在 identity 域内：令牌怎么签、会话登记表的键名是什么、refresh / bind
+     * 令牌怎么区分，都不出这个域。消费方（agent 的 WebSocket 握手）只看到
+     * {@link AccessTokenLookupPort} 这一个方法。</p>
+     *
+     * <p>⚠️ 这里<b>没有</b> {@code @Transactional}，也不该有：本方法纯读，
+     * 而 {@link #validateAccessToken(String)} 只是一次 JWT 校验加一次 Redis
+     * {@code hasKey}，没有任何需要原子性的写。加注解只会白占一个连接。</p>
+     *
+     * <p>⚠️ 本方法名由 {@code getUserIdFromAccessToken} 改名而来。改名是因为
+     * 跨域位置现在通过端口调用，域内没有必要再留一个别名 —— 唯一的同域调用点
+     * （{@code QrLoginService#confirm}）已一并更新。</p>
      */
-    public Long getUserIdFromAccessToken(String token) {
-        if (!validateAccessToken(token)) {
+    @Override
+    public Long resolveUserId(String accessToken) {
+        if (!validateAccessToken(accessToken)) {
             return null;
         }
         try {
-            return Long.valueOf(jwtUtil.getSubject(token));
+            return Long.valueOf(jwtUtil.getSubject(accessToken));
         } catch (RuntimeException exception) {
             log.debug("access token subject parse failed: {}", exception.getMessage());
             return null;
