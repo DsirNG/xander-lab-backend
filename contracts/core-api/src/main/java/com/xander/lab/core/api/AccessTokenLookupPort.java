@@ -33,12 +33,24 @@ package com.xander.lab.core.api;
  * 建在 {@code core-api} 则 identity 只依赖一个它<b>已经</b>依赖的模块
  * （它已经实现了 {@link UserLookupPort}），且未来任何宿主都能直接用。</p>
  *
- * <h2>为什么只有这一个方法</h2>
+ * <h2>为什么只有这一个方法（以及"两个方法其实是一个"）</h2>
  *
  * <p>端口只覆盖<b>当前真实存在的跨域需求</b>：调用方要的就是"这个令牌是谁"。
  * 不要因为"以后可能要看角色 / 会话 id / 过期时间"就提前加方法 ——
  * 端口每多一个方法，就多一份被当成通用认证接口滥用的空间，
  * 而那正是本端口要消除的耦合。{@code AccessTokenLookupPortTest} 把方法个数钉住了。</p>
+ *
+ * <p>{@code integration} 今天用的是 {@code validateAccessToken(token)}（只问"还有效吗"），
+ * 看起来像另一个方法，其实是<b>同一个判断</b>：{@code validateAccessToken(t)} 与
+ * {@code resolveUserId(t) != null} 可证等价 —— ①生产端只有 {@code generateTokenResponse}
+ * 一处签发访问令牌，主体是 {@code String.valueOf(user.getId())} ⇒ 主体必为数字；
+ * ②refresh 令牌过不了 {@code isRefreshToken}；③bind 令牌虽然签名有效，却从不写进
+ * {@code login:token:} 前缀 ⇒ 会话登记检查不通过。三条都成立，两者只会同时为真。</p>
+ *
+ * <p>⚠️ 未来若出现"主体非数字、但仍登记在会话表里"的令牌类型，两者才会分歧 ——
+ * 分歧方向是<b>更严</b>（拒绝握手），不是放行，但届时需要重新拍板。
+ * 正因为存在这条潜在分歧，端口一旦成为"身份的唯一来源"，它的行为就必须被测试钉住
+ * （{@code resolveUserId} 在本端口建立之前<b>一个测试都没有</b>）。</p>
  *
  * <h2>为什么返回 {@code null} 而不是抛异常 / 返回 {@code Optional}</h2>
  *
