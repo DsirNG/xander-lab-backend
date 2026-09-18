@@ -12,9 +12,9 @@ import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.integration.api.CsdnCredentialPort;
 import com.xander.lab.integration.api.JuejinBlogSyncPort;
-import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
-import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
+import com.xander.lab.integration.api.JuejinCredentialPort;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
 import com.xander.lab.content.api.PublishCommand;
@@ -48,8 +48,8 @@ class BlogPlanRunServiceTest {
     @Mock private BlogAgentService agentService;
     @Mock private PublicationService publicationService;
     @Mock private BlogService blogService;
-    @Mock private CsdnCredentialService csdnCredentialService;
-    @Mock private JuejinCredentialService juejinCredentialService;
+    @Mock private CsdnCredentialPort csdnCredentialPort;
+    @Mock private JuejinCredentialPort juejinCredentialPort;
     @Mock private JuejinBlogSyncPort juejinBlogSyncPort;
     @Mock private BlogContentPlanMapper planMapper;
     @Mock private com.xander.lab.automation.infrastructure.BlogPlanSseService sseService;
@@ -59,7 +59,7 @@ class BlogPlanRunServiceTest {
     private BlogPlanRunService newService() {
         wireTransactionTemplate();
         return new BlogPlanRunService(runMapper, planMapper, notificationMapper, agentService,
-                publicationService, blogService, csdnCredentialService, juejinCredentialService,
+                publicationService, blogService, csdnCredentialPort, juejinCredentialPort,
                 juejinBlogSyncPort, sseService, materialPort, transactionTemplate);
     }
 
@@ -88,7 +88,7 @@ class BlogPlanRunServiceTest {
         when(agentService.get(task.getId(), 7L)).thenReturn(ready);
         when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
                 .thenReturn(new PublishResult("local", "45", null));
-        when(csdnCredentialService.isAuthorized(7L)).thenReturn(true);
+        when(csdnCredentialPort.isAuthorized(7L)).thenReturn(true);
         when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("csdn")))
                 .thenReturn(new PublishResult("csdn", "csdn-45", "https://blog.csdn.net/x/45"));
 
@@ -224,7 +224,7 @@ class BlogPlanRunServiceTest {
         when(agentService.get(task.getId(), 7L)).thenReturn(ready);
         when(publicationService.publish(any(), any(String.class)))
                 .thenReturn(new PublishResult("local", "56", null));
-        when(csdnCredentialService.isAuthorized(7L)).thenReturn(true);
+        when(csdnCredentialPort.isAuthorized(7L)).thenReturn(true);
         when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("csdn")))
                 .thenThrow(new RuntimeException("csdn 503"));
 
@@ -256,7 +256,7 @@ class BlogPlanRunServiceTest {
         when(agentService.get(task.getId(), 7L)).thenReturn(ready);
         when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
                 .thenReturn(new PublishResult("local", "58", null));
-        when(juejinCredentialService.isAuthorized(7L)).thenReturn(true);
+        when(juejinCredentialPort.isAuthorized(7L)).thenReturn(true);
         when(juejinBlogSyncPort.sync(7L, 58L, null, null))
                 .thenReturn(new BlogSyncResult("juejin", "jj-58", "https://juejin.cn/post/58"));
 
@@ -286,7 +286,7 @@ class BlogPlanRunServiceTest {
         when(agentService.get(task.getId(), 7L)).thenReturn(ready);
         when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
                 .thenReturn(new PublishResult("local", "59", null));
-        when(juejinCredentialService.isAuthorized(7L)).thenReturn(true);
+        when(juejinCredentialPort.isAuthorized(7L)).thenReturn(true);
         when(juejinBlogSyncPort.sync(any(Long.class), any(Long.class), any(), any()))
                 .thenThrow(new RuntimeException("juejin 502"));
 
@@ -318,13 +318,61 @@ class BlogPlanRunServiceTest {
         when(agentService.get(task.getId(), 7L)).thenReturn(ready);
         when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
                 .thenReturn(new PublishResult("local", "60", null));
-        when(juejinCredentialService.isAuthorized(7L)).thenReturn(false);
+        when(juejinCredentialPort.isAuthorized(7L)).thenReturn(false);
 
         BlogPlanRunService service = newService();
         service.executeRun(runRow(), plan(false, true));
 
         BlogPlanRun updated = updatedRun();
         assertThat(updated.getJuejinStatus()).isEqualTo(BlogPlanRun.JUEJIN_FAILED);
+        assertThat(updated.getJuejinErrorCode()).isEqualTo("AUTH_REQUIRED");
+        verify(juejinBlogSyncPort, org.mockito.Mockito.never()).sync(any(), any(), any(), any());
+    }
+
+    /**
+     * ⚠️ {@link CsdnCredentialPort} 与 {@link JuejinCredentialPort} 的
+     * {@code isAuthorized(Long)} <b>方法名与签名逐字相同</b>，所以把 {@code publishCsdn} /
+     * {@code publishJuejin} 里那两个接收者写反<b>编译得过</b>：不会报错、耦合指标一动不动、
+     * 门禁全绿 —— 症状是"CSDN 发布前检查了掘金的授权"。
+     *
+     * <p>这条用例让两个桩取<b>不同</b>的值，把两者分开。注意既有的
+     * {@code juejinUnauthorizedSkipsSyncWithAuthRequiredCode} <b>抓不到</b>它：
+     * 那个用例里 {@code csdnCredentialPort} 没有被打桩、默认返回 {@code false}，
+     * 于是写反之后掘金那条路拿到的仍是 {@code false}、仍然记 {@code AUTH_REQUIRED}，
+     * 断言<b>照样通过</b>。两个桩都返回同一个值的用例一律抓不到这个错误。</p>
+     *
+     * <p>方向与 {@code BlogContentPlanServiceTest} 里那条相反（那边 CSDN 未授权、掘金已授权），
+     * 两条合起来把两个方向的写反都堵住。</p>
+     */
+    @Test
+    void theTwoCredentialPortsAreNotInterchangeableEvenThoughTheirSignaturesAreIdentical() {
+        mockRunRow();
+        BlogAgentTask task = task(104L);
+        BlogAgentTaskVO ready = readyVo(task);
+        when(agentService.create(any(Long.class), any(BlogAgentTaskCreateRequest.class)))
+                .thenReturn(task);
+        when(agentService.run(task.getId(), 7L)).thenReturn(ready);
+        when(agentService.reviewCompliance(task.getId(), 7L))
+                .thenReturn(new ComplianceReview(true, null));
+        when(agentService.get(task.getId(), 7L)).thenReturn(ready);
+        when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("local")))
+                .thenReturn(new PublishResult("local", "61", null));
+        when(csdnCredentialPort.isAuthorized(7L)).thenReturn(true);
+        when(juejinCredentialPort.isAuthorized(7L)).thenReturn(false);
+        when(publicationService.publish(any(), org.mockito.ArgumentMatchers.eq("csdn")))
+                .thenReturn(new PublishResult("csdn", "csdn-61", "https://blog.csdn.net/x/61"));
+
+        BlogPlanRunService service = newService();
+        service.executeRun(runRow(), plan(true, true));
+
+        verify(publicationService).publish(any(), org.mockito.ArgumentMatchers.eq("csdn"));
+        BlogPlanRun updated = updatedRun();
+        assertThat(updated.getCsdnStatus())
+                .as("CSDN 已授权 ⇒ 必须真的发布。取反了就说明接收者写反了")
+                .isEqualTo(BlogPlanRun.CSDN_SUCCEEDED);
+        assertThat(updated.getJuejinStatus())
+                .as("掘金未授权 ⇒ 必须跳过并记 AUTH_REQUIRED，不能借用 CSDN 的授权结果")
+                .isEqualTo(BlogPlanRun.JUEJIN_FAILED);
         assertThat(updated.getJuejinErrorCode()).isEqualTo("AUTH_REQUIRED");
         verify(juejinBlogSyncPort, org.mockito.Mockito.never()).sync(any(), any(), any(), any());
     }

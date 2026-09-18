@@ -16,9 +16,9 @@ import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.blogagent.application.ComplianceReview;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.integration.api.CsdnCredentialPort;
 import com.xander.lab.integration.api.JuejinBlogSyncPort;
-import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
-import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
+import com.xander.lab.integration.api.JuejinCredentialPort;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.publishing.application.BlogService;
 import com.xander.lab.publishing.application.PublicationService;
@@ -50,8 +50,8 @@ public class BlogPlanRunService {
     private final BlogAgentService agentService;
     private final PublicationService publicationService;
     private final BlogService blogService;
-    private final CsdnCredentialService csdnCredentialService;
-    private final JuejinCredentialService juejinCredentialService;
+    private final CsdnCredentialPort csdnCredentialPort;
+    private final JuejinCredentialPort juejinCredentialPort;
     private final JuejinBlogSyncPort juejinBlogSyncPort;
     private final BlogPlanSseService sseService;
     private final RecitationMaterialPort materialPort;
@@ -222,7 +222,10 @@ public class BlogPlanRunService {
     }
 
     private void publishCsdn(Long runId, BlogContentPlan plan, BlogAgentTaskVO ready) {
-        if (!csdnCredentialService.isAuthorized(plan.getUserId())) {
+        // ⚠️ 两个凭证端口的 isAuthorized 签名逐字相同，把接收者写成 juejinCredentialPort
+        // **编译得过**（不会报错、指标不动、门禁全绿）。钉住这条的是 BlogPlanRunServiceTest
+        // 里那条不对称桩用例：CSDN 授权、掘金不授权时，必须"CSDN 走通、掘金记 AUTH_REQUIRED"。
+        if (!csdnCredentialPort.isAuthorized(plan.getUserId())) {
             updateCsdnFailure(runId, "AUTH_REQUIRED",
                     "CSDN 尚未授权，本次已跳过同步，请先在个人中心完成 CSDN 授权");
             return;
@@ -275,7 +278,7 @@ public class BlogPlanRunService {
      * 两个 {@code null} 与 {@code PublishPostTool} 传的一样：用文章自己的分类与标签名。</p> */
     private void publishJuejin(Long runId, BlogContentPlan plan) {
         Long userId = plan.getUserId();
-        if (!juejinCredentialService.isAuthorized(userId)) {
+        if (!juejinCredentialPort.isAuthorized(userId)) {
             updateJuejinFailure(runId, "AUTH_REQUIRED",
                     "掘金尚未授权，本次已跳过同步，请先在个人中心完成掘金授权");
             return;

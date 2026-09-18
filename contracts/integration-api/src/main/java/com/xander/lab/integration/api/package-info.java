@@ -4,7 +4,7 @@
  * <h2>这里放什么</h2>
  *
  * 放"实现跨部署单元"的类型：一个类型属于这里，判据不是"看起来像契约"，
- * 而是**它的实现跨部署单元**。本包六个成员都是这么来的：
+ * 而是**它的实现跨部署单元**。本包九个成员都是这么来的：
  *
  * <ul>
  *   <li>{@code OssPort} / {@code UploadResponse} —— agent / knowledgebase / publishing /
@@ -15,11 +15,19 @@
  *   <li>{@code MailPort} —— identity（登录验证码）与 automation（定时提醒）落在另外两个
  *       部署单元，却都要发邮件；实现类 {@code MailService} 在
  *       {@code dinqor-platform-integration}。</li>
+ *   <li>{@code CsdnCredentialPort} / {@code JuejinCredentialPort} —— automation 落在另一个
+ *       部署单元，却要问"这个用户连了 CSDN / 掘金没有"（填前端的派生字段、发布前判前置条件）。
+ *       两个端口各只有<b>一个</b>方法，因为跨域位置只用到实现类六个公开方法里的一个。</li>
  * </ul>
  *
  * ⚠️ 站外同步刻意是**两个**端口（每个平台一个）而不是一个带 {@code platform} 参数的端口：
  * 掘金的同步多收分类与标签 id，合并要么让 CSDN 那条路收下它永远不用的参数，要么砍掉掘金的能力。
  * 完整权衡见 {@link com.xander.lab.integration.api.CsdnBlogSyncPort} 的类注释。
+ *
+ * ⚠️ 凭证查询同样是**两个**端口，理由同源，但代价不同：这两个端口的<b>方法名与签名逐字相同</b>，
+ * 所以"接收者写反"编译得过（同步那两个靠参数表不同挡在编译期，这两个挡不住），
+ * 只能由**不对称桩**的行为测试守。见
+ * {@link com.xander.lab.integration.api.CsdnCredentialPort} 的类注释。
  *
  * ⚠️ {@link com.xander.lab.integration.api.MailPort} 刻意**只带"发什么"、不带"怎么渲染"**：
  * 改造前 {@code MailService} 自己渲染提醒邮件的 HTML，于是它必须 import
@@ -50,9 +58,10 @@
  * <ul>
  *   <li>{@code OssService} 本身。它是**实现**（阿里云 SDK、{@code @Value} 配置、
  *       懒建客户端），属于 integration 域；这里只放端口。</li>
- *   <li>CSDN / 掘金 的**凭证**服务。它们同样被跨域引用（automation / agent），
- *       但都不是接口而是具体实现，搬它们要先做端口抽取。见
- *       {@code docs/migration/lib-extraction.md}。</li>
+ *   <li>CSDN / 掘金 的**凭证**服务的其余五个方法（{@code isExpired} / {@code markExpired} /
+ *       {@code requireCookie} / {@code requireCredential} / {@code save} / {@code delete}）。
+ *       它们被 {@code integration} 域自己的授权回调、发布器、定时校验使用，
+ *       <b>跨域位置一个都没用到</b> —— 端出去只会让消费方的适配器被迫实现四个它从不调用的成员。</li>
  *   <li>两个 {@code *BlogSyncService} 的<b>实现</b>。它们 import 了内容域的
  *       {@code ContentPostPort} / {@code PublicationPort}（都是契约，不计跨域边），
  *       以及 {@code MyBatis} 之外的东西很少，但仍然是 {@code @Service} ——

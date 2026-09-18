@@ -3,6 +3,7 @@ package com.xander.lab.integration.mcp.juejin.application;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.integration.api.JuejinCredentialPort;
 import com.xander.lab.integration.mcp.juejin.infrastructure.JuejinClient;
 import com.xander.lab.integration.mcp.juejin.infrastructure.JuejinPlatformCredential;
 import com.xander.lab.integration.mcp.juejin.infrastructure.JuejinPlatformCredentialMapper;
@@ -18,10 +19,16 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-/** Encrypts and persists per-user Juejin browser credentials. */
+/**
+ * Encrypts and persists per-user Juejin browser credentials.
+ *
+ * <p>Implements {@link JuejinCredentialPort} for the <b>one</b> method another deployment unit
+ * calls ({@link #isAuthorized}). Same reasoning as {@code CsdnCredentialService}: the other five
+ * public methods have no cross-domain caller. See the port's class comment.</p>
+ */
 @Service
 @RequiredArgsConstructor
-public class JuejinCredentialService {
+public class JuejinCredentialService implements JuejinCredentialPort {
     private final JuejinPlatformCredentialMapper mapper;
     private final JuejinPlatformProperties properties;
     private final ObjectMapper objectMapper;
@@ -39,6 +46,7 @@ public class JuejinCredentialService {
         }
     }
 
+    @Override
     public boolean isAuthorized(Long userId) {
         JuejinPlatformCredential credential = find(userId);
         return credential != null && "ACTIVE".equals(credential.getStatus())

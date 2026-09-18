@@ -2,6 +2,7 @@ package com.xander.lab.integration.mcp.csdn.application;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
+import com.xander.lab.integration.api.CsdnCredentialPort;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnPlatformCredential;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnPlatformCredentialMapper;
 import com.xander.lab.integration.mcp.csdn.infrastructure.CsdnProperties;
@@ -17,10 +18,18 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 
-/** Encrypts and persists per-user CSDN browser credentials. */
+/**
+ * Encrypts and persists per-user CSDN browser credentials.
+ *
+ * <p>Implements {@link CsdnCredentialPort} for the <b>one</b> method another deployment unit
+ * calls ({@link #isAuthorized}). The other five public methods are used only inside
+ * {@code integration} (authorization callbacks, the publisher, the scheduled re-validation),
+ * so they deliberately stay out of the contract — the consumer's adapter would otherwise have
+ * to implement four members it never calls. See the port's class comment.</p>
+ */
 @Service
 @RequiredArgsConstructor
-public class CsdnCredentialService {
+public class CsdnCredentialService implements CsdnCredentialPort {
     private final CsdnPlatformCredentialMapper mapper;
     private final CsdnProperties properties;
     private SecretKeySpec key;
@@ -37,6 +46,7 @@ public class CsdnCredentialService {
         }
     }
 
+    @Override
     public boolean isAuthorized(Long userId) {
         CsdnPlatformCredential credential = find(userId);
         return credential != null

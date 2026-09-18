@@ -394,6 +394,15 @@ boolean        deleteByUrlQuietly(String url);
 `publishing.application.PublicationService` 与 `BlogService` —— 那是**反向**的跨单元依赖，
 属于另一条边（`integration → publishing`，已在 `content-api` 那次降到 5 条）。
 
+> ⚠️ **草稿订正（事后补）**：这里写的 `CredentialPort` / `BlogSyncPort` 都是**单数**，
+> 实际两样都落成了**两个端口**（每个平台一个）：
+> `CsdnBlogSyncPort` / `JuejinBlogSyncPort`（第十六刀）与
+> `CsdnCredentialPort` / `JuejinCredentialPort`（第十九刀）。
+> 判据是**参数表**：只有当合并后的签名对**每一个**实现都是它真正需要的形状时才合并
+> （§3duodevicies.2 与 ADR 待办 38）。
+> ⇒ **侦察阶段的端口草稿只写能力名，不要写死个数** —— 个数由调用点的参数表决定，
+> 而那要等数清跨域表面之后才知道。
+
 **`MailService`：被一处业务域依赖挡住，搬不动。** 它 import 了
 `com.xander.lab.automation.domain.EmailReminderMailTemplates` —— 一个**业务域的类型**。
 契约不能 import 业务域（门禁判据一），所以要么先把模板挪到别处、要么让调用方把
@@ -3406,6 +3415,188 @@ dinqor-core-host ──1──▶ dinqor-content-automation ──4──▶ din
 `deployment-unit-coupling` 的三条判据将全部只剩"不许变坏"的含义。
 
 ---
+
+## 3duodevicies. 第十九刀：`CsdnCredentialPort` / `JuejinCredentialPort` —— 跨单元实现边只剩一条
+
+### 3duodevicies.1 目标边，以及"先数跨域表面"这一步
+
+`automation → integration`，4 条实现语句，落在 `BlogContentPlanService` 与
+`BlogPlanRunService` 上，每个文件各 import 两个凭证服务。
+
+⚠️ 侦察第一件事**不是想端口形状，是数清跨域表面**。两个实现类各有 **6 个公开方法**，
+而跨域位置只用到**一个** `isAuthorized(Long)`：
+
+| 方法 | 跨域调用点 |
+|---|---|
+| `isAuthorized(Long)` | `toVO`（填前端派生字段）、`publishCsdn` / `publishJuejin`（发布前置条件） |
+| `isExpired` / `markExpired` / `requireCookie` / `requireCredential` / `save` / `delete` | **全在 `integration` 域内** |
+
+⭐ **端口宽度 = 调用方适配器被迫实现的成员集。** 这一刀只搬 6 个里的 1 个；
+另外 5 个端出去，消费方的适配器就被迫实现 4 个它从不调用的成员。
+**一半的价值来自没搬的东西。**
+
+### 3duodevicies.2 为什么是两个端口：与第十六刀同源，但**代价相反**
+
+三条理由与 §3vicies 那一刀（站外同步）同源：**域自己就是这么分的**（两套
+`*PlatformCredential`、两个 mapper、两个独立的加密密钥）、**零适配器**、
+**合并要造一个域里没有的词汇**。
+
+⚠️ 但第十六刀有一条**附带收益**在这里**消失了**，而且是反过来的：
+
+| | `*BlogSyncPort`（第十六刀） | `*CredentialPort`（本刀） |
+|---|---|---|
+| 方法名 | 相同（`sync` / `findSucceeded`） | 相同（`isAuthorized`） |
+| **参数表** | **不同** —— 掘金多收分类与标签 id | **逐字相同** |
+| "接收者写反"的后果 | **编译失败** | **编译通过** |
+
+⇒ 第十六刀写下"两个端口的方法表与各自实现逐字相同 ⇒ 实现类只加一句 `implements`"，
+那句话在**参数表不同**的前提下顺带挡住了一类错误。本刀把这个前提拿掉了。
+
+### 3duodevicies.3 ⚠️ 新缝：**同形不同源** ⇒ 静默换位点的第三类
+
+| # | 形状 | 例子 |
+|---|---|---|
+| 1 | **同名同参的重载** —— 新方法的参数表与旧方法逐字相同时，转发点显式点名旧名字，编译器没有意见 | §3quater / 待办 20 |
+| 2 | **端口归一参数顺序** —— 提供方 `(taskId, userId)` 与调用方 `(userId, taskId)` 归一后两个 `Long` 换位 | ADR 待办 20 |
+| 3 | **同形不同源** —— 两个**不同提供方**的对象，方法名与签名逐字相同，**接收者写反**编译得过 | **本刀** |
+
+```java
+if (!csdnCredentialPort.isAuthorized(plan.getUserId()))   // ← 写成 juejinCredentialPort
+```
+
+编译通过、耦合指标一动不动、26 条门禁全绿。症状是"CSDN 发布前检查了掘金的授权"，
+而两边都返回 `boolean`，类型层面没有任何信号。
+
+### 3duodevicies.4 ⭐ "某个地方有测试挡着" ≠ "这个错误形状被守住了"
+
+**这是本刀最值得记的一条。** 同一个"接收者写反"，实测（§3duodevicies.7 注入 C / D）：
+
+| 消费方 | 写反的位置 | 实测红 | 其中**既有**用例 |
+|---|---|---|---|
+| `BlogPlanRunService` | `publishCsdn` 的接收者 | **3** | **2 条** |
+| `BlogContentPlanService` | `toVO` 里 `csdnAuthorized` 的来源 | **1** | **0 条** |
+
+`BlogPlanRunService` 那两条既有用例是**碰巧**挡住的：它们给 CSDN 桩 `true`、
+而掘金桩没打桩（Mockito 默认 `false`），正好把两者分开，于是写反之后 CSDN 那条路
+拿不到授权、`verify(publicationService).publish(…, "csdn")` 不满足 ⇒ 红。
+而 `BlogContentPlanService` 的既有用例**根本没有读那两个派生字段的断言** —— 那里是真的盲区。
+
+⇒ **"某个地方有测试挡着"不能推广成"这个错误形状被守住了"。**
+同一形状、同一刀、两个消费方，一个红 3 条、一个只红新加的 1 条。
+
+判据必须是**不对称桩**（一个平台授权、另一个不授权），两个方向各一条。
+
+⚠️ **顺带澄清一条此前写得太宽的话。** 前面几刀反复写过"这类缺陷注入验证发现不了"——
+**过宽了**。正确的区分是：
+
+| | 注入能不能发现 | 例子 |
+|---|---|---|
+| **位置**问题 —— 某个具体地方没人守 | **能**（注入落在那里就红） | 注入 D：`toVO` 的派生字段没人断言 |
+| **判据**问题 —— 判据的**形状**不够强 | **不能**（永远看不见），只能**反着用一次** | 只断言参数**类型**不断言**参数名**（注入 E） |
+
+⇒ 一条判据写完，要问两个问题：**①它守的位置有人管吗？②它的形状够强吗？**
+①靠注入，②靠"拿判据去断言它本该拒绝的形状"。
+
+⚠️ **同一个坑在第十六刀的两个同步端口上早就存在**：`BlogPlanRunService` 只注入了
+`JuejinBlogSyncPort`，下一个同时接入两个同步端口的调用方就会踩到。本刀没去补，
+登记为 ADR 待办 54。
+
+### 3duodevicies.5 落地：零换算、零新类型
+
+两个端口各一个方法，方法表与各自实现类那个公开方法**逐字相同**：
+
+```java
+public interface CsdnCredentialPort   { boolean isAuthorized(Long userId); }
+public interface JuejinCredentialPort { boolean isAuthorized(Long userId); }
+```
+
+实现类只加一句 `implements` 与一个 `@Override`，消费方只换注入类型 ——
+**没有新 DTO、没有新记录、没有换算、没有中间适配器**。这是本刀与前面十五刀最不一样的地方：
+`OssPort` 有 `byte[] ↔ MultipartFile` 的换算，`MailPort` 把渲染整个搬走，
+这一刀**只换了一个类型名**。⚠️ 但"没有换算"不等于"没有新缝"（§3duodevicies.3）。
+
+⚠️ 两个端口的**"可用"口径不同**（CSDN 额外要求用户名非空，因为它要生成回链；
+掘金只要求 cookie 非空）—— 这个差异**属于实现，不属于契约**：
+跨域位置没有任何调用方读得出它。写在端口注释里，不写进签名。
+
+### 3duodevicies.6 ⭐ 实测收益：跨单元实现边只剩 `admin → automation`
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 22 | **18** |
+| `implementation_edges` | 9 | **8** |
+| `cross_deployment_unit_statements` | 5 | **1** |
+| `cross_deployment_unit_edges` | 2 | **1** |
+| `api_statements` / `api_edges` | 9 / 6 | 9 / 6（不动） |
+
+`automation → integration` **整条边消失**。`automation` 作为来源域只剩两条**同单元**出边
+（`→ blogagent` 4/2、`→ publishing` 2/0）。
+
+⚠️ 剩余跨单元实现边**只剩一条** `admin → automation`（1）⇒ **跨单元实现图现在是一条链**
+`core-host ──1──▶ content-automation`，且 `MUTUAL_UNIT_PAIRS` 已清空（第十八刀）。
+
+### 3duodevicies.7 注入验证：七次
+
+落点分两类，**必须分开跑**（待办 41）：契约模块排在反应堆前面，它一红就让依赖它的
+`core-host` 整块跳过。契约侧（A / B / E / F）用 `-Dtest=CsdnCredentialPortTest`，
+消费方侧（C / D）用各自消费方的测试类。
+
+| # | 注入 | 落在 | 实测红 |
+|---|---|---|---|
+| A | 端口加一个 `default` 方法 | `CsdnCredentialPort` | **2** |
+| B | 返回类型 `boolean` → `Boolean` | 端口 + 实现 | **2** |
+| C | ⭐ `publishCsdn` 的接收者换成掘金端口 | `BlogPlanRunService` | **3**（含 2 条既有） |
+| D | ⭐ `toVO` 里 `csdnAuthorized` 改从掘金端口取值 | `BlogContentPlanService` | **1**（只有新加的） |
+| E | 首参改名 `userId` → `credentialOwnerId` | `CsdnCredentialPort` | **1** |
+| F | 端口 `extends` 掘金孪生接口 | `CsdnCredentialPort` | **2** |
+| G | 消费方退回具体 `@Service` | `BlogPlanRunService` | **指标 18/8/1/1 → 20/9/3/2** |
+
+⭐ **A**：给端口加一个带实现体的 `default` 方法 ⇒ 编译过、指标一动不动、26 门禁全绿、
+消费方一个 mock 都不用改，只有反射测试红。**这条缝每加一次端口就开一次。**
+
+⭐ **C / D 的对照**见 §3duodevicies.4 —— 本刀最有价值的一条。
+
+⭐ **E**：改名之后**没有任何其它断言变红**，证明"断言参数名"那条守卫真的接着线
+（只断言类型 `Long` 会绿着过）。
+
+**G** 证明**指标确实是这一刀搬动的**；同时它是"判据的基线必须来自判据之外"的
+**第九次**实测 —— 注入后按既定流程（先 scan 再 gates）跑，
+`cross-domain-import-baseline` 报 **PASS**（`20 statements across 9 edges`），
+存量涨了门禁照样绿。
+
+⚠️ 两条工具坑：①G 第一版把两个 import 写成相邻一块，但它们中间夹着
+`JuejinBlogSyncPort` ⇒ **锚点 0 命中**（"锚点唯一"要连"它是不是真的相邻"一起查）；
+②G 会把 `scan.py` 的产物改成注入态的数字 ⇒ **收尾必须无条件重跑一次 scan**
+（产物既是基线，就绝不能带着注入态落盘）。
+
+⚠️ 七个目标文件全部逐字节还原（`git hash-object` 与基线逐个相同）。
+
+### 3duodevicies.8 为什么没有加 `contract-changes.yaml` 条目
+
+同 §3vicies.9 与 §3unvicies.9：没有改任何**线上形状**。两个端口是新类型，
+不是对既有 HTTP / SSE / WebSocket 契约的改动；消费方注入的类型换了，
+但同进程内仍是同一个 bean，返回值类型一分没变 ⇒ 可证纯重构。
+
+### 3duodevicies.9 ⚠️ 刻意没做的事 / 残留
+
+**`BlogContentPlanService` 的"已知残留"没修。** `ContentPlanPort` 的读方法都经过 `toVO`，
+而 `toVO` 要调两个 `isAuthorized` 去填前端要的派生字段；随后 `toView` 把它们**收窄掉**
+（`ContentPlanView` 里没有这两个字段）。⇒ 一个智能体并不读的派生字段，
+能让一次状态变更失败，而两次凭证查询的结果被**丢掉**。
+
+⚠️ 修了会同时**改变行为**（端口路径不再可能被凭证查询的失败带崩），
+而本次抽取要能**被证明**是纯重构。⇒ 刻意不顺手做，登记为 ADR 待办 53。
+**这一刀让这处残留更具体了（现在它经过端口），但没有让它变好。**
+
+### 3duodevicies.10 下一刀
+
+1. **`admin → automation`（1）** —— 唯一剩下的跨单元实现边。`AdminNotificationController`
+   需要 SSE 广播能力，⚠️ 契约不许带框架类型 ⇒ 端口**不能**返回 `SseEmitter`，
+   形状要先设计。
+2. **补 `*BlogSyncPort` 的"同形不同源"守卫**（§3duodevicies.4 末）。
+
+⚠️ 两条都收掉之后**跨单元实现边归零** —— 那时要重新想 `MUTUAL_UNIT_PAIRS` /
+`WAVE2_UNITS` 的关系。
 
 ## 4. 必须留痕的判断
 

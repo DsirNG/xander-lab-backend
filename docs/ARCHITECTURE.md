@@ -253,10 +253,21 @@ empty except for shared infrastructure:
    `automation.domain.EmailReminderMailTemplates` import and the
    `email-reminder.display-zone` key it was reading out of another domain's
    configuration. That removal is what deleted the last `integration → automation`
-   statement. What is left in `integration` and still crossed by another unit is the
-   CSDN/Juejin **credential** services (`automation` injects both, 4 statements);
-   they are concrete classes, so they need ports rather than a move. Each cut is
-   recorded in `docs/migration/lib-extraction.md`.
+   statement. Then `CsdnCredentialPort` / `JuejinCredentialPort` for the credential
+   query surface — each declares exactly **one** method (`isAuthorized`), because
+   that is the whole cross-domain surface: the two implementations have six public
+   methods each, and the other five have no cross-domain caller at all, so putting
+   them on the port would force the consumer's adapter to implement four members it
+   never calls. ⚠️ These two ports have **identical method names and signatures**, so
+   a receiver swap compiles — unlike `CsdnBlogSyncPort` / `JuejinBlogSyncPort`, whose
+   differing parameter lists catch that at compile time, this one is caught only by
+   an asymmetric-stub behavioural test. That deleted the last `automation →
+   integration` statement. **Nothing in `integration` is crossed by another
+   deployment unit any more**; the only cross-unit implementation edge left in the
+   whole repo is `admin → automation` (1 statement: `AdminNotificationController`
+   needs an SSE broadcast port, and a contract may not carry `SseEmitter`, so its
+   shape has to be designed first). Each cut is recorded in
+   `docs/migration/lib-extraction.md`.
 
 9. `contracts/core-api` holds the runtime model-routing SPI (`ModelGateway`), its
    `ModelEndpoint` record, and `FeatureModelNotConfiguredException`. Like item 7

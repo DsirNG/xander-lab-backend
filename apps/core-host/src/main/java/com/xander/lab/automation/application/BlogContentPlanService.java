@@ -21,8 +21,8 @@ import com.xander.lab.automation.spi.ContentPlanEdit;
 import com.xander.lab.automation.spi.ContentPlanPort;
 import com.xander.lab.automation.spi.ContentPlanView;
 import com.xander.lab.blogagent.application.BlogAgentService;
-import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
-import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
+import com.xander.lab.integration.api.CsdnCredentialPort;
+import com.xander.lab.integration.api.JuejinCredentialPort;
 import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -61,13 +61,18 @@ import java.util.Set;
  * （读方法也走 {@code toVO}，为的是让"往读模型落字段"只有一处 —— 见 {@code toView} 上的注释）。
  * 多一次内存里的对象构造，换来的是"这次抽取不改变任何行为"可以被直接看出来。</p>
  *
- * <p>⚠️ <b>已知残留</b>：端口调用会经过 {@code toVO}，而它要调
- * {@code csdnCredentialService.isAuthorized} / {@code juejinCredentialService.isAuthorized}
+ * <p>⚠️ <b>已知残留（本刀未修）</b>：端口调用会经过 {@code toVO}，而它要调
+ * {@link CsdnCredentialPort#isAuthorized} / {@link JuejinCredentialPort#isAuthorized}
  * 去填那两个前端要的派生字段（{@link ContentPlanView} 里没有它们）。
  * 同进程里这没有区别（今天就是这样），但拆服务后
  * {@link ContentPlanPort#updateStatus} 会变得比它需要的样子更脆：一个智能体并不读的派生字段，
  * 能让一次状态变更失败。要修就得把实现体改成返回实体、由两个公开方法各自包装 ——
  * 那是独立的一刀，不在这次重构里做。</p>
+ *
+ * <p>⚠️ 凭证抽取那一刀（{@code CsdnCredentialPort} / {@code JuejinCredentialPort}）
+ * 让这处残留<b>更具体了但没有变好</b>：那两个查询现在会经过端口。之所以没有顺手一起修，
+ * 是因为那会同时改变行为（端口路径不再做两次凭证查询、因而不再可能被凭证查询的失败带崩），
+ * 而本次抽取要能<b>被证明</b>是纯重构。残留照旧登记在 ADR 待办里。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -86,8 +91,8 @@ public class BlogContentPlanService implements ContentPlanPort {
     private final BlogContentPlanMapper planMapper;
     private final BlogPlanRunMapper runMapper;
     private final BlogPlanRunService runService;
-    private final CsdnCredentialService csdnCredentialService;
-    private final JuejinCredentialService juejinCredentialService;
+    private final CsdnCredentialPort csdnCredentialPort;
+    private final JuejinCredentialPort juejinCredentialPort;
     private final BlogAgentService agentService;
     private final RecitationMaterialPort materialPort;
 
@@ -646,8 +651,10 @@ public class BlogContentPlanService implements ContentPlanPort {
                 .errorMessage(plan.getErrorMessage())
                 .createdAt(plan.getCreatedAt())
                 .updatedAt(plan.getUpdatedAt())
-                .csdnAuthorized(csdnCredentialService.isAuthorized(userId))
-                .juejinAuthorized(juejinCredentialService.isAuthorized(userId))
+                // ⚠️ 两个端口的 isAuthorized 签名逐字相同，接收者写反**编译得过**（不会报错、指标不动）。
+                // 钉住这条的是 BlogContentPlanServiceTest 里那条不对称桩用例（一个授权、一个不授权）。
+                .csdnAuthorized(csdnCredentialPort.isAuthorized(userId))
+                .juejinAuthorized(juejinCredentialPort.isAuthorized(userId))
                 .build();
     }
 

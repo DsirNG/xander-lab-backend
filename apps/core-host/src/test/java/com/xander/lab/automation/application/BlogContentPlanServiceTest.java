@@ -9,8 +9,8 @@ import com.xander.lab.automation.domain.BlogContentPlan;
 import com.xander.lab.automation.infrastructure.BlogContentPlanMapper;
 import com.xander.lab.automation.infrastructure.BlogPlanRunMapper;
 import com.xander.lab.blogagent.application.BlogAgentService;
-import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
-import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
+import com.xander.lab.integration.api.CsdnCredentialPort;
+import com.xander.lab.integration.api.JuejinCredentialPort;
 import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,14 +41,14 @@ class BlogContentPlanServiceTest {
     @Mock private BlogContentPlanMapper planMapper;
     @Mock private BlogPlanRunMapper runMapper;
     @Mock private BlogPlanRunService runService;
-    @Mock private CsdnCredentialService csdnCredentialService;
-    @Mock private JuejinCredentialService juejinCredentialService;
+    @Mock private CsdnCredentialPort csdnCredentialPort;
+    @Mock private JuejinCredentialPort juejinCredentialPort;
     @Mock private BlogAgentService agentService;
     @Mock private RecitationMaterialPort materialPort;
 
     private BlogContentPlanService newService() {
         BlogContentPlanService service = new BlogContentPlanService(planMapper, runMapper, runService,
-                csdnCredentialService, juejinCredentialService, agentService, materialPort);
+                csdnCredentialPort, juejinCredentialPort, agentService, materialPort);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "maxActivePerUser", 50L);
         org.springframework.test.util.ReflectionTestUtils.setField(service, "maxCreatedPerDay", 20L);
         return service;
@@ -271,5 +271,38 @@ class BlogContentPlanServiceTest {
         Transactional transactional = method.getAnnotation(Transactional.class);
         assertThat(transactional).as("nextRunAfter 应保留只读事务").isNotNull();
         assertThat(transactional.readOnly()).as("nextRunAfter 不应变成读写事务").isTrue();
+    }
+
+    /**
+     * ⚠️ {@link CsdnCredentialPort} 与 {@link JuejinCredentialPort} 的
+     * {@code isAuthorized(Long)} <b>方法名与签名逐字相同</b>，所以把 {@code toVO} 里
+     * 那两个接收者写反<b>编译得过</b>：不会报错、耦合指标一动不动、门禁全绿。
+     *
+     * <p>钉住它的唯一办法是让两个桩取<b>不同</b>的值。两个都返回 {@code true}
+     * （或都 {@code false}）的用例，把接收者对调之后<b>照样全绿</b> ——
+     * 这正是"注入验证发现不了判据强度不够"那一族：能证明已写的断言会红，
+     * 证明不了"断言选的值分不开两个被测对象"。</p>
+     *
+     * <p>方向与 {@code BlogPlanRunServiceTest} 里那条相反（那边 CSDN 授权、掘金不授权），
+     * 两条合起来把两个方向的写反都堵住。</p>
+     */
+    @Test
+    void theTwoCredentialPortsAreNotInterchangeableEvenThoughTheirSignaturesAreIdentical() {
+        BlogContentPlan plan = new BlogContentPlan();
+        plan.setId(41L);
+        plan.setUserId(7L);
+        plan.setStatus(BlogContentPlan.STATUS_ACTIVE);
+        when(planMapper.selectOne(any())).thenReturn(plan);
+        when(csdnCredentialPort.isAuthorized(7L)).thenReturn(false);
+        when(juejinCredentialPort.isAuthorized(7L)).thenReturn(true);
+
+        BlogContentPlanVO vo = newService().detail(7L, 41L);
+
+        assertThat(vo.getCsdnAuthorized())
+                .as("CSDN 那个派生字段必须来自 CsdnCredentialPort —— 取反了就说明接收者写反了")
+                .isFalse();
+        assertThat(vo.getJuejinAuthorized())
+                .as("掘金那个派生字段必须来自 JuejinCredentialPort")
+                .isTrue();
     }
 }

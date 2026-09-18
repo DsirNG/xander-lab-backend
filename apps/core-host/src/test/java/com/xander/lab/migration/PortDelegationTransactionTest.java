@@ -10,7 +10,9 @@ import com.xander.lab.identity.application.AuthService;
 import com.xander.lab.identity.application.UserLookupService;
 import com.xander.lab.integration.mail.MailService;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
+import com.xander.lab.integration.mcp.csdn.application.CsdnCredentialService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
+import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
 import com.xander.lab.integration.oss.OssService;
 import com.xander.lab.publishing.application.BlogMediaService;
 import com.xander.lab.publishing.application.BlogService;
@@ -62,8 +64,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 就报缺陷。</p>
  * <p>这是一个<b>保守近似</b>：它不解析方法体去证明 M 真的转调了那个兄弟方法，
  * 只检查"危险区"里有没有缺注解。这样宁可要求一个用不上的注解，也不会漏掉一个真的转调。
- * 实测在全仓 <b>18</b> 个端口实现上零误报（见 {@code @see} 记录；
- * 数字随 {@link #PORT_IMPLEMENTATIONS} 变化，第十六刀从 15 加到 17、第十八刀加到 18）。</p>
+ * 实测在全仓 <b>20</b> 个端口实现上零误报（见 {@code @see} 记录；
+ * 数字随 {@link #PORT_IMPLEMENTATIONS} 变化，第十六刀从 15 加到 17、第十八刀加到 18、
+ * 第十九刀加到 20）。</p>
  *
  * <p>为什么 {@code @Override} 不能用来判"这是端口方法"：{@code java.lang.Override} 是
  * {@code SOURCE} 保留，反射看不见。所以改为拿方法签名去比它实现的那组接口方法。</p>
@@ -96,7 +99,9 @@ class PortDelegationTransactionTest {
             AuthService.class,
             CsdnBlogSyncService.class,
             JuejinBlogSyncService.class,
-            MailService.class);
+            MailService.class,
+            CsdnCredentialService.class,
+            JuejinCredentialService.class);
 
     @Test
     void everyPortMethodThatDelegatesToATransactionalSiblingCarriesItsOwnTransactional() {
