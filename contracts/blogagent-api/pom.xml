@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>blogagent-api</artifactId>
+    <name>blogagent-api</name>
+    <description>
+        Service-to-service contract for the blog generation agent (V9 §18 / §91).
+
+        Members. BlogAgentPort (5 methods), plus the three narrowed records it carries:
+        BlogAgentTaskDraft (write), BlogAgentTaskView (read), BlogAgentPostView (read).
+
+        Why the module exists. Four statements in three files reached into blogagent's
+        application layer, and two more reached into its api layer:
+
+          agent -> blogagent   (4 impl / 2 api)  BlogGenerationTool, PublishPostTool,
+                                                 ImageGenerationTool
+          agent -> publishing  (0 impl / 1 api)  PublishPostTool
+
+        BlogGenerationTool and PublishPostTool imported
+        blogagent.application.BlogAgentService together with blogagent.api.*, and
+        PublishPostTool additionally imported publishing.api.BlogPostVO, because that is what
+        BlogAgentService.publish returns. After the split dinqor-agent could not be built
+        without blogagent's implementation classes AND without publishing's api layer.
+
+        What this cut takes. The SERVICE capability -- the two tools that go through
+        BlogAgentService. It clears agent -> publishing outright (PublishPostTool was the only
+        cross-domain reader of BlogPostVO) and shortens agent -> blogagent from 4 to 2.
+
+        What it deliberately does NOT take. ImageGenerationTool's two statements, which reach
+        into blogagent.infrastructure (BlogAgentImageClient, BlogAgentProperties). That is a
+        different shape from a service port -- a concrete client plus a
+        @ConfigurationProperties bean -- and it carries its own decision: the generated image
+        travels as bytes and the token usage travels as a three-long record, because
+        ModelUsage lives in libs/xander-model and a contract may not depend on a library that
+        drags in Jackson (ADR-1). Settling that shape is a separate cut, so
+        agent -> blogagent does not reach zero here.
+
+        Why the DTOs are NARROWED, not mirrored. The mirror rule (ADR §2.5) exists for a type
+        that *replaces* a frontend-visible one: mirroring then makes "serialization is
+        byte-identical" provable, which is what keeps the cut a pure refactor. Nothing here
+        replaces anything. blogagent.api.BlogAgentTaskVO stays exactly where it is and keeps
+        going to the frontend unchanged from blogagent.api.BlogAgentController; so does
+        publishing.api.BlogPostVO. Every type in this module is new, on a new seam the
+        frontend never sees, so each carries exactly the components its consumers read:
+
+          BlogAgentTaskView  4 of the domain entity's 25  id, title, summary, publishedPostId
+          BlogAgentPostView  5 of BlogPostVO's 17         id, title, status, csdnSynced, juejinSynced
+          BlogAgentTaskDraft mirrors BlogAgentTaskCreateRequest's 2 fields, without @NotBlank
+
+        What IS pinned is the component order, by reflection, and the mapping
+        entity/VO -> record, by an app-module test using mutually distinct literals.
+
+        Why jakarta.validation annotations are NOT here.
+        blogagent.api.BlogAgentTaskCreateRequest carries @NotBlank and @Size, and those fire
+        only because BlogAgentController annotates the parameter @Valid. A contract may not
+        carry them anyway (they would add a dependency, and ADR-1 keeps this module
+        framework-free). Nothing is lost on the agent path, which never had them: the tools
+        build their arguments from JSON, and BlogAgentService validates the fields itself in
+        normalizeClientRequestId. BlogAgentTaskDraft mirrors the request's two fields without
+        the annotations, and the domain-side request type stays the validated front door for
+        the HTTP callers.
+
+        Why every method takes the caller id FIRST. All four earlier contracts do, and the
+        guard test that pins it asserts the first parameter's TYPE is Long -- which is a
+        weaker statement than the invariant it is named for. Four of the five methods this
+        port wraps declare their parameters the other way round on the provider side
+        (publish(taskId, userId), findPublishedPost(taskId, userId),
+        runStream(taskId, userId, ...)), so mirroring the provider's order would have made the
+        port inconsistent while still passing that guard. Instead the port normalises to
+        (userId, ...) and the provider's thin adapters swap explicitly, one line each, pinned
+        by a mapping test whose two literals differ (42 vs 9). BlogAgentPortTest asserts the
+        first parameter is NAMED userId, not merely typed Long -- javac is run with
+        -parameters here, so the name survives into the class file, and that closes the gap
+        between what the guard says and what it checks.
+
+        Package note: this module's package is com.xander.lab.blogagent.spi, NOT
+        com.xander.lab.blogagent.api. blogagent already owns com.xander.lab.blogagent.api as
+        its *frontend HTTP* layer (BlogAgentController, BlogAgentTaskCreateRequest,
+        BlogAgentTaskVO, BlogAgentSessionVO, BlogAgentMessageRequest). Declaring the contract
+        there would put one package in two jars, and would make the scanner classify those
+        controllers as shared kernel, turning "a controller imports its own application layer"
+        into dozens of blogagent.api -> blogagent backlog edges plus a
+        shared-kernel-reverse-dependency violation each. Same collision as agent-api,
+        automation-api, recitation-api and studio-api; same answer. SHARED_KERNEL lists
+        blogagent.spi (dotted, matched longest-first, so it does not swallow
+        blogagent.application, blogagent.domain or blogagent.infrastructure).
+
+        What is deliberately NOT here yet:
+        - ImageGenerationTool's image capability (see above).
+        - generateTopicSeries, whose only caller is automation.BlogContentPlanService -- same
+          deployment unit (both are dinqor-content-automation), so converting it would move
+          no cross-unit metric. It is a candidate for a later tidy-up, not for this cut.
+        - listSessions / reviseStream / reviewCompliance / findTaskByClientRequestId: their
+          callers are BlogAgentController and BlogAgentService's own pipeline.
+        - Any of blogagent's own api layer (com.xander.lab.blogagent.api.*). It is the
+          frontend HTTP contract, a different audience, and it joins a contract module only
+          when that layer itself is split in Wave 2.
+
+        Zero dependencies, and that is the point. A contract that drags in a framework cannot
+        be depended on by every service, and V9 §19 is explicit that the WebFlux Gateway must
+        stay free of spring-webmvc. Nothing here may gain a compile dependency without a
+        deliberate decision; test scope is fine.
+    </description>
+
+    <dependencies>
+        <!--
+            No compile or runtime dependency by design. junit-jupiter is test-scoped: the
+            port's width and its full signature are pinned by reflection, because widening a
+            port trips no other defence. It compiles, the coupling metrics do not move, and
+            no gate reports it. Adding a default method is the silent form of widening.
+        -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!--
+                No spring-boot-maven-plugin here. It is declared only in apps/core-host/pom.xml
+                so that libraries do not inherit the repackage goal. repackage needs a main
+                class and would fail this build with "Unable to find main class".
+            -->
+        </plugins>
+    </build>
+
+</project>

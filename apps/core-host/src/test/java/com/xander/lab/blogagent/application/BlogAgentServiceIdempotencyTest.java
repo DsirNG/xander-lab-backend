@@ -187,9 +187,11 @@ class BlogAgentServiceIdempotencyTest {
         BlogAgentTask running = task(12L, 42L, "running");
         when(taskMapper.selectOne(any())).thenReturn(ready, running);
 
-        assertThat(service.findReadyTaskByClientRequestId(42L, "invocation-11"))
+        // ⚠️ 必须点名 ...ForView：端口方法同名同参，返回的是 4 个分量的契约视图，
+        // 这个测试要验的是"只认 ready"这条过滤本身，所以直接测富方法。
+        assertThat(service.findReadyTaskByClientRequestIdForView(42L, "invocation-11"))
                 .isSameAs(ready);
-        assertThat(service.findReadyTaskByClientRequestId(42L, "invocation-12"))
+        assertThat(service.findReadyTaskByClientRequestIdForView(42L, "invocation-12"))
                 .isNull();
     }
 

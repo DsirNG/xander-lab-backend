@@ -42,6 +42,7 @@
         <module>contracts/agent-api</module>
         <module>contracts/automation-api</module>
         <module>contracts/recitation-api</module>
+        <module>contracts/blogagent-api</module>
         <module>apps/core-host</module>
     </modules>
 

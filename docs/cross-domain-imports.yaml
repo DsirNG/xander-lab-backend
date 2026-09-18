@@ -7,16 +7,17 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 36
+  implementation_statements: 34
   implementation_edges: 16
-  cross_deployment_unit_statements: 19
+  cross_deployment_unit_statements: 17
   cross_deployment_unit_edges: 9
-  api_statements: 12
-  api_edges: 8
+  api_statements: 9
+  api_edges: 6
   shared_kernel_sources:
     - agent.spi
     - auth
     - automation.spi
+    - blogagent.spi
     - common
     - config
     - content
@@ -50,17 +51,6 @@ edges:
       - apps/core-host/src/main/java/com/xander/lab/virtualpay/application/VirtualPayService.java
       - apps/core-host/src/main/java/com/xander/lab/virtualpay/application/VirtualPaySettingsService.java
       - apps/core-host/src/main/java/com/xander/lab/virtualpay/infrastructure/WechatVirtualPayClient.java
-  - from: agent
-    to: blogagent
-    from_unit: dinqor-agent
-    to_unit: dinqor-content-automation
-    crosses_deployment_unit: true
-    api_statements: 2
-    implementation_statements: 4
-    implementation_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/BlogGenerationTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/ImageGenerationTool.java
-      - apps/core-host/src/main/java/com/xander/lab/agent/application/PublishPostTool.java
   - from: automation
     to: blogagent
     from_unit: dinqor-content-automation
@@ -81,6 +71,15 @@ edges:
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminUserController.java
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminWechatCredentialController.java
+  - from: agent
+    to: blogagent
+    from_unit: dinqor-agent
+    to_unit: dinqor-content-automation
+    crosses_deployment_unit: true
+    api_statements: 0
+    implementation_statements: 2
+    implementation_files:
+      - apps/core-host/src/main/java/com/xander/lab/agent/application/ImageGenerationTool.java
   - from: agent
     to: identity
     from_unit: dinqor-agent
@@ -181,14 +180,6 @@ edges:
     implementation_statements: 1
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/studio/infrastructure/Img2ThreeModelClient.java
-  - from: agent
-    to: publishing
-    from_unit: dinqor-agent
-    to_unit: dinqor-content-automation
-    crosses_deployment_unit: true
-    api_statements: 1
-    implementation_statements: 0
-    implementation_files: []
   - from: virtualpay
     to: admin
     from_unit: dinqor-core-host

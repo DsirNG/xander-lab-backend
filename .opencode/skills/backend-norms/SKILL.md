@@ -443,7 +443,9 @@ ls apps/core-host/src/main/java/com/xander/lab/<domain>/
 | 域 | `<domain>.api` 是否已被占用 | 契约包 |
 |---|---|---|
 | `integration` | 空闲（该域按集成方式分子包：`file` / `mail` / `mcp` / `oss`） | `integration.api` |
-| `agent` / `automation` / `studio` | **已被占用** —— 是这三个域自己的**前端 HTTP 层**（controller / VO / request body） | `agent.spi` / `automation.spi` / `studio.spi` |
+| `agent` / `automation` / `recitation` / `blogagent` | **已被占用** —— 是这些域自己的**前端 HTTP 层**（controller / VO / request body）。2026-09-17 实测：`recitation.api` 6 个文件、`blogagent.api` 5 个文件 | `agent.spi` / `automation.spi` / `recitation.spi` / `blogagent.spi` |
+| `studio` | **已被占用** | `studio.spi` |
+| `content` / `core` / `payment` | 契约名与域**不同名**，包名不与任何域撞车 | `content.api` / `core.api` / `payment.api` |
 
 硬把契约塞进 `<domain>.api` 会同时坏两件事：（a）一个包名出现在两个 jar 里；
 （b）扫描器会把那个域的 **controller 当成共享内核**，于是"controller import 自己的
@@ -878,6 +880,76 @@ for (Method method : Port.class.getDeclaredMethods()) {
 
 **断言失败的信息必须指向真正的问题**，否则下次有人看到"下标越界"会去查数组而不是查契约。
 `automation-api` 的三个端口测试都补了这个守卫（2026-09-17）。
+
+### ⚠️ 断言"第一个参数是调用方 id"时，**类型**不够，要断言**参数名**
+
+```java
+// ❌ 这个断言对 publish(Long taskId, Long userId) 同样成立 —— 而那个形状正是它要禁止的
+assertEquals(Long.class, method.getParameterTypes()[0]);
+
+// ✅ 参数名进了 class 文件（本项目 javac 开了 -parameters）
+assertEquals("userId", method.getParameters()[0].getName(),
+        "第一个参数必须叫 userId：只断言\"类型是 Long\"不够，"
+        + "publish(Long taskId, Long userId) 同样满足那个断言。");
+```
+
+**这是"判据只朝一个方向看"的第三次实例**（前两次：`SHARED_KERNEL` 的 `util` 死条目、
+`deployment-unit-coupling` 判据 2 的根成了单元素集合）。三次的共同点：
+
+> **判据断言的是一个弱化后的性质（"是 `Long`" / "有包" / "有成员"），
+> 而它的名字声称的是强性质（"是调用方 id" / "有反向条目" / "会变红"）。**
+
+⚠️ 这类缺陷**注入验证发现不了**。注入只能证明"已写的判据会红"，
+证明不了"判据的强度够不够"。要靠**反着用一次**：把判据拿去断言一个它本该拒绝的形状
+（这里是 `publish(Long taskId, Long userId)`），看它是否真的红。
+
+⚠️ 代价与自证：这条守卫依赖 `-parameters`。把它从编译配置里删掉后
+`getParameters()[0].getName()` 退化成 `arg0` ⇒ 守卫**变红**（而不是静默放过），
+所以是一个会自己喊出来的依赖，可以接受。
+
+```bash
+# 确认 -parameters 生效
+javap -v -p contracts/<x>-api/target/classes/com/xander/lab/<x>/spi/<X>Port.class | grep MethodParameters
+```
+
+### ⚠️ "归一参数顺序"会产生静默换位点：新重载的参数表可能与旧方法逐字相同
+
+端口把提供方的 `(taskId, userId)` 归一成 `(userId, taskId)` 时，
+如果提供方**本来就有**一个参数表逐字相同的重载，那么所有原来转发到旧方法的调用点
+会**静默解析到新方法**，两个 `Long` 直接换位 —— 编译器一个字都不说。
+
+```java
+runStream(Long taskId, Long userId, BiConsumer<String,String> onEvent)                    // 同域
+runStream(Long userId, Long taskId, BiConsumer<String,String> onEvent, BooleanSupplier)   // 端口
+
+// 旧写法：静默解析到端口方法，两个 Long 换位
+return runStream(taskId, userId, onEvent, () -> false);
+// ✅ 必须显式点名
+return runStreamForView(taskId, userId, onEvent, () -> false);
+```
+
+**判据**：改完参数顺序后，`grep` 出所有转发到旧方法的调用点，逐个确认解析目标；
+每一处都要有测试（`verify(service, never()).runStream(any(), any(), any(), any())`
+这类反向断言最直接）。与"相邻同类型参数"（§5.6）、`TokenUsage` 换位（§4.6）同族：
+**两个同类型参数挨在一起时，编译器永远帮不上忙。**
+
+### ⚠️ 守卫的失败信息必须指向真正的原因（第二次踩，已成规则）
+
+第一版"两个 `Long` 换位"的测试写成"用具体字面量打桩，写反了自然匹配不上"，
+结果症状是 `null` 一路传到断言里变成 **NPE** —— 报的是"某处为 null"，不是"两个 Long 换位了"。
+
+```java
+// ✅ 在 thenAnswer 里断言实收的两个值，失败信息就是 expected: 9L but was: 42L
+when(port.publish(anyLong(), anyLong())).thenAnswer(inv -> {
+    assertEquals(USER_ID, inv.getArgument(0), "第一个参数必须是 userId");
+    assertEquals(TASK_ID, inv.getArgument(1), "第二个参数必须是 taskId");
+    return view;
+});
+```
+
+⚠️ 同时注意**分工**：用 `any(), any()` 打桩的"逐字段落点"测试**抓不到换位**，
+换位只能由上面这条专门的测试抓。**"有一个测试覆盖了这个方法"不等于
+"这个方法的所有性质都被覆盖了"。**
 
 ## 验证门禁（改动后必须执行并贴结果，不要直接宣布完成）
 

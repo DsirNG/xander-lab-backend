@@ -114,7 +114,9 @@ public class BlogAgentController {
 
     @PostMapping("/{id}/publish")
     public Result<BlogPostVO> publish(@PathVariable Long id) {
-        return Result.success(service.publish(id, UserContext.getUserId()));
+        // ⚠️ 必须点名 publishForView：四参以外的 publish(Long, Long) 现在是端口方法，
+        // 参数是 (userId, taskId)。写回 publish(id, userId) 会编译通过但静默换位。
+        return Result.success(service.publishForView(id, UserContext.getUserId()));
     }
 
     @PostMapping(value = "/{id}/run/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

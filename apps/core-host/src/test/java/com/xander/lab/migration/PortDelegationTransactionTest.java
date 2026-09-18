@@ -5,6 +5,7 @@ import com.xander.lab.automation.application.BlogContentPlanService;
 import com.xander.lab.automation.application.BlogNotificationService;
 import com.xander.lab.automation.application.EmailReminderService;
 import com.xander.lab.billing.application.BillingService;
+import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.identity.application.UserLookupService;
 import com.xander.lab.integration.oss.OssService;
 import com.xander.lab.publishing.application.BlogMediaService;
@@ -85,6 +86,7 @@ class PortDelegationTransactionTest {
             PublicationService.class,
             RecitationService.class,
             KnowledgeQuizService.class,
+            BlogAgentService.class,
             DashScopeRecitationAsrClient.class);
 
     @Test

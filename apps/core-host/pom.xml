@@ -141,6 +141,20 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+            blogagent's service-to-service contract, for the agent tools that generate and
+            publish blog posts. The package is com.xander.lab.blogagent.spi, not
+            .blogagent.api, because that domain already owns .blogagent.api as its frontend
+            HTTP layer (BlogAgentController, BlogAgentTaskCreateRequest, BlogAgentTaskVO,
+            BlogAgentSessionVO, BlogAgentMessageRequest).
+            Zero transitive dependencies by design; see contracts/blogagent-api/pom.xml.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>blogagent-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>com.vladsch.flexmark</groupId>
             <artifactId>flexmark-all</artifactId>

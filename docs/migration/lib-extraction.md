@@ -17,20 +17,22 @@
 所以 §19 必须拆。
 
 Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`xander-auth-core`）
-与 **7 个契约模块**（`content-api`、`integration-api`、`core-api`、`payment-api`、
-`agent-api`、`automation-api`、`recitation-api`），`common` 从 12 类降到 6 类，
+与 **8 个契约模块**（`content-api`、`integration-api`、`core-api`、`payment-api`、
+`agent-api`、`automation-api`、`recitation-api`、`blogagent-api`），`common` 从 12 类降到 6 类，
 另有 2 个类从**业务域包** `identity.security` 迁出、4 个类从 `publishing.domain` 迁出。
 剩下 3 个 lib 与 2 个契约模块（`knowledge-api`、`studio-api`）未开始。
 
-⚠️ **"7 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过多轮：
+⚠️ **"8 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过多轮：
 `core-api` 加过 `UserLookupPort`（§3septies），`automation-api` 加过 `NotificationPort`（§3duodecies），
 `recitation-api` 加过 `RecitationQuizPort`（§3quaterdecies）。
 扩展是**零构建接线**的 —— 不新增模块，四处构建接线一处都不用改。
 `recitation-api` 是**第十刀**（§3terdecies），也是第一个"建新模块"的刀自 `automation-api` 之后；
 它的测验能力扩展是**第十一刀**（§3quaterdecies），又回到零接线。
+`blogagent-api` 是**第十二刀**（§3quinquiesdecies），**第二个"建新模块"的刀** ——
+这一刀的看点是**参数顺序归一**，以及随之暴露的"守卫只朝一个方向看"（第三次实例）。
 
-⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十一刀）；
-`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第十八刀）。
+⚠️ **刀次口径有两个，引用时写清是哪个。** 本文用**契约刀次**（第十二刀）；
+`D:\blog\.workbuddy-ai\memory\notes\v9-wave0a.md` 用 **Wave 0B 总刀次**（第十九刀）。
 两者都对，只是分母不同。
 
 ⚠️ **Wave 0 不全仓搬目录**（§18 原话）。目录形态之所以变了，是 Maven 的硬约束，
@@ -61,6 +63,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `agent-api` | **已完成** | `RemoteToolCatalog`（远端工具目录端口）`RemoteTool`（一个被贡献出来的工具）`RemoteToolCall`（调用期回传通道）。包是 `com.xander.lab.agent.spi`，**不是** `.agent.api`（§3decies.2） | `integration → agent` 5 → **0（边整条消失）**；总计 **−5**（跨单元 −5）。图形状：`agent ↔ platform-integration` **不再是互依对**，`deployment-unit-coupling` 从 4 对降到 3 对 |
 | `automation-api` | **已完成** | `EmailReminderPort`（定时邮件提醒端口）+ `EmailReminderView` / `EmailReminderDraft`；`ContentPlanPort`（定时发文计划端口）+ `ContentPlanView` / `ContentPlanDraft` / `ContentPlanEdit`。**第九刀再加 `NotificationPort`（写一条持久化用户通知）+ 两个从实体搬来的常量**。包是 `com.xander.lab.automation.spi`，**不是** `.automation.api`（§3decies.2 同因：那个包是 20 个前端 HTTP 文件的家）。**收窄而非镜像**：11/12/11/10/8 个分量，对应域 VO 是 20/12/24/10/15 | 第八刀：`agent → automation` 6 → **0（边整条消失）**；总计 **−6**（跨单元 −6）。另外 `api_statements` 25 → 16（−9）：6 个工具原本 import 的 9 个 `automation.api.*` 类型全换成 `automation.spi.*`，而契约包在 `SHARED_KERNEL` 里**不计任何指标**。图形状：`dinqor-agent` **脱离 Wave 2 强连通分量**（只剩出边），成为可单独抽取的单元。**第九刀（零接线扩展，§3duodecies）**：`knowledgebase → automation` 2 → **0（边整条消失）**，总计再 **−2**（跨单元 −2）；`api_statements` **16 → 16 不变**（消费方 import 的是 `.application` / `.domain`，从没碰过 `.api`）。图形状：`knowledgebase` 变成**纯汇点**（整个域从清单里消失）；`automation` 扇入只剩 `admin`（SSE，要框架类型）与 `integration`（模板真环） |
 | `recitation-api` | **已完成**（两刀） | 第十刀（§3terdecies）：`RecitationMaterialPort`（背诵材料能力端口，4 个方法）+ `MaterialView`（收窄的读模型，9 分量）/ `MaterialDraft`（4）/ `MaterialFilter`（4）。第十一刀（§3quaterdecies）：`RecitationQuizPort`（测验能力端口，2 个方法 + 2 个常量）+ `QuizSessionView`（15，全带）/ `QuizAttemptView`（收窄，6，`items` 走**文本** `itemsJson`）/ `QuizOutcomeView`（收窄，10）/ `GradedItemDraft`（4）。包是 `com.xander.lab.recitation.spi`，**不是** `.recitation.api`（同因：那个包是 6 个前端 HTTP 文件的家）。⚠️ 第十一刀**删掉了两个域内 record**（`QuizSession` / `QuizOutcome`，同域生产消费方为零）而不是搬走 | 材料刀：`automation → recitation` 2 → **0（边整条消失）**、`agent → recitation` 4 → 2；总计 **−4**（跨单元 −4），`api_statements` 16 → 13（−3）。测验刀：`agent → recitation` 2 → **0（边整条消失）**，总计 **−2**（跨单元 −2），`api_statements` 13 → 12（−1）。图形状：**`content-automation ↔ core-host` 不再是互依对**（互依对 3 → 2，`MUTUAL_UNIT_PAIRS` 删掉那对，门禁主动报出过期条目）；`recitation` 成为**零跨域消费方**的域 |
+| `blogagent-api` | **已完成** | 第十二刀（§3quinquiesdecies）：`BlogAgentPort`（博客生成能力端口，5 个方法）+ `BlogAgentTaskDraft`（2）/ `BlogAgentTaskView`（4）/ `BlogAgentPostView`（5）。包是 `com.xander.lab.blogagent.spi`，**不是** `.blogagent.api`（同因：那个包是 5 个前端 HTTP 文件的家）。⚠️ 这一刀**归一了参数顺序**（提供方是 `(taskId, userId)`，端口统一 `(userId, taskId)`）—— 并因此发现既有的"首参必须是调用方 id"守卫**只断言类型**，对 `publish(Long taskId, Long userId)` 是**绿的** | `agent → blogagent` 4/2 → **2/0**（剩 `ImageGenerationTool`，见 §13 待办 27）；**`agent → publishing`（0/1）整条边消失**（`PublishPostTool` 是 `BlogPostVO` 的唯一跨域读者）；总计 **−2**（跨单元 −2），`api_statements` 12 → 9（−3）。⚠️ **两条边数指标一个都没动**（16 / 9）—— 见 §3quinquiesdecies.8 |
 | `knowledge-api` | 未开始 | — | — |
 | `studio-api` | 未开始 | — | — |
 | `payment-api` | **已完成** | `BillingBiz`（`points_ledger.biz_type` 词表）；**`BillingPort`（积分账本端口）+ `TokenUsage`（用量 DTO）** | 词表那一刀：`agent 6→3`、`integration 4→2`、`automation 2→1`、`blogagent 2→1`、`studio 2→1`；总计 **−8**（跨单元 −7）。端口那一刀：`agent 3→0`、`integration 2→0`、`automation 1→0`、`blogagent 1→0`、`identity 1→0`、`profile 1→0`、`studio 1→0` —— **7 条边全部归零**，总计再 **−10**（跨单元 −7）。两刀合计 **−18**（跨单元 −14） |
@@ -1888,6 +1891,300 @@ Wave 2 强连通分量仍是 {content-automation, core-host, platform-integratio
 但也可能撞上 `agent-api` 那种"要抽的端口属于 agent 自己的工具体系"的反向问题 ——
 **先侦察，再定形状**。
 
+**结果（§3quinquiesdecies）**：形状与 `agent-api` 那条不同 —— 目标类型**两个都不能搬**
+（一个 25 字段带 `@TableName`、一个 17 字段的 `api` VO），但**也没有无形状字段**；
+这一刀真正的新东西是**参数顺序**。上面那句"可能顺带清掉第三条边"**猜错了一半**：
+清掉的不是猜的 `agent → integration`（那 2 条还在 `PublishPostTool` 里，见 §3quinquiesdecies.9），
+而是**没猜到的** `agent → publishing`（0 impl / 1 api）—— 因为 `PublishPostTool` 恰好是
+`BlogPostVO` 的**唯一跨域读者**。
+> 教训：**"一个文件贡献多条边"的预测，不要猜是哪一条。** 先 `grep` 出那个文件到底 import 了谁，
+> 再判断哪条边会被动到 —— 否则会像这次一样，把"收益存在"和"收益是哪一条"混为一谈。
+
+## 3quinquiesdecies. 第十二刀：`contracts/blogagent-api` —— 参数顺序归一，与"守卫只朝一个方向看"的第三次实例
+
+### 3quinquiesdecies.1 目标边
+
+| from → to | impl | api | 文件 |
+|---|---|---|---|
+| `agent → blogagent` | 4 | 2 | `BlogGenerationTool`、`PublishPostTool`（`ImageGenerationTool` 见 §3quinquiesdecies.9） |
+| `agent → publishing` | 0 | 1 | `PublishPostTool`（`BlogPostVO` 的**唯一**跨域读者） |
+
+这是 §3quaterdecies.14 写下的待办，也是本文的**第二个"建新模块"的刀**（上一个是 §3terdecies）。
+做完之后 `agent → blogagent` 从 4/2 降到 **2/0**（只剩 `ImageGenerationTool`），
+而**没在待办里写出来的** `agent → publishing` **整条边消失**。
+
+### 3quinquiesdecies.2 侦察：一个目标域、三条出边，只有两条值得这一刀做
+
+`blogagent` 是 `agent` 最大的出边目标，而且它有**三个**跨域消费方：
+
+| 消费方 | 原来依赖 | 性质 |
+|---|---|---|
+| `BlogGenerationTool` | `blogagent.application.BlogAgentService`、`blogagent.api.BlogAgentTaskCreateRequest`、`blogagent.api.BlogAgentTaskVO`、`blogagent.domain.BlogAgentTask` | 工具类，走服务 |
+| `PublishPostTool` | `blogagent.application.BlogAgentService`、`publishing.api.BlogPostVO` | 工具类，走服务 |
+| `ImageGenerationTool` | `blogagent.infrastructure.BlogAgentImageClient`、`BlogAgentProperties` | **形状不同**：一个具体客户端 + 一个 `@ConfigurationProperties` |
+
+前两个是"薄壳 + 换算"的熟悉形状，第三个不是。`ImageGenerationTool` 被**刻意留下**
+（§3quinquiesdecies.9），所以这一刀只做前两个。
+
+> 判据仍然是"这个消费方要的**端口形状**和我已经会做的那个是不是同一个"，
+> **不是**"它是不是 import 了目标域"。同一个域的三个消费方可以形状完全不同。
+
+### 3quinquiesdecies.3 ⚠️ 参数顺序归一：端口统一 `(userId, taskId)`
+
+提供方这四个方法的声明顺序是**反的**：
+
+```java
+public BlogPostVO publish(Long taskId, Long userId)
+public BlogPostVO findPublishedPost(Long taskId, Long userId)
+public BlogAgentTaskVO runStream(Long taskId, Long userId, ...)
+public BlogAgentTask findReadyTaskByClientRequestId(Long userId, String clientRequestId)  // 这个是对的
+```
+
+端口统一成 `(userId, ...)`，理由三条：
+
+1. 前四个契约（`EmailReminderPort`、`ContentPlanPort`、`RecitationMaterialPort`、
+   `RecitationQuizPort`）全都是 userId 在首位 —— 归一才有一致的消费方心智。
+2. 消费方的心智模型是"我（userId）对某个资源（taskId）做事"。
+3. 第三条最要命：**既有的"首参必须是调用方 id"守卫只断言"第一个参数的类型是 `Long`"，
+   而 `publish(Long taskId, Long userId)` 同样满足它。**
+
+### 3quinquiesdecies.4 ⚠️ "守卫只朝一个方向看"的第三次实例
+
+这一刀之前的每一份端口测试里都有一条守卫，名字叫
+`everyMethodTakesTheCallerIdExplicitlyAsItsFirstParameter`，
+而它的**实现**只断言 `getParameters()[0].getType() == Long.class`。
+
+**名字声称的是强性质（"是调用方 id"），判据断言的是弱化后的性质（"是 Long"）。**
+所以如果这里照抄提供方的顺序，守卫会**绿着**放过一个它自己名字所禁止的形状。
+
+> 这是"判据只朝一个方向看"的**第三次**实例。前两次：
+> ①`SHARED_KERNEL` 里的 `util` 是死条目（门禁只查"每个包都有条目"，不查"每个条目都有包"）；
+> ②`deployment-unit-coupling` 判据 2 的根取了 `WAVE2_UNITS[0]`，而它恰好是已脱离分量的
+> `dinqor-agent` ⇒ `joined` 恒为空 ⇒ 判据再也不会红（§3undecies.7）。
+>
+> 三次的共同点：**判据断言的是一个弱化后的性质（"是 Long" / "有包" / "有成员"），
+> 而名字声称的是强性质（"是调用方 id" / "有反向条目" / "会变红"）。**
+
+⚠️ 这一条的**发现方式**值得记：它不是注入验证发现的，而是**写端口签名时顺手想到**的
+（"如果我照抄提供方顺序，守卫会怎样？"）。注入验证只能证明"已写的判据会红"，
+证明不了"判据的强度够不够" —— 后者要靠**反着用一次**：把判据拿去断言一个它本该拒绝的形状。
+
+### 3quinquiesdecies.5 于是守卫改钉**参数名**
+
+`javac` 在本项目开了 `-parameters`，参数名会进 class 文件。已实测：
+
+```bash
+javap -v -p contracts/recitation-api/target/classes/com/xander/lab/recitation/spi/RecitationMaterialPort.class \
+  | grep MethodParameters
+```
+
+⇒ `MethodParameters` 属性在。所以新契约的测试不再只断言类型，而是断言**参数名**：
+
+```java
+assertThat(method.getParameters()[0].getName()).isEqualTo("userId");
+assertThat(method.getParameters()[1].getName()).isEqualTo("taskId");
+```
+
+这条判据是**强**的：`publish(Long taskId, Long userId)` 会让它红，而类型断言不会。
+失败信息本身就说明了问题：
+
+```text
+BlogAgentPort.publish 的第一个参数叫 ownerId，不叫 userId。只断言"类型是 Long"是不够的：
+publish(Long taskId, Long userId) 同样满足那个断言。
+```
+
+> ⚠️ 代价：这条守卫依赖 `-parameters`。如果哪天有人把它从编译配置里删掉，
+> `MethodParameters` 消失，`getParameters()[0].getName()` 退化成 `arg0` ⇒ 守卫**变红**
+> （而不是静默放过）。这是一个**会自己喊出来的**依赖，可以接受。
+
+### 3quinquiesdecies.6 收窄：4 个分量与 5 个分量
+
+| 契约类型 | 域侧来源 | 分量 | 说明 |
+|---|---|---|---|
+| `BlogAgentTaskDraft` | `blogagent.api.BlogAgentTaskCreateRequest` | 2 | 去掉 `@NotBlank` / `@Size`（`jakarta.validation` 也是框架，ADR-1） |
+| `BlogAgentTaskView` | `blogagent.domain.BlogAgentTask` | **4** | 域实体 25 个字段且带 `@TableName` ⇒ 按 ADR-2 不许跨边界 |
+| `BlogAgentPostView` | `publishing.api.BlogPostVO` | **5** | 17 个字段；两个消费方读的就是这 5 个 |
+
+`BlogAgentTaskView` 只带 `id` / `title` / `summary` / `publishedPostId`：`BlogGenerationTool`
+的 `outcome()` 读的正是这四个。⚠️ `publishedPostId` 是**装箱的 `Long`**，因为工具用
+`== null ? -1 : value` 区分"没发布过"与"发布了"（"没传 ≠ 传了空"，§3duodecies.7）。
+
+`BlogAgentPostView` 的 `status` 是**装箱的 `Integer`**：域侧 `BlogPostVO.status` 可以为 `null`，
+而调用方的判据是 `status == null || status != 1`。换成 `int` 会把"没传"变成"传了 0"。
+
+⚠️ `BlogAgentPostView` 与 `content.api.ContentPost` **形状相同但不能合并**：契约不许依赖契约
+（只允许 JDK + 本包，§2.7 / §4.6），而且一个是 blogagent 的能力面、一个是内容域的文章模型，
+让其中一个替另一个发言就是把两个域的词汇表绑在一起。归一放在 `PublishPostTool` 内部
+（一个 5 行的私有 `LocalPost` record）。
+
+### 3quinquiesdecies.7 顺手收益：`agent → publishing` 整条边消失
+
+`PublishPostTool` 是 `publishing.api.BlogPostVO` 的**唯一跨域读者**。它改走 `BlogAgentPostView`
+之后，`agent → publishing`（0 impl / 1 api）整条边从清单里消失。
+
+> 这是"**端口只收调用方真正用到的字段**"的直接后果：
+> 不为了"统一返回类型"把整个 VO 搬上端口，那条边就不会存在。
+> 反过来说，**端口收宽一点点的代价可能是一整条边**。
+
+⚠️ 与 §3quaterdecies.14 的预测对照：那一节猜"`PublishPostTool` 一个文件同时贡献
+`agent → blogagent` 与 `agent → integration` ⇒ 做它可能顺带清掉第三条边"。
+**猜错了。** `agent → integration` 那 2 条还在（`PublishPostTool` 仍 import 集成域），
+真正消失的是**没被猜到的** `agent → publishing`。
+
+> 教训：**"一个文件贡献多条边"的预测，不要猜是哪一条。**
+> 先 `grep` 出那个文件到底 import 了谁，再判断哪条边会被动到 ——
+> 否则会把"收益存在"和"收益是哪一条"混为一谈。
+
+### 3quinquiesdecies.8 实测收益（重新生成基线后）
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 36 | **34** |
+| `implementation_edges` | 16 | **16**（不变） |
+| `cross_deployment_unit_statements` | 19 | **17** |
+| `cross_deployment_unit_edges` | 9 | **9**（不变） |
+| `api_statements` | 12 | **9** |
+| `api_edges` | 8 | **6** |
+
+`agent → blogagent` **4 impl / 2 api → 2 impl / 0 api**；`agent → publishing`（0 / 1）**整条边消失**。
+
+⚠️ **两条边数指标一个都没动。** 原因不同：
+`agent → blogagent` 因为 `ImageGenerationTool` 还在，边还在；
+`agent → publishing` 消失了，但它是 **api-only 边**（0 impl），不进 impl 边计数。
+
+> **"边数不变"不等于"什么都没发生"** —— 这与 §3quaterdecies 那次
+> "api 与 impl 降幅 1 比 2"是同一类现象：**四个指标要一起看，任何一个单独看都会误判。**
+> 一个只看 `implementation_edges` 的人会认为这一刀白干了。
+
+`api_statements` 12 → 9（−3）：三个工具原本 import 的 3 个 `blogagent.api.*` 类型
+（`BlogAgentTaskCreateRequest` / `BlogAgentTaskVO`）与 `publishing.api.BlogPostVO` 全换成
+`blogagent.spi.*`，而**契约包在 `SHARED_KERNEL` 里不计任何指标**（§6）。
+
+### 3quinquiesdecies.9 刻意没做的事
+
+- **`ImageGenerationTool`（图片生成）**。它走 `blogagent.infrastructure`，形状与前面所有端口都不同：
+  是一个具体客户端 + 一个 `@ConfigurationProperties`，而且它自带两个决定：生成的图片以
+  `byte[]` 过界；用量要以三 long 的记录过界，而 `ModelUsage` 住在 `libs/xander-model`（带 Jackson）
+  ⇒ 按 ADR-1 契约不能依赖它，需要契约自带等价 DTO（同 `payment.api.TokenUsage` 的先例）。
+  **两个决定都不是搬家决定**，所以单独一刀。
+- **`generateTopicSeries`**：唯一调用方是 `automation.BlogContentPlanService`，与 blogagent
+  **同属 `dinqor-content-automation`** ⇒ 改它不动任何跨单元指标。
+- **`listSessions` / `reviseStream` / `reviewCompliance`**：调用方都是 `BlogAgentController`
+  （同域前端 HTTP 层，§2.7 那条线）。
+- **`BlogAgentService` 的 14 个构造依赖**没有动。端口实现是"薄壳 + 换算"，服务内部结构不变。
+
+### 3quinquiesdecies.10 ⚠️ `runStream` 的静默换位：三参重载必须点名 `ForView`
+
+`runStream` 现在有三个重载：
+
+```java
+runStream(Long taskId, Long userId, Consumer<String> onDelta)                        // 前端 SSE 用
+runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent)              // 同域
+runStream(Long userId, Long taskId, BiConsumer<String, String> onEvent, BooleanSupplier)  // 端口
+```
+
+第三个与第二个**参数表逐字相同**（`Long, Long, BiConsumer, BooleanSupplier`），只是含义与返回值
+不同 —— 所以两者不能同名，端口拿规范名，同域那个加 `ForView` 后缀（§3duodecies 的同名规则）。
+
+**危险在于三参重载的转发**：它原来写的是 `runStream(taskId, userId, onEvent, () -> false)`。
+如果保留这行，它会**静默解析到端口方法**（四参、同样的类型），两个 `Long` 直接换位 ——
+而编译器不会说一个字。所以它必须显式写成 `runStreamForView(taskId, userId, ...)`，
+并且这一点由 `BlogAgentPortMappingTest.theThreeArgumentOverloadForwardsToTheForViewMethodNotThePortMethod`
+钉住（用 `verify(service, never()).runStream(any(), any(), any(), any())` 反向断言）。
+
+> 一般化的教训：**当"归一参数顺序"产生了一个与旧方法参数表逐字相同的新重载时，
+> 所有原来转发到旧方法的调用点都变成了静默换位点。**
+> 数量不多（这里 1 处），但每一处都要显式点名新名字，且每一处都要有测试。
+> 这与 §4.6 的 `TokenUsage` 换位、§5.6 的"相邻同类型参数"是同一个家族：
+> **两个同类型参数挨在一起时，编译器永远帮不上忙。**
+
+### 3quinquiesdecies.11 两个富方法改名 + 一个"直接就是实现"
+
+| 方法 | 处理 | 同域调用方 |
+|---|---|---|
+| `runStream(taskId, userId, BiConsumer, BooleanSupplier)` | 改名 `runStreamForView` | 三参重载 + `BlogAgentController` 的 SSE |
+| `publish(taskId, userId)` | 改名 `publishForView` | `BlogAgentController#publish`（响应体就是 `BlogPostVO`） |
+| `findReadyTaskByClientRequestId(userId, clientRequestId)` | 改名 `findReadyTaskByClientRequestIdForView` | `BlogAgentServiceIdempotencyTest` |
+| `findPublishedPost(taskId, userId)` | **直接就是端口实现**，换签名换返回类型 | **无**（唯一调用方是跨域的 `PublishPostTool`） |
+
+⚠️ 最后一行按 ADR §7.5 判据：**同域生产消费方为零 ⇒ 不保留富方法**，直接改。
+给一个没有调用方的富方法留后缀是死代码。"删掉它不会有别的症状"由全量测试守着
+（`BlogAgentController` 从不调用它）。
+
+⚠️ `create` 那一侧**不用改名**：端口方法收 `BlogAgentTaskDraft`，与域侧
+`BlogAgentTaskCreateRequest` **参数类型不同**，不构成"同名同参"，两个重载可以共存。
+
+> **"冲突"不等于"同名"。** 只有"同名**且**同参数表"才冲突。
+> 不要为了对称去改那些本来就不冲突的方法。
+
+### 3quinquiesdecies.12 为什么没有加 `contract-changes.yaml` 条目
+
+三个契约类型都是**新缝**（不是替换某个前端可见类型），而且都**收窄**了。
+按 §2.5 的分支判断：镜像才可能"序列化逐字节不变 ⇒ 可证纯重构 ⇒ 不进登记表"，
+收窄是**新形状**，本应登记 —— 但它们**不是前端可见类型**：`BlogAgentTaskView` 与
+`BlogAgentPostView` 只出现在跨进程端口上，前端看不到；`BlogAgentTaskDraft` 同理。
+`contract-changes.yaml` 登记的是"前端可见契约的变化"，这三个不在其内。
+
+⚠️ 反过来说：`BlogAgentTaskView` / `BlogAgentPostView` **在 Wave 2 之后会变成线上格式**
+（跨进程调用）。届时它们的字段顺序就是线上格式，任何重排都要走 §11。
+这一条已记入 ADR §13 待办第 26 项。
+
+### 3quinquiesdecies.13 注入验证：五次注入，每次变红的都正好是预期的那些
+
+| # | 注入 | 期望 | 实测 |
+|---|---|---|---|
+| A | 端口加一个 `default` 方法 | 2 | **2**（`declaresNoDefaultMethods` + `hasExactlyTheseFiveMethods`） |
+| B | 端口方法首参改名（`userId` → `ownerId`） | 2 | **2**（两条参数名守卫） |
+| C | `publish` 里两个 `Long` 对调 | 1 | **1** |
+| D | `toTaskView` 里 `title` 与 `summary` 对调 | 3 | **3**（三个测试共用那个换算） |
+| E | `PortDelegationTransactionTest` 的守卫清单里删掉 `BlogAgentService` | 1 | **1**，消息点名缺哪个类 |
+
+⚠️ **注入 A / B / C / D 的期望值第一版写的是 3 / 1 / 2 / 1，全部与实测不符**，已按实测改。
+写文档时**不要沿用上一刀的数目** —— 每次的测试分布都不同（A 之所以是 2 而不是 3，
+是因为"没有 `default`"这条被两个测试分别断言；D 之所以是 3，是因为那个换算被三个测试共用）。
+
+**注入 B 是这一刀新建立的守卫，它的失败信息本身就是 §3quinquiesdecies.4 的证据**（见上）。
+**注入 C 逮到一处测试缺陷（已修）**：第一版把换位写成"用具体字面量打桩，写反了自然匹配不上"，
+结果症状是 `null` 一路传到断言里变成 **NPE** —— 报的信息指向"某处为 null"而不是"两个 Long 换位了"。
+改成 `thenAnswer` 里断言实收的两个值之后，失败信息是 `expected: 9L but was: 42L`。
+
+> **守卫的失败信息必须指向真正的原因。** 这条在本项目已踩过一次
+> （`getDeclaredMethods()[0]` 越界，见 ADR §8.11）。**第二次踩同一个坑，说明它值得进规范。**
+
+⚠️ 顺带确认一个**分工**：`everyPostComponentComesFromItsOwnSourceField` 用的是
+`any(), any()`，所以它**抓不到换位**；换位只由那条专门的测试抓。两个测试各有职责，缺一不可 ——
+**"有一个测试覆盖了这个方法"不等于"这个方法的所有性质都被覆盖了"。**
+
+### 3quinquiesdecies.14 测试
+
+`blogagent-api` **+15**（新模块）：`BlogAgentPortTest`(9) + `RecordShapeTest`(6)。
+`apps/core-host` 1168 → **1177**（+9）：`BlogAgentPortMappingTest`(7) 是新类 ——
+钉三个换算的逐字段落点、两处换位、以及"三参重载必须点名 `ForView`"；
+`BlogGenerationToolTest` 与 `PublishPostToolTest` 改 mock 端口后各净增（其中一个新增用例是
+`reconcileOnATaskIdReadsThePublishedPostWithUserIdFirst`，把 `findPublishedPost` 的换位
+与 `publish` 的换位分开覆盖）；`PortDelegationTransactionTest` 清单加一个类（数目不变）。
+全反应堆 1362 → **1386**（0 fail / 0 err）。
+26 门禁 → 24 pass / 0 fail / 2 skip；`contract-dependency-boundary` 报
+**8 个模块 / 54 个源文件，JDK-only**；`dockerfile-module-coverage` 报 12 个模块。
+
+### 3quinquiesdecies.15 下一刀
+
+剩余跨单元实现边（按语句数）：`automation → integration` 6、`agent → blogagent` 2、
+`agent → identity` 2、`agent → integration` 2、`admin → automation` 1、
+`identity → integration` 1、`integration → automation` 1、`integration → identity` 1、
+`studio → blogagent` 1。
+
+按"能不能一刀干净收掉"排序，候选：
+
+1. **`agent → blogagent` 剩下的 2 条（`ImageGenerationTool`）** —— 同一目标域的第三刀，
+   形状是新的（具体客户端 + `@ConfigurationProperties`），两个决定（`byte[]` 过界、
+   契约自带用量 DTO）。做完 `agent → blogagent` 归零。
+2. **`agent → identity`（2）** —— 在 `agent/api/` 下，是 WebSocket 握手鉴权，
+   形状与工具类**完全不同**，要单独判断（可能落进 `xander-auth-core` 而不是契约）。
+3. **`agent → integration`（2）** —— 与 `PublishPostTool` 同一文件，可与第 1 项合刀。
+4. **`automation → integration`（6）** —— 目前最大的跨单元边，但卡在 `MailService` 的
+   API 变更上（模板环，§3quater.5），不是纯粹的"抽端口"。
+
 ---
 
 ## 4. 必须留痕的判断
@@ -2084,7 +2381,7 @@ python scripts/migration/ci_gates.py
 ⚠️ **`mvn -o test` 的 "Results: Tests run: N" 是逐模块打印的。**
 类搬进 lib 之后，总数会拆成 `dinqorai-backend` + 各 lib + 各契约模块多处，
 只看最后那个 `Results:` 会以为"测试变少了"。
-**要核对的是各模块之和。**最新一轮（§3quaterdecies 之后，2026-09-17）：
+**要核对的是各模块之和。**最新一轮（§3quinquiesdecies 之后，2026-09-17）：
 
 | 模块 | Tests run |
 |---|---|
@@ -2096,8 +2393,18 @@ python scripts/migration/ci_gates.py
 | `contracts/agent-api` | 21 |
 | `contracts/automation-api` | 31 |
 | `contracts/recitation-api` | 35 |
-| `apps/core-host` | 1168 |
-| **合计** | **1362**（0 failures / 0 errors） |
+| `contracts/blogagent-api` | 15 |
+| `apps/core-host` | 1177 |
+| **合计** | **1386**（0 failures / 0 errors） |
+
+第十二刀的增量（1362 → 1386）：
+
+* `contracts/blogagent-api` **+15**（新模块）：`BlogAgentPortTest`(9) + `RecordShapeTest`(6)。
+  其中 `BlogAgentPortTest` 里有**两条**断言参数名的守卫（§3quinquiesdecies.5）。
+* `apps/core-host` 1168 → **1177**（+9）：`BlogAgentPortMappingTest`(7) 是新类 ——
+  钉三个换算的逐字段落点、**两处换位**（`publish` 与 `findPublishedPost` 各一条）、
+  以及"三参重载必须点名 `ForView`"；`BlogGenerationToolTest` 与 `PublishPostToolTest`
+  改 mock 端口后各净增；`PortDelegationTransactionTest` 清单加一个类（数目不变）。
 
 第十一刀的增量（1336 → 1362）：
 
@@ -2187,7 +2494,7 @@ python scripts/migration/ci_gates.py
 |---|---|---|
 | 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
-| 4 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **38** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → **38**）。按被依赖目标排序（总数 / 跨单元）：`automation` 10/10、`integration` 9/9、`recitation` 6/6、`agent` 5/5、`blogagent` 9/5、`identity` 11/3、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies），**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）。当前最大的跨单元边是 `agent -> automation` 与 `automation -> integration`，各 6 条；`agent -> publishing` 已从 9 降到 3（§3septies.8）再到 **0**（§3nonies） | Wave 0B 剩余 |
+| 2 个 `*-api` 契约未建 | 剩余跨部署单元实现依赖 **17** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → **17**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` 9/9、`identity` 11/3、`blogagent` 7/3、`automation` 2/2、`publishing` 4/**0**、`virtualpay` 1/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）。当前最大的跨单元边是 `automation -> integration` 6 条（卡在 `MailService`，§3quater.5） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |

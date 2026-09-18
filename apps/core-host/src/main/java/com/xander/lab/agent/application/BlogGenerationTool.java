@@ -3,9 +3,9 @@ package com.xander.lab.agent.application;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
-import com.xander.lab.blogagent.api.BlogAgentTaskVO;
-import com.xander.lab.blogagent.application.BlogAgentService;
+import com.xander.lab.blogagent.spi.BlogAgentPort;
+import com.xander.lab.blogagent.spi.BlogAgentTaskDraft;
+import com.xander.lab.blogagent.spi.BlogAgentTaskView;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -15,14 +15,18 @@ import java.util.Optional;
  * Exposes the full blog generation pipeline (analyze → research → write →
  * illustrate → review) as one agent tool. Progress stages are forwarded to
  * the conversation so the user can follow the long-running pipeline.
+ *
+ * <p>依赖 {@link BlogAgentPort} 而不是 {@code blogagent.application.BlogAgentService}
+ * （跨部署单元：agent 在 {@code dinqor-agent}、blogagent 在 {@code dinqor-content-automation}）。
+ * 本工具只读任务的 4 个字段，所以端口收的是 {@code BlogAgentTaskView} 而不是 25 个字段的域实体。</p>
  */
 @Component
 public class BlogGenerationTool implements AgentTool {
 
-    private final BlogAgentService blogAgentService;
+    private final BlogAgentPort blogAgentPort;
 
-    public BlogGenerationTool(BlogAgentService blogAgentService) {
-        this.blogAgentService = blogAgentService;
+    public BlogGenerationTool(BlogAgentPort blogAgentPort) {
+        this.blogAgentPort = blogAgentPort;
     }
 
     @Override
@@ -63,12 +67,12 @@ public class BlogGenerationTool implements AgentTool {
         if (!StringUtils.hasText(input)) {
             throw new IllegalArgumentException("博客生成工具缺少参数 input");
         }
-        BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
-        request.setInput(input);
-        request.setClientRequestId(context.invocationId());
-        var task = blogAgentService.create(context.userId(), request);
+        // 幂等键取本轮调用的 invocationId：重放同一个工具调用时不会建出第二个任务。
+        BlogAgentTaskDraft draft = new BlogAgentTaskDraft(input, context.invocationId());
+        BlogAgentTaskView task = blogAgentPort.create(context.userId(), draft);
         onProgress.onProgress("收到，开始处理你的主题…");
-        BlogAgentTaskVO result = blogAgentService.runStream(task.getId(), context.userId(), (event, data) -> {
+        // ⚠️ 端口是 (userId, taskId)，域侧是 (taskId, userId) —— 这里显式换位。
+        BlogAgentTaskView result = blogAgentPort.runStream(context.userId(), task.id(), (event, data) -> {
                     if ("stage".equals(event)) {
                         onProgress.onProgress(prettyStage(String.valueOf(data)));
                     } else if ("delta".equals(event) && StringUtils.hasText(data)) {
@@ -77,25 +81,26 @@ public class BlogGenerationTool implements AgentTool {
                 }, onProgress::isCancellationRequested);
         onProgress.checkCancellation();
 
-        return outcome(result.getTask());
+        return outcome(result);
     }
 
     @Override
     public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
         if (!StringUtils.hasText(context.invocationId())) return Optional.empty();
-        var task = blogAgentService.findReadyTaskByClientRequestId(context.userId(), context.invocationId());
+        BlogAgentTaskView task =
+                blogAgentPort.findReadyTaskByClientRequestId(context.userId(), context.invocationId());
         return task == null ? Optional.empty() : Optional.of(outcome(task));
     }
 
-    private ObjectNode outcome(com.xander.lab.blogagent.domain.BlogAgentTask task) {
+    private ObjectNode outcome(BlogAgentTaskView task) {
         ObjectNode outcome = JsonNodeFactory.instance.objectNode();
         outcome.put("ok", true);
-        outcome.put("taskId", task.getId());
-        outcome.put("title", defaultText(task.getTitle(), ""));
-        outcome.put("summary", defaultText(task.getSummary(), ""));
-        outcome.put("publishedPostId", task.getPublishedPostId() == null
-                ? -1 : task.getPublishedPostId());
-        outcome.put("hint", "文章已生成。你可以继续让用户在会话中修改，或提示用户查看任务 " + task.getId() + " 进行发布。");
+        outcome.put("taskId", task.id());
+        outcome.put("title", defaultText(task.title(), ""));
+        outcome.put("summary", defaultText(task.summary(), ""));
+        outcome.put("publishedPostId", task.publishedPostId() == null
+                ? -1 : task.publishedPostId());
+        outcome.put("hint", "文章已生成。你可以继续让用户在会话中修改，或提示用户查看任务 " + task.id() + " 进行发布。");
         return outcome;
     }
 

@@ -80,17 +80,17 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 Counted from `import com.xander.lab.<other domain>.<layer>...`. Only the
 implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 
-- implementation statements: **36** across 16 edges
-- of which cross a deployment unit (the real backlog): **19** across 9 edges
-- api-layer statements (contract surface): **12**
+- implementation statements: **34** across 16 edges
+- of which cross a deployment unit (the real backlog): **17** across 9 edges
+- api-layer statements (contract surface): **9**
 
 | from | to | impl | api | crosses unit | from unit -> to unit |
 |---|---|---|---|---|---|
 | automation | integration | 6 | 0 | yes | dinqor-content-automation -> dinqor-platform-integration |
 | virtualpay | identity | 5 | 0 | no | dinqor-core-host -> dinqor-core-host |
-| agent | blogagent | 4 | 2 | yes | dinqor-agent -> dinqor-content-automation |
 | automation | blogagent | 4 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
 | admin | identity | 2 | 2 | no | dinqor-core-host -> dinqor-core-host |
+| agent | blogagent | 2 | 0 | yes | dinqor-agent -> dinqor-content-automation |
 | agent | identity | 2 | 0 | yes | dinqor-agent -> dinqor-core-host |
 | agent | integration | 2 | 0 | yes | dinqor-agent -> dinqor-platform-integration |
 | automation | publishing | 2 | 0 | no | dinqor-content-automation -> dinqor-content-automation |
@@ -102,7 +102,6 @@ implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 | integration | identity | 1 | 0 | yes | dinqor-platform-integration -> dinqor-core-host |
 | profile | identity | 1 | 1 | no | dinqor-core-host -> dinqor-core-host |
 | studio | blogagent | 1 | 0 | yes | dinqor-core-host -> dinqor-content-automation |
-| agent | publishing | 0 | 1 | yes | dinqor-agent -> dinqor-content-automation |
 | virtualpay | admin | 0 | 1 | no | dinqor-core-host -> dinqor-core-host |
 
 ## Shared kernel reverse dependencies (V9 section 21 gate)

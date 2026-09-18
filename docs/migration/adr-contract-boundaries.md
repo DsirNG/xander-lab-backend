@@ -86,9 +86,10 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
 
 ### 1.5 当前状态
 
-- `contracts/` 下 7 个模块（`core-api` / `content-api` / `integration-api` /
-  `payment-api` / `agent-api` / `automation-api` / `recitation-api`）目前**零 Jackson 依赖**，
-  由门禁 `contract-dependency-boundary` 守着（JDK-only import + 无 compile/runtime 依赖）。
+- `contracts/` 下 8 个模块（`core-api` / `content-api` / `integration-api` /
+  `payment-api` / `agent-api` / `automation-api` / `recitation-api` / `blogagent-api`）
+  目前**零 Jackson 依赖**，由门禁 `contract-dependency-boundary` 守着
+  （8 个模块 / 54 个源文件，JDK-only import + 无 compile/runtime 依赖）。
 - `agent-api` 是这条 ADR 最难的一次应用：要抽的端口属于 agent 的工具体系，而
   `AgentTool.parametersSchema()` 返回 `JsonNode`。**没有**放宽门禁，也没有搬 `AgentTool`，
   而是让 JSON 以文本出入端口（见 §6）。
@@ -104,6 +105,11 @@ private JsonNode metadata;   // 一个任意形状的 JSON 袋
   （`QuizAttemptView.itemsJson`），解析上移到工具里。
   **这一次 ADR-1 不是代价，而是直接给出了正确答案**：一个"什么都不知道"的契约
   恰好是唯一不会对历史行撒谎的契约（见 §10.3）。
+- `blogagent-api` 是第五次，也是**第一次撞上"参数顺序"这个问题**：提供方三个方法的声明顺序
+  是 `(taskId, userId)`，端口统一成 `(userId, taskId)`，提供方适配器显式换位。
+  ⚠️ 关键是**旧守卫对这个形状是绿的** —— 它只断言"第一个参数的类型是 `Long`"，
+  而 `publish(Long taskId, Long userId)` 同样满足。于是守卫改钉**参数名**
+  （`javac -parameters` 会把参数名写进 class 文件）。见 §11.2。
 
 ---
 
@@ -194,7 +200,7 @@ blogagent ───→ content-api ←─── agent
 **所以它不构成一次 §11 契约变更，不该进登记表。** 这一点写在这里，
 是为了让后来的人知道"没登记"是判断，不是漏掉。
 
-> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§12 待办第 3 项），
+> 反过来说：如果哪天真的把 `MediaAssetRef` 收窄到 3 个字段（§13 待办第 3 项），
 > 那**必须**进 `contract-changes.yaml` 并走 §11 流程 —— 因为它会真的删掉
 > 前端能看到 10 个字段。
 
@@ -310,7 +316,7 @@ MediaAssetRef findReusableGenerated(Long userId, String title);
 
 > **这暴露了一个仍未拍板的问题**：契约能不能依赖契约？今天答案是**不能**
 > （Maven 无法编排 test-only 的跨契约依赖，所以门禁干脆全禁）。
-> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §12 待办。
+> 代价就是像 `StoredImage` 这样的重复类型。这个问题见 §13 待办。
 
 ### 3.5 `byte[]` 而不是 `MultipartFile`，以及 `MAX_IMAGE_BYTES`
 
@@ -547,7 +553,7 @@ api_statements / api_edges         38 / 11 (不变)
 
 **但这笔账要在拆分后重新算**：一旦 `payment-api` 作为独立版本化的 jar 发布，
 `TokenUsage` 的分量顺序就变成了跨进程的线上格式，届时任何重排都必须走 §11
-（见 §11 第 7 项）。
+（见 §13 第 7 项）。
 
 ---
 
@@ -747,7 +753,7 @@ api_edges                          11 -> 10   (-1)
 也确认（28 个能力 0 增 0 退；14 条变更全部可解析）。
 
 **⚠️ 但这笔账要在拆分后重新算**：`ContentPost` 的 17 个分量顺序与 `ContentPostPage` 的 6 个分量顺序，
-与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §11 第 7 项）。
+与 `TokenUsage` 一样是"拆分后才会变成线上格式"的东西（见 §13 第 7 项）。
 今天不登记，契约 jar 独立版本化时必须补。
 
 ---
@@ -777,7 +783,7 @@ SPI，所以看起来理所当然。问题在方向：`AgentTool` / `AgentDynami
 
 1. **`parametersSchema()` 返回 `com.fasterxml.jackson.databind.JsonNode`。** ADR-1 说契约
    必须与序列化框架无关，`CONTRACT_ALLOWED_IMPORT_PREFIXES` 只有 `java.`。搬它就必须放宽
-   门禁——而 §12.1 明写"不许为了过门禁而放宽"。
+   门禁——而 §13.1 明写"不许为了过门禁而放宽"。
 2. **它有 6 个 `default` 成员**（`promptSection` / `execute(AgentToolContext,…)` /
    `reconcile` / `approvalReason` / `readOnly`），外加嵌套的 `ProgressListener` 又有 5 个。
    搬过去等于把 agent 的整套工具词汇表塞进每个依赖方。
@@ -1255,7 +1261,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
   不跨域，不上端口。
 - **`RESOURCE_KNOWLEDGE_FILE` 的归属**：它语义上更像"knowledgebase 的资源类型"而不是
   "通知表的词表"。这次按"跟着端口搬"处理（纯搬家，可证）；真要改归属是**另一个决定**，
-  记在 §12 待办里。
+  记在 §13 待办里。
 
 ### 8.11 注入验证：四次注入，逮到三个缺陷（其中两个在测试里）
 
@@ -1292,7 +1298,7 @@ assertEquals("KNOWLEDGE_FILE", NotificationPort.RESOURCE_KNOWLEDGE_FILE, ...);
 **没修但必须记下来的一处**：第 5 次注入（把常量放回实体、让 `knowledgebase` 重新 import）
 **没有让 `cross-domain-import-baseline` 变红** —— 扫描器如实报了 42 → 43 条语句、边 18 → 19，
 门禁却报 PASS。原因是该门禁拿 `scan.py` 的产物当自己的基线，在"先 scan 后 gates"的既定流程下
-基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §12 待办第 16 项；
+基线恒等于实时值。这是**本刀之外**的既有缺陷（修法要动 CI 设计），记在 §13 待办第 16 项；
 本刀只先把门禁 docstring 里那句"任何边增长就 FAIL"的失实保证改成实情。
 
 > 教训与 §7.10、`util` 死条目同源：**一个判据的"基线"必须来自判据之外。**
@@ -1733,7 +1739,193 @@ public QuizSessionView openQuiz(Long userId, Long materialId, Long conversationI
 
 ---
 
-## 11. 这两条 ADR 与既有规则的交叉
+## 11. 落地记录（九）：`blogagent-api` —— 参数顺序归一，以及"守卫只朝一个方向看"的第三次实例
+
+### 11.1 侦察：一个目标域、三条出边，但只有两条值得这一刀做
+
+`blogagent` 是 `agent` 最大的出边目标，而且它有**三个**跨域消费方：
+
+| 消费方 | 原来依赖 | 性质 |
+|---|---|---|
+| `BlogGenerationTool` | `blogagent.application.BlogAgentService`、`blogagent.api.BlogAgentTaskCreateRequest`、`blogagent.api.BlogAgentTaskVO`、`blogagent.domain.BlogAgentTask` | 工具类，走服务 |
+| `PublishPostTool` | `blogagent.application.BlogAgentService`、`publishing.api.BlogPostVO` | 工具类，走服务 |
+| `ImageGenerationTool` | `blogagent.infrastructure.BlogAgentImageClient`、`BlogAgentProperties` | **形状不同**：一个具体客户端 + 一个 `@ConfigurationProperties` |
+
+`ImageGenerationTool` 被**刻意留下**（见 §11.11）。所以这一刀的目标是前两个，而它们各自还牵出一条别的边：
+`PublishPostTool` 同时是 `BlogPostVO` 的**唯一跨域读者**，所以这一刀顺手让 `agent → publishing` 整条消失。
+
+### 11.2 ⚠️ 参数顺序：端口统一 `(userId, taskId)`，而旧守卫对这个形状**是绿的**
+
+提供方这四个方法的声明顺序是**反的**：
+
+```java
+public BlogPostVO publish(Long taskId, Long userId)
+public BlogPostVO findPublishedPost(Long taskId, Long userId)
+public BlogAgentTaskVO runStream(Long taskId, Long userId, ...)
+public BlogAgentTask findReadyTaskByClientRequestId(Long userId, String clientRequestId)  // 这个是对的
+```
+
+端口统一成 `(userId, ...)`，理由三条：前四个契约（`EmailReminderPort`、`ContentPlanPort`、
+`RecitationMaterialPort`、`RecitationQuizPort`）全都是 userId 在首位；消费方的心智模型是
+"我（userId）对某个资源（taskId）做事"；以及第三条最要命 ——
+
+**前面每一刀的端口测试里都有一条"每个方法第一个参数必须是调用方 id"的守卫，
+而那条守卫只断言"第一个参数的类型是 `Long`"。这个断言对 `publish(Long taskId, Long userId)`
+同样成立。** 也就是说，如果这里照抄提供方的顺序，守卫会**绿着**放过一个它自己名字所禁止的形状。
+
+> 这是"判据只朝一个方向看"的**第三次**实例（前两次：`util` 死条目、`deployment-unit-coupling`
+> 判据 2 的根成了单元素集合）。三次的共同点：**判据断言的是一个弱化后的性质
+> （"是 Long" / "有包" / "有成员"），而名字声称的是强性质（"是调用方 id" / "有反向条目" / "会变红"）。**
+
+### 11.3 于是守卫改钉**参数名**
+
+`javac` 在本项目开了 `-parameters`，参数名会进 class 文件。已实测：
+
+```
+$ javap -v -p contracts/recitation-api/target/classes/.../RecitationMaterialPort.class | grep MethodParameters
+```
+
+⇒ `MethodParameters` 属性在。所以 `BlogAgentPortTest` 不再只断言类型，而是断言**参数名**
+（`userId` 必须是第一个参数的名字）。这条判据是**强**的：`publish(Long taskId, Long userId)`
+会让它红，而类型断言不会。
+
+> ⚠️ 代价：这条守卫依赖 `-parameters`。如果哪天有人把它从编译配置里删掉，
+> `MethodParameters` 消失，`getParameters()[0].getName()` 会退化成 `arg0` ⇒ 守卫**变红**
+> （而不是静默放过），所以这是一个**会自己喊出来的**依赖，可以接受。
+
+### 11.4 收窄：4 个分量与 5 个分量
+
+| 契约类型 | 域侧来源 | 分量 | 说明 |
+|---|---|---|---|
+| `BlogAgentTaskDraft` | `blogagent.api.BlogAgentTaskCreateRequest` | 2 | 去掉 `@NotBlank` / `@Size`（`jakarta.validation` 也是框架，ADR-1） |
+| `BlogAgentTaskView` | `blogagent.domain.BlogAgentTask` | **4** | 域实体 25 个字段且带 `@TableName` ⇒ 按 ADR-2 不许跨边界 |
+| `BlogAgentPostView` | `publishing.api.BlogPostVO` | **5** | 17 个字段；两个消费方读的就是这 5 个 |
+
+`BlogAgentTaskView` 只带 `id` / `title` / `summary` / `publishedPostId`：`BlogGenerationTool`
+的 `outcome()` 读的正是这四个。⚠️ `publishedPostId` 是**装箱的 `Long`**，因为工具用
+`== null ? -1 : value` 区分"没发布过"与"发布了"。
+
+`BlogAgentPostView` 的 `status` 是**装箱的 `Integer`**：域侧 `BlogPostVO.status` 可以为 `null`，
+而调用方的判据是 `status == null || status != 1`。换成 `int` 会把"没传"变成"传了 0" ——
+"没传 ≠ 传了空"那条规则的又一次应用（§8.5）。
+
+⚠️ `BlogAgentPostView` 与 `content.api.ContentPost` **形状相同但不能合并**：契约不许依赖契约
+（只允许 JDK + 本包），而且一个是 blogagent 的能力面、一个是内容域的文章模型，让其中一个替
+另一个发言就是把两个域的词汇表绑在一起。归一放在 `PublishPostTool` 内部（一个 5 行的 `LocalPost`）。
+
+### 11.5 顺手收益：`agent → publishing` 整条边消失
+
+`PublishPostTool` 是 `publishing.api.BlogPostVO` 的**唯一跨域读者**。它改走 `BlogAgentPostView`
+之后，`agent → publishing`（0 impl / 1 api）整条边从清单里消失 —— 这是"端口只收调用方真正
+用到的字段"的直接后果：**不为了统一返回类型把整个 VO 搬上端口，那条边就不会存在。**
+
+### 11.6 两个富方法改名 + 一个"直接就是实现"
+
+| 方法 | 处理 | 同域调用方 |
+|---|---|---|
+| `runStream(taskId, userId, BiConsumer, BooleanSupplier)` | 改名 `runStreamForView` | 三参重载 + `BlogAgentController` 的 SSE |
+| `publish(taskId, userId)` | 改名 `publishForView` | `BlogAgentController#publish`（响应体就是 `BlogPostVO`） |
+| `findReadyTaskByClientRequestId(userId, clientRequestId)` | 改名 `findReadyTaskByClientRequestIdForView` | `BlogAgentServiceIdempotencyTest` |
+| `findPublishedPost(taskId, userId)` | **直接就是端口实现**，换签名换返回类型 | **无**（唯一调用方是跨域的 `PublishPostTool`） |
+
+⚠️ 最后一行按 ADR §7.5 判据：**同域生产消费方为零 ⇒ 不保留富方法**，直接改。给一个没有调用方的
+富方法留后缀是死代码。"删掉它不会有别的症状"由全量测试守着（`BlogAgentController` 从不调用它）。
+
+⚠️ `create` 那一侧不用改名：端口方法收 `BlogAgentTaskDraft`，与域侧 `BlogAgentTaskCreateRequest`
+**参数类型不同**，不构成"同名同参"，两个重载可以共存。
+
+### 11.7 ⚠️ `runStream` 的静默换位：三参重载必须点名 `ForView`
+
+`runStream` 现在有三个重载：
+
+```java
+runStream(Long taskId, Long userId, Consumer<String> onDelta)                        // 前端 SSE 用
+runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent)              // 同域
+runStream(Long userId, Long taskId, BiConsumer<String, String> onEvent, BooleanSupplier)  // 端口
+```
+
+第三个与第二个**参数表逐字相同**（`Long, Long, BiConsumer, BooleanSupplier`），只是含义与返回值
+不同 —— 所以两者不能同名，端口拿规范名，同域那个加 `ForView`。
+
+**危险在于三参重载的转发**：它原来写的是 `runStream(taskId, userId, onEvent, () -> false)`。
+如果保留这行，它会**静默解析到端口方法**（四参、同样的类型），两个 `Long` 直接换位 ——
+而编译器不会说一个字。所以它必须显式写成 `runStreamForView(taskId, userId, ...)`，
+并且这一点由 `BlogAgentPortMappingTest.theThreeArgumentOverloadForwardsToTheForViewMethodNotThePortMethod`
+钉住。
+
+> 一般化的教训：**当"归一参数顺序"产生了一个与旧方法参数表逐字相同的新重载时，
+> 所有原来转发到旧方法的调用点都变成了静默换位点。** 数量不多（这里 1 处），但每一处都要
+> 显式点名新名字，且每一处都要有测试。
+
+### 11.8 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 36 | **34** |
+| `implementation_edges` | 16 | **16**（不变） |
+| `cross_deployment_unit_statements` | 19 | **17** |
+| `cross_deployment_unit_edges` | 9 | **9**（不变） |
+| `api_statements` | 12 | **9** |
+| `api_edges` | 8 | **6** |
+
+`agent → blogagent` 从 **4 impl / 2 api** 降到 **2 impl / 0 api**（剩 `ImageGenerationTool`）；
+`agent → publishing`（0 / 1）**整条边消失**。
+
+⚠️ **两条边数指标一个都没动**：`agent → blogagent` 因为 `ImageGenerationTool` 还在所以边还在，
+`agent → publishing` 消失但它是 api-only 边、不进 impl 计数。**"边数不变"不等于"什么都没发生"** ——
+这和 §10 那次"api 与 impl 降幅 1 比 2"是同一类现象：**四个指标要一起看，任何一个单独看都会误判。**
+
+### 11.9 为什么没有加 `contract-changes.yaml` 条目
+
+三个契约类型都是**新缝**（不是替换某个前端可见类型），而且都**收窄**了。
+按 §2.5 的分支判断：镜像才可能"序列化逐字节不变 ⇒ 可证纯重构 ⇒ 不进登记表"，
+收窄是**新形状**，本应登记 —— 但它们**不是前端可见类型**：`BlogAgentTaskView` 与
+`BlogAgentPostView` 只出现在跨进程端口上，前端看不到；`BlogAgentTaskDraft` 同理。
+`contract-changes.yaml` 登记的是"前端可见契约的变化"，这三个不在其内。
+
+⚠️ 反过来说：`BlogAgentTaskView` / `BlogAgentPostView` **在 Wave 2 之后会变成线上格式**
+（跨进程调用）。届时它们的字段顺序就是线上格式，任何重排都要走 §11。这一条记在 §13 待办里。
+
+### 11.10 注入验证：五次注入，每次变红的都正好是预期的那些
+
+| # | 注入 | 期望 | 实测 |
+|---|---|---|---|
+| A | 端口加一个 `default` 方法 | 2 | **2**（`declaresNoDefaultMethods` + `hasExactlyTheseFiveMethods`） |
+| B | 端口方法首参改名（`userId` → `ownerId`） | 2 | **2**（两条参数名守卫） |
+| C | `publish` 里两个 `Long` 对调 | 1 | **1** |
+| D | `toTaskView` 里 `title` 与 `summary` 对调 | 3 | **3**（三个测试共用那个换算） |
+| E | 守卫清单里删掉 `BlogAgentService` | 1 | **1**，消息点名缺哪个类 |
+
+**注入 B 是这一刀新建立的守卫，它的失败信息本身就证明了 §11.2 的判断：**
+
+```
+BlogAgentPort.publish 的第一个参数叫 ownerId，不叫 userId。只断言"类型是 Long"是不够的：
+publish(Long taskId, Long userId) 同样满足那个断言。
+```
+
+**注入 C 逮到一处测试缺陷（已修）。** 第一版把换位写成"用具体字面量打桩，写反了自然匹配不上"，
+结果症状是 `null` 一路传到断言里变成 **NPE** —— 报的信息指向"某处为 null"而不是"两个 Long 换位了"。
+改成 `thenAnswer` 里断言实收的两个值之后，失败信息是 `expected: 9L but was: 42L`。
+**守卫的失败信息必须指向真正的原因**，这条在本项目已经踩过一次
+（`getDeclaredMethods()[0]` 越界，见 §8.11）。
+
+⚠️ 顺带确认一个**分工**：`everyPostComponentComesFromItsOwnSourceField` 用的是
+`any(), any()`，所以它**抓不到换位**；换位只由那条专门的测试抓。两个测试各有职责，缺一不可 ——
+"有一个测试覆盖了这个方法"不等于"这个方法的所有性质都被覆盖了"。
+
+### 11.11 刻意没做的事
+
+- **`ImageGenerationTool`（图片生成）**。它走 `blogagent.infrastructure`，形状与前面所有端口都不同：
+  是一个具体客户端 + 一个 `@ConfigurationProperties`，而且它自带两个决定：生成的图片以
+  `byte[]` 过界；用量要以三 long 的记录过界，而 `ModelUsage` 住在 `libs/xander-model`（带 Jackson）
+  ⇒ 按 ADR-1 契约不能依赖它，需要契约自带等价 DTO（同 `payment.api.TokenUsage` 的先例）。
+  **两个决定都不是搬家决定**，所以单独一刀。
+- **`generateTopicSeries`**：唯一调用方是 `automation.BlogContentPlanService`，与 blogagent
+  **同属 `dinqor-content-automation`** ⇒ 改它不动任何跨单元指标。
+- **`listSessions` / `reviseStream` / `reviewCompliance`**：调用方都是 `BlogAgentController`（同域前端 HTTP 层）。
+- **`BlogAgentService` 的 14 个构造依赖**没有动。端口实现是"薄壳 + 换算"，服务内部结构不变。
+
+## 12. 这两条 ADR 与既有规则的交叉
 
 | 既有规则 | 与 ADR 的关系 |
 |---|---|
@@ -1755,7 +1947,7 @@ public QuizSessionView openQuiz(Long userId, Long materialId, Long conversationI
 
 ---
 
-## 12. 待办
+## 13. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -1781,9 +1973,13 @@ public QuizSessionView openQuiz(Long userId, Long materialId, Long conversationI
 | 20 | `KnowledgeQuizAttemptView.items` 的类型是 `Object`（**无形状字段**） | **已定**（§10.3）：契约带**文本**（`QuizAttemptView.itemsJson`），解析上移到工具。三种做法里只有这一种不假装知道历史行的形状；而"契约没法解析"正是 ADR-1 的直接后果，这次 ADR-1 不是代价而是答案 |
 | 21 | `PortDelegationTransactionTest` 的端口实现清单靠人工维护 | **已知代价**，由 `theAuditedClassListIsComplete` 的类路径扫描**双向**兜住：漏加会直接变红（本刀实测，见 §9.9）。新增端口实现时把类加进 `PORT_IMPLEMENTATIONS` |
 | 22 | **⚠️ 一份实体被投影成两份类型时，两个投影必须被测试钉成一致** —— 两边各自的测试都不会红，只有一条跨投影的断言能抓到漂移 | **已建立**（§10.4）：`RecitationQuizPortMappingTest` 里那条"契约投影与前端投影在共享字段上相等"。注入 D 证明它有独立价值。**后续凡新增一份投影（`ContentPost` / `MediaAssetRef` 收窄时也会遇到）都要配一条同款断言** |
-| 23 | `agent` 的剩余出边：`blogagent` 4/2、`identity` 2/0、`integration` 2/0、`publishing` 0/1（api） | **未做**。**四条全部跨部署单元**（`agent` 在 `dinqor-agent`；`blogagent`/`publishing` 在 `dinqor-content-automation`，`identity` 在 `dinqor-core-host`，`integration` 在 `dinqor-platform-integration`）。要"出边归零"需 8 条 impl + 3 条 api，至少两刀。`agent → blogagent`（4 impl / 2 api，三个工具）最大，且它同时清掉 `agent → publishing` 那 1 条 api（`PublishPostTool` 一个文件同时贡献两条边）⇒ **建议下一刀做它**。⚠️ `agent → identity` 那 2 条在 `agent/api/` 下（WebSocket 握手鉴权），形状与工具类完全不同，要单独判断 |
+| 23 | `agent` 的剩余出边：`blogagent` 2/0、`identity` 2/0、`integration` 2/0 | **部分已做**（§11）。`agent → blogagent` 4/2 → **2/0**，`agent → publishing`（0/1）**整条消失**。剩 6 条 impl，**三条全部跨部署单元**（`agent` 在 `dinqor-agent`；`blogagent` 在 `dinqor-content-automation`，`identity` 在 `dinqor-core-host`，`integration` 在 `dinqor-platform-integration`）。`agent → blogagent` 剩下的 2 条是 `ImageGenerationTool`（见第 27 项）。⚠️ `agent → identity` 那 2 条在 `agent/api/` 下（WebSocket 握手鉴权），形状与工具类完全不同，要单独判断 |
+| 24 | **⚠️ 端口守卫只断言"第一个参数的类型是 `Long`"** —— 而 `publish(Long taskId, Long userId)` 同样满足它，于是守卫会**绿着**放过一个它名字所禁止的形状 | **已修**（§11.2/§11.3）：守卫改钉**参数名**（javac 开了 `-parameters`，`MethodParameters` 属性在 class 文件里，已用 `javap` 实测）。这是"判据只朝一个方向看"的**第三次**实例，前两次是 `util` 死条目与 `deployment-unit-coupling` 判据 2。⚠️ 代价：这条守卫依赖 `-parameters`；删掉它守卫会**变红**（退化成 `arg0`）而不是静默放过，可以接受 |
+| 25 | **⚠️ "归一参数顺序"会产生与旧方法参数表逐字相同的新重载** ⇒ 所有原来转发到旧方法的调用点都变成**静默换位点** | **已处理**（§11.7）：`runStream` 的三参重载必须显式点名 `runStreamForView`，由 `theThreeArgumentOverloadForwardsToTheForViewMethodNotThePortMethod` 用 `never()` + `thenAnswer` 双向钉住。**下次遇到"换参数顺序"时，先 grep 所有转发点** |
+| 26 | `BlogAgentTaskView` / `BlogAgentPostView` / `BlogAgentTaskDraft` 在 Wave 2 之后会变成**跨进程线上格式** | **未定**。今天不登记（它们不是前端可见类型，见 §11.9）；拆分后任何重排都要走 §11。与第 7 项同类 |
+| 27 | `blogagent` 的图片生成能力（`ImageGenerationTool` 走 `blogagent.infrastructure`） | **未做**。**形状是新的**：一个具体客户端 + 一个 `@ConfigurationProperties`，不是"薄壳 + 换算"。两个决定：①生成的图片以 `byte[]` 过界；②用量要以三 long 的记录过界，而 `ModelUsage` 住在 `libs/xander-model`（带 Jackson）⇒ 按 ADR-1 契约不能依赖它，需契约自带等价 DTO（同 `payment.api.TokenUsage`）。**两个决定都不是搬家决定**，单独一刀 |
 
-### 12.1 第 1 项的边界（明确不许顺手放宽）
+### 13.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -1794,7 +1990,7 @@ public QuizSessionView openQuiz(Long userId, Long materialId, Long conversationI
 
 ---
 
-## 13. 一句话记法
+## 14. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

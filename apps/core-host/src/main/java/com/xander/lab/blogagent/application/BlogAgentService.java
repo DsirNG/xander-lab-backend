@@ -8,6 +8,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentSessionVO;
+import com.xander.lab.blogagent.spi.BlogAgentPort;
+import com.xander.lab.blogagent.spi.BlogAgentPostView;
+import com.xander.lab.blogagent.spi.BlogAgentTaskDraft;
+import com.xander.lab.blogagent.spi.BlogAgentTaskView;
 import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.payment.api.TokenUsage;
@@ -54,7 +58,7 @@ import java.util.function.BiConsumer;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class BlogAgentService {
+public class BlogAgentService implements BlogAgentPort {
     private static final long MAX_LEASE_RENEW_INTERVAL_SECONDS = 60L;
 
     private final BlogAgentTaskMapper taskMapper;
@@ -107,13 +111,49 @@ public class BlogAgentService {
         return task;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>薄壳 + 换算：把契约草稿装回域请求体，转调上面那个方法。幂等、去重、首次消息落库全都在
+     * 那一份实现体里，只有一份 —— 复制一份到这里意味着以后改幂等规则要改两处，
+     * 而且不会有任何编译错误提醒。</p>
+     *
+     * <p>⚠️ <b>这个 {@code @Transactional} 不是多余的。</b>Spring 的事务是代理实现的，而同类自调用
+     * （{@code this.create(...)}）不走代理 —— 上面那个方法上的注解在这条路径上<b>不生效</b>。
+     * 上面那个方法体里是"先按幂等键查、再插入"，靠事务边界把它与并发请求串起来；
+     * 少了这一层，先查后插之间就会出现窗口，两个并发请求各建一个任务。
+     * 症状是"偶尔重复"，比崩溃难查。由 {@code PortDelegationTransactionTest} 守着。</p>
+     */
+    @Override
+    @Transactional
+    public BlogAgentTaskView create(Long userId, BlogAgentTaskDraft draft) {
+        return toTaskView(create(userId, toRequest(draft)));
+    }
+
     /** Returns a completed task proven to belong to a stable create-request key. */
     @Transactional(readOnly = true)
-    public BlogAgentTask findReadyTaskByClientRequestId(Long userId, String clientRequestId) {
+    public BlogAgentTask findReadyTaskByClientRequestIdForView(Long userId, String clientRequestId) {
         String normalized = normalizeClientRequestId(clientRequestId);
         if (userId == null || normalized == null) return null;
         BlogAgentTask task = findTaskByClientRequestId(userId, normalized);
         return task != null && "ready".equals(task.getStatus()) ? task : null;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>上面那个方法加了 {@code ForView} 后缀：它返回域实体 {@code BlogAgentTask}，而端口要返回
+     * {@link BlogAgentTaskView}。Java 不允许同名同参只差返回值，所以端口拿规范名、
+     * 同域富方法用后缀说明它的受众 —— 与 {@code EmailReminderService#updateStatusForView}、
+     * {@code RecitationService#getMaterialForView} 同一个先例。</p>
+     *
+     * <p>这里没有参数换位（两个方法都是 {@code (userId, clientRequestId)}），
+     * 但 {@code @Transactional(readOnly = true)} 仍要重写一遍 —— 自调用不走代理。</p>
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public BlogAgentTaskView findReadyTaskByClientRequestId(Long userId, String clientRequestId) {
+        return toTaskView(findReadyTaskByClientRequestIdForView(userId, clientRequestId));
     }
 
     /** Generates a deduplicated topic series for a scheduled plan's topic queue.
@@ -158,13 +198,42 @@ public class BlogAgentService {
     }
 
     public BlogAgentTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent) {
-        return runStream(taskId, userId, onEvent, () -> false);
+        // ⚠️ 必须点名 runStreamForView：四参的 runStream 现在是端口方法，参数是
+        // (userId, taskId)。写回 runStream(taskId, userId, ...) 会静默地把两个 Long 换位。
+        return runStreamForView(taskId, userId, onEvent, () -> false);
     }
 
-    /** Runs the pipeline with cooperative cancellation checks between remote stages and streamed deltas. */
-    public BlogAgentTaskVO runStream(Long taskId, Long userId, BiConsumer<String, String> onEvent,
-                                     BooleanSupplier cancellationRequested) {
+    /**
+     * Runs the pipeline with cooperative cancellation checks between remote stages and streamed deltas.
+     *
+     * <p>⚠️ {@code ForView} 后缀是必需的，不是风格问题：端口方法
+     * {@code runStream(Long userId, Long taskId, BiConsumer, BooleanSupplier)} 与它**参数表逐字相同**
+     * （都是 {@code (Long, Long, BiConsumer, BooleanSupplier)}），只有参数含义与返回值不同，
+     * 两者不能同名共存，而端口拿规范名。同域调用方（三参重载、前端 SSE）继续走这个方法，
+     * 拿完整的 {@code BlogAgentTaskVO}。</p>
+     */
+    public BlogAgentTaskVO runStreamForView(Long taskId, Long userId, BiConsumer<String, String> onEvent,
+                                            BooleanSupplier cancellationRequested) {
         return execute(taskId, userId, true, onEvent, cancellationRequested);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>⚠️ <b>参数是换位的</b>：端口收 {@code (userId, taskId)}，而上面那个方法收
+     * {@code (taskId, userId)}。这一行是这一刀最容易静默出错的地方 —— 写反了会把 userId 当 taskId
+     * 去查，落到"任务不存在"（响亮的失败，不是静默的错数据），但仍然由
+     * {@code BlogAgentPortMappingTest} 用互不相同的字面量（42 vs 9）钉住。</p>
+     *
+     * <p>这里<b>不加</b> {@code @Transactional}：流水线要跑几分钟、内含多次外部 HTTP 调用，
+     * 本来就不该包在一个事务里。{@code PortDelegationTransactionTest} 的判据是"转调的兄弟方法
+     * 带注解，才要求这一层也带" —— 这里兄弟方法没带，所以它不会误报。判据写成"看兄弟方法"
+     * 而不是"一律要求"，正是为了不逼出一个语义错误的事务边界。</p>
+     */
+    @Override
+    public BlogAgentTaskView runStream(Long userId, Long taskId, BiConsumer<String, String> onEvent,
+                                       BooleanSupplier cancellationRequested) {
+        return toTaskView(runStreamForView(taskId, userId, onEvent, cancellationRequested));
     }
 
     private BlogAgentTaskVO execute(Long taskId, Long userId, boolean streaming, Consumer<String> onDelta) {
@@ -657,7 +726,14 @@ public class BlogAgentService {
         return limit(value.replace("[", "").replace("]", "").replace("\n", " "), 180);
     }
 
-    public BlogPostVO publish(Long taskId, Long userId) {
+    /**
+     * 前端 HTTP 层的发布入口，返回完整的 {@code BlogPostVO}。
+     *
+     * <p>端口那一侧走 {@link #publish(Long, Long)}。{@code ForView} 后缀的受众就是这里：
+     * {@code BlogAgentController#publish} 把 {@code BlogPostVO} 直接当响应体，
+     * 换掉它就是这个前端路由的响应体变更（ADR §11），不属于这一刀。</p>
+     */
+    public BlogPostVO publishForView(Long taskId, Long userId) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
         if (!"ready".equals(task.getStatus())) throw new IllegalStateException("文章尚未生成完成");
         if (task.getPublishedPostId() != null) return blogService.getBlogById(task.getPublishedPostId());
@@ -669,11 +745,36 @@ public class BlogAgentService {
         return published;
     }
 
-    /** Returns the local post already published by a generation task, without changing task or post state. */
+    /**
+     * {@inheritDoc}
+     *
+     * <p>⚠️ <b>参数是换位的</b>：端口收 {@code (userId, taskId)}，上面那个方法收
+     * {@code (taskId, userId)}。</p>
+     *
+     * <p>这里没有 {@code @Transactional}，因为兄弟方法也没有 —— 发布链路自己的事务在
+     * {@code publicationService} 与 {@code blogService} 里面。补一个裸 {@code @Transactional}
+     * 不是"更安全"，而是把两条外部调用路径的边界改掉了。</p>
+     */
+    @Override
+    public BlogAgentPostView publish(Long userId, Long taskId) {
+        return toPostView(publishForView(taskId, userId));
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>这个方法<b>直接就是端口实现</b>，没有 {@code ForView} 兄弟：它唯一的调用方是跨域的
+     * {@code PublishPostTool}，同域没有任何人读它的 {@code BlogPostVO} 形态，所以按 ADR §7.5
+     * 直接换返回类型、直接把参数归一成 {@code (userId, taskId)}。给一个没有调用方的富方法留后缀
+     * 是死代码，而"删掉它不会有别的症状"这件事由全量测试守着（{@code BlogAgentController}
+     * 从不调用它）。</p>
+     */
+    @Override
     @Transactional(readOnly = true)
-    public BlogPostVO findPublishedPost(Long taskId, Long userId) {
+    public BlogAgentPostView findPublishedPost(Long userId, Long taskId) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
-        return task.getPublishedPostId() == null ? null : blogService.getBlogById(task.getPublishedPostId());
+        return task.getPublishedPostId() == null ? null
+                : toPostView(blogService.getBlogById(task.getPublishedPostId()));
     }
 
     private BlogAgentTask requireOwnedTask(Long taskId, Long userId) {
@@ -825,6 +926,68 @@ public class BlogAgentService {
         return safeValue.length() <= maxLength ? safeValue : safeValue.substring(0, maxLength);
     }
     private String excerpt(String content, int length) { return content.length() <= length ? content : content.substring(0, length - 1) + "…"; }
+
+    // --- 契约换算。每个类型只有一处落点，端口方法与富方法共用它 ---
+    //
+    // 为什么必须只有一处：这些方法逐字段对齐两个类型，是"分量顺序写反"的唯一防线。
+    // 分散成两处意味着以后加一个分量要记得改两遍，而漏掉一处不会有任何编译错误。
+
+    /**
+     * 域实体 → 契约视图。
+     *
+     * <p>{@code null} 透传：{@code findReadyTaskByClientRequestIdForView} 用 {@code null} 表示
+     * "没有已完成的任务"，那是**有意义的结果**，不能在这里变成一个空对象。</p>
+     */
+    /**
+     * 域实体 → 契约视图。
+     *
+     * <p>只带 4 个分量：两个消费方（{@code BlogGenerationTool}）读的就是这 4 个。
+     * 域实体是 25 个字段的 {@code @TableName} 实体，按 ADR-2 不许跨边界。</p>
+     */
+    private static BlogAgentTaskView toTaskView(BlogAgentTask task) {
+        if (task == null) return null;
+        return new BlogAgentTaskView(task.getId(), task.getTitle(), task.getSummary(),
+                task.getPublishedPostId());
+    }
+
+    /**
+     * {@code BlogAgentTaskVO} → 契约视图。
+     *
+     * <p>为什么有两个入口：{@code create} 与 {@code findReadyTaskByClientRequestIdForView}
+     * 返回实体，而 {@code runStreamForView} 返回 VO（它顺带带了 tags / sources / versions 等
+     * 前端要的东西）。VO 只是实体的包装，所以这里剥一层再走上面那个方法 ——
+     * <b>换算规则仍然只有一份</b>，不是把 4 个字段抄两遍。</p>
+     *
+     * <p>VO 为 {@code null} 时透传 {@code null}；VO 非空但 {@code task} 为空是<b>不该发生</b>的
+     * （{@code execute} 的两条返回路径都经 {@code get()}，那里一定 {@code setTask}），
+     * 所以不在这里兜底 —— 兜底会把这个不变量变成"没人知道它是否成立"。</p>
+     */
+    private static BlogAgentTaskView toTaskView(BlogAgentTaskVO vo) {
+        return vo == null ? null : toTaskView(vo.getTask());
+    }
+
+    /** {@code BlogPostVO} → 契约视图。{@code null} 透传，理由同上。 */
+    private static BlogAgentPostView toPostView(BlogPostVO post) {
+        if (post == null) return null;
+        return new BlogAgentPostView(post.getId(), post.getTitle(), post.getStatus(),
+                post.getCsdnSynced(), post.getJuejinSynced());
+    }
+
+    /**
+     * 契约草稿 → 域请求体。
+     *
+     * <p><b>纯换算，不兜底。</b> {@code clientRequestId} 缺省时必须落成 {@code null} ——
+     * 域侧用 {@code null} 表示"这次调用不要求幂等"。给它填一个默认值（比如空串或
+     * invocation id）会让每一次没有显式传幂等键的调用**静默变成幂等调用**，
+     * 而症状是"第二次生成被当成重复请求吃掉了"。</p>
+     */
+    private static BlogAgentTaskCreateRequest toRequest(BlogAgentTaskDraft draft) {
+        if (draft == null) return null;
+        BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
+        request.setInput(draft.input());
+        request.setClientRequestId(draft.clientRequestId());
+        return request;
+    }
 
     private record IllustrationOutcome(String content, String status, String error, int generated) {}
 

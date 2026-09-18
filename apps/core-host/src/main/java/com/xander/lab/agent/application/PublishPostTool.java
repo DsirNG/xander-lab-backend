@@ -5,13 +5,13 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.xander.lab.payment.api.BillingBiz;
 import com.xander.lab.payment.api.BillingPort;
-import com.xander.lab.blogagent.application.BlogAgentService;
+import com.xander.lab.blogagent.spi.BlogAgentPort;
+import com.xander.lab.blogagent.spi.BlogAgentPostView;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.content.api.ContentPost;
 import com.xander.lab.content.api.ContentPostPort;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
-import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.content.api.PublishResult;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -25,25 +25,32 @@ import java.util.Optional;
  * accounts. Local publishing first, then platform sync, keeps every attempt
  * durable: a platform failure leaves the local post intact for a safe retry.
  *
- * <p>读本地文章改走 {@link ContentPostPort}（跨部署单元：agent 在 {@code dinqor-agent}、
- * 内容域在 {@code dinqor-content-automation}）。另一条来源 {@code BlogAgentService} 仍然
- * 返回内容域的 {@code BlogPostVO}，两条来源在本类里归一成 {@link LocalPost} —— 本工具只读 5 个字段，
- * 不需要把整个 VO 搬上端口。</p>
+ * <p>读本地文章有两条来源，都跨部署单元（agent 在 {@code dinqor-agent}、内容域与 blogagent
+ * 在 {@code dinqor-content-automation}）：</p>
+ * <ul>
+ *   <li>{@code taskId} 走 {@link BlogAgentPort#publish} / {@link BlogAgentPort#findPublishedPost}
+ *       —— blogagent 的生成任务。</li>
+ *   <li>{@code postId} 走 {@link ContentPostPort} —— 已存在的本地文章。</li>
+ * </ul>
+ * <p>两条来源在本类里归一成 {@link LocalPost}。本工具只读 5 个字段，所以两个端口各自只带那 5 个 ——
+ * <b>不为了统一返回类型把整个 {@code BlogPostVO}（17 个字段）搬上端口</b>。
+ * 归一放在工具内部而不是端口上，是因为 {@code LocalPost} 是**本工具的概念**
+ * （"一条本地文章，来源不限"），把它塞进 blogagent 的契约等于让 blogagent 替内容域发言。</p>
  */
 @Component
 public class PublishPostTool implements AgentTool {
 
-    private final BlogAgentService blogAgentService;
+    private final BlogAgentPort blogAgentPort;
     private final ContentPostPort contentPostPort;
     private final CsdnBlogSyncService csdnBlogSyncService;
     private final JuejinBlogSyncService juejinBlogSyncService;
     private final BillingPort billingPort;
 
-    public PublishPostTool(BlogAgentService blogAgentService, ContentPostPort contentPostPort,
+    public PublishPostTool(BlogAgentPort blogAgentPort, ContentPostPort contentPostPort,
                            CsdnBlogSyncService csdnBlogSyncService,
                            JuejinBlogSyncService juejinBlogSyncService,
                            BillingPort billingPort) {
-        this.blogAgentService = blogAgentService;
+        this.blogAgentPort = blogAgentPort;
         this.contentPostPort = contentPostPort;
         this.csdnBlogSyncService = csdnBlogSyncService;
         this.juejinBlogSyncService = juejinBlogSyncService;
@@ -103,7 +110,8 @@ public class PublishPostTool implements AgentTool {
         long postId = args.path("postId").asLong(-1L);
         String platform = normalizePlatform(args.path("platform").asText("local"));
         LocalPost local = taskId > 0
-                ? fromGenerated(blogAgentService.findPublishedPost(taskId, context.userId()))
+                // ⚠️ 端口是 (userId, taskId)，域侧是 (taskId, userId) —— 显式换位。
+                ? fromGenerated(blogAgentPort.findPublishedPost(context.userId(), taskId))
                 : postId > 0 ? fromContract(contentPostPort.findOwned(context.userId(), postId)) : null;
         if (local == null || local.id() == null) return Optional.empty();
 
@@ -184,7 +192,8 @@ public class PublishPostTool implements AgentTool {
 
     private LocalPost resolveLocalPost(Long userId, long taskId, long postId) {
         if (taskId > 0) {
-            return fromGenerated(blogAgentService.publish(taskId, userId));
+            // ⚠️ 端口是 (userId, taskId)，域侧是 (taskId, userId) —— 显式换位。
+            return fromGenerated(blogAgentPort.publish(userId, taskId));
         }
         return fromContract(contentPostPort.findOwned(userId, postId));
     }
@@ -192,18 +201,22 @@ public class PublishPostTool implements AgentTool {
     /**
      * 本地文章的两种来源归一成的形状。
      *
-     * <p>一条来自 {@code blogagent} 的生成结果（返回内容域的 {@code BlogPostVO}），一条来自
-     * 内容域端口（返回契约类型 {@link ContentPost}）。本工具只读这 5 个字段，所以在这里归一，
-     * 而不是为了统一返回类型把整个 {@code BlogPostVO} 搬上端口 ——
-     * 端口只收调用方真正用到的字段，这也是断环的手段。</p>
+     * <p>一条来自 {@link BlogAgentPort}（返回契约类型 {@link BlogAgentPostView}），一条来自
+     * {@link ContentPostPort}（返回契约类型 {@link ContentPost}）。本工具只读这 5 个字段，
+     * 所以两个端口各自只带这 5 个 —— <b>不为了统一返回类型把整个 {@code BlogPostVO}
+     * （17 个字段）搬上端口</b>。端口只收调用方真正用到的字段，这也是断环的手段。</p>
+     *
+     * <p>两个契约类型形状相同但**不能合并**：契约不许依赖契约（只允许 JDK + 本包），
+     * 而且 {@link BlogAgentPostView} 是 blogagent 的能力面、{@link ContentPost} 是内容域的文章模型，
+     * 让其中一个替另一个发言就是把两个域的词汇表绑在一起。归一放在本工具内部，代价是这 5 行。</p>
      */
     private record LocalPost(Long id, String title, Integer status, Boolean csdnSynced, Boolean juejinSynced) {
     }
 
-    /** blogagent 的生成结果 → 本工具用的形状。 */
-    private static LocalPost fromGenerated(BlogPostVO vo) {
-        return vo == null ? null : new LocalPost(vo.getId(), vo.getTitle(), vo.getStatus(),
-                vo.getCsdnSynced(), vo.getJuejinSynced());
+    /** blogagent 端口的发布结果 → 本工具用的形状。 */
+    private static LocalPost fromGenerated(BlogAgentPostView post) {
+        return post == null ? null : new LocalPost(post.id(), post.title(), post.status(),
+                post.csdnSynced(), post.juejinSynced());
     }
 
     /** 内容域端口 → 本工具用的形状。 */
