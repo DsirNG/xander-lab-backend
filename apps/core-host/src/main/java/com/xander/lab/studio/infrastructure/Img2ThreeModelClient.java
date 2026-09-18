@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.core.api.ModelGateway;
 import com.xander.lab.core.api.ModelGateway.ModelEndpoint;
-import com.xander.lab.blogagent.infrastructure.BlogAgentProperties;
 import com.xander.lab.common.ModelCallResult;
 import com.xander.lab.common.ModelUsage;
 import lombok.RequiredArgsConstructor;
@@ -25,9 +24,10 @@ import java.util.Map;
 
 /**
  * Vision-capable Responses client for image → procedural Three.js reconstruction.
- * Credentials fall back to blog.agent when img2three.agent fields are blank.
- * When the admin model gateway returns candidates for the img2three_vision
- * feature they take precedence (primary first, fallback second).
+ * Credentials come from {@code img2three.agent.*}; the {@code blog.agent} fallback lives
+ * in {@code application.yml} as nested placeholders, so this class never reads another
+ * domain's configuration bean. When the admin model gateway returns candidates for the
+ * img2three_vision feature they take precedence (primary first, fallback second).
  */
 @Component
 @RequiredArgsConstructor
@@ -35,7 +35,6 @@ public class Img2ThreeModelClient {
     private static final Logger log = LoggerFactory.getLogger(Img2ThreeModelClient.class);
     private static final int MAX_OUTPUT_TOKENS = 16_000;
     private final Img2ThreeProperties properties;
-    private final BlogAgentProperties blogAgentProperties;
     private final ObjectMapper objectMapper;
     private final ModelGateway gateway;
 
@@ -81,18 +80,22 @@ public class Img2ThreeModelClient {
         throw lastFailure;
     }
 
-    /** 解析候选端点：网关启用时由功能模型配置驱动（未配置由网关抛错）；网关关闭时复用原环境变量回退链（img2three.agent → blog.agent）。 */
+    /**
+     * 解析候选端点：网关启用时由功能模型配置驱动（未配置由网关抛错）；
+     * 网关关闭时用 {@code img2three.agent.*} —— 它对 {@code blog.agent} 的回落写在
+     * application.yml 的嵌套占位符里，所以这里不需要（也不许）读 blogagent 的配置 bean。
+     */
     private List<ModelEndpoint> endpoints() {
         List<ModelEndpoint> candidates = gateway.candidates(ModelGateway.FEATURE_IMG2THREE_VISION);
         if (!candidates.isEmpty()) {
             return candidates;
         }
-        String apiKey = resolveApiKey();
-        String model = resolveModel();
+        String apiKey = properties.getApiKey();
+        String model = properties.getModel();
         if (!StringUtils.hasText(apiKey) || !StringUtils.hasText(model)) {
             throw new IllegalStateException("图片转 3D 尚未配置模型服务，请设置 IMG2THREE_AGENT_API_KEY / IMG2THREE_AGENT_MODEL（或复用 BLOG_AGENT_*）");
         }
-        return List.of(new ModelEndpoint(0L, resolveBaseUrl(), apiKey, model));
+        return List.of(new ModelEndpoint(0L, properties.getBaseUrl(), apiKey, model));
     }
 
     private Map<String, Object> reconstructPayload(ModelEndpoint endpoint, byte[] imageBytes,
@@ -313,23 +316,6 @@ public class Img2ThreeModelClient {
         String message = root.getMessage();
         return root.getClass().getSimpleName()
                 + (StringUtils.hasText(message) ? ": " + message : "");
-    }
-
-    private String resolveApiKey() {
-        return StringUtils.hasText(properties.getApiKey())
-                ? properties.getApiKey()
-                : blogAgentProperties.getApiKey();
-    }
-
-    private String resolveModel() {
-        return StringUtils.hasText(properties.getModel())
-                ? properties.getModel()
-                : blogAgentProperties.getModel();
-    }
-
-    private String resolveBaseUrl() {
-        if (StringUtils.hasText(properties.getBaseUrl())) return properties.getBaseUrl();
-        return blogAgentProperties.getBaseUrl();
     }
 
     private String extractOutputText(JsonNode response) {

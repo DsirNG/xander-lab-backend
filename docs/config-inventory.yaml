@@ -1037,17 +1037,17 @@ config:
     logical_owner: studio
   - key: img2three.agent.base-url
     source: application.yml
-    value: "${IMG2THREE_AGENT_BASE_URL:}"
+    value: "${IMG2THREE_AGENT_BASE_URL:${blog.agent.base-url:}}"
     leaf: true
     logical_owner: studio
   - key: img2three.agent.api-key
     source: application.yml
-    value: "${IMG2THREE_AGENT_API_KEY:}"
+    value: "${IMG2THREE_AGENT_API_KEY:${blog.agent.api-key:}}"
     leaf: true
     logical_owner: studio
   - key: img2three.agent.model
     source: application.yml
-    value: "${IMG2THREE_AGENT_MODEL:}"
+    value: "${IMG2THREE_AGENT_MODEL:${blog.agent.model:}}"
     leaf: true
     logical_owner: studio
   - key: email-reminder

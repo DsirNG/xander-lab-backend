@@ -2911,7 +2911,195 @@ Jackson 按分量名序列化 ⇒ **JSON 逐字节不变**。
 
 ---
 
-## 17. 待办
+## 17. 落地记录（十四）：`studio → blogagent` 的凭证回落从**代码**搬到**配置** —— 一条 import 换一个 YAML 占位符
+
+### 17.1 目标边：不是"调能力"，是**借别人的凭证**
+
+`studio → blogagent` 是 **1 条实现语句**，落在
+`studio.infrastructure.Img2ThreeModelClient`
+（`dinqor-core-host → dinqor-content-automation`）：它 import 了 blogagent 的
+`infrastructure.BlogAgentProperties`，用来给 img2three 的模型凭证兜底。
+
+```java
+private final Img2ThreeProperties properties;          // studio 自己，prefix = img2three
+private final BlogAgentProperties blogAgentProperties; // blogagent 的，prefix = blog.agent
+
+private String resolveApiKey()  { return hasText(properties.getApiKey())  ? properties.getApiKey()  : blogAgentProperties.getApiKey(); }
+private String resolveModel()   { return hasText(properties.getModel())   ? properties.getModel()   : blogAgentProperties.getModel(); }
+private String resolveBaseUrl() { return hasText(properties.getBaseUrl()) ? properties.getBaseUrl() : blogAgentProperties.getBaseUrl(); }
+```
+
+⇒ 语义是「img2three 有自己的模型端点配置，**没配就借用 blogagent 的**」。
+它读的正是 ADR 待办 30 禁止的形状：**消费方读提供方的 `@ConfigurationProperties`**。
+
+### 17.2 ⚠️ 侦察结论：这一刀不能用"抽端口"收
+
+三个候选都被否掉，理由是**各自违反一条已经定下来的规则**：
+
+| 做法 | 为什么不行 |
+|---|---|
+| 在 `blogagent-api` 加端口，把解析后的端点暴露给 studio | 正是待办 30 禁止的形状：**提供方的配置变成跨域契约**。端口返回的就是"我怎么配置的" |
+| 在 `core-api` 加"默认模型端点"端口 | 看着像能力归位，但 studio 并不是在调 blogagent 的能力 —— 它在**做自己的模型调用**，只是借上游凭证。为"借凭证"立一个契约，等于把"两个域共用一套上游凭证"合法化，而 `config-ownership.yaml` 已经把它们记成两家各自的 `service_private` / `secret` |
+| 让 `Img2ThreeProperties` 自己配全、删掉回落 | ⚠️ **行为变更**：只配了 `BLOG_AGENT_*` 的部署会直接报"尚未配置模型服务"。`application-local.yml` 恰好就是这种部署 |
+
+⇒ 真正的形状是：**回落属于"配置层"，不属于"代码层"。** 它是"同一个值在两个服务里都要有"，
+不是"一个服务向另一个服务要东西"。拆服务之后前者由运维 / Nacos 承担；后者要跨进程调用 ——
+而**为了读一个凭证去跨进程调用**显然不是目标架构想要的。
+
+### 17.3 ⭐ 形状决定：回落写成**属性名**，不是环境变量名
+
+```yaml
+img2three:
+  agent:
+    base-url: ${IMG2THREE_AGENT_BASE_URL:${blog.agent.base-url:}}
+    api-key: ${IMG2THREE_AGENT_API_KEY:${blog.agent.api-key:}}
+    model: ${IMG2THREE_AGENT_MODEL:${blog.agent.model:}}
+```
+
+⚠️ 这里有一个**很容易写错、而且写错了不会报错**的选择：占位符里写
+`${blog.agent.api-key:}`（**属性名**）还是 `${BLOG_AGENT_API_KEY:}`（**环境变量名**）？
+
+- `application-local.yml` 是**直接把值写在 `blog.agent.api-key` 上**的（不是设环境变量）；
+- 写环境变量名 ⇒ 本地那份配置**回落不到** ⇒ 行为变了，而且没有任何东西会报错。
+
+⇒ **必须是属性名。** `Img2ThreeCredentialFallbackTest` 里的
+`alsoFallsBackToABlogAgentPropertyWrittenInAProfileFile` 专门钉这一条，注入 B 证明它接着线。
+
+⚠️ 一个正确的巧合：本仓 `agent.model.*`（`application.yml` 第 252–255 行）**早就**是这么写的
+（`api-key: ${AGENT_MODEL_API_KEY:${BLOG_AGENT_API_KEY:}}`）—— 注意它写的是**环境变量名**。
+但 `agent` 与 `blogagent` **也不在同一个部署单元**（`dinqor-agent` vs `dinqor-content-automation`）。
+也就是说"在 YAML 层复用另一个域的配置"在本仓是**既有做法**，只是它**不在扫描器的视野里**
+（扫描器数的是 Java import）。本刀是把既有做法用到 `studio` 上，不是发明新缝 ——
+但这条视野盲区本身要记下来（见 §17.10）。
+
+### 17.4 ⚠️ 为什么这一刀不需要动任何 Java 契约
+
+`img2three` 与 `blogagent` 之间**没有能力调用**，只有"同一个值"。所以：
+无新模块、无新契约类型、无新端口、`pom.xml` 一行没改、`contracts/` 一个字没改。
+Java 侧只做减法：删一个 import、删一个字段、删三个私有方法，`endpoints()` 改成直接取 `properties`。
+
+### 17.5 ⚠️ 代价：单元测试再也构造不出那条路径 ⇒ 必须用**真实交付的** YAML 守住
+
+把回落从代码搬到配置，代价是**可测性**：直接 `new Img2ThreeProperties()` 不经过任何 YAML，
+于是"回落真的存在"这件事在单元测试里**无法表达**。
+
+⇒ 新增 `Img2ThreeCredentialFallbackTest`：把**真实交付的** `application.yml` 用
+`YamlPropertySourceLoader` 加载进来，用 `PropertySourcesPropertyResolver` 解析那三个键，
+再叠一个模拟的 `application-local.yml` / 环境变量源。三条用例：
+
+1. 只配了 `BLOG_AGENT_*` ⇒ 三个键整体回落到它；
+2. 同时配了 `IMG2THREE_AGENT_*` ⇒ img2three 自己的赢；
+3. `blog.agent.*` 写成**属性**（`application-local.yml` 的真实形态）⇒ 也能回落。
+
+**这是"搬家"之后唯一能守住它的东西** —— 与 §10.4 那条"一份实体两份投影必须配跨投影断言"同源：
+**东西搬走了，守卫也要跟着搬，否则搬完就没人看了。**
+
+### 17.6 顺手补掉一条**零覆盖**的路径
+
+`endpoints()` 的"网关关闭"分支此前**一条测试都没有**：两个既有用例的网关桩都返回非空端点，
+方法在第二行就早退了。补了两条：
+
+| 用例 | 钉住 |
+|---|---|
+| `buildsTheEndpointFromImg2ThreeOwnSettingsWhenTheGatewayIsOff` | 网关关闭时 baseUrl / apiKey / model **三个都取对**（起真 HTTP server 看请求体） |
+| `reportsNotConfiguredWhenNeitherImg2ThreeNorTheBlogAgentFallbackIsSet` | 两端都空时抛 `IllegalStateException`，且文案同时点名 `IMG2THREE_AGENT_API_KEY` 与 `BLOG_AGENT_*` |
+
+⚠️ 与待办 32（"把域内方法提升成契约实现时先查它有没有测试"）同族：
+**改一段代码时顺手数一下它有几条测试** —— 这里答案是 **0**，而它是运维唯一会看到的提示。
+
+### 17.7 实测收益
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 26 | **25** |
+| `implementation_edges` | 12 | **11** |
+| `cross_deployment_unit_statements` | 9 | **8** |
+| `cross_deployment_unit_edges` | 5 | **4** |
+| `api_statements` | 9 | 9（不动） |
+| `api_edges` | 6 | 6（不动） |
+
+`studio → blogagent` **整条边消失** ⇒ ⭐ **`studio` 作为来源域在实现层与 api 层都一条出边都没有了**
+（它此前的另一条 `studio → admin` 已被 §3quinquies 的 `ModelGateway` 收掉）。
+
+### 17.8 注入验证：六次
+
+六条注入全部落在 `apps/core-host`，用 `-Dtest` 收窄到 studio 的两个测试类 ——
+这样其余模块匹配不到测试、永远不红，不会出现 §16.8 那种"契约模块先红、实现模块整块被跳过"的假低分。
+
+| # | 注入 | 落在 | 实测红 |
+|---|---|---|---|
+| A | 回落整条丢掉（只认 `IMG2THREE_AGENT_API_KEY`） | `application.yml` | **2** |
+| B | 回落写成**环境变量名** `${BLOG_AGENT_API_KEY:}` | `application.yml` | **1** |
+| C | 回落反过来**盖过** img2three 自己的值 | `application.yml` | **1** |
+| D | 网关关闭时 baseUrl 写死成常量 | `Img2ThreeModelClient` | **1** |
+| E | `apiKey` / `model` 两个相邻 `String` 换位 | `Img2ThreeModelClient` | **1** |
+| F | 只把 `base-url` 这一行的回落丢掉 | `application.yml` | **1** |
+
+六条全部生效，两条目标文件在跑完后**逐字节还原**（`git hash-object` 与基线相同：
+`application.yml` = `2e452954…`、`Img2ThreeModelClient.java` = `6b74c9a5…`）。
+
+⚠️ **B 是本刀最有价值的一条**：它把"占位符写属性名还是环境变量名"这个**写错了不会报错**的选择
+变成一条会红的断言。如果没有 `alsoFallsBackToABlogAgentPropertyWrittenInAProfileFile`，
+B 会**绿着过**，而本地部署的 img2three 会静默失去凭证。
+
+⚠️ **D 的失败信息没有指向真正的原因（"守卫的失败信息"第三次实例）。** 它把 baseUrl 写死成
+`https://api.openai.com/v1` 之后，用例不是断言失败，而是**真去请求了公网**、24 秒后以网络错误
+结束（`Errors: 1` 而不是 `Failures: 1`）。原因是这条用例只能通过"请求落到了哪个地址"间接断言
+baseUrl（`endpoints()` 是私有方法），而地址错了请求就飞到别处去了。
+⇒ **红是红了，但红的原因看起来像"网络问题"而不是"baseUrl 取错了"。**
+与 §11.2 / §13.7 那两次同族：**失败信息指向的环境越像外部故障，越容易被人当成 flaky 忽略。**
+（记入待办；改法要么把端点解析抽成可测的小函数，要么给客户端注入一个固定的短超时。）
+
+⚠️ **两个把这次测量卡住/打歪的工具坑（都已写进 `notes/repo-workflow.md`）：**
+
+1. **⚠️ 注入锚点必须对"行尾已归一"的文本匹配。** 本仓工作区 CRLF / LF **混杂**
+   （实测 `application.yml` 是 **LF**、`Img2ThreeModelClient.java` 是 **CRLF**），
+   而锚点是以 `\n` 结尾写的 ⇒ 在 CRLF 文件里 `…));\r\n` 不含子串 `…));\n`，
+   锚点**静默 0 命中**（第一遍 D 就是这样中止的：`锚点出现 0 次，期望 1 次`）。
+   修法：读的时候把 `\r\n` 归一成 `\n` 再匹配，写回去时按记录的原行尾还原。
+   ⚠️ 顺带一条读数坑：**Git Bash 里 `grep -c $'\r'` 判 CRLF 不可信**（对 LF 文件也报满行数），
+   要用 Python 数 `b"\r\n"` 的字节数。
+2. **⚠️ 注入脚本不要在前台跑。** 六条注入约 4.5 分钟，前台会在默认超时处被 SIGTERM，
+   **把目标文件留在注入态**（实测残留了 E）。必须后台跑；**任何中断之后第一件事是比 blob**。
+   这是"脚本跑完了 ≠ 注入生效了、也还原了"的第四次变体 —— 这次是"脚本被杀了"。
+
+### 17.9 为什么没有加 `contract-changes.yaml` 条目
+
+契约模块一个字没改，路由与响应形状都没动 ⇒ 没有契约变更要登记。
+
+### 17.10 ⚠️ 刻意没做的事 / 残留
+
+- **⚠️ 没有解决"谁拥有 img2three 的凭证"这个配置归属问题。** `config-ownership.yaml` 把
+  `blog.agent.api-key` 记成 `owner: content-automation` + `secret` + `NACOS: DINQOR-CONTENT-AUTOMATION`，
+  把 `img2three.agent.api-key` 记成 `owner: studio` + `secret` + `NACOS: DINQOR-CORE`。
+  改造后 img2three 的默认值仍然指向 content-automation 的环境变量 —— 这是**运维约定**，
+  不是代码依赖，但清单里没写、也没有门禁守。已记入待办。
+- **⚠️ 扫描器看不见配置层的跨域引用。** 本刀把一条 import 换成一行 YAML 占位符，指标如实下降
+  （跨单元实现边 5 → 4），但"studio 的配置默认值指向 content-automation 的环境变量"这件事
+  **在 `cross-domain-imports.yaml` 里一个字都看不到**。这与 `SHARED_KERNEL` 漏登记那个盲区同类：
+  **指标只能看见它被设计来数的那种耦合。** 已记入待办。
+- **没有动 `agent.model.*` 那条同样形状的 YAML 回落**（它没有 Java 边，不在本刀范围）。
+- **没有删 `Img2ThreeProperties` 里那三个 Java 默认值 `""`** —— 它们现在是"没配"的表示，
+  `hasText` 判断仍然需要。
+
+### 17.11 下一刀
+
+剩余跨单元实现边（**4 条**）：`automation → integration` 5、`admin → automation` 1、
+`identity → integration` 1、`integration → automation` 1。
+
+⚠️ **`integration ↔ automation` 是唯一一对互相依赖的单元**（5 条出 + 1 条回）。
+本刀之后它成了最大的一块，**要一起看** —— 只收一边会把环变成"单向但仍在跨单元"：
+
+1. **`admin → automation`（1）** —— `AdminNotificationController`，需要 SSE 广播端口。
+   ⚠️ 契约不许带框架类型 ⇒ 端口**不能**直接返回 `SseEmitter`，形状要先设计。
+2. **`integration → automation`（1）** —— `MailService` import
+   `automation.domain.EmailReminderMailTemplates`，是**域实体跨边界**（ADR-2 直接禁止的形状），
+   要改 API 而不是加端口。
+3. **`identity → integration`（1）** —— `AuthService`。
+
+---
+
+## 18. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -2956,9 +3144,12 @@ Jackson 按分量名序列化 ⇒ **JSON 逐字节不变**。
 | 39 | **⚠️ 端口上一个参数该不该留，看"它有没有具名消费方"，不看"它现在有没有跨域消费方"** | **本刀拍板**（§16.3）：掘金那两个参数在跨域路径上**今天全是 `null`**，但同域的前端 HTTP 层会传真实值，而跨进程后端口是那条路径唯一能穿过的形状。**按"没人用"砍参数 = 让能力在拆服务时静默消失**（§2.3） |
 | 40 | **⚠️ 抽端口可能逼实现类改返回类型 ⇒ 同域消费方要跟着改；判据是"线上 JSON 变了没有"，不是"Java 类型名变了没有"** | **本刀实例**（§16.4 / §16.5）：Java 不许"同名同参只差返回值"的重载 ⇒ `sync` 只能返回契约的 `BlogSyncResult`（契约不许依赖契约），5 个同域消费方跟着换类型（含 2 个 HTTP 控制器）。**仍是镜像、不进 `contract-changes.yaml`**：两份 record 分量名逐字相同 ⇒ JSON 逐字节不变。⚠️ **`grep` 的目标要选"那个类型"而不是"那个类"** —— 本刀第一遍按服务类名找只得到 4 个消费方，编译前按 `PublishResult` 再 `grep` 才多出 `DualPublishMcpApplicationService` |
 | 41 | **⚠️ 多模块注入验证：`-fae` 不够，还要把 `-Dtest` 收窄到"依赖方自己的测试类"** | **本刀踩到**（§16.8）：注入同时落在 `contracts/integration-api` 与 `apps/core-host`，而契约模块在反应堆里排在**前面** ⇒ 契约侧一红 maven 就中断，`core-host` 的测试根本不跑，记下的红数是**下界**。⚠️ 加 `-fae`（fail at end）**仍然不够** —— `-fae` 只续跑"**不依赖**失败模块"的模块，而 `core-host` 恰恰依赖 `integration-api`，照样被跳过。**修法**：把 `-Dtest` 收窄到 `core-host` 自己的测试类，让契约模块**一个测试都匹配不到**（因此永远不会红）。此时契约模块连 `Tests run` 行都不打印 ⇒ **"没有汇总行"必须判成"0 个测试"，不是"编译失败"**（第一版脚本混了这两件事，报了个假的 `-1`）。另：逐模块的 `Tests run` 汇总行要**累加**，只看最后一行会漏掉另一个模块 |
-| 42 | **⚠️ `sha1sum` ≠ `git hash-object`，同一文件两个值** —— 前者对**原始字节**算，后者对 `blob <len>\0` + 内容算且会先做 CRLF→LF 归一 | **本刀踩到**（§16.8）：`CsdnBlogSyncPort.java` 两个值分别是 `60a4fe6b…` 与 `5c7408d4…`，手上同时有这两个值时把**没被改过**的文件误判成"内容不对了"，白查了一轮。⇒ **还原判据必须写清用的是哪一个算法，且全程只用同一个**（本仓统一用 `git hash-object`）。⚠️ 与第 33 / 36 项同族：**"脚本跑完了"不等于"注入生效了、也还原了"**，但这一条是"判据本身用错了算法"，比前两条更难发现 —— 因为它不会报错，只会让你去查一个不存在的问题 |
+| 42 | **⚠️ `sha1sum` ≠ `git hash-object`，同一文件两个值** —— 前者对**原始字节**算，后者对 `blob <len>\0` + 内容算且会先做 CRLF→LF 归一 | **第十六刀踩到**（§16.8）：`CsdnBlogSyncPort.java` 两个值分别是 `60a4fe6b…` 与 `5c7408d4…`，手上同时有这两个值时把**没被改过**的文件误判成"内容不对了"，白查了一轮。⇒ **还原判据必须写清用的是哪一个算法，且全程只用同一个**（本仓统一用 `git hash-object`）。⚠️ 与第 33 / 36 项同族：**"脚本跑完了"不等于"注入生效了、也还原了"**，但这一条是"判据本身用错了算法"，比前两条更难发现 —— 因为它不会报错，只会让你去查一个不存在的问题 |
+| 43 | **⚠️ 扫描器看不见"配置层"的跨域引用** —— 一条 Java import 可以换成一行 YAML 占位符，指标如实下降，而耦合只是换了地方 | **本刀实例**（§17.10）：`studio → blogagent` 的实现边确实消失（跨单元实现边 5 → 4），但"studio 的配置默认值指向 content-automation 的环境变量"这件事在 `cross-domain-imports.yaml` 里一个字都看不到。⚠️ 而且这不是本刀发明的缝 —— `agent.model.*`（`application.yml` 第 252–255 行）**早就**在用同样的写法复用 `BLOG_AGENT_*`，而 `agent` 与 `blogagent` 也不在同一个部署单元。⇒ **指标只能看见它被设计来数的那种耦合**；`config-ownership.yaml` 是唯一可能承载这类引用的地方，但它今天只记 `owner` / `classification` / `nacos_group`，**不记"这个键的默认值引用了哪个键"**。未修 |
+| 44 | **⚠️ `img2three.agent.*` 的配置归属没有结论** —— 它的默认值指向另一个域的凭证 | **未定**（§17.10）。`config-ownership.yaml` 把 `blog.agent.api-key` 记成 `owner: content-automation` + `secret` + `NACOS: DINQOR-CONTENT-AUTOMATION`，把 `img2three.agent.api-key` 记成 `owner: studio` + `secret` + `NACOS: DINQOR-CORE`。改造后 img2three 的默认值仍指向 content-automation 的环境变量 —— 这是**运维约定**而不是代码依赖（拆服务后它表现为"两个服务的环境里配同一个值"），但清单里没写、也没有门禁守。⚠️ 本刀**刻意没有替这个决定做主**：删掉回落是行为变更（`application-local.yml` 就是靠它工作的） |
+| 45 | **⚠️ 守卫的失败信息必须指向真正的原因（第三次实例）** —— 这次是"只能间接断言"导致错因伪装成环境故障 | **本刀踩到**（§17.8 的注入 D）：`buildsTheEndpointFromImg2ThreeOwnSettingsWhenTheGatewayIsOff` 只能通过"请求落到了哪个地址"间接断言 baseUrl（`endpoints()` 是私有方法）⇒ 把 baseUrl 写错之后用例不是断言失败，而是**真去请求公网**、24 秒后以网络错误结束（`Errors: 1` 而非 `Failures: 1`）。**红是红了，但红的原因看起来像"网络问题"** ⇒ 容易被当成 flaky 忽略。改法二选一：把端点解析抽成可测的小函数，或给客户端注入固定的短超时。前两次同族实例见 §11.2（两个 `Long` 换位 → 症状是 NPE）与 §13.7 |
 
-### 17.1 第 1 项的边界（明确不许顺手放宽）
+### 18.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -2969,7 +3160,7 @@ Jackson 按分量名序列化 ⇒ **JSON 逐字节不变**。
 
 ---
 
-## 18. 一句话记法
+## 19. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

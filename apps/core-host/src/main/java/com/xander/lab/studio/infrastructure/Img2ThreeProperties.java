@@ -43,7 +43,12 @@ public class Img2ThreeProperties {
     public static class Agent {
         /** Disabled by default so deterministic local reconstruction remains the safe baseline. */
         private boolean enabled = false;
-        /** OpenAI-compatible Responses API base URL. Falls back to blog.agent when blank at runtime. */
+        /**
+         * OpenAI-compatible Responses API base URL.
+         * The blog.agent fallback is a **config-level** placeholder in application.yml
+         * ({@code img2three.agent.base-url} → {@code blog.agent.base-url}), not a runtime
+         * read of another domain's bean.
+         */
         private String baseUrl = "";
         private String apiKey = "";
         private String model = "";

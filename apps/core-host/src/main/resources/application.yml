@@ -272,7 +272,9 @@ blog:
     max-illustrations: ${BLOG_AGENT_MAX_ILLUSTRATIONS:3}
     stale-task-minutes: ${BLOG_AGENT_STALE_TASK_MINUTES:30}
 
-# Image → procedural Three.js. Blank fields fall back to blog.agent credentials.
+# Image → procedural Three.js.
+# 凭证回落写在**配置层**（下面三个嵌套占位符），不是在代码里读 blogagent 的配置 bean ——
+# 见 docs/migration/adr-contract-boundaries.md §17。
 img2three:
   pipeline-enabled: ${IMG2THREE_PIPELINE_ENABLED:true}
   pipeline-root: ${IMG2THREE_PIPELINE_ROOT:plugins/img2threejs}
@@ -281,9 +283,11 @@ img2three:
   agent:
     # Deterministic local reconstruction is the default; remote vision is explicit opt-in.
     enabled: ${IMG2THREE_AGENT_ENABLED:false}
-    base-url: ${IMG2THREE_AGENT_BASE_URL:}
-    api-key: ${IMG2THREE_AGENT_API_KEY:}
-    model: ${IMG2THREE_AGENT_MODEL:}
+    # 回落的是 blog.agent 的**属性值**（不是环境变量名），所以 application-local.yml 里
+    # 直接写 blog.agent.* 也能被回落到，行为与改造前逐字一致。
+    base-url: ${IMG2THREE_AGENT_BASE_URL:${blog.agent.base-url:}}
+    api-key: ${IMG2THREE_AGENT_API_KEY:${blog.agent.api-key:}}
+    model: ${IMG2THREE_AGENT_MODEL:${blog.agent.model:}}
 
 # The database migration must be applied before enabling the scheduler.
 email-reminder:
