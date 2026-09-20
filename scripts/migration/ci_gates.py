@@ -1110,6 +1110,21 @@ def gate_nacos_config_profile() -> None:
             problems.append(
                 "apps/core-host: nacos profile does not select the dinqor_core runtime account"
             )
+    core_nacos = REPO / "infrastructure" / "nacos" / "dinqor-core.yaml"
+    if not core_nacos.is_file():
+        problems.append("infrastructure/nacos/dinqor-core.yaml is missing")
+    else:
+        core_text = core_nacos.read_text(encoding="utf-8")
+        if "mapper-locations: classpath:/mapper/*.xml" not in core_text:
+            problems.append(
+                "infrastructure/nacos/dinqor-core.yaml: production mapper-locations "
+                "must be the core-host-private classpath:/mapper/*.xml"
+            )
+        if "classpath*:/mapper/" in core_text:
+            problems.append(
+                "infrastructure/nacos/dinqor-core.yaml: production config must not "
+                "use the classpath*:/mapper/ global swallow"
+            )
     if problems:
         report(gate, False, "; ".join(problems))
         return
@@ -1454,8 +1469,9 @@ def gate_dockerfile_runtime_target() -> None:
 #
 # Wave 0B therefore freezes the current state instead of editing it: this gate
 # fails if a NEW config file introduces the pattern, and reports the surviving one
-# so it cannot be forgotten. Wave 1 moves MyBatis config into Nacos Service Private
-# DataId, which is the natural moment to narrow it.
+# so it cannot be forgotten. Wave 1 moves the production MyBatis override into
+# the Nacos Service Private DataId; the local fallback remains only for no-Nacos
+# development and is checked separately by the Nacos profile gate.
 KNOWN_MYBATIS_GLOBAL_SCAN = {
     "apps/core-host/src/main/resources/application.yml",
 }
@@ -1581,8 +1597,8 @@ def gate_mybatis_scan_scope() -> None:
         detail += (f"; {stale} no longer use the global swallow, remove from "
                    f"KNOWN_MYBATIS_GLOBAL_SCAN")
     if survivors:
-        detail += (f"; global swallow still present in {survivors} "
-                   f"(deliberate until Wave 1 moves MyBatis config to Nacos)")
+        detail += (f"; local fallback global swallow remains in {survivors} "
+                   f"(production Nacos override is checked by nacos-config-profile)")
     report(gate, True, detail)
 
 

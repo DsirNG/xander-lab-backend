@@ -4085,8 +4085,13 @@ classpath 上没有别人的 mapper 可吞。§80 的禁令写在"拆分后"的�
 本轮**刻意不改这一行配置**，因为改完无法验证 —— 五个 `@SpringBootTest` 都是切片上下文
 （显式 `classes = {...}`），没有任何测试会启动 MyBatis-Plus 并解析 `mapper-locations`。
 
-Wave 0B 的处置是**用门禁冻结现状**：`mybatis-scan-scope` 门禁有三条判据，
+Wave 0B 的处置是**用门禁冻结本地 fallback**：`mybatis-scan-scope` 门禁有三条判据，
 见 §8。Wave 1 把 MyBatis 配置搬进 Nacos Service Private DataId 时一并收窄。
+
+Wave 1 现已接通：`infrastructure/nacos/dinqor-core.yaml` 使用
+`classpath:/mapper/*.xml`，只加载 core-host 自己的 mapper。默认 `application.yml` 的
+`classpath*:` 仅作为不启用 Nacos 的本地 fallback；`nacos-config-profile` 门禁会同时守住
+DataId 导入和生产路径收窄。
 
 同时删掉了 `type-aliases-package` 里指向 **不存在包** 的 `com.xander.lab.entity`
 （旧式分层遗留的空目录）。剩下三个是真实域包，但唯一一份 mapper XML
