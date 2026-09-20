@@ -44,14 +44,6 @@ public class BlogContentPlanController {
         return Result.success(planService.update(UserContext.getUserId(), id, request));
     }
 
-    @PatchMapping("/{id}/status")
-    public Result<BlogContentPlanVO> updateStatus(@PathVariable Long id,
-                                                  @Valid @RequestBody BlogContentPlanStatusRequest request) {
-        // updateStatusForView 而不是 updateStatus：后者现在是与 ContentPlanPort 同名同参的
-        // 窄方法（返回契约读模型）。HTTP 层要的是前端页面渲染的全字段 VO，所以调这个。
-        return Result.success(planService.updateStatusForView(UserContext.getUserId(), id, request.getAction()));
-    }
-
     /** Immediate manual test trigger; runs through the same pipeline. */
     @PostMapping("/{id}/trigger")
     public Result<BlogPlanRunVO> trigger(@PathVariable Long id) {
