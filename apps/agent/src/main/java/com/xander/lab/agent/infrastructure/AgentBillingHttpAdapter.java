@@ -67,14 +67,7 @@ public class AgentBillingHttpAdapter implements BillingPort {
 
     @Override
     public void ensureAvailable(Long userId) {
-        try {
-            post("/internal/agent/billing/ensure-available", new UserRequest(userId), Void.class);
-        } catch (RestClientResponseException exception) {
-            if (exception.getStatusCode().value() == HttpStatus.PAYMENT_REQUIRED.value()) {
-                throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "积分不足，请先获取积分");
-            }
-            throw unavailable(exception);
-        }
+        post("/internal/agent/billing/ensure-available", new UserRequest(userId), Void.class);
     }
 
     @Override
@@ -106,6 +99,9 @@ public class AgentBillingHttpAdapter implements BillingPort {
                     .retrieve()
                     .body(responseType);
         } catch (RestClientResponseException exception) {
+            if (exception.getStatusCode().value() == HttpStatus.PAYMENT_REQUIRED.value()) {
+                throw new ResponseStatusException(HttpStatus.PAYMENT_REQUIRED, "积分不足，请先获取积分");
+            }
             throw unavailable(exception);
         } catch (RestClientException exception) {
             throw unavailable(exception);
