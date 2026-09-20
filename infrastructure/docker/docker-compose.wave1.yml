@@ -15,7 +15,7 @@ services:
         APP_PORT: "0"
     restart: "no"
     env_file:
-      - ${BACKEND_ENV_FILE:-../../.env.production}
+      - ${BACKEND_ENV_FILE:-../../.env.wave1}
     environment:
       SPRING_PROFILES_ACTIVE: ${MIGRATION_SPRING_PROFILES_ACTIVE:-default}
       SPRING_DATASOURCE_URL: ${MIGRATION_DB_URL:?set MIGRATION_DB_URL}
@@ -34,7 +34,7 @@ services:
         APP_PORT: "30002"
     restart: unless-stopped
     env_file:
-      - ${BACKEND_ENV_FILE:-../../.env.production}
+      - ${BACKEND_ENV_FILE:-../../.env.wave1}
     environment:
       SPRING_PROFILES_ACTIVE: ${CORE_SPRING_PROFILES_ACTIVE:-nacos}
       SPRING_DATASOURCE_URL: ${CORE_DB_URL:?set CORE_DB_URL}
@@ -68,7 +68,7 @@ services:
         APP_PORT: "30000"
     restart: unless-stopped
     env_file:
-      - ${BACKEND_ENV_FILE:-../../.env.production}
+      - ${BACKEND_ENV_FILE:-../../.env.wave1}
     environment:
       SPRING_PROFILES_ACTIVE: ${GATEWAY_SPRING_PROFILES_ACTIVE:-nacos}
       NACOS_CONFIG_ENABLED: "true"
@@ -99,7 +99,7 @@ services:
         APP_PORT: "30003"
     restart: unless-stopped
     env_file:
-      - ${BACKEND_ENV_FILE:-../../.env.production}
+      - ${BACKEND_ENV_FILE:-../../.env.wave1}
     environment:
       SPRING_PROFILES_ACTIVE: ${BLOGHTML_SPRING_PROFILES_ACTIVE:-nacos}
       NACOS_CONFIG_ENABLED: "true"

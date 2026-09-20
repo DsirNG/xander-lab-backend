@@ -1565,6 +1565,10 @@ def gate_wave1_compose_contract() -> None:
             problems.append(f"{name}: build target must be {module}:{port}")
         if "env_file" not in service:
             problems.append(f"{name}: shared secret env_file is missing")
+        else:
+            env_files = service.get("env_file") or []
+            if not any(".env.wave1" in str(value) for value in env_files):
+                problems.append(f"{name}: env_file must default to .env.wave1")
         environment = service.get("environment", {})
         if not isinstance(environment, dict):
             problems.append(f"{name}: environment must be a mapping")

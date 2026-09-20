@@ -38,7 +38,7 @@ long-running application container.
 It assumes Nacos, MySQL and Redis already exist outside this Compose project and keeps the
 historical root `docker-compose.yml` unchanged.
 
-Create a private environment file with separate database credentials, then run from the repo
+Create a private `.env.wave1` file with separate database credentials, then run from the repo
 root:
 
 ```bash
@@ -49,8 +49,10 @@ docker compose --env-file .env.wave1 \
 The required database variables are `MIGRATION_DB_URL`, `MIGRATION_DB_PASSWORD`, `CORE_DB_URL`
 and `CORE_DB_PASSWORD`; usernames default to `dinqor_migration` and `dinqor_core`. The Nacos
 variables `NACOS_SERVER_ADDR` and `NACOS_NAMESPACE` are also required. `BACKEND_ENV_FILE` may
-point at the existing common secret file for Redis, mail, OSS and model credentials, but its
-database username/password are overridden by the two service-specific pairs above.
+point at the existing `.env.production` common secret file for Redis, mail, OSS and model
+credentials, but its database username/password are overridden by the two service-specific
+pairs above. When `BACKEND_ENV_FILE` is omitted, `.env.wave1` itself is injected into all four
+containers.
 
 Compose waits for `migration-runner` to exit successfully before starting `core-host`, then
 waits for core readiness before starting Gateway. BlogHTML Preview is independent apart from

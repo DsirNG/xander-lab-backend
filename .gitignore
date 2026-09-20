@@ -40,5 +40,5 @@ apps/core-host/src/main/resources/application-local.yml
 .env.local
 .env.production
 .env.development
-
+.env.wave1
 
