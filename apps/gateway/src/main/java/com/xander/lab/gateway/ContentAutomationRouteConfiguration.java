@@ -16,6 +16,11 @@ public class ContentAutomationRouteConfiguration {
             @Value("${gateway.content-automation-uri:lb://dinqor-content-automation}")
             String contentAutomationUri) {
         return builder.routes()
+                .route("content-publishing-private-post-reads", route -> route
+                        .path("/api/blog/posts/mine", "/api/blog/posts/mine/{id}")
+                        .and()
+                        .method(org.springframework.http.HttpMethod.GET)
+                        .uri(contentAutomationUri))
                 .route("content-publishing-public-reads", route -> route
                         .path("/api/blog/posts", "/api/blog/posts/recent")
                         .and()

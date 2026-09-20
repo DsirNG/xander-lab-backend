@@ -1101,7 +1101,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#publishPost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 44
+    line: 39
   - id: integration-any-blog-posts-sync
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -1123,7 +1123,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getManageStats"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 79
+    line: 57
   - id: publishing-get-blog-posts-mine
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1132,9 +1132,9 @@ routes:
     path: "/api/blog/posts/mine"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getMyPosts"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 61
+    handler: "com.xander.lab.publishing.api.BlogPrivateReadController#listMine"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPrivateReadController.java
+    line: 24
   - id: publishing-get-blog-posts-mine-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1143,9 +1143,9 @@ routes:
     path: "/api/blog/posts/mine/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getMyPostById"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 84
+    handler: "com.xander.lab.publishing.api.BlogPrivateReadController#findMine"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPrivateReadController.java
+    line: 42
   - id: publishing-get-blog-posts-publish-rhythm
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1156,7 +1156,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getMyPublishRhythm"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 74
+    line: 52
   - id: publishing-get-blog-posts-publish-status
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1167,7 +1167,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getPublishStatus"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 51
+    line: 46
   - id: publishing-get-blog-posts-recent
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1189,7 +1189,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#softDeletePost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 113
+    line: 82
   - id: publishing-get-blog-posts-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1211,7 +1211,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#updatePost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 93
+    line: 62
   - id: publishing-delete-blog-posts-id-permanent
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1222,7 +1222,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#permanentlyDeletePost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 123
+    line: 92
   - id: publishing-patch-blog-posts-id-status
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1233,7 +1233,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#updatePostStatus"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 102
+    line: 71
   - id: publishing-post-blog-posts-id-view
     logical_owner: publishing
     deployment_unit: dinqor-content-automation

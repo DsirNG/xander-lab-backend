@@ -7,14 +7,11 @@ import com.xander.lab.publishing.api.BlogPostStatusUpdateRequest;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.api.CategoryVO;
 import com.xander.lab.publishing.api.TagVO;
-import com.xander.lab.common.PageData;
 import com.xander.lab.publishing.application.BlogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-
-import java.util.List;
 
 /**
  * 博客接口控制器
@@ -23,8 +20,6 @@ import java.util.List;
  * 接口列表：
  *   GET    /api/blog/posts                 获取文章列表（公开，仅已发布）
  *   POST   /api/blog/posts                 发布/存草稿（publish=false）
- *   GET    /api/blog/posts/mine            我的文章管理列表
- *   GET    /api/blog/posts/mine/{id}       我的文章详情（含草稿/回收站）
  *   PUT    /api/blog/posts/{id}            更新文章
  *   PATCH  /api/blog/posts/{id}/status     变更状态（草稿/发布/回收站）
  *   DELETE /api/blog/posts/{id}            软删除（进入回收站）
@@ -54,23 +49,6 @@ public class BlogController {
         return Result.success(new PublishStatus(postId == null ? "pending" : "published", postId));
     }
 
-    /**
-     * 我的文章列表（管理端）
-     * status: 不传=草稿+已发布；0=草稿；1=已发布；-1=回收站
-     */
-    @GetMapping("/posts/mine")
-    public Result<PageData<BlogPostVO>> getMyPosts(
-            @RequestParam(required = false) Integer status,
-            @RequestParam(required = false, defaultValue = "") String search,
-            @RequestParam(required = false, defaultValue = "1") int page,
-            @RequestParam(required = false, defaultValue = "10") int size) {
-        try {
-            return Result.success(blogService.getMyBlogs(status, search, page, size));
-        } catch (IllegalArgumentException e) {
-            return Result.badRequest(e.getMessage());
-        }
-    }
-
     @GetMapping("/posts/publish-rhythm")
     public Result<BlogPublishRhythmVO> getMyPublishRhythm() {
         return Result.success(blogService.getWeeklyPublishRhythm(UserContext.getUserId(), null));
@@ -79,15 +57,6 @@ public class BlogController {
     @GetMapping("/posts/manage-stats")
     public Result<BlogManageStatsVO> getManageStats() {
         return Result.success(blogService.getManageStats(UserContext.getUserId(), null));
-    }
-
-    @GetMapping("/posts/mine/{id}")
-    public Result<BlogPostVO> getMyPostById(@PathVariable Long id) {
-        BlogPostVO vo = blogService.getManagedBlogById(UserContext.getUserId(), id);
-        if (vo == null) {
-            return Result.notFound("文章不存在");
-        }
-        return Result.success(vo);
     }
 
     @PutMapping("/posts/{id}")
