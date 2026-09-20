@@ -60,9 +60,16 @@ public class ContentAutomationRouteConfiguration {
                         .and()
                         .method(org.springframework.http.HttpMethod.GET)
                         .uri(contentAutomationUri))
+                .route("content-automation-notification-reads", route -> route
+                        .path("/api/notifications", "/api/notifications/unread-count",
+                                "/api/notifications/read-all", "/api/notifications/{id}/read")
+                        .and()
+                        .method(org.springframework.http.HttpMethod.GET,
+                                org.springframework.http.HttpMethod.PATCH)
+                        .uri(contentAutomationUri))
                 .route("content-automation-cutover", route -> route
                         .path("/api/blog-agent/**", "/api/blog-plans/**", "/api/email-reminders/**",
-                                "/api/notifications/**")
+                                "/api/notifications/events")
                         .uri(contentAutomationUri))
                 .build();
     }

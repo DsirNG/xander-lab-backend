@@ -2045,15 +2045,15 @@ routes:
     path: "/api/notifications"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.api.BlogNotificationController#list"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
-    line: 33
-  - id: automation-any-notifications
+    handler: "com.xander.lab.automation.api.BlogNotificationReadController#list"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogNotificationReadController.java
+    line: 24
+  - id: automation-any-notifications-events
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
     http_method: ANY
-    path: "/api/notifications/**"
+    path: "/api/notifications/events"
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
@@ -2069,7 +2069,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogNotificationController#events"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
-    line: 25
+    line: 19
   - id: automation-patch-notifications-read-all
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -2078,9 +2078,9 @@ routes:
     path: "/api/notifications/read-all"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.api.BlogNotificationController#markAllRead"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
-    line: 50
+    handler: "com.xander.lab.automation.api.BlogNotificationReadController#markAllRead"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogNotificationReadController.java
+    line: 57
   - id: automation-get-notifications-unread-count
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -2089,9 +2089,9 @@ routes:
     path: "/api/notifications/unread-count"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.api.BlogNotificationController#unreadCount"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
-    line: 39
+    handler: "com.xander.lab.automation.api.BlogNotificationReadController#unreadCount"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogNotificationReadController.java
+    line: 35
   - id: automation-patch-notifications-id-read
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -2100,8 +2100,8 @@ routes:
     path: "/api/notifications/{id}/read"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.api.BlogNotificationController#markRead"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
+    handler: "com.xander.lab.automation.api.BlogNotificationReadController#markRead"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogNotificationReadController.java
     line: 44
   - id: billing-get-points
     logical_owner: billing

@@ -46,7 +46,7 @@ public class ContentAutomationProxyController {
             "/api/blog-agent/**",
             "/api/blog-plans/**",
             "/api/email-reminders/**",
-            "/api/notifications/**"
+            "/api/notifications/events"
     })
     public void proxy(HttpServletRequest request,
                       HttpServletResponse response) {

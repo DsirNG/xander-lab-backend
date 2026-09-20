@@ -1089,14 +1089,14 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-any-notifications
+  - id: automation-any-notifications-events
     owner: automation
     old:
       method: ANY
-      path: "/api/notifications/**"
+      path: "/api/notifications/events"
     new:
       method: ANY
-      path: "/api/v2/automations/notifications/**"
+      path: "/api/v2/automations/notifications/events"
     clients:
       web: pending
       miniprogram: pending
