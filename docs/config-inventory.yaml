@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 562
-  leaves: 422
+  total: 571
+  leaves: 425
 config:
   - key: server
     source: apps/bloghtml-preview/src/main/resources/application.yml
@@ -89,6 +89,21 @@ config:
     source: apps/bloghtml-preview/src/main/resources/application.yml
     value: ""
     leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config
+    source: apps/bloghtml-preview/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check
+    source: apps/bloghtml-preview/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/bloghtml-preview/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}"
+    leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery
     source: apps/bloghtml-preview/src/main/resources/application.yml
@@ -279,6 +294,21 @@ config:
     source: apps/core-host/src/main/resources/application.yml
     value: ""
     leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}"
+    leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery
     source: apps/core-host/src/main/resources/application.yml
@@ -1894,6 +1924,21 @@ config:
     source: apps/gateway/src/main/resources/application.yml
     value: ""
     leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config
+    source: apps/gateway/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check
+    source: apps/gateway/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}"
+    leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery
     source: apps/gateway/src/main/resources/application.yml

@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 422
-  service_private: 366
+  total: 425
+  service_private: 369
   secret: 47
   shared: 9
 config:
@@ -1609,6 +1609,21 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.gateway.routes.uri
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.config.import-check.enabled
     source: apps/gateway/src/main/resources/application.yml
     classification: service_private
     owner: shared

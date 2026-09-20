@@ -3,8 +3,8 @@
 spring:
   config:
     import:
-      - "optional:nacos:dinqor-shared.yaml?group=COMMON"
-      - "optional:nacos:dinqor-bloghtml-preview.yaml?group=DINQOR-BLOGHTML-PREVIEW"
+      - "nacos:dinqor-shared.yaml?group=COMMON"
+      - "nacos:dinqor-bloghtml-preview.yaml?group=DINQOR-BLOGHTML-PREVIEW"
   cloud:
     nacos:
       config:

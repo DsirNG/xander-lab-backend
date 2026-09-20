@@ -8,7 +8,7 @@ spring:
     nacos:
       config:
         # The default profile is local and does not import Nacos. The nacos profile
-        # supplies the actual optional:nacos: locations.
+        # supplies the actual required nacos: locations.
         import-check:
           enabled: ${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}
       discovery:

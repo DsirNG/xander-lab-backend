@@ -1163,13 +1163,14 @@ def gate_nacos_config_profile() -> None:
             problems.append(f"{module}: application-nacos.yml is missing")
             continue
         text = profile.read_text(encoding="utf-8")
-        if text.count("optional:nacos:") != len(data_ids):
+        imports = re.findall(r'^\s*-\s*"(nacos:[^"]+)"\s*$', text, re.M)
+        if len(imports) != len(data_ids):
             problems.append(
-                f"{module}: expected {len(data_ids)} optional Nacos imports, "
-                f"found {text.count('optional:nacos:')}"
+                f"{module}: expected {len(data_ids)} required Nacos imports, "
+                f"found {len(imports)}"
             )
         for data_id in data_ids:
-            if f"optional:nacos:{data_id}" not in text:
+            if not any(value.startswith(f"nacos:{data_id}?") for value in imports):
                 problems.append(f"{module}: missing import {data_id}")
         if module == "apps/core-host" and "dinqor_core" not in text:
             problems.append(

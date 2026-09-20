@@ -3,8 +3,8 @@
 spring:
   config:
     import:
-      - "optional:nacos:dinqor-shared.yaml?group=COMMON"
-      - "optional:nacos:dinqor-gateway.yaml?group=DINQOR-GATEWAY"
+      - "nacos:dinqor-shared.yaml?group=COMMON"
+      - "nacos:dinqor-gateway.yaml?group=DINQOR-GATEWAY"
   cloud:
     nacos:
       config:

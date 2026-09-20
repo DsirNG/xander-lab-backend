@@ -3,8 +3,8 @@
 spring:
   config:
     import:
-      - "optional:nacos:dinqor-shared.yaml?group=COMMON"
-      - "optional:nacos:dinqor-core.yaml?group=DINQOR-CORE"
+      - "nacos:dinqor-shared.yaml?group=COMMON"
+      - "nacos:dinqor-core.yaml?group=DINQOR-CORE"
   datasource:
     # Wave 1 runtime account; the password is deployment-only and never belongs in Nacos.
     username: ${SPRING_DATASOURCE_USERNAME:dinqor_core}

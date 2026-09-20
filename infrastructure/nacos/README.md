@@ -21,7 +21,8 @@ Runtime activation:
 - set `SPRING_PROFILES_ACTIVE=nacos` for `dinqor-core-host`, `dinqor-gateway` and
   `dinqor-bloghtml-preview`;
 - set `NACOS_SERVER_ADDR`, `NACOS_NAMESPACE` and `NACOS_CONFIG_ENABLED=true`;
-- keep local development on the default profile, where Nacos Config is not imported.
+- keep local development on the default profile, where Nacos Config is not imported;
+  the `nacos` profile fails startup when either required DataId cannot be loaded.
 
 Each `application-nacos.yml` imports exactly two DataIds: `dinqor-shared.yaml` from `COMMON`
 and the service-private DataId from its stable logical Group.
