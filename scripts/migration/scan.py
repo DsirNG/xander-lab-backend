@@ -634,8 +634,179 @@ def scan_tables() -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# application.yml config inventory
+# application.yml / @ConfigurationProperties config inventory
 # ---------------------------------------------------------------------------
+
+CONFIGURATION_PROPERTIES_RE = re.compile(
+    r"@ConfigurationProperties\s*\((?P<arguments>[^)]*)\)"
+)
+CONFIGURATION_PREFIX_RE = re.compile(
+    r"\b(?:prefix|value)\s*=\s*\"([^\"]+)\""
+)
+JAVA_PROPERTY_FIELD_RE = re.compile(
+    r"(?ms)^[ \t]*(?:private|protected|public)\s+"
+    r"(?!static\b)"
+    r"(?:final\s+)?[A-Za-z_$][\w$]*(?:\s*<[^;=]+?>)?"
+    r"(?:\s*\[\])?\s+(?P<name>[A-Za-z_$][\w$]*)\s*"
+    r"(?:=\s*.*?\s*)?;"
+)
+
+
+def mask_java_non_code(content: str) -> str:
+    """Blank comments and literals while preserving positions and newlines.
+
+    The scanner only needs balanced braces to find the body of a properties class.
+    Javadocs and string examples can contain braces too, so counting the raw source
+    would occasionally cut the class body at the wrong place.
+    """
+    chars = list(content)
+    index = 0
+    state = "code"
+    while index < len(chars):
+        if state == "code":
+            if content.startswith("//", index):
+                chars[index] = chars[index + 1] = " "
+                index += 2
+                state = "line-comment"
+                continue
+            if content.startswith("/*", index):
+                chars[index] = chars[index + 1] = " "
+                index += 2
+                state = "block-comment"
+                continue
+            if chars[index] == '"':
+                chars[index] = " "
+                index += 1
+                state = "string"
+                continue
+            if chars[index] == "'":
+                chars[index] = " "
+                index += 1
+                state = "char"
+                continue
+            index += 1
+            continue
+
+        if state == "line-comment":
+            if chars[index] == "\n":
+                state = "code"
+            else:
+                chars[index] = " "
+            index += 1
+            continue
+
+        if state == "block-comment":
+            if content.startswith("*/", index):
+                chars[index] = chars[index + 1] = " "
+                index += 2
+                state = "code"
+            else:
+                if chars[index] != "\n":
+                    chars[index] = " "
+                index += 1
+            continue
+
+        if state in ("string", "char"):
+            if chars[index] == "\\":
+                chars[index] = " "
+                if index + 1 < len(chars) and chars[index + 1] != "\n":
+                    chars[index + 1] = " "
+                    index += 2
+                else:
+                    index += 1
+                continue
+            if (state == "string" and chars[index] == '"') or \
+                    (state == "char" and chars[index] == "'"):
+                chars[index] = " "
+                index += 1
+                state = "code"
+            else:
+                if chars[index] != "\n":
+                    chars[index] = " "
+                index += 1
+    return "".join(chars)
+
+
+def class_body_range(content: str, masked: str, start: int) -> tuple[int, int] | None:
+    """Return the source range of the first class body after ``start``."""
+    class_match = re.search(r"\b(?:class|record)\s+\w+", masked[start:])
+    if not class_match:
+        return None
+    class_end = start + class_match.end()
+    open_index = masked.find("{", class_end)
+    if open_index < 0:
+        return None
+    depth = 1
+    index = open_index + 1
+    while index < len(masked) and depth:
+        if masked[index] == "{":
+            depth += 1
+        elif masked[index] == "}":
+            depth -= 1
+        index += 1
+    if depth:
+        return None
+    return open_index + 1, index - 1
+
+
+def scan_configuration_properties() -> list[dict]:
+    """Inventory keys declared by Spring ``@ConfigurationProperties`` classes.
+
+    YAML is not the only source of a configuration contract. A property class can
+    provide a default without an ``application.yml`` entry, which used to make the
+    key invisible to ``config-ownership-drift``. We record the key and source file,
+    but never persist Java initializer text: a default may itself contain a secret.
+    """
+    entries: list[dict] = []
+    for path in java_files():
+        content = read_text(path)
+        masked = mask_java_non_code(content)
+        # Search the original text because the prefix is a string literal; use the
+        # masked copy only for class/body structure where comments and literals must
+        # not affect brace matching.
+        for annotation in CONFIGURATION_PROPERTIES_RE.finditer(content):
+            prefix_match = CONFIGURATION_PREFIX_RE.search(annotation.group("arguments"))
+            if not prefix_match:
+                continue
+            prefix = prefix_match.group(1).strip(".")
+            body_range = class_body_range(content, masked, annotation.end())
+            if body_range is None:
+                continue
+            body_start, body_end = body_range
+            body = content[body_start:body_end]
+            masked_body = masked[body_start:body_end]
+
+            # Only fields directly owned by the annotated class are included. Nested
+            # property objects can be added as a follow-up once their binding shape is
+            # standardised; RefreshTokenProperties and the current Contract keys are
+            # all flat and therefore fully covered here.
+            depths: list[int] = [0] * len(masked_body)
+            depth = 0
+            for index, char in enumerate(masked_body):
+                depths[index] = depth
+                if char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth = max(0, depth - 1)
+
+            source = path.relative_to(REPO).as_posix()
+            for field in JAVA_PROPERTY_FIELD_RE.finditer(body):
+                if depths[field.start()] != 0:
+                    continue
+                name = field.group("name")
+                key = f"{prefix}.{kebab(name)}" if prefix else kebab(name)
+                has_initializer = "=" in field.group(0)
+                entries.append({
+                    "key": key,
+                    "source": source,
+                    "value": "<java-default>" if has_initializer else "<java-default:none>",
+                    "leaf": True,
+                    "logical_owner": owner_of_config(key),
+                    "source_kind": "java-configuration-properties",
+                    "line": content[:body_start + field.start()].count("\n") + 1,
+                })
+    entries.sort(key=lambda item: (item["source"], item["key"]))
+    return entries
 
 def scan_config() -> list[dict]:
     entries: list[dict] = []
@@ -669,6 +840,7 @@ def scan_config() -> list[dict]:
                     "leaf": bool(value),
                     "logical_owner": owner_of_config(full),
                 })
+    entries.extend(scan_configuration_properties())
     return entries
 
 
@@ -684,6 +856,7 @@ CONFIG_OWNERS = [
     (r"^knowledge-base\.", "knowledge"),
     (r"^agent\.", "agent"),
     (r"^mcp\.", "integration"),
+    (r"^auth\.refresh\.", "core"),
     (r"^blog-html\.", "bloghtml-preview"),
     (r"^blog\.|^blog-content-plan\.|^email-reminder\.", "content-automation"),
     (r"^img2three\.", "studio"),
@@ -838,7 +1011,10 @@ def build_config_inventory() -> dict:
     leaves = [e for e in entries if e["leaf"]]
     return {
         "generated_by": "scripts/migration/scan.py",
-        "note": "Machine-owned key set of every configuration key in application.yml.",
+        "note": (
+            "Machine-owned key set of every configuration key in application.yml and "
+            "every field declared by @ConfigurationProperties."
+        ),
         "counts": {"total": len(entries), "leaves": len(leaves)},
         "config": entries,
     }
@@ -1091,7 +1267,8 @@ V2_PATH_TABLE = sorted(
 
 CONFIG_OWNERSHIP_HEADER = """DinQorAI microservice migration — 配置归属清单（V9 section 16 / section 17）.
 
-Bootstrapped by scripts/migration/scan.py from docs/config-inventory.yaml.
+Bootstrapped by scripts/migration/scan.py from docs/config-inventory.yaml and
+@ConfigurationProperties declarations. Java initializer text is never copied.
 Nacos 规范：Namespace = dinqor-{dev,staging,prod}，Group = 稳定逻辑服务名
 （COMMON / DINQOR-CORE / DINQOR-GATEWAY / ...），DataId = dinqor-<service>.yaml。
 

@@ -1,6 +1,7 @@
 # DinQorAI microservice migration — 配置归属清单（V9 section 16 / section 17）.
 #
-# Bootstrapped by scripts/migration/scan.py from docs/config-inventory.yaml.
+# Bootstrapped by scripts/migration/scan.py from docs/config-inventory.yaml and
+# @ConfigurationProperties declarations. Java initializer text is never copied.
 # Nacos 规范：Namespace = dinqor-{dev,staging,prod}，Group = 稳定逻辑服务名
 # （COMMON / DINQOR-CORE / DINQOR-GATEWAY / ...），DataId = dinqor-<service>.yaml。
 #
@@ -12,13 +13,18 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 286
-  service_private: 241
-  secret: 36
+  total: 422
+  service_private: 366
+  secret: 47
   shared: 9
 config:
   - key: agent.conversation.compaction-enabled
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.compaction-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -27,8 +33,18 @@ config:
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
+  - key: agent.conversation.compaction-retain-ratio
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
   - key: agent.conversation.compaction-threshold-ratio
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.compaction-threshold-ratio
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -37,8 +53,18 @@ config:
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
+  - key: agent.conversation.context-message-limit
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
   - key: agent.conversation.context-window-tokens
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.context-window-tokens
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -47,8 +73,28 @@ config:
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-parallel-tools
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-reflections
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
   - key: agent.conversation.max-steps
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-steps
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-sub-agent-steps
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -57,8 +103,18 @@ config:
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-tool-failures
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
   - key: agent.conversation.stale-conversation-minutes
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.stale-conversation-minutes
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -67,8 +123,18 @@ config:
     classification: secret
     owner: agent
     nacos_group: DINQOR-AGENT
+  - key: agent.model.api-key
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: secret
+    owner: agent
+    nacos_group: DINQOR-AGENT
   - key: agent.model.base-url
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.base-url
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -77,8 +143,18 @@ config:
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
+  - key: agent.model.connect-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
   - key: agent.model.model
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.model
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -87,8 +163,18 @@ config:
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
+  - key: agent.model.read-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
   - key: agent.model.reasoning-effort
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.reasoning-effort
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -97,6 +183,11 @@ config:
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
+  - key: agent.model.web-search-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
   - key: blog-html.preview.frame-ancestors
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
@@ -104,6 +195,11 @@ config:
     nacos_group: DINQOR-BLOGHTML-PREVIEW
   - key: blog-html.preview.frame-ancestors
     source: apps/core-host/src/main/resources/application-local.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.frame-ancestors
+    source: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/infrastructure/BlogHtmlPreviewProperties.java
     classification: service_private
     owner: bloghtml-preview
     nacos_group: DINQOR-BLOGHTML-PREVIEW
@@ -112,6 +208,11 @@ config:
     classification: service_private
     owner: bloghtml-preview
     nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.max-code-bytes
+    source: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/infrastructure/BlogHtmlPreviewProperties.java
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
   - key: blog-html.preview.page-url-pattern
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
@@ -122,8 +223,18 @@ config:
     classification: service_private
     owner: bloghtml-preview
     nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.page-url-pattern
+    source: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/infrastructure/BlogHtmlPreviewProperties.java
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
   - key: blog-html.preview.rate-limit-max-requests
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.rate-limit-max-requests
+    source: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/infrastructure/BlogHtmlPreviewProperties.java
     classification: service_private
     owner: bloghtml-preview
     nacos_group: DINQOR-BLOGHTML-PREVIEW
@@ -132,8 +243,18 @@ config:
     classification: service_private
     owner: bloghtml-preview
     nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.rate-limit-window-seconds
+    source: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/infrastructure/BlogHtmlPreviewProperties.java
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
   - key: blog-html.preview.ttl-seconds
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: bloghtml-preview
+    nacos_group: DINQOR-BLOGHTML-PREVIEW
+  - key: blog-html.preview.ttl-seconds
+    source: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/infrastructure/BlogHtmlPreviewProperties.java
     classification: service_private
     owner: bloghtml-preview
     nacos_group: DINQOR-BLOGHTML-PREVIEW
@@ -187,6 +308,11 @@ config:
     classification: secret
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.api-key
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
+    classification: secret
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.base-url
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
@@ -194,6 +320,11 @@ config:
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.base-url
     source: apps/core-host/src/main/resources/application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.base-url
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
@@ -202,6 +333,11 @@ config:
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.connect-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.image-model
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
@@ -209,6 +345,11 @@ config:
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.image-model
     source: apps/core-host/src/main/resources/application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.image-model
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
@@ -222,6 +363,11 @@ config:
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.image-size
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.max-illustrations
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
@@ -232,6 +378,11 @@ config:
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.max-illustrations
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.model
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
@@ -239,6 +390,11 @@ config:
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.model
     source: apps/core-host/src/main/resources/application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.model
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
@@ -247,8 +403,18 @@ config:
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.read-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.stale-task-minutes
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.stale-task-minutes
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
@@ -259,6 +425,11 @@ config:
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.web-search-enabled
     source: apps/core-host/src/main/resources/application-local.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.web-search-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentProperties.java
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
@@ -322,8 +493,18 @@ config:
     classification: service_private
     owner: core
     nacos_group: DINQOR-CORE
+  - key: admin.model-gateway.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/admin/infrastructure/ModelGatewayProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
   - key: admin.model-gateway.encryption-key
     source: apps/core-host/src/main/resources/application.yml
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: admin.model-gateway.encryption-key
+    source: apps/core-host/src/main/java/com/xander/lab/admin/infrastructure/ModelGatewayProperties.java
     classification: secret
     owner: core
     nacos_group: DINQOR-CORE
@@ -412,8 +593,113 @@ config:
     classification: service_private
     owner: core
     nacos_group: DINQOR-CORE
+  - key: auth.refresh.access-ttl-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.ciphertext-cleanup-batch-size
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.ciphertext-cleanup-interval-ms
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.ciphertext-cleanup-max-batches
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.cleanup-slow-batch-ms
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.encryption-key
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.grace-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.history-cleanup-batch-size
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.history-cleanup-interval-ms
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.history-cleanup-max-batches
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.history-cleanup-sleep-ms
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.max-generations-per-sid
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.retention-hours
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.security-outbox-publish-batch-size
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.security-outbox-publish-interval-ms
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.security-reconcile-batch-size
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.security-reconcile-interval-ms
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.session-ttl-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
   - key: billing.enabled
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/billing/infrastructure/BillingProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.flat
+    source: apps/core-host/src/main/java/com/xander/lab/billing/infrastructure/BillingProperties.java
     classification: service_private
     owner: core
     nacos_group: DINQOR-CORE
@@ -434,6 +720,16 @@ config:
     nacos_group: DINQOR-CORE
   - key: billing.grant-register
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.grant-register
+    source: apps/core-host/src/main/java/com/xander/lab/billing/infrastructure/BillingProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.models
+    source: apps/core-host/src/main/java/com/xander/lab/billing/infrastructure/BillingProperties.java
     classification: service_private
     owner: core
     nacos_group: DINQOR-CORE
@@ -474,6 +770,16 @@ config:
     nacos_group: DINQOR-CORE
   - key: billing.pre-check-min-balance
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.pre-check-min-balance
+    source: apps/core-host/src/main/java/com/xander/lab/billing/infrastructure/BillingProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: billing.price
+    source: apps/core-host/src/main/java/com/xander/lab/billing/infrastructure/BillingProperties.java
     classification: service_private
     owner: core
     nacos_group: DINQOR-CORE
@@ -567,8 +873,58 @@ config:
     classification: secret
     owner: core
     nacos_group: DINQOR-CORE
+  - key: wechat.credential.encryption-key
+    source: apps/core-host/src/main/java/com/xander/lab/identity/infrastructure/wechat/WechatCredentialProperties.java
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
   - key: wechat.miniapp.code-2-session-url
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.code2session-url
+    source: apps/core-host/src/main/java/com/xander/lab/identity/infrastructure/wechat/WechatMiniAppProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.connect-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/identity/infrastructure/wechat/WechatMiniAppProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.env-version
+    source: apps/core-host/src/main/java/com/xander/lab/identity/infrastructure/wechat/WechatMiniAppProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.login-page
+    source: apps/core-host/src/main/java/com/xander/lab/identity/infrastructure/wechat/WechatMiniAppProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.miniapp.read-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/identity/infrastructure/wechat/WechatMiniAppProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.virtual-pay.api-base-url
+    source: apps/core-host/src/main/java/com/xander/lab/virtualpay/infrastructure/VirtualPayProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.virtual-pay.connect-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/virtualpay/infrastructure/VirtualPayProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.virtual-pay.message-token
+    source: apps/core-host/src/main/java/com/xander/lab/virtualpay/infrastructure/VirtualPayProperties.java
+    classification: secret
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: wechat.virtual-pay.read-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/virtualpay/infrastructure/VirtualPayProperties.java
     classification: service_private
     owner: core
     nacos_group: DINQOR-CORE
@@ -582,8 +938,18 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.connect-timeout-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.client.credential-encryption-key
     source: apps/core-host/src/main/resources/application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.credential-encryption-key
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
     classification: secret
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -592,8 +958,18 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.client.max-description-length
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.max-description-length
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -602,8 +978,23 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.max-result-length
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.max-tool-name-length
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.client.max-tools-per-server
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.max-tools-per-server
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -612,8 +1003,18 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.client.request-timeout-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.csdn.enabled
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/CsdnMcpProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -622,8 +1023,18 @@ config:
     classification: secret
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.api-key
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/infrastructure/CsdnProperties.java
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.csdn.platform.authorization-timeout-seconds
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.authorization-timeout-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/infrastructure/CsdnProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -632,8 +1043,23 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.base-url
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/infrastructure/CsdnProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.cleanup-interval-ms
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/infrastructure/CsdnProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.csdn.platform.credential-encryption-key
     source: apps/core-host/src/main/resources/application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.credential-encryption-key
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/infrastructure/CsdnProperties.java
     classification: secret
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -642,8 +1068,18 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/infrastructure/CsdnProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.csdn.platform.selenium-url
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.selenium-url
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/infrastructure/CsdnProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -652,8 +1088,18 @@ config:
     classification: secret
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.csdn.platform.web-console-secret
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/infrastructure/CsdnProperties.java
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.dual.enabled
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.dual.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/dual/McpDualProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -662,8 +1108,23 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/JuejinMcpProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.authorization-timeout-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.juejin.platform.base-url
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.base-url
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -672,8 +1133,23 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.catalog-freshness-hours
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.cleanup-interval-ms
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.juejin.platform.connect-timeout-millis
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.connect-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -682,8 +1158,18 @@ config:
     classification: secret
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.credential-encryption-key
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.juejin.platform.default-aid
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.default-aid
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -692,8 +1178,28 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.qr-image-selector
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.juejin.platform.read-timeout-millis
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.read-timeout-millis
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.juejin.platform.selenium-url
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/infrastructure/JuejinPlatformProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -702,8 +1208,18 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.access-token-ttl-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/McpOAuthProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.oauth.authorization-code-ttl-seconds
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.authorization-code-ttl-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/McpOAuthProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -712,8 +1228,18 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.authorization-request-ttl-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/McpOAuthProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.oauth.enabled
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/McpOAuthProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -722,8 +1248,18 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.public-base-url
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/McpOAuthProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.oauth.rate-limit-max-requests
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.rate-limit-max-requests
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/McpOAuthProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -732,13 +1268,33 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.rate-limit-window-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/McpOAuthProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: mcp.oauth.refresh-token-ttl-seconds
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: mcp.oauth.refresh-token-ttl-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/security/McpOAuthProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: knowledge-base.allowed-extensions
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.auto-structure-chapter-threshold
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.auto-structure-chapter-threshold
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -747,8 +1303,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: knowledge-base.auto-structure-max-chars
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.chunk-staging-dir
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.chunk-staging-dir
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -757,8 +1323,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-auto-tags
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.max-chapters
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-chapters
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -767,8 +1343,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-chunk-size
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.max-extract-chars
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-extract-chars
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -777,8 +1363,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-file-bytes
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.max-folder-depth
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-folder-depth
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -787,8 +1383,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-folders
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.max-points-per-node
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-points-per-node
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -797,8 +1403,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: knowledge-base.max-tags
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.min-chunk-size
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.min-chunk-size
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -807,8 +1423,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: knowledge-base.reaper-batch-size
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.reaper-enabled
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.reaper-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -827,8 +1453,23 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: knowledge-base.session-ttl-hours
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: knowledge-base.summary-length
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.summary-length
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: knowledge-base.text-extensions
+    source: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeBaseProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -837,8 +1478,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: recitation.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/recitation/infrastructure/RecitationProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: recitation.max-audio-bytes
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: recitation.max-audio-bytes
+    source: apps/core-host/src/main/java/com/xander/lab/recitation/infrastructure/RecitationProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -847,8 +1498,18 @@ config:
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
+  - key: recitation.stale-claim-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/recitation/infrastructure/RecitationProperties.java
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
   - key: recitation.worker-batch-size
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: knowledge
+    nacos_group: DINQOR-CORE
+  - key: recitation.worker-batch-size
+    source: apps/core-host/src/main/java/com/xander/lab/recitation/infrastructure/RecitationProperties.java
     classification: service_private
     owner: knowledge
     nacos_group: DINQOR-CORE
@@ -1312,6 +1973,11 @@ config:
     classification: shared
     owner: shared
     nacos_group: COMMON
+  - key: img2three.agent
+    source: apps/core-host/src/main/java/com/xander/lab/studio/infrastructure/Img2ThreeProperties.java
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
   - key: img2three.agent.api-key
     source: apps/core-host/src/main/resources/application.yml
     classification: secret
@@ -1337,13 +2003,28 @@ config:
     classification: service_private
     owner: studio
     nacos_group: DINQOR-CORE
+  - key: img2three.pipeline-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/studio/infrastructure/Img2ThreeProperties.java
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
   - key: img2three.pipeline-root
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: studio
     nacos_group: DINQOR-CORE
+  - key: img2three.pipeline-root
+    source: apps/core-host/src/main/java/com/xander/lab/studio/infrastructure/Img2ThreeProperties.java
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
   - key: img2three.python-command
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: studio
+    nacos_group: DINQOR-CORE
+  - key: img2three.python-command
+    source: apps/core-host/src/main/java/com/xander/lab/studio/infrastructure/Img2ThreeProperties.java
     classification: service_private
     owner: studio
     nacos_group: DINQOR-CORE

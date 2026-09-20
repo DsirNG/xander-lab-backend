@@ -135,7 +135,7 @@
 | `lockAtMostFor` 未按实测校准 | 取值是从任务间隔启发式推的（`PT5M` / `PT2M`），不是量出来的。设得过小会在多实例下出现锁提前释放 → 重复执行（幂等，无害）；设得过大则故障实例会长时间挡住其他实例 | 切流前 |
 | 真实负载感知暂停 | 见 §6，目前只有单批耗时这一个代理信号 | Wave 2 |
 | Primary 绑定未实现 | §42 要求 DELETE 必须走 Primary。当前单库无此问题；将来读写分离时本任务必须显式绑定主库数据源，**不得跟随只读路由**（在 Replica 上 DELETE 会直接失败） | 读写分离前 |
-| `auth.refresh.*` 配置键不在机器清单里 | `RefreshTokenProperties` 的 19 个键只存在于 Java 默认值，`scan_config()` 只读 `application.yml` → 它们对 `config-ownership-drift` 等门禁**完全不可见**。而该类自己的 Javadoc 说这些值「全部属于 Contract」（§36）。另外 `@Scheduled` 占位符默认值与配置类默认值是两处手写 | 待办（见 §8） |
+| `auth.refresh.*` 配置键不在机器清单里 | 已由 `scan.py` 扫描 `@ConfigurationProperties` 字段；Java 初始化表达式只记录为安全占位符，不落盘原文。`configuration-properties-coverage` 会阻止源代码键从清单中静默消失 | ✅ 已完成；后续仍需把 `@Scheduled` 占位符默认值与配置类默认值收敛为单一真源 |
 | `auth.refresh.enabled` 默认 `false` | 整个新 Token 模型未生效，所以这两个任务当前是空转（表为空）。切流是 Wave 2（§94） | 切流前 |
 
 ---
@@ -155,15 +155,7 @@ java ... -Dtest=AuthRefreshRetentionServiceTest test
 
 # 机器门禁（scheduler-lock-scope-consistency 校验锁名与 execution_scope）
 python scripts/migration/ci_gates.py
+
+# 配置 Contract 的源代码覆盖门禁
+python scripts/migration/ci_gates.py configuration-properties-coverage
 ```
-
-### 尚未被机器守住的配置键
-
-`scan_config()` 只读 `application.yml` / `application-local.yml`，
-所以 `@ConfigurationProperties` 类里**只以 Java 默认值存在**的键不会进入
-`config-inventory.yaml`，也就不会被 `config-ownership-drift` 检查。
-
-`RefreshTokenProperties` 的 19 个键全部属于这种情况（§36 明确它们是 Contract）。
-补法是在 `scan_config()` 里增加 `@ConfigurationProperties` 扫描，
-但这会让 `config-ownership.yaml` 新增约 19 个待分类键 —— 值得单独做一次，
-不要和清理任务的改动混在一起。

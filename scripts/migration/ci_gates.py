@@ -322,6 +322,39 @@ def gate_config_ownership_drift() -> None:
     report(gate, True, f"{len(owned)} leaf keys classified")
 
 
+def gate_configuration_properties_coverage() -> None:
+    """Every Java configuration property must enter the machine inventory.
+
+    ``config-ownership-drift`` only proves that the generated inventory has an
+    ownership row. It cannot detect a scanner regression that stops discovering a
+    ``@ConfigurationProperties`` field and then regenerates both files consistently.
+    Compare the source scan with the inventory so the V9 section 13 key-set guarantee
+    is enforced at the source boundary too.
+    """
+    gate = "configuration-properties-coverage"
+    expected = {
+        (entry["key"], entry["source"])
+        for entry in scan.scan_configuration_properties()
+    }
+    inventory = load("config-inventory.yaml")["config"]
+    actual = {
+        (entry["key"], entry["source"])
+        for entry in inventory
+        if entry.get("source_kind") == "java-configuration-properties"
+    }
+    missing = sorted(expected - actual)
+    stale = sorted(actual - expected)
+    if missing or stale:
+        details = []
+        if missing:
+            details.append(f"missing {len(missing)} source key(s): {missing[:8]}")
+        if stale:
+            details.append(f"stale {len(stale)} source key(s): {stale[:8]}")
+        report(gate, False, "; ".join(details) + " -- re-run scripts/migration/scan.py")
+        return
+    report(gate, True, f"{len(expected)} @ConfigurationProperties keys covered")
+
+
 def gate_shared_kernel_reverse_dependency() -> None:
     gate = "shared-kernel-reverse-dependency"
     java = scan.scan_java()
@@ -1700,6 +1733,7 @@ GATES = {
     "scheduled-scan-ref-freshness": gate_scheduled_scan_ref_freshness,
     "table-ownership-drift": gate_table_ownership_drift,
     "config-ownership-drift": gate_config_ownership_drift,
+    "configuration-properties-coverage": gate_configuration_properties_coverage,
     "shared-kernel-reverse-dependency": gate_shared_kernel_reverse_dependency,
     "shared-kernel-classification": gate_shared_kernel_classification,
     "contract-dependency-boundary": gate_contract_dependency_boundary,
