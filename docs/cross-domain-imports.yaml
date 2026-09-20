@@ -33,6 +33,7 @@ counts:
     - DinQorAIApplication.java
     - gateway
     - migration
+    - operations
 edges:
   - from: virtualpay
     to: identity

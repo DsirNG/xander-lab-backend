@@ -262,9 +262,9 @@ capabilities:
     ref: V9 §21
     status: changed
     contract_change_ref: shared-kernel-boundary
-    evidence: "common/RedisHealthMonitor.java → import integration.mail.MailService（config/WebConfig.java → import identity.security.AuthInterceptor 已于 Wave 0B 由 xander-webmvc-support 消除）"
-    notes: "一旦把 common 抽成共享 jar 被各服务依赖，所有服务都传递依赖 identity + integration，libs/contracts 边界失效。ArchUnit 现有两条规则都不覆盖它（common 不是业务域）→ 必须单独加一条「共享内核不得依赖任何业务域」。"
-    acceptance: "CI 门禁 shared-kernel-reverse-dependency 通过（当前 1 处违规必须清零；原 2 处，config → identity 已消除）"
+    evidence: "RedisHealthMonitor 已移至 operations.redishealth 并改依赖 contracts/integration-api 的 MailPort；common 只保留 RedisHealthProbe。config/WebConfig.java → identity.security.AuthInterceptor 也已由 xander-webmvc-support 消除"
+    notes: "共享内核可被所有宿主复用，不能反向依赖业务域实现。运维告警仍可使用邮件能力，但必须通过 integration-api 端口消费，不能把 MailService implementation 引回 common。"
+    acceptance: "CI 门禁 shared-kernel-reverse-dependency 通过且违规数为 0"
 
   - id: gateway-stream-proxy-transparent
     since: V9

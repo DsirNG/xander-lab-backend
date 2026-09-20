@@ -100,21 +100,22 @@ Wave 0B 已抽出 **6 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 理由见 §6 与 §10.3：否则把类型搬进契约之后，跨域基线**一点都不会动**，
 这次抽取在唯一的进度指标上完全隐形。
 
-`common` / `config` / `filter` 三个包**当前剩余 9 个类**，全部还在应用模块里
+`common` / `config` / `filter` 三个包**当前剩余 8 个类**，全部还在应用模块里；
+运维告警调度器已单独归到 `operations.redishealth`。
 （⚠️ 2026-09-20 实测订正：原文写"11 个类"，那还是把 `config` 里已搬走的 3 个算在内；
-而且列表本身还漏了 `common/security/SecurityPlaneReadiness.java`。9 是 `find` 数出来的，
+而且列表本身还漏了 `common/security/SecurityPlaneReadiness.java`。8 是当前源码清单，
 不是从这张表加出来的）：
 
 ```text
 common/HealthController.java              ← 运维端点，见 §4
-common/RedisHealthMonitor.java            ← 运维型 Redis，见 §4
-common/RedisHealthProbe.java              ← 运维型 Redis，见 §4
+common/RedisHealthProbe.java              ← 运维型 Redis 探针，见 §4
 common/security/ConnectionRegistry.java   ← 连接注册表（§49）
 common/security/SecurityPlaneConfiguration.java
 common/security/SecurityPlaneReadiness.java
 common/security/SecurityStateCache.java
 config/ShedLockConfiguration.java
 filter/RequestLoggingFilter.java          ← 目标是 xander-observability-core
+operations/redishealth/RedisHealthMonitor.java ← 运维告警调度器，见 §4
 ```
 
 `config/GlobalExceptionHandler.java` / `config/ResultStatusResponseBodyAdvice.java` /
@@ -3483,9 +3484,10 @@ dinqor-core-host ──1──▶ dinqor-content-automation ──4──▶ din
 
 ### 3unvicies.10 ⚠️ 刻意没做的事 / 残留
 
-- **没有把 `RedisHealthMonitor` 改成依赖 `MailPort`**：它注入的是具体类 `MailService`，
-  但它在 `common`，与 `integration` 同属 `dinqor-core-host` —— 收它不减任何跨单元边。
-  ADR 待办 30 记的那件事（"让它依赖 `AlertPort` 并移出 `common`"）是**另一刀**。
+- **`RedisHealthMonitor` 的共享内核残留已清掉**：它已移到
+  `operations.redishealth`，只依赖 `RedisHealthProbe` 与 `integration-api` 的 `MailPort`；
+  具体 `MailService` 仍留在 integration。这样 common 不再反向依赖业务 implementation，
+  `shared-kernel-reverse-dependency` 的 Wave 0B 基线已归零。
 - **`email-reminder.display-zone` 的归属没动**：改造后读它的人（`EmailReminderScheduler`）
   与 owner（`content-automation`）终于是同一个，但 `config-ownership.yaml` 里那条记录
   **一个字都没改**（本来就记对了）。⚠️ 与 §3vicies.10 的 `img2three` 那条不同：
@@ -3932,11 +3934,12 @@ E / G 的 `restore` 行打印 `1ae8d38b…`，而驱动脚本与收尾 `git stat
 `grep -rn "TypeHandler"` 扫全仓返回**零**结果。所以这一项**没有东西可搬**，
 不是"搬了但没记录"。将来若新增，归属 `xander-mybatis-support`。
 
-### 4.3 `HealthController` / `RedisHealthMonitor` / `RedisHealthProbe` 不进任何 lib
+### 4.3 `HealthController` / `RedisHealthProbe` 不进任何 lib
 
-§19 明确："运维型 Redis 健康检查不进通用 libs"。这三个类**不能**为了"让 common 清空"
+§19 明确："运维型 Redis 健康检查不进通用 libs"。这两个类**不能**为了"让 common 清空"
 而塞进 `xander-model` 或 `xander-mybatis-support` —— 那正是 §19 要消灭的超级 jar 的做法。
-它们属于 application/operations，Wave 1 跟随宿主。
+它们属于 application/operations，Wave 1 跟随宿主。告警调度器已归入
+`operations.redishealth`，并通过 `integration-api` 的 `MailPort` 消费邮件能力。
 
 ### 4.4 包名要跟着归属走：`identity.security` → `auth.core`
 

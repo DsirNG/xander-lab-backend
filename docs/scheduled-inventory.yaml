@@ -30,13 +30,6 @@ scheduled:
     logical_owner: automation
     file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java
     line: 62
-  - id: redis-health-monitor
-    class: com.xander.lab.common.RedisHealthMonitor
-    method: checkRedis
-    trigger: "fixedDelayString = \"${redis-monitor.poll-interval-ms:30000}\", initialDelayString = \"${redis-monitor.initial-delay-ms:30000}\""
-    logical_owner: unassigned
-    file: apps/core-host/src/main/java/com/xander/lab/common/RedisHealthMonitor.java
-    line: 45
   - id: auth-refresh-ciphertext-cleanup
     class: com.xander.lab.identity.application.AuthRefreshCiphertextCleanup
     method: clearExpiredCiphertext
@@ -93,6 +86,13 @@ scheduled:
     logical_owner: knowledgebase
     file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java
     line: 39
+  - id: redis-health-monitor
+    class: com.xander.lab.operations.redishealth.RedisHealthMonitor
+    method: checkRedis
+    trigger: "fixedDelayString = \"${redis-monitor.poll-interval-ms:30000}\", initialDelayString = \"${redis-monitor.initial-delay-ms:30000}\""
+    logical_owner: operations
+    file: apps/core-host/src/main/java/com/xander/lab/operations/redishealth/RedisHealthMonitor.java
+    line: 46
   - id: recitation-worker
     class: com.xander.lab.recitation.application.RecitationWorker
     method: process

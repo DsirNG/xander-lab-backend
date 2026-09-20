@@ -18,8 +18,8 @@
 
 counts:
   total: 14
-  planned: 12
-  active: 2
+  planned: 11
+  active: 3
   frozen: 0
 
 changes:
@@ -303,20 +303,21 @@ changes:
   - id: shared-kernel-boundary
     type: dependency_boundary
     owner: shared
-    status: planned
+    status: active
     change:
       forbidden_dependencies:
         - "common / config / util → 任何业务域 implementation"
-      current_violations:
-        - source: apps/core-host/src/main/java/com/xander/lab/common/RedisHealthMonitor.java
-          imports: com.xander.lab.integration.mail.MailService
+      current_violations: []
       resolved_violations:
         - source: apps/core-host/src/main/java/com/xander/lab/config/WebConfig.java
           imports: com.xander.lab.identity.security.AuthInterceptor
           resolved_by: "Wave 0B xander-webmvc-support：WebConfig 与 AuthInterceptor 一起搬进 libs/xander-webmvc-support（包名 com.xander.lab.webmvc），AuthInterceptor 的依赖从 identity.application.AuthService 收窄到 core.api.AccessTokenLookupPort。config -> identity 这条边随之消失，ci_gates.py 的 KNOWN_SHARED_KERNEL_VIOLATIONS 已删掉 ('config','identity')。"
+        - source: apps/core-host/src/main/java/com/xander/lab/common/RedisHealthMonitor.java
+          imports: com.xander.lab.integration.mail.MailService
+          resolved_by: "Wave 0B follow-up：监控移到 com.xander.lab.operations.redishealth，只依赖 common.RedisHealthProbe 与 contracts/integration-api 的 MailPort；具体 MailService 仍留在 integration。"
       remedy:
-        - "common/RedisHealthMonitor → 依赖 AlertPort 接口，MailService 实现留在 integration；并移出 common 到 operations/redis-health 或 core-host observability worker"
-    notes: "一旦 common 抽成共享 jar 被各服务依赖，所有服务都传递依赖 identity + integration，libs/contracts 边界失效。ArchUnit 现有「domain 不依赖 infrastructure」「业务域之间不 import 实现」两条规则都不覆盖它（common 不是业务域）。"
+        - "已完成：RedisHealthMonitor 移出 common 并收窄为 MailPort；后续新增运维组件不得回写 common → 业务 implementation 依赖。"
+    notes: "共享内核不得依赖业务域实现。common 只保留可被所有宿主复用的 Redis 探针；运维告警组件位于 operations，邮件能力通过 integration-api 端口消费。"
     capability_refs: [shared-kernel-no-business-dependency]
 
   - id: security-plane-fail-closed

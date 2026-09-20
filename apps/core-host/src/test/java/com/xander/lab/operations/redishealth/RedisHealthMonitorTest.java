@@ -1,6 +1,7 @@
-package com.xander.lab.common;
+package com.xander.lab.operations.redishealth;
 
-import com.xander.lab.integration.mail.MailService;
+import com.xander.lab.common.RedisHealthProbe;
+import com.xander.lab.integration.api.MailPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -13,14 +14,14 @@ import static org.mockito.Mockito.verify;
 class RedisHealthMonitorTest {
 
     private RedisHealthProbe probe;
-    private MailService mailService;
+    private MailPort mailPort;
     private RedisHealthMonitor monitor;
 
     @BeforeEach
     void setUp() {
         probe = mock(RedisHealthProbe.class);
-        mailService = mock(MailService.class);
-        monitor = new RedisHealthMonitor(probe, mailService);
+        mailPort = mock(MailPort.class);
+        monitor = new RedisHealthMonitor(probe, mailPort);
         org.springframework.test.util.ReflectionTestUtils.setField(monitor, "recipient", "owner@example.com");
         org.springframework.test.util.ReflectionTestUtils.setField(monitor, "failureThreshold", 2);
         org.springframework.test.util.ReflectionTestUtils.setField(monitor, "notifyRecovery", true);
@@ -32,7 +33,7 @@ class RedisHealthMonitorTest {
         doThrow(new RuntimeException("connection refused")).when(probe).ping();
 
         monitor.checkRedis();
-        verify(mailService, never()).sendSimpleMail(
+        verify(mailPort, never()).sendSimpleMail(
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString()
@@ -40,7 +41,7 @@ class RedisHealthMonitorTest {
 
         monitor.checkRedis();
         monitor.checkRedis();
-        verify(mailService).sendSimpleMail(
+        verify(mailPort).sendSimpleMail(
                 eq("owner@example.com"),
                 eq("【DinQorAI】Redis 不可用告警"),
                 org.mockito.ArgumentMatchers.contains("connection refused")
@@ -48,7 +49,7 @@ class RedisHealthMonitorTest {
 
         org.mockito.Mockito.reset(probe);
         monitor.checkRedis();
-        verify(mailService).sendSimpleMail(
+        verify(mailPort).sendSimpleMail(
                 eq("owner@example.com"),
                 eq("【DinQorAI】Redis 已恢复"),
                 org.mockito.ArgumentMatchers.contains("检测时间")
@@ -58,7 +59,7 @@ class RedisHealthMonitorTest {
     @Test
     void mailFailureDoesNotStopSubsequentMonitoring() {
         doThrow(new RuntimeException("connection refused")).when(probe).ping();
-        doThrow(new RuntimeException("smtp down")).when(mailService).sendSimpleMail(
+        doThrow(new RuntimeException("smtp down")).when(mailPort).sendSimpleMail(
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString(),
                 org.mockito.ArgumentMatchers.anyString()
@@ -68,7 +69,7 @@ class RedisHealthMonitorTest {
         monitor.checkRedis();
         monitor.checkRedis();
 
-        verify(mailService).sendSimpleMail(
+        verify(mailPort).sendSimpleMail(
                 eq("owner@example.com"),
                 eq("【DinQorAI】Redis 不可用告警"),
                 org.mockito.ArgumentMatchers.contains("connection refused")

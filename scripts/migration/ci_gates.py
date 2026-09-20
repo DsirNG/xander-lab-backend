@@ -41,12 +41,9 @@ CAPABILITY_LOCK = DOCS / "capability-baseline.lock"
 # The frozen-history manifest for the 80 archived SQL scripts (V9 §64 step 3).
 LEGACY_SUMS = REPO / "migrations" / "legacy" / "SHA256SUMS"
 
-# Shared-kernel violations that exist today and are scheduled for Wave 0B.
-# The gate fails only when a NEW violation appears, so the baseline cannot rot
-# while the fix is pending. Removing an entry from this list is part of the fix.
-KNOWN_SHARED_KERNEL_VIOLATIONS = {
-    ("common", "integration"),
-}
+# Shared-kernel violations that are explicitly accepted while a migration is in progress.
+# Removing an entry from this list is part of the fix; the current Wave 0B baseline is empty.
+KNOWN_SHARED_KERNEL_VIOLATIONS = set()
 
 RESULTS: list[tuple[str, str, str]] = []
 

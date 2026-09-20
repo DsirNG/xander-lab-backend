@@ -1,10 +1,11 @@
-package com.xander.lab.common;
+package com.xander.lab.operations.redishealth;
 
-import com.xander.lab.integration.mail.MailService;
+import com.xander.lab.common.RedisHealthProbe;
+import com.xander.lab.integration.api.MailPort;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -17,7 +18,7 @@ import java.time.Instant;
 public class RedisHealthMonitor {
 
     private final RedisHealthProbe redisHealthProbe;
-    private final MailService mailService;
+    private final MailPort mailPort;
 
     @Value("${redis-monitor.recipient:}")
     private String recipient;
@@ -36,9 +37,9 @@ public class RedisHealthMonitor {
     private boolean missingRecipientLogged;
     private long lastAlertAttemptAt = Long.MIN_VALUE;
 
-    public RedisHealthMonitor(RedisHealthProbe redisHealthProbe, MailService mailService) {
+    public RedisHealthMonitor(RedisHealthProbe redisHealthProbe, MailPort mailPort) {
         this.redisHealthProbe = redisHealthProbe;
-        this.mailService = mailService;
+        this.mailPort = mailPort;
     }
 
     /** Checks Redis periodically; SMTP failures are logged and never stop monitoring. */
@@ -87,7 +88,7 @@ public class RedisHealthMonitor {
             return false;
         }
         try {
-            mailService.sendSimpleMail(recipient, subject, content);
+            mailPort.sendSimpleMail(recipient, subject, content);
             log.info("[RedisMonitor] Redis 告警邮件已发送：recipient={}", recipient);
             return true;
         } catch (RuntimeException mailFailure) {

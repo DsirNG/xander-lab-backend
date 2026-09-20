@@ -114,13 +114,12 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/common/RedisHealthMonitor.java:45
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/operations/redishealth/RedisHealthMonitor.java:46
     notes: >-
-      V9 §73：必须移出 common。当前用 synchronized + 实例字段（consecutiveFailures /
-      outageNotified / lastAlertAttemptAt）做"每次故障只发一封邮件"的去重。
-      抽 jar 后每个服务 × 每个实例各跑一份 → 一次 Redis 故障发 5×N 封告警邮件。
-      它不碰业务表，所以"DB 原子领取"那套救不了它，必须 ShedLock。
-      依赖必须改为 AlertPort，而不是 MailService implementation（消除 common → integration 反向依赖）。
+      V9 §73：监控已移出 common，放在 operations.redishealth。当前用 synchronized +
+      实例字段（consecutiveFailures / outageNotified / lastAlertAttemptAt）做"每次故障只发一封邮件"
+      的去重。它不碰业务表，所以"DB 原子领取"那套救不了它，必须 ShedLock。
+      邮件依赖收窄为 integration-api 的 MailPort，具体 MailService implementation 仍留在 integration。
 
   # ===================== V9 新增项（Wave 0A 设计，Wave 2 上线） =====================
 
