@@ -49,6 +49,7 @@ public class SecurityDenylistReconcilerGateway implements ApplicationRunner {
             fullSnapshotAndReplay();
             long now = System.currentTimeMillis();
             lastFullReconcileAt = now;
+            stateCache.markSynced(now);
             readiness.markReady(now);
             log.info("[GatewaySecurity] Bootstrap 完成：封禁账号={} 水位={} 耗时={} ms",
                     stateCache.disabledCount(), stateCache.lastSeenSeq(), now - startedAt);
@@ -73,6 +74,7 @@ public class SecurityDenylistReconcilerGateway implements ApplicationRunner {
             } else {
                 incrementalReconcile();
             }
+            stateCache.markSynced(now);
         } catch (RuntimeException ex) {
             // 保留上一份已知安全状态；下一轮以同一 cursor 重试，避免短暂 core-host 故障抹空缓存。
             log.warn("[GatewaySecurity] 对账失败，将在下一轮重试: {}", ex.getMessage());
@@ -87,6 +89,7 @@ public class SecurityDenylistReconcilerGateway implements ApplicationRunner {
                     new GatewaySecurityStateCache.State(entry.disabled(), entry.securityVersion()));
         }
         stateCache.replaceAll(states, snapshot.watermark());
+        stateCache.markSourceWatermark(snapshot.watermark());
         replayAfter(snapshot.watermark());
     }
 
@@ -100,6 +103,7 @@ public class SecurityDenylistReconcilerGateway implements ApplicationRunner {
         while (true) {
             SecurityStateSyncApi.Changes changes = stateClient.changes(
                     cursor, properties.getReconcileBatchSize());
+            stateCache.markSourceWatermark(changes.watermark());
             if (changes.changes().isEmpty()) {
                 return;
             }
@@ -116,6 +120,7 @@ public class SecurityDenylistReconcilerGateway implements ApplicationRunner {
     }
 
     private long applyChanges(long cursor, SecurityStateSyncApi.Changes changes) {
+        stateCache.markSourceWatermark(changes.watermark());
         long nextCursor = cursor;
         for (SecurityStateSyncApi.Entry entry : changes.changes()) {
             stateCache.apply(entry.accountId(), entry.disabled(), entry.securityVersion());

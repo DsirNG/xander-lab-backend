@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Gateway 每实例的账号封禁缓存。
@@ -15,7 +16,9 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GatewaySecurityStateCache {
 
     private final Map<Long, State> states = new ConcurrentHashMap<>();
-    private volatile long lastSeenSeq;
+    private final AtomicLong lastSeenSeq = new AtomicLong();
+    private final AtomicLong sourceWatermark = new AtomicLong();
+    private final AtomicLong lastSuccessfulSyncAt = new AtomicLong();
 
     public boolean isDisabled(long accountId) {
         State state = states.get(accountId);
@@ -36,17 +39,36 @@ public class GatewaySecurityStateCache {
     public synchronized void replaceAll(Map<Long, State> snapshot, long cursor) {
         states.clear();
         states.putAll(snapshot);
-        lastSeenSeq = cursor;
+        lastSeenSeq.set(cursor);
     }
 
     public long lastSeenSeq() {
-        return lastSeenSeq;
+        return lastSeenSeq.get();
     }
 
     public synchronized void advanceCursor(long cursor) {
-        if (cursor > lastSeenSeq) {
-            lastSeenSeq = cursor;
-        }
+        lastSeenSeq.accumulateAndGet(cursor, Math::max);
+    }
+
+    public void markSourceWatermark(long watermark) {
+        sourceWatermark.accumulateAndGet(watermark, Math::max);
+    }
+
+    public long sourceWatermark() {
+        return sourceWatermark.get();
+    }
+
+    public void markSynced(long epochMillis) {
+        lastSuccessfulSyncAt.set(epochMillis);
+    }
+
+    public long syncAgeMillis(long nowEpochMillis) {
+        long last = lastSuccessfulSyncAt.get();
+        return last == 0L ? Long.MAX_VALUE : Math.max(0L, nowEpochMillis - last);
+    }
+
+    public long reconcileLag() {
+        return Math.max(0L, sourceWatermark() - lastSeenSeq());
     }
 
     public int disabledCount() {

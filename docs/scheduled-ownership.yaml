@@ -171,7 +171,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: apps/gateway/src/main/java/com/xander/lab/gateway/SecurityDenylistReconcilerGateway.java:63
+    scan_ref: apps/gateway/src/main/java/com/xander/lab/gateway/SecurityDenylistReconcilerGateway.java:64
     notes: "V9 §69 / §70。每个 Gateway 实例通过 core-host 内部同步 API 维护自己的 deny cache 与 cursor；启动快照 + watermark 后重放，运行期 1.5 秒增量对账并低频全量校准。禁止全局 ShedLock。"
 
   - id: security-state-reconciler-reconcile

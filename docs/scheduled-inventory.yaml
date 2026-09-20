@@ -36,7 +36,7 @@ scheduled:
     trigger: "fixedDelayString = \"${gateway.security-state.reconcile-interval-ms:1500}\""
     logical_owner: gateway
     file: apps/gateway/src/main/java/com/xander/lab/gateway/SecurityDenylistReconcilerGateway.java
-    line: 63
+    line: 64
   - id: auth-refresh-ciphertext-cleanup
     class: com.xander.lab.identity.application.AuthRefreshCiphertextCleanup
     method: clearExpiredCiphertext

@@ -274,8 +274,11 @@ admin_ban_stream_disconnect_latency
 但已建立的流因为手段 A 没实现而一直收数据 —— 这正好是 §12「补了又丢」
 最容易发生的形态。
 
-当前状态：两个指标**尚未接入**（Wave 2 的可观测性工作）。
-本文给出的是可验证的预算分解，不是已上线的指标。
+当前状态：`gateway_deny_cache_size`、`deny_reconcile_lag`、`security_reconcile_lag`、
+`service_security_cache_size`、`security_state_age`、`active_sse` 与 `active_ws` 等基础
+安全平面指标已接入各宿主的 Actuator/Micrometer。两个端到端延迟指标
+`admin_ban_new_request_block_latency` 与 `admin_ban_stream_disconnect_latency` 仍未接入
+（Wave 2 的可观测性工作），本文给出的预算分解暂不是这两个 P95/P99 的实测结果。
 
 ---
 
@@ -283,7 +286,7 @@ admin_ban_stream_disconnect_latency
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| 两个 SLO 指标未接入 | §53 要求的两类观测目前只能靠 `ConnectionRegistry.totalClosed()` 与日志人工核对 | Wave 2 |
+| 两个端到端 SLO 延迟指标未接入 | §53 要求的两类 P95/P99 目前仍不能仅靠基础 cache/连接 gauges 计算，需补齐封禁事件到达与请求/断连时间关联 | Wave 2 |
 | 多实例部署未开启 Redis Pub/Sub | 开关关闭时只有抢到 ShedLock 的实例走发件箱本地快路径，其余实例靠各自 reconciler 在 1.5 秒内收敛；多实例切流前必须开启 `auth.refresh.security-pubsub-enabled` | 部署配置项 |
 | `SecurityStateCache` 无持久化 | 实例启动先由 Bootstrap 做快照 + replay，再开放流量；运行期仍靠 reconciler 增量/全量对账，缓存不持久化是有意取舍 | 设计取舍 |
 | `Img2ThreeController` 无心跳 | 见 §6，该流在无业务事件时完全依赖手段 A | 已知 |

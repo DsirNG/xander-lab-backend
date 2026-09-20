@@ -69,10 +69,11 @@ public class SecurityStateSyncController {
         if (cursor < 0 || limit < 1 || limit > 2000) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "非法安全状态对账参数");
         }
-        return new SecurityStateSyncApi.Changes(securityStateMapper.pullChangesAfter(cursor, limit)
-                .stream()
-                .map(SecurityStateSyncController::toEntry)
-                .toList());
+        return new SecurityStateSyncApi.Changes(
+                securityStateMapper.pullChangesAfter(cursor, limit).stream()
+                        .map(SecurityStateSyncController::toEntry)
+                        .toList(),
+                valueOrZero(securityStateMapper.currentSecurityWatermark()));
     }
 
     private void authorize(String token) {

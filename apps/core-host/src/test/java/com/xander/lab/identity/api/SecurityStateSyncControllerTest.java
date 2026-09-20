@@ -43,6 +43,19 @@ class SecurityStateSyncControllerTest {
                 .hasMessageContaining("404 NOT_FOUND");
     }
 
+    @Test
+    void returnsSourceWatermarkWithIncrementalChanges() {
+        AccountSecurityStateMapper mapper = mock(AccountSecurityStateMapper.class);
+        when(mapper.pullChangesAfter(7L, 10)).thenReturn(List.of(state(42L, true, 2L, 8L)));
+        when(mapper.currentSecurityWatermark()).thenReturn(12L);
+        SecurityStateSyncController controller = new SecurityStateSyncController(mapper, properties());
+
+        var changes = controller.changes("sync-secret", 7L, 10);
+
+        assertThat(changes.watermark()).isEqualTo(12L);
+        assertThat(changes.changes()).hasSize(1);
+    }
+
     private SecurityStateSyncProperties properties() {
         SecurityStateSyncProperties properties = new SecurityStateSyncProperties();
         properties.setInternalApiEnabled(true);

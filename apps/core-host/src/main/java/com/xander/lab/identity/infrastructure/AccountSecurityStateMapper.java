@@ -88,6 +88,10 @@ public interface AccountSecurityStateMapper extends BaseMapper<AccountSecuritySt
     @Select("SELECT * FROM account_security_state")
     List<AccountSecurityState> listAll();
 
+    /** 当前全局安全游标，仅用于对账滞后观测，不用于推进 Gateway 游标。 */
+    @Select("SELECT seq FROM security_state_sequence WHERE id = 1")
+    Long currentSecurityWatermark();
+
     /**
      * 全量对账兜底。
      *

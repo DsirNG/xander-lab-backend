@@ -20,6 +20,6 @@ public final class SecurityStateSyncApi {
     public record Snapshot(List<Entry> states, long watermark) {
     }
 
-    public record Changes(List<Entry> changes) {
+    public record Changes(List<Entry> changes, long watermark) {
     }
 }

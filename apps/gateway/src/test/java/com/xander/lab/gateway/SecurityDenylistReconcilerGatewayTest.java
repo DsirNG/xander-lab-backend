@@ -22,7 +22,7 @@ class SecurityDenylistReconcilerGatewayTest {
                 new SecurityStateSyncApi.Entry(42L, true, 2L, 2L),
                 new SecurityStateSyncApi.Entry(43L, false, 3L, 3L)), 3L));
         when(client.changes(3L, 500)).thenReturn(new SecurityStateSyncApi.Changes(List.of(
-                new SecurityStateSyncApi.Entry(44L, true, 1L, 4L))));
+                new SecurityStateSyncApi.Entry(44L, true, 1L, 4L)), 4L));
 
         SecurityDenylistReconcilerGateway reconciler = new SecurityDenylistReconcilerGateway(
                 client, cache, properties, readiness);
@@ -33,5 +33,7 @@ class SecurityDenylistReconcilerGatewayTest {
         assertThat(cache.isDisabled(43L)).isFalse();
         assertThat(cache.isDisabled(44L)).isTrue();
         assertThat(cache.lastSeenSeq()).isEqualTo(4L);
+        assertThat(cache.sourceWatermark()).isEqualTo(4L);
+        assertThat(cache.syncAgeMillis(System.currentTimeMillis())).isLessThan(1000L);
     }
 }
