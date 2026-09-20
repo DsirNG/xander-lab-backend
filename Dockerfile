@@ -41,14 +41,14 @@ RUN mvn package -DskipTests -s settings.xml
 
 
 # Stage 2: Run the application
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
 # img2threejs forge scripts are dependency-free but require a Python 3 runtime.
 RUN sed -i \
-        -e 's|http://deb.debian.org/debian|https://mirrors.cloud.tencent.com/debian|g' \
-        -e 's|http://security.debian.org/debian-security|https://mirrors.cloud.tencent.com/debian-security|g' \
+        -e 's|http://archive.ubuntu.com/ubuntu|https://mirrors.cloud.tencent.com/ubuntu|g' \
+        -e 's|http://security.ubuntu.com/ubuntu|https://mirrors.cloud.tencent.com/ubuntu|g' \
         /etc/apt/sources.list \
     && apt-get -o Acquire::Retries=5 -o Acquire::https::Timeout=30 update \
     && apt-get -o Acquire::Retries=5 -o Acquire::https::Timeout=30 install -y --no-install-recommends \
