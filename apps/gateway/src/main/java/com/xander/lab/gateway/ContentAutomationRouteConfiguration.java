@@ -36,6 +36,11 @@ public class ContentAutomationRouteConfiguration {
                         .and()
                         .method(org.springframework.http.HttpMethod.POST)
                         .uri(contentAutomationUri))
+                .route("content-publishing-private-media-reads", route -> route
+                        .path("/api/blog/media/images", "/api/blog/media/images/agent")
+                        .and()
+                        .method(org.springframework.http.HttpMethod.GET)
+                        .uri(contentAutomationUri))
                 .route("content-automation-cutover", route -> route
                         .path("/api/blog-agent/**", "/api/blog-plans/**", "/api/email-reminders/**",
                                 "/api/notifications/**")

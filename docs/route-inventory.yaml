@@ -1055,8 +1055,8 @@ routes:
     path: "/api/blog/media/images"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogMediaController#getImages"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
+    handler: "com.xander.lab.publishing.api.BlogMediaReadController#getImages"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogMediaReadController.java
     line: 25
   - id: publishing-post-blog-media-images
     logical_owner: publishing
@@ -1068,7 +1068,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogMediaController#uploadImage"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
-    line: 39
+    line: 22
   - id: publishing-get-blog-media-images-agent
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1077,9 +1077,9 @@ routes:
     path: "/api/blog/media/images/agent"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogMediaController#getAgentImages"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
-    line: 32
+    handler: "com.xander.lab.publishing.api.BlogMediaReadController#getAgentImages"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogMediaReadController.java
+    line: 37
   - id: publishing-get-blog-posts
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
