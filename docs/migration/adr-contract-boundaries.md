@@ -3475,6 +3475,11 @@ if (!csdnCredentialPort.isAuthorized(plan.getUserId()))     // ← 写成 juejin
 `JuejinBlogSyncPort`，所以暂时没有调用点会写反；`agent` 侧同理）。本刀没有去补它 ——
 那需要另一条不对称桩用例，属于独立的一刀。记进待办 54。
 
+> ⚠️ **2026-09-20 订正（§22）：上面这一段的后半句是错的。**
+> `agent` 侧的 `PublishPostTool` **同时持有两个同步端口**，`reconcile` 里 131 / 135 行两个
+> `findSucceeded` 相邻、参数表逐字相同 ⇒ 写反的机会**一直存在**。
+> 当时是从"谁注入了什么"推出来的结论，没有数。待办 54 已做（§22）。
+
 ### 19.5 两个端口的"可用"口径不同 —— 属于实现，不属于契约
 
 `CsdnCredentialService.isAuthorized` 额外要求 `csdnUsername` 非空（凭证是"cookie + 用户名"两段，
@@ -3794,9 +3799,12 @@ E / G 的 `restore` 行打印 `1ae8d38b…`，而驱动脚本与收尾 `git stat
 跨单元实现边已经归零 ⇒ **没有"下一刀抽取"了**。剩下的是三类**不是抽取**的工作：
 
 1. **把"0"变成有人守的不变式**（待办 56）—— 本刀解锁的、最该做的一件。**✅ 已做，见 §21。**
-2. **补 `*BlogSyncPort` 的"同形不同源"守卫**（待办 54，第十九刀发现）。
+2. **补 `*BlogSyncPort` 的"同形不同源"守卫**（待办 54，第十九刀发现）。**✅ 已做，见 §22** ——
+   ⚠️ 做的时候发现这里的假设是错的：`PublishPostTool` **早就**同时持有两个端口，
+   写反的机会一直存在（§22.1）。
 3. `BlogContentPlanService` 的 `toVO` 残留（待办 53）—— 它**会改变行为**，
    所以不是重构，要单独决定。
+4. 三处端口测试的 `methodNamed` 仍是"取第一个"的旧写法（待办 57）。
 
 ⚠️ 还有一件**更大**的事：`cross-domain-imports.yaml` 里剩下的 7 条边**全部同单元**。
 `deployment-unit-coupling` 三条判据此后只剩"不许变坏"的含义 ——
@@ -3863,7 +3871,115 @@ EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0
 - 常量**没有**跟着写进 `docs/cross-domain-imports.yaml`：那个文件是**产物**，
   把基线写进产物等于把判据的基线又交回给被测物。
 
-## 22. 待办
+## 22. 落地记录（十九）：待办 54 —— 「同形不同源」守卫，以及一句被**实测推翻**的结论
+
+这一刀**不是抽取**：跨单元实现边仍然是 0，六个指标与本刀之前逐字相同。
+它做的是把 §19.4 留下的待办 54 补上 —— 补的过程里发现**那句待办的结论是错的**。
+
+### 22.1 缝：两个 `findSucceeded` 逐字相同，而调用方**早就存在**
+
+§16 立起来的两个站外同步端口，方法表如下：
+
+| 方法 | `CsdnBlogSyncPort` | `JuejinBlogSyncPort` | 同形？ |
+|---|---|---|---|
+| `sync` | `(Long, Long)` | `(Long, Long, String, List<String>)` | 否 —— 参数表不同 ⇒ 写反**编译不过** |
+| `findSucceeded` | `(Long, Long) -> BlogSyncResult` | `(Long, Long) -> BlogSyncResult` | **是，逐字相同** |
+
+⇒ `findSucceeded` 是这两个端口之间**唯一**一处"接收者写反编译通过"的位置。
+
+§19.4 末尾记的待办 54 原文是：
+
+> `BlogPlanRunService` 只注入了 `JuejinBlogSyncPort`……`agent` 侧同理 ⇒ **暂时没有写反的机会**。
+
+**这句话是错的。** 实测（`PublishPostTool`，`dinqor-agent`）：
+
+```java
+private final CsdnBlogSyncPort csdnBlogSyncPort;       // 52
+private final JuejinBlogSyncPort juejinBlogSyncPort;   // 53
+...
+if ("csdn".equals(platform)) {
+    BlogSyncResult result = csdnBlogSyncPort.findSucceeded(context.userId(), local.id());    // 131
+} else if ("juejin".equals(platform)) {
+    BlogSyncResult result = juejinBlogSyncPort.findSucceeded(context.userId(), local.id());  // 135
+}
+```
+
+两行**相邻**、参数表**逐字相同**、只有接收者不同。⇒ **写反的机会一直存在，只是从来没有东西会报错。**
+
+⚠️ 纸面为什么会错：写待办 54 时看的是 `BlogPlanRunService` 与 `agent` 的**注入类型**，
+而 `PublishPostTool` 恰恰是**唯一**同时注入两个端口的类 —— §16 把它列成
+"这两个端口的第一个跨域消费方"，但**没有顺手问一句"它是不是同时持有两个"**。
+结论是从"谁注入了什么"推出来的，而不是数出来的。
+
+### 22.2 修法：三条守卫，各自管一件事
+
+| # | 守卫 | 位置 | 管什么 |
+|---|---|---|---|
+| ① | `BlogSyncPortInterchangeabilityTest` | `contracts/integration-api`（测试） | 「可互换的方法集」必须**恰好**等于 `{findSucceeded}`。**双向**：变大 ⇒ 新增一处静默换位点；变小 ⇒ 是好事，但提示文本与两个端口的 javadoc 要**一起删**，否则下一个人会去守一个不存在的坑 |
+| ② | `DualSyncPortConsumerTest` | `apps/core-host`（测试） | 扫类路径，出现同时持有两个端口的类就红。基线**非空**（`PublishPostTool`，用全限定名）+ **反向 sanity**（清单里的条目必须真的持有两个端口） |
+| ③ | `PublishPostToolTest` 的两条不对称桩 | `apps/core-host`（测试） | 两个方向各一条：两个桩取**不同的值** + 断言**另一个端口零交互** + `thenAnswer` 断言**实收参数** |
+
+⚠️ ①与②的分工不能省任何一个：**①说得清坑在哪，②说得出现在有没有人正踩着它。**
+缺①，②红了也不知道该给哪个方法配桩；缺②，①绿着也拦不住新增消费方。
+
+⚠️ ③ 里最有价值的那条不是值断言，是 `verify(other, never())` ——
+写反时先红的是它，失败信息直接说"这个 mock 从未被调用"。
+
+### 22.3 ⭐ 实测：纸面结论 vs 跑出来的结论
+
+本刀真正的收获不在三条守卫，而在**写②的过程中它立刻红了**：
+
+```
+noClassHoldsBothSyncPortsUnlessItIsDeclaredAndHasAsymmetricStubs:64
+  ==> expected: <[]> but was: <[PublishPostTool]>
+```
+
+基线当时是**空的**。也就是说：**"先写判据、再用判据去测自己相信的那句话"**，
+代价是十几分钟，收益是发现 §19.4 的结论是错的。
+
+⚠️ 顺带记一条同族的发现：**既有用例其实也挡住了写反，但症状指不到错因。**
+注入 A（CSDN 分支读成掘金端口）的实测红了两条：
+
+```
+PublishPostToolTest.reconcileOnCsdnReadsTheCsdnPortAndNeverTheJuejinOne:287   FAILURE
+PublishPostToolTest.reconcilesPersistedCsdnResultWithoutCallingThePlatformAgain:220
+    ? NoSuchElementException: No value present                              ← 既有用例
+```
+
+既有那条**红了**，但失败信息是"没有值" —— **看起来像环境故障，不像接收者写反**。
+这是待办 45 / 51 的同族：**红是红了，但红的原因指不到真正的错因**，
+所以它很容易被当成 flaky 忽略。新加的不对称桩那条断言的是"值来自哪个桩"+ "另一个端口零交互"，
+失败信息里写着是哪个端口。
+
+### 22.4 注入验证：七次，全部按预期变红
+
+| 注入 | 变异 | 目标测试 | 实测（红数 / 红的是哪条） |
+|---|---|---|---|
+| A | CSDN 分支的接收者 → 掘金端口 | `PublishPostToolTest` | 11 run / **1 fail + 1 error** —— 新不对称桩 `:287` **fail**；既有用例 `:220` **error**（`NoSuchElementException`） |
+| B | 掘金分支的接收者 → CSDN 端口 | 同上 | 11 run / **1 fail** / 0 error —— **只红新加的那条** `:319`：既有套件里**根本没有掘金分支的 `reconcile` 用例** |
+| C | 参数写反 `(local.id(), context.userId())` | 同上 | 11 run / 1 fail + 1 error —— 新那条报 **`[findSucceeded 的第一个参数必须是 userId（写反编译通过）]`**（**断言**，不是 NPE）；既有用例仍是 `NoSuchElementException` |
+| D | 两个端口各加一个同形的 `findLatest(Long, Long)` | `BlogSyncPortInterchangeabilityTest` | 3 run / **1 fail** —— 只有"可互换集合"那条（**集合变大**方向） |
+| E | CSDN 的 `findSucceeded` 加一个参数（**集合变小**） | 同上 | 3 run / **2 fail** —— 集合那条 + `findSucceededIsInterchangeable…`，报 `findSucceeded(Long, Long, boolean)` vs `findSucceeded(Long, Long)` |
+| F | `DUAL_PORT_CONSUMERS` 清空 | `DualSyncPortConsumerTest` | 2 run / **1 fail** —— 正向判据红、反向 sanity **绿**（正确：清单是空的，没有过期条目） |
+| G | `DUAL_PORT_CONSUMERS` 塞一个**不**持有两个端口的类名 | 同上 | 2 run / **2 fail** —— 反向 sanity 红，点名 `com.xander.lab.agent.application.AgentEventBus` |
+
+七条的 `apply` / `restore` 全部**逐字节还原**（`git hash-object` 算法，见待办 58）；
+四个被注入文件的 before / after blob 完全相同。
+
+⚠️ D / E 的注入会**破坏 `core-host` 的编译**（两个实现类与 `PublishPostTool` 都要跟着改）。
+把 `-Dtest` 收窄到**契约模块自己的测试类**之后，契约模块先红、`core-host` 被 `-fae` 跳过，
+所以两次测量的红数都只来自那一个模块 —— 这是待办 41 那条规矩的正常用法，不是巧合。
+
+### 22.5 刻意没做的事
+
+- **没有把两个端口合并、也没有让它们 `extends` 一个共同父接口。** §16.2 的三个理由不变；
+  而且共同父接口会让"两个端口"变成"一个端口的两副面孔"，静默换位点只会更多。
+- **没有给 `sync` 加不对称桩** —— 它写反编译不过。⚠️ 但那是"参数表恰好不同"的**副产品**，
+  不是设计出来的保护。注入 D 守的正是这件事：两个 `sync` 一旦变得同形，集合那条判据会红。
+- **没有改任何生产代码。** 三处改动全在测试里，外加两个端口的 javadoc 各加一段提示
+  （下一个接入者读端口注释，不读测试）。所以**六个指标一动不动**。
+
+## 23. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -3920,13 +4036,13 @@ EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0
 | 51 | **⚠️ "某个地方有测试挡着" ≠ "这个错误形状被守住了"** —— 同一个错误形状，一个消费方被既有用例挡住、另一个完全没人守 | **本刀实测**（§19.7 注入 C / D）：同一个"接收者写反"，`BlogPlanRunService` 红 **3** 条（其中 2 条是**既有**用例**碰巧**挡住的 —— 它们给一个端口打桩 `true`、另一个默认 `false`，正好把两者分开），而 `BlogContentPlanService` 只红新加的 **1** 条（那里**根本没有读那两个派生字段的断言**）。⇒ **别拿"另一个地方有测试挡着"当这个形状被守住的证据。** 与待办 11 / 46 同族 |
 | 52 | **⚠️ 断言"参数必须叫 `userId`"的守卫，前提是 `-parameters` 开着** | **本刀实例**（§19.7 注入 E）：把首参从 `userId` 改名成 `credentialOwnerId`，实现类**不用**跟着改（Java 允许覆写时换参数名），处处编译通过 ⇒ 只有 `assertFirstParameterIsTheCallerId` 能抓，**没有其它断言变红**。⚠️ 反过来，断言**类型** `Long` 的判据在这种改动下**绿着过** —— 这是待办 11 那条"判据只朝一个方向看"的**正例样本**：修好之后注入能证明它接着线 |
 | 53 | **⚠️ `BlogContentPlanService` 的"已知残留"：端口路径被迫做两次凭证查询，然后**把结果丢掉** | **未修**（§19.5 末）。`ContentPlanPort` 的读方法都经过 `toVO`，而 `toVO` 要调两个 `isAuthorized` 去填前端要的派生字段；随后 `toView` 把它们**收窄掉**（`ContentPlanView` 里没有这两个字段）。⇒ 一个智能体并不读的派生字段，能让一次状态变更失败。**本刀刻意没顺手修**：修了会同时改变行为（端口路径不再可能被凭证查询的失败带崩），而本次抽取要能**被证明**是纯重构。修法是把实现体改成返回实体、由两个公开方法各自包装 —— 独立的一刀 |
-| 54 | **⚠️ `CsdnBlogSyncPort` / `JuejinBlogSyncPort` 缺"同形不同源"守卫** —— 它们的 `sync` / `findSucceeded` 签名也**部分同形**，今天没有调用点会写反只是巧合 | **未做**（§19.4 末）。`BlogPlanRunService` 只注入了 `JuejinBlogSyncPort`（`publishCsdn` 走的是 `publicationService.publish(command, "csdn")`，不是端口），`agent` 侧同理 ⇒ 暂时没有写反的机会。但下一个同时接入两个同步端口的调用方就会踩到，而**那一步不会有任何东西报错**。补法与 §19.4 相同：不对称桩 |
+| 54 | **⚠️ `CsdnBlogSyncPort` / `JuejinBlogSyncPort` 缺"同形不同源"守卫** —— `findSucceeded(Long, Long) -> BlogSyncResult` 在两个端口上**签名逐字相同**（`sync` 不同形，参数表不同 ⇒ 写反编译不过） | **已做**（§22，**不是抽取刀**）。⚠️ **原文那句"今天没有调用点会写反只是巧合 / 暂时没有写反的机会"是错的**：`PublishPostTool`（`dinqor-agent`）**早就**同时持有两个端口，`reconcile` 的 131 / 135 行两个 `findSucceeded` **相邻、参数表逐字相同、只有接收者不同** ⇒ 写反的机会一直存在，只是从来没有东西会报错。⚠️ 纸面为什么会错：结论是从"谁注入了什么"**推**出来的，没**数**。修法三条：①契约侧钉「可互换的方法集**恰好** `{findSucceeded}`」（**双向**）；②`core-host` 扫类路径，出现同时持有两个端口的类就红（基线 `PublishPostTool` + **反向 sanity**）；③`PublishPostToolTest` 补**不对称桩**两条（两个方向各一条，桩取不同的值 + 断言另一个端口**零交互** + `thenAnswer` 断言实收参数）。⭐ **②写出来当天就抓到①** —— 基线还是空的时候它直接点名了 `PublishPostTool`。注入 A–G 七次全部按预期变红（§22.4）。⚠️ 既有用例其实也挡得住写反，但症状是 `NoSuchElementException: No value present` —— **红的原因指不到错因**，容易被当 flaky（待办 45 / 51 同族） |
 | 55 | **⚠️ 注入验证与"判据强度"的边界要说清** —— 注入**能**发现"某个具体位置没人守"，**不能**发现"判据的**形状**够不够" | **本刀澄清**（§19.4 末）。前一条此前被写成"这类缺陷注入验证发现不了"，**过宽了**：注入 D 就发现了一处真的没人守的位置。正确的区分是 —— 前者是**位置**问题，注入落在那里就能看见；后者是**判据**问题（例如只断言参数类型不断言参数名），注入永远看不见，只能**反着用一次**：拿判据去断言它本该拒绝的形状。待办 11 / 46 / 51 都是后者 |
 | 56 | **⚠️ 跨单元实现边归零之后，"= 0"这条不变式没有任何门禁守着** | **已做**（§21，**不是抽取刀**）。修法：`ci_gates.py` 加常量 `EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0` + `deployment-unit-coupling` 第 4 条判据（放在三条形状判据**之后**，双向）。⭐ 实测**直接对照**：注入 D（消费方退回具体类）时，**常量=1 ⇒ 24 pass / 0 fail，而且 detail 仍印着 `1 cross-unit edge(s) left`**；**常量=0 ⇒ 23 pass / 1 fail，唯一红的就是它**。⇒ 形状判据不是漏了，是**结构上看不见**单向边。⚠️ 归零**之前**这个常量写不出来（数字一直在动）⇒ 是 §20 解锁的。⚠️ **待办 16 仍未修**（修它要人工维护的基线文件，代价不同，已问过九次） |
 | 57 | **⚠️ 反射测试"按名字取方法"要断言**恰好一个**同名方法** | **本刀修了新测试、其余未修**（§20.3 末）。原来的写法是"遍历取第一个同名方法" ⇒ 端口上出现**重载**时，它会**按 JVM 的方法顺序**挑一个，后续断言开始检查另一个方法，而它们仍然**通过**（**没有失败信息，因为根本没有失败**）。⚠️ 现状：`NotificationPortTest` / `ContentPlanPortTest` / `EmailReminderPortTest` 三处仍是旧写法；风险被"恰好签名清单"那条断言**间接**挡住（端口多一个方法它先红），所以不是活缺陷 —— 但守卫不该依赖**另一条**测试先红。注入 A 同时踩中本刀新测试的这条与 `noMethodIsDefault` |
 | 58 | **⚠️ 同一次注入验证里混用了两种哈希算法** —— 注入脚本自己打印一个（原始字节），驱动脚本打印另一个（`git hash-object`，先 CRLF→LF 归一），**两条输出挨着** | **本刀踩到、已修**（§20.7）。`BlogPlanSseService.java` 的 `restore` 行报 `1ae8d38b…`、收尾报 `8df1c761…`，看起来像还原没到位，白查一轮。实测三种算法同一文件三个值：原始字节带 `blob <len>\0` 头 `1ae8d38b…` / `sha1sum` 原始字节 `87578e00…` / `git hash-object` 归一后 `8df1c761…`（本仓 `core.autocrlf=true`）。⚠️ 这是待办 42 的**第三种形态**：42 是"两个**外部工具**给出不同值"，本刀是"**同一个脚本的两条代码路径**各自打印一个"。⇒ 判据已统一：`inj20.py` 的 `blob()` 改成先归一再哈希，与 `git hash-object` 逐字等价，复跑验证通过。⚠️ 通用规则：**"脚本打印了一个陌生的哈希" ≠ "文件被改坏了"**；分辨它们的是 `git diff`（差异是否逐行都是本次意图），不是哈希比对 |
 
-### 22.1 第 1 项的边界（明确不许顺手放宽）
+### 23.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -3937,7 +4053,7 @@ EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0
 
 ---
 
-## 23. 一句话记法
+## 24. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

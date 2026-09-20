@@ -36,6 +36,16 @@ package com.xander.lab.integration.api;
  * <p>代价是两个几乎同形的接口，共享同一个 {@link BlogSyncResult}。
  * 这份权衡记在 {@code docs/migration/adr-contract-boundaries.md}。</p>
  *
+ * <h2>⚠️ {@link #findSucceeded(Long, Long)} 与掘金那个<b>签名逐字相同</b></h2>
+ * <p>所以同时持有两个端口的调用方里，{@code csdnPort.findSucceeded(u, p)} 写成
+ * {@code juejinPort.findSucceeded(u, p)} <b>编译通过</b>、耦合指标一动不动、门禁全绿。
+ * {@link #sync} 没有这个问题：掘金多收两个参数，写反编译不过 ——
+ * 那是"参数表恰好不同"的副产品，不是设计出来的保护。</p>
+ * <p>今天的调用方<b>恰好一个</b>：{@code PublishPostTool}（同时持有两个端口），
+ * 它的不对称桩用例在 {@code PublishPostToolTest}。再出现第二个这样的类会被
+ * {@code DualSyncPortConsumerTest} 拦下；"哪些方法可互换"由
+ * {@code BlogSyncPortInterchangeabilityTest} 钉住。</p>
+ *
  * <h2>失败语义（跨进程后仍然成立，实现必须遵守）</h2>
  * <ul>
  *   <li>{@link #sync} 失败时<b>抛异常</b>，不返回"失败的结果对象"——{@link BlogSyncResult}

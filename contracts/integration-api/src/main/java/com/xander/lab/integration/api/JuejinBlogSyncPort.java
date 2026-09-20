@@ -18,6 +18,15 @@ import java.util.List;
  * 这里只补一条掘金特有的：它的同步<b>真的多收两个参数</b>，
  * 合并端口就必须在 CSDN 那条路上收下它们。</p>
  *
+ * <h2>⚠️ {@link #findSucceeded(Long, Long)} 与 CSDN 那个<b>签名逐字相同</b></h2>
+ * <p>所以同时持有两个端口的调用方里，把 {@code csdnPort.findSucceeded(u, p)} 写成
+ * {@code juejinPort.findSucceeded(u, p)}（或反过来）<b>编译通过</b>、耦合指标一动不动、
+ * 门禁全绿。{@link #sync} 没有这个问题 —— 本方法多收两个参数，写反编译不过。</p>
+ * <p>今天的调用方<b>恰好一个</b>：{@code PublishPostTool}（同时持有两个端口），
+ * 它的不对称桩用例在 {@code PublishPostToolTest}。再出现第二个这样的类会被
+ * {@code DualSyncPortConsumerTest} 拦下；"哪些方法可互换"由
+ * {@code BlogSyncPortInterchangeabilityTest} 钉住。</p>
+ *
  * <h2>⚠️ 这两个参数目前跨域调用方一律传 {@code null}</h2>
  * <p>{@code PublishPostTool} 与 {@code BlogPlanRunService} 传的都是 {@code (null, null)} ——
  * 也就是"用本地文章自己的标签名，由发布器解析成掘金 tag_id"。

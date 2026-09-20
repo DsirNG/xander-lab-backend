@@ -46,6 +46,14 @@ import static org.mockito.Mockito.when;
  * <p>⚠️ {@code findSucceeded} 用 {@code null} 表示"没有成功记录"，所以凡是断言"查不到"的用例
  * 都<b>显式</b> stub 成 {@code null}：Mockito 对未 stub 的返回给的是包装类型的零值，
  * 这条测试今天靠"返回类型是自定义对象 ⇒ 默认就是 null"侥幸成立，写出来才不依赖这个巧合。</p>
+ *
+ * <p>⚠️ 本类是<b>唯一</b>同时持有 {@link CsdnBlogSyncPort} 与 {@link JuejinBlogSyncPort} 的类
+ * （类路径扫描见 {@code com.xander.lab.migration.DualSyncPortConsumerTest}）。两个端口上
+ * {@code findSucceeded(Long, Long) -> BlogSyncResult} <b>签名逐字相同</b>，所以
+ * {@code reconcile} 里那两行是**静默换位点**：把接收者写反<b>编译通过</b>、
+ * 耦合指标一动不动、门禁全绿。抓它的唯一办法是不对称桩 ——
+ * 见 {@link #reconcileOnCsdnReadsTheCsdnPortAndNeverTheJuejinOne()} 与
+ * {@link #reconcileOnJuejinReadsTheJuejinPortAndNeverTheCsdnOne()}。</p>
  */
 class PublishPostToolTest {
 
@@ -230,6 +238,87 @@ class PublishPostToolTest {
                 JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn")))
                 .isEmpty();
         verify(csdn, never()).sync(any(), any());
+    }
+
+    /**
+     * CSDN 对账读的是 <b>CSDN</b> 端口，而且一次都没碰掘金那个。
+     *
+     * <p>两个端口的 {@code findSucceeded(Long, Long)} 签名逐字相同，所以 {@code reconcile} 里
+     * {@code csdnBlogSyncPort.findSucceeded(...)} 写成 {@code juejinBlogSyncPort.findSucceeded(...)}
+     * <b>编译通过</b>。本用例用不对称桩把它变成一条会红的断言：</p>
+     * <ul>
+     *   <li>两个端口都<b>显式</b> stub 成不同的值 —— 桩取同一个值时接收者写反照样绿；</li>
+     *   <li>断言 {@code externalId} 来自 CSDN 那个桩（值分得开两个被测对象）；</li>
+     *   <li>断言掘金端口<b>零交互</b> —— 写反时先红的是这一条，失败信息直接说
+     *       "这个 mock 从未被调用"，而不是抛一个看着像环境故障的 {@code NoSuchElementException}。</li>
+     * </ul>
+     *
+     * <p>参数顺序也在这里钉住：{@code thenAnswer} 断言实收参数，因为
+     * {@code findSucceeded(userId, postId)} 的两个参数都是 {@code Long}，
+     * 写反同样编译通过，而症状是 {@code null} → {@code Optional.empty()} ——
+     * 失败信息完全指不到换位上。</p>
+     */
+    @Test
+    void reconcileOnCsdnReadsTheCsdnPortAndNeverTheJuejinOne() {
+        ContentPostPort contentPostPort = mock(ContentPostPort.class);
+        when(contentPostPort.findOwned(USER_ID, 5L))
+                .thenReturn(contractPost(5L, "同形端口", null, null, false, false));
+        CsdnBlogSyncPort csdn = mock(CsdnBlogSyncPort.class);
+        when(csdn.findSucceeded(any(), any()))
+                .thenAnswer(invocation -> {
+                    assertThat(invocation.getArgument(0, Long.class))
+                            .as("findSucceeded 的第一个参数必须是 userId（写反编译通过）")
+                            .isEqualTo(USER_ID);
+                    assertThat(invocation.getArgument(1, Long.class))
+                            .as("findSucceeded 的第二个参数必须是 postId")
+                            .isEqualTo(5L);
+                    return new BlogSyncResult("csdn", "csdn-5", "https://csdn.example.com/5");
+                });
+        JuejinBlogSyncPort juejin = mock(JuejinBlogSyncPort.class);
+        when(juejin.findSucceeded(any(), any()))
+                .thenReturn(new BlogSyncResult("juejin", "juejin-5", "https://juejin.cn/post/5"));
+
+        PublishPostTool tool = new PublishPostTool(mock(BlogAgentPort.class), contentPostPort, csdn, juejin,
+                mock(BillingPort.class));
+        JsonNode result = tool.reconcile(new AgentToolContext(USER_ID, 7L, 3L, "invocation-1"),
+                JsonNodeFactory.instance.objectNode().put("postId", 5L).put("platform", "csdn"))
+                .orElseThrow();
+
+        assertThat(result.path("externalId").asText()).isEqualTo("csdn-5");
+        verify(csdn).findSucceeded(USER_ID, 5L);
+        verify(juejin, never()).findSucceeded(any(), any());
+    }
+
+    /** {@link #reconcileOnCsdnReadsTheCsdnPortAndNeverTheJuejinOne()} 的另一个方向。 */
+    @Test
+    void reconcileOnJuejinReadsTheJuejinPortAndNeverTheCsdnOne() {
+        ContentPostPort contentPostPort = mock(ContentPostPort.class);
+        when(contentPostPort.findOwned(USER_ID, 6L))
+                .thenReturn(contractPost(6L, "同形端口", null, null, false, false));
+        CsdnBlogSyncPort csdn = mock(CsdnBlogSyncPort.class);
+        when(csdn.findSucceeded(any(), any()))
+                .thenReturn(new BlogSyncResult("csdn", "csdn-6", "https://csdn.example.com/6"));
+        JuejinBlogSyncPort juejin = mock(JuejinBlogSyncPort.class);
+        when(juejin.findSucceeded(any(), any()))
+                .thenAnswer(invocation -> {
+                    assertThat(invocation.getArgument(0, Long.class))
+                            .as("findSucceeded 的第一个参数必须是 userId（写反编译通过）")
+                            .isEqualTo(USER_ID);
+                    assertThat(invocation.getArgument(1, Long.class))
+                            .as("findSucceeded 的第二个参数必须是 postId")
+                            .isEqualTo(6L);
+                    return new BlogSyncResult("juejin", "juejin-6", "https://juejin.cn/post/6");
+                });
+
+        PublishPostTool tool = new PublishPostTool(mock(BlogAgentPort.class), contentPostPort, csdn, juejin,
+                mock(BillingPort.class));
+        JsonNode result = tool.reconcile(new AgentToolContext(USER_ID, 7L, 3L, "invocation-1"),
+                JsonNodeFactory.instance.objectNode().put("postId", 6L).put("platform", "juejin"))
+                .orElseThrow();
+
+        assertThat(result.path("externalId").asText()).isEqualTo("juejin-6");
+        verify(juejin).findSucceeded(USER_ID, 6L);
+        verify(csdn, never()).findSucceeded(any(), any());
     }
 
     /**
