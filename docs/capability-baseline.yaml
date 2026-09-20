@@ -18,8 +18,8 @@
 
 counts:
   total: 28
-  planned: 15
-  active: 11
+  planned: 14
+  active: 12
   changed: 2
   retired: 0
 
@@ -218,15 +218,18 @@ capabilities:
   - id: agent-event-bus-cross-instance-fanout
     since: V9
     ref: V9 §4 / §27.2 / §69
-    status: planned
-    evidence: "agent/application/AgentEventBus —— 类注释原文写死「多实例部署前置条件（重要）：本总线只在单个 JVM 内生效」；实现是 Map<Long, List<Consumer<AgentEvent>>> subscribers = new ConcurrentHashMap<>()"
+    status: active
+    evidence: >-
+      agent/application/AgentEventBus 在本地订阅之外，按持久化 event.id 通过
+      RedisAgentEventBroadcaster 扇出；RedisAgentEventSubscriber 只做本地投递，
+      无 id 的先推送后落库增量由 agent_event 重放兜底。
     notes: >-
       V9 §4 明确「Wave 2：core-host 允许 2 实例」，而触发执行的 HTTP 请求与 WS 握手订阅可能落在不同节点
-      → 订阅者收不到其他实例产生的事件，表现为「偶发卡住不输出」，
-      **不触发任何现有回滚阈值**（§98 只看 5xx / 断连率 / MCP 错误率）。
-      后端全库 convertAndSend / RedisMessageListener / @RabbitListener / KafkaTemplate 全部 0 匹配。
-      V9 §27.2 已为 security event 引入 Redis PubSub，必须复用给对话事件扇出，并保留 DB 重放作为跨实例兜底。
+      → 已通过独立 Agent 事件频道解决实时扇出；订阅者只收到有持久化游标的事件，
+      避免流式增量的无 id 实时副本与落库副本重复渲染。
+      Redis 快路径丢消息或暂时不可用时，客户端重新订阅会从 agent_event 按游标重放。
     acceptance: "§97 门槛：事件只到部分实例时全实例收敛；Wave 2 多实例下不丢事件"
+    verified_by: "AgentEventBusTest / RedisAgentEventPubSubTest + AgentStreamWebSocketHandler 的 durable cursor 去重"
 
   - id: security-plane-stale-fail-closed-declared
     since: V9

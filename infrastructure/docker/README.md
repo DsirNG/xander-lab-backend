@@ -62,3 +62,6 @@ two HTTP services use Actuator readiness.
 For a multi-instance core deployment, set `AUTH_REFRESH_SECURITY_PUBSUB_ENABLED=true` for every
 core-host instance and keep `AUTH_REFRESH_SECURITY_PUBSUB_CHANNEL` identical across them. Redis
 Pub/Sub is the fast path; the database security reconciler remains enabled as the durable fallback.
+For Agent WebSocket event fan-out, also set `AGENT_EVENT_BUS_PUBSUB_ENABLED=true` on every
+core-host instance and keep `AGENT_EVENT_BUS_PUBSUB_CHANNEL` identical. Persisted Agent events
+remain replayable from `agent_event`; the Pub/Sub channel is only the low-latency path.

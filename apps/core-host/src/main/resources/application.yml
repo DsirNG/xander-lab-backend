@@ -253,6 +253,9 @@ management:
     read-timeout-millis: ${WECHAT_VIRTUAL_PAY_READ_TIMEOUT_MILLIS:10000}
 
 agent:
+  event-bus:
+    pubsub-enabled: ${AGENT_EVENT_BUS_PUBSUB_ENABLED:false}
+    pubsub-channel: ${AGENT_EVENT_BUS_PUBSUB_CHANNEL:dinqor:agent-events}
   conversation:
     max-steps: ${AGENT_CONVERSATION_MAX_STEPS:20}
     max-tool-failures: ${AGENT_CONVERSATION_MAX_TOOL_FAILURES:2}

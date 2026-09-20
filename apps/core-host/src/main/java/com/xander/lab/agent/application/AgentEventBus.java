@@ -1,7 +1,12 @@
 package com.xander.lab.agent.application;
 
 import com.xander.lab.agent.domain.AgentEvent;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Map;
@@ -18,17 +23,27 @@ import java.util.function.Consumer;
  * 延迟敏感、且可由完整正文兜底的场景，走 {@code AgentEventProjector#appendLive} 的
  * "先推送、后静默落库"，落库卡住也不会拖慢用户看到正文。</p>
  *
- * <p><b>多实例部署前置条件（重要）</b>：本总线只在单个 JVM 内生效。
- * 当前服务为单实例部署，触发执行的 HTTP 请求与本总线的订阅者必然同进程；
- * 若未来水平扩容为多实例，「POST 触发执行」与「WS 握手订阅」可能落在不同节点，
- * 订阅者将收不到其他实例产生的事件。届时必须先引入跨实例广播
- * （如 Redis pub/sub 转发 publish，或复用既有 Redis 基础设施），
- * 并保留数据库重放作为跨实例兜底，再启用多实例。</p>
+ * <p>本总线默认仍只在当前 JVM 内直推；开启
+ * {@code agent.event-bus.pubsub-enabled} 后，带持久化 id 的事件还会通过 Redis Pub/Sub
+ * 扇出到其他实例。流式增量在「先推送、后落库」阶段 id 为空，刻意不跨实例广播，
+ * 避免收到无 id 的实时副本后又收到落库副本而重复渲染；落库副本由订阅端重放兜底。</p>
  */
 @Component
+@Slf4j
 public class AgentEventBus {
 
     private final Map<Long, List<Consumer<AgentEvent>>> subscribers = new ConcurrentHashMap<>();
+    private final ObjectProvider<AgentEventBroadcaster> broadcasterProvider;
+
+    /** 保留无参构造，测试与单实例模式不依赖 Redis。 */
+    public AgentEventBus() {
+        this(null);
+    }
+
+    @Autowired
+    public AgentEventBus(ObjectProvider<AgentEventBroadcaster> broadcasterProvider) {
+        this.broadcasterProvider = broadcasterProvider;
+    }
 
     /** 订阅某会话的事件；返回的句柄用于取消订阅（连接关闭时必须调用，防止泄漏）。 */
     public Subscription subscribe(Long conversationId, Consumer<AgentEvent> sink) {
@@ -40,6 +55,35 @@ public class AgentEventBus {
 
     /** 向该会话的全部本实例订阅者广播事件；单个订阅者异常不影响其他订阅者。 */
     public void publish(Long conversationId, AgentEvent event) {
+        publishLocally(conversationId, event);
+        if (event == null || event.getId() == null || broadcasterProvider == null) return;
+
+        Runnable broadcast = () -> {
+            AgentEventBroadcaster broadcaster = broadcasterProvider.getIfAvailable();
+            if (broadcaster == null) return;
+            try {
+                broadcaster.publish(event);
+            } catch (RuntimeException exception) {
+                // agent_event 已落库，跨实例快路径失败不能回滚业务事务；订阅端重放会兜底。
+                log.warn("agent cross-instance event broadcast failed conversation={} event={} type={}",
+                        conversationId, event.getId(), event.getEventType(), exception);
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    broadcast.run();
+                }
+            });
+        } else {
+            broadcast.run();
+        }
+    }
+
+    /** 仅投递当前 JVM，不再进入 Redis，供订阅者避免广播回环。 */
+    void publishLocally(Long conversationId, AgentEvent event) {
+        if (event == null) return;
         List<Consumer<AgentEvent>> list = subscribers.get(conversationId);
         if (list == null || list.isEmpty()) return;
         for (Consumer<AgentEvent> sink : list.toArray(Consumer[]::new)) {

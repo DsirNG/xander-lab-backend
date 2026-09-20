@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 577
-  leaves: 429
+  total: 582
+  leaves: 433
 config:
   - key: server
     source: apps/bloghtml-preview/src/main/resources/application.yml
@@ -1195,6 +1195,21 @@ config:
     value: ""
     leaf: false
     logical_owner: unassigned
+  - key: agent.event-bus
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: agent
+  - key: agent.event-bus.pubsub-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${AGENT_EVENT_BUS_PUBSUB_ENABLED:false}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.event-bus.pubsub-channel
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${AGENT_EVENT_BUS_PUBSUB_CHANNEL:dinqor:agent-events}"
+    leaf: true
+    logical_owner: agent
   - key: agent.conversation
     source: apps/core-host/src/main/resources/application.yml
     value: ""
@@ -2338,6 +2353,20 @@ config:
     logical_owner: agent
     source_kind: java-configuration-properties
     line: 17
+  - key: agent.event-bus.pubsub-channel
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 17
+  - key: agent.event-bus.pubsub-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 14
   - key: agent.model.api-key
     source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
     value: "<java-default:none>"

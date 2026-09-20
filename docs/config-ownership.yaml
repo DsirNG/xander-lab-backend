@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 429
-  service_private: 373
+  total: 433
+  service_private: 377
   secret: 47
   shared: 9
 config:
@@ -115,6 +115,26 @@ config:
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.stale-conversation-minutes
     source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.event-bus.pubsub-channel
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.event-bus.pubsub-channel
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.event-bus.pubsub-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.event-bus.pubsub-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
