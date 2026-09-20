@@ -52,6 +52,8 @@ management:
       application: ${spring.application.name}
 
 agent:
+  stream:
+    drain-enabled: ${AGENT_STREAM_DRAIN_ENABLED:false}
   core-client:
     enabled: ${AGENT_CORE_CLIENT_ENABLED:false}
     base-url: ${AGENT_CORE_BASE_URL:http://core-host:30002}

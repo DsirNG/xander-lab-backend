@@ -8,6 +8,7 @@ import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.agent.domain.AgentConversation;
 import com.xander.lab.agent.domain.AgentEvent;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
+import com.xander.lab.agent.infrastructure.AgentStreamProperties;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
 import lombok.extern.slf4j.Slf4j;
@@ -82,6 +83,8 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
     private final ConnectionRegistry connectionRegistry;
     /** 取代检查周期；生产固定值，测试可注入更短周期避免用例等待真实时长。 */
     private final long supersededCheckMillis;
+    /** Wave 2 切换时拒绝新建 WS，已建立连接继续自然收口。 */
+    private final AgentStreamProperties streamProperties;
 
     public AgentStreamWebSocketHandler(AgentEventService eventService,
                                        AgentEventBus eventBus,
@@ -92,7 +95,8 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
                                        SecurityStateCache securityStateCache,
                                        ConnectionRegistry connectionRegistry) {
         this(eventService, eventBus, objectMapper, agentSseExecutor, agentHeartbeatScheduler,
-                conversationMapper, securityStateCache, connectionRegistry, SUPERSEDED_CHECK_MILLIS);
+                conversationMapper, securityStateCache, connectionRegistry, SUPERSEDED_CHECK_MILLIS,
+                new AgentStreamProperties());
     }
 
     /** 测试专用：允许缩短取代检查周期。 */
@@ -105,7 +109,7 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
                                 long supersededCheckMillis) {
         this(eventService, eventBus, objectMapper, agentSseExecutor, agentHeartbeatScheduler,
                 conversationMapper, new SecurityStateCache(), new ConnectionRegistry(),
-                supersededCheckMillis);
+                supersededCheckMillis, new AgentStreamProperties());
     }
 
     /**
@@ -121,10 +125,25 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
                                 ObjectMapper objectMapper,
                                 TaskExecutor agentSseExecutor,
                                 TaskScheduler agentHeartbeatScheduler,
+                                 AgentConversationMapper conversationMapper,
+                                 SecurityStateCache securityStateCache,
+                                 ConnectionRegistry connectionRegistry,
+                                 long supersededCheckMillis) {
+        this(eventService, eventBus, objectMapper, agentSseExecutor, agentHeartbeatScheduler,
+                conversationMapper, securityStateCache, connectionRegistry, supersededCheckMillis,
+                new AgentStreamProperties());
+    }
+
+    AgentStreamWebSocketHandler(AgentEventService eventService,
+                                AgentEventBus eventBus,
+                                ObjectMapper objectMapper,
+                                TaskExecutor agentSseExecutor,
+                                TaskScheduler agentHeartbeatScheduler,
                                 AgentConversationMapper conversationMapper,
                                 SecurityStateCache securityStateCache,
                                 ConnectionRegistry connectionRegistry,
-                                long supersededCheckMillis) {
+                                long supersededCheckMillis,
+                                AgentStreamProperties streamProperties) {
         this.eventService = eventService;
         this.eventBus = eventBus;
         this.objectMapper = objectMapper;
@@ -134,10 +153,16 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
         this.securityStateCache = securityStateCache;
         this.connectionRegistry = connectionRegistry;
         this.supersededCheckMillis = supersededCheckMillis;
+        this.streamProperties = streamProperties;
     }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+        if (streamProperties.isDrainEnabled()) {
+            log.info("agent ws connection rejected because stream drain is enabled");
+            closeQuietly(session, new CloseStatus(1012, "DRAINING"));
+            return;
+        }
         Long userId = (Long) session.getAttributes().get(AgentStreamAuthHandshakeInterceptor.ATTR_USER_ID);
         Long conversationId = (Long) session.getAttributes().get(AgentStreamAuthHandshakeInterceptor.ATTR_CONVERSATION_ID);
         Long runVersion = (Long) session.getAttributes().get(AgentStreamAuthHandshakeInterceptor.ATTR_RUN_VERSION);

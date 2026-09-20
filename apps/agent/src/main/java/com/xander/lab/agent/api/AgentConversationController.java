@@ -7,6 +7,7 @@ import com.xander.lab.agent.application.AgentConversationService;
 import com.xander.lab.agent.application.AgentAttachmentService;
 import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.agent.application.AgentApprovalService;
+import com.xander.lab.agent.infrastructure.AgentStreamProperties;
 import com.xander.lab.common.Result;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
@@ -52,6 +53,8 @@ public class AgentConversationController {
     private final SecurityStateCache securityStateCache;
     /** 本实例的活跃连接注册表：封禁时主动断开已建立的流。 */
     private final ConnectionRegistry connectionRegistry;
+    /** Wave 2 切换时拒绝新建 SSE，已建立连接继续自然收口。 */
+    private final AgentStreamProperties streamProperties;
 
     @Autowired
     public AgentConversationController(AgentConversationService service,
@@ -62,7 +65,8 @@ public class AgentConversationController {
                                        @Qualifier("agentSseExecutor") TaskExecutor agentSseExecutor,
                                        @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler,
                                        SecurityStateCache securityStateCache,
-                                       ConnectionRegistry connectionRegistry) {
+                                       ConnectionRegistry connectionRegistry,
+                                       AgentStreamProperties streamProperties) {
         this.service = service;
         this.attachmentService = attachmentService;
         this.eventService = eventService;
@@ -72,6 +76,7 @@ public class AgentConversationController {
         this.agentHeartbeatScheduler = agentHeartbeatScheduler;
         this.securityStateCache = securityStateCache;
         this.connectionRegistry = connectionRegistry;
+        this.streamProperties = streamProperties;
     }
 
     /** Compatibility constructor for focused controller tests that do not exercise approvals. */
@@ -82,7 +87,8 @@ public class AgentConversationController {
                                 TaskExecutor agentSseExecutor,
                                 TaskScheduler agentHeartbeatScheduler) {
         this(service, attachmentService, eventService, null, agentTaskExecutor, agentSseExecutor,
-                agentHeartbeatScheduler, new SecurityStateCache(), new ConnectionRegistry());
+                agentHeartbeatScheduler, new SecurityStateCache(), new ConnectionRegistry(),
+                new AgentStreamProperties());
     }
 
     /**
@@ -99,7 +105,7 @@ public class AgentConversationController {
                                 TaskScheduler agentHeartbeatScheduler) {
         this(service, attachmentService, eventService, approvalService, agentTaskExecutor,
                 agentSseExecutor, agentHeartbeatScheduler, new SecurityStateCache(),
-                new ConnectionRegistry());
+                new ConnectionRegistry(), new AgentStreamProperties());
     }
 
     /** 根据首条消息确定标题并创建 ready 会话壳；消息执行仍由 /messages/stream 负责。 */
@@ -195,6 +201,7 @@ public class AgentConversationController {
     public SseEmitter sendMessage(@PathVariable Long id,
                                   @Valid @RequestBody AgentConversationMessageRequest request,
                                   HttpServletResponse response) {
+        ensureStreamsAvailable();
         Long userId = UserContext.getUserId();
         // Claim and persist the user message before committing an SSE 200 response.
         String content = request.effectiveContent();
@@ -272,6 +279,7 @@ public class AgentConversationController {
                                 @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId,
                                 @RequestParam(value = "afterEventId", required = false) Long afterEventId,
                                 HttpServletResponse response) {
+        ensureStreamsAvailable();
         Long userId = UserContext.getUserId();
         AgentConversation snapshot = service.get(id, userId);
         long runVersion = snapshot.getRunVersion() == null ? 0L : snapshot.getRunVersion();
@@ -307,6 +315,13 @@ public class AgentConversationController {
                 .conversation(service.get(conversationId, userId))
                 .messages(service.listMessages(conversationId, userId))
                 .build();
+    }
+
+    private void ensureStreamsAvailable() {
+        if (streamProperties.isDrainEnabled()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "智能体长连接正在切换，请稍后重试");
+        }
     }
 
     private SseEmitter createEmitter(Long conversationId, HttpServletResponse response) {

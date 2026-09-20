@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 712
-  leaves: 522
+  total: 715
+  leaves: 524
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -260,6 +260,16 @@ config:
     value: ""
     leaf: false
     logical_owner: unassigned
+  - key: agent.stream
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: agent
+  - key: agent.stream.drain-enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_STREAM_DRAIN_ENABLED:false}"
+    leaf: true
+    logical_owner: agent
   - key: agent.core-client
     source: apps/agent/src/main/resources/application.yml
     value: ""
@@ -2961,6 +2971,13 @@ config:
     logical_owner: agent
     source_kind: java-configuration-properties
     line: 15
+  - key: agent.stream.drain-enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentStreamProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 12
   - key: mcp.client.connect-timeout-seconds
     source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
     value: "<java-default>"

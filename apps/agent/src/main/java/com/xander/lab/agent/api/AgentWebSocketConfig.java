@@ -4,6 +4,7 @@ import com.xander.lab.agent.application.AgentConversationService;
 import com.xander.lab.agent.application.AgentEventBus;
 import com.xander.lab.agent.application.AgentEventService;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
+import com.xander.lab.agent.infrastructure.AgentStreamProperties;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.core.api.AccessTokenLookupPort;
@@ -37,6 +38,7 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
     /** /ws/agent 的宿主必须维护 Security Local Cache 与连接注册表。 */
     private final SecurityStateCache securityStateCache;
     private final ConnectionRegistry connectionRegistry;
+    private final AgentStreamProperties streamProperties;
 
     public AgentWebSocketConfig(AgentEventService eventService,
                                 AgentEventBus eventBus,
@@ -47,7 +49,8 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
                                 @Qualifier("agentHeartbeatScheduler") TaskScheduler agentHeartbeatScheduler,
                                 AgentConversationMapper conversationMapper,
                                 SecurityStateCache securityStateCache,
-                                ConnectionRegistry connectionRegistry) {
+                                ConnectionRegistry connectionRegistry,
+                                AgentStreamProperties streamProperties) {
         this.eventService = eventService;
         this.eventBus = eventBus;
         this.accessTokenLookupPort = accessTokenLookupPort;
@@ -58,6 +61,7 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
         this.conversationMapper = conversationMapper;
         this.securityStateCache = securityStateCache;
         this.connectionRegistry = connectionRegistry;
+        this.streamProperties = streamProperties;
     }
 
     @Override
@@ -72,6 +76,7 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
     public AgentStreamWebSocketHandler agentStreamWebSocketHandler() {
         return new AgentStreamWebSocketHandler(
                 eventService, eventBus, objectMapper, agentSseExecutor, agentHeartbeatScheduler,
-                conversationMapper, securityStateCache, connectionRegistry);
+                conversationMapper, securityStateCache, connectionRegistry,
+                AgentStreamWebSocketHandler.SUPERSEDED_CHECK_MILLIS, streamProperties);
     }
 }
