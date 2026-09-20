@@ -1563,6 +1563,15 @@ def gate_wave1_compose_contract() -> None:
     core_dependency = gateway_dependencies.get("core-host", {})
     if core_dependency.get("condition") != "service_healthy":
         problems.append("gateway: must wait for core-host health")
+    migration_grant = REPO / "migrations" / "grants" / "dinqor_migration.sql"
+    if not migration_grant.is_file():
+        problems.append("migrations/grants/dinqor_migration.sql is missing")
+    else:
+        grant_text = migration_grant.read_text(encoding="utf-8")
+        if "Effective wave: wave1" not in grant_text:
+            problems.append("dinqor_migration grant must be effective in wave1")
+        if "CREATE, ALTER, DROP" not in grant_text:
+            problems.append("dinqor_migration grant must retain Flyway DDL privileges")
     if problems:
         report(gate, False, "; ".join(problems))
         return

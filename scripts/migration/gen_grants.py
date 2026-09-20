@@ -48,6 +48,7 @@ ACCOUNT_OF = {
 WAVE_OF_ACCOUNT = {
     "dinqor_core": "wave1",
     "dinqor_bloghtml_preview": "wave1",
+    "dinqor_migration": "wave1",
     "dinqor_agent": "wave2",
     "dinqor_integration": "wave2",
     "dinqor_content_automation": "wave2",
@@ -64,8 +65,9 @@ HEADER = """-- DinQorAI microservice migration — GRANT script for `{account}` 
 --   Wave 1 : apply together with the first real split, in the SAME change window
 --            that narrows core-host — otherwise ownership is a paper concept.
 --
--- This account holds DML only. It must never receive DDL rights
--- (V9 §102 禁止项: 业务服务拿 DDL 权限).
+-- Runtime-service accounts hold DML only and must never receive DDL rights
+-- (V9 §102 禁止项: 业务服务拿 DDL 权限). The migration-runner account is the
+-- controlled DDL exception and is emitted explicitly below.
 --
 -- Idempotent: safe to re-run.
 """
