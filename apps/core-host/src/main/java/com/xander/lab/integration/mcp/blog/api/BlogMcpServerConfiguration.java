@@ -35,13 +35,35 @@ public class BlogMcpServerConfiguration {
     }
 
     @Bean
+    HttpServletStreamableServerTransportProvider mcpRootTransport() {
+        return HttpServletStreamableServerTransportProvider.builder()
+                .jsonMapper(McpJsonMapperFactory.jsonMapper()).mcpEndpoint("/mcp").build();
+    }
+
+    @Bean
     ServletRegistrationBean<HttpServletStreamableServerTransportProvider> mcpServlet(
             @Qualifier("mcpTransport") HttpServletStreamableServerTransportProvider transport) {
         return new ServletRegistrationBean<>(transport, "/api/mcp");
     }
 
     @Bean
+    ServletRegistrationBean<HttpServletStreamableServerTransportProvider> mcpRootServlet(
+            @Qualifier("mcpRootTransport") HttpServletStreamableServerTransportProvider transport) {
+        return new ServletRegistrationBean<>(transport, "/mcp");
+    }
+
+    @Bean
     McpSyncServer blogMcpServer(@Qualifier("mcpTransport") HttpServletStreamableServerTransportProvider transport) {
+        return buildServer(transport);
+    }
+
+    @Bean
+    McpSyncServer blogMcpRootServer(
+            @Qualifier("mcpRootTransport") HttpServletStreamableServerTransportProvider transport) {
+        return buildServer(transport);
+    }
+
+    private McpSyncServer buildServer(HttpServletStreamableServerTransportProvider transport) {
         return McpServer.sync(transport).serverInfo("xander-blog", "1.0.0")
                 .tools(listPostsTool(), getPostTool(), postTool("create_draft", false), postTool("publish_post", true),
                         updatePostTool(), deletePostTool())

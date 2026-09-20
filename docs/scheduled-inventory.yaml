@@ -50,7 +50,7 @@ scheduled:
     trigger: "fixedDelayString = \"${auth.refresh.history-cleanup-interval-ms:300000}\""
     logical_owner: identity
     file: apps/core-host/src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java
-    line: 74
+    line: 85
   - id: legacy-redis-metrics
     class: com.xander.lab.identity.application.LegacyRedisMetrics
     method: reconcile
@@ -64,7 +64,7 @@ scheduled:
     trigger: "fixedDelay = OBSERVE_INTERVAL_MS, initialDelay = OBSERVE_INTERVAL_MS"
     logical_owner: identity
     file: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshStorageMetrics.java
-    line: 38
+    line: 42
   - id: security-event-outbox-publisher
     class: com.xander.lab.identity.application.SecurityEventOutboxPublisher
     method: publishDueEvents

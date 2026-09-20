@@ -131,7 +131,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java:74
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java:85
     notes: >-
       V9 §41 / §42。DELETE FROM auth_refresh_token_history WHERE retained_until < now
       ORDER BY retained_until LIMIT ?。删的是**共享**表行 → global_once（多实例同时删同一段
@@ -162,7 +162,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshStorageMetrics.java:38
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshStorageMetrics.java:42
     notes: "V9 §87。每个 core-host 实例低频只读统计 Refresh Session / History 行数并保留最近一次成功值；SQL 不放在 Micrometer scrape 回调中，禁止全局 ShedLock。"
 
   - id: auth-refresh-ciphertext-cleanup

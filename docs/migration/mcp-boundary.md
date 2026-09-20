@@ -147,10 +147,10 @@ Claude / Cursor / Other Host
 | `mcp-csdn-server` | `/api/mcp/csdn` | streamable-http | oauth2-pkce | integration |
 | `mcp-juejin-server` | `/api/mcp/juejin` | streamable-http | oauth2-pkce | integration |
 | `mcp-dual-publish-server` | `/api/mcp/dual` | streamable-http | oauth2-pkce | integration |
-| `mcp-v2-endpoint` | `/mcp` | streamable-http | oauth2-pkce | integration（`status: planned`） |
+| `mcp-v2-endpoint` | `/mcp` | streamable-http | oauth2-pkce | integration |
 
-⚠️ `/mcp` 是 §7 要求的**协议端点迁移目标**（MCP 规范用根路径 `/mcp`），
-兼容期保留 `/api/mcp`。它当前是 `planned`，不要当成已存在。
+`/mcp` 是 §7 要求的**协议端点迁移目标**（MCP 规范用根路径 `/mcp`），
+当前已与博客 MCP 工具集接通；兼容期继续保留 `/api/mcp`，两者共享同一套 OAuth scope 语义。
 
 四个业务模块的职责（`docs/MCP_MODULES.md`）：
 
@@ -176,6 +176,9 @@ the other's credentials."
   note: "MCP 入站传输（Streamable HTTP），走 OAuth + PKCE + Scope，不套业务 JWT。
          含 /api/mcp、/api/mcp/csdn、/api/mcp/dual、/api/mcp/juejin。"
 ```
+
+`/mcp` 另有独立的 `excluded-mcp-root-transport` 精确规则，避免根路径因不含
+`/api` 前缀而落入业务 JWT 默认规则。
 
 ⚠️ 这是**有意的排除**，不是"漏配"。区分"有意的排除"与"漏配"的唯一办法
 就是把它显式写进策略文件 —— 这也是 `auth-policy-token-location` 门禁存在的原因
@@ -305,7 +308,6 @@ checksum
 | `integration/mcp/client` → `agent/tool/mcp` 未迁移 | §76 的迁入动作尚未执行。当前包名与目标归属不一致 | Wave 2 |
 | `probe` 在事务内做 HTTP | 见 §2.5，当前就是错的 | 建议 Wave 0B 修 |
 | `owner_transition` 无门禁校验阶段合法性 | `table-ownership.yaml` 登记了 `stage-a-integration-write`，但没有门禁校验这个取值合法、也没有门禁校验"Stage C 完成前不得 REVOKE integration WRITE" | Wave 0B |
-| `/mcp` 端点未实现 | §7 的协议端点迁移目标，`status: planned` | Wave 1 |
 | STDIO transport 的可信边界未定义 | §76 说"仅可信 Sandbox / Worker"，但"可信"如何判定（配置白名单？部署单元？）未定义。STDIO 会启动子进程，边界不清等于命令执行面 | Wave 2 设计 |
 | DNS rebinding 残余风险 | 见 §2.2，已显式接受并记录理由 | 已接受 |
 

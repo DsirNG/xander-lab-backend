@@ -75,6 +75,14 @@ excluded:
     identity_mode: none
     token_location: n/a
     note: "MCP 入站传输（Streamable HTTP），走 OAuth + PKCE + Scope，不套业务 JWT。含 /api/mcp、/api/mcp/csdn、/api/mcp/dual、/api/mcp/juejin。"
+  - id: excluded-mcp-root-transport
+    match:
+      method: ANY
+      path: /mcp
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "MCP 规范根端点，走 OAuth + PKCE + Scope，不套业务 JWT；/api/mcp 作为兼容路径保留。"
   - id: excluded-studio-preview
     match:
       method: ANY
@@ -657,5 +665,4 @@ mcp_inbound:
     transport: streamable-http
     auth: oauth2-pkce
     owner: integration
-    status: planned
-    note: "V9 §7：MCP 协议端点迁到 /mcp，兼容期保留 /api/mcp。"
+    note: "V9 §7：/mcp 为 MCP 规范根端点，兼容期保留 /api/mcp；两者提供同一博客 MCP 工具集。"

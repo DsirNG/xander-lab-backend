@@ -254,6 +254,19 @@ class McpOAuthServiceTest {
     }
 
     @Test
+    void startAuthorizationAcceptsCanonicalRootResource() {
+        when(properties.getPublicBaseUrl()).thenReturn(BASE_URL);
+        ValueOperations<String, String> ops = org.mockito.Mockito.mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(ops);
+
+        McpOAuthService.AuthorizationStart start = service.startAuthorization(
+                "code", CLIENT_ID, "https://client.example/cb", "blog:read", "state-1",
+                "challenge-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMM", "S256", BASE_URL + "/mcp");
+
+        assertEquals(Set.of("blog:read"), start.scopes());
+    }
+
+    @Test
     void approvingPersistsOnlyUserSelectedScopes() {
         mockWebLogin();
         seedAuthorizationRequest();
@@ -357,6 +370,7 @@ class McpOAuthServiceTest {
 
     @Test
     void resourceScopesAreTrimmedPerMcpEndpoint() {
+        assertEquals(Set.of("blog:read", "blog:write"), McpOAuthService.resourceScopes(BASE_URL + "/mcp"));
         assertEquals(Set.of("blog:read", "blog:write"), McpOAuthService.resourceScopes(BASE_URL + "/api/mcp"));
         assertEquals(Set.of("csdn:status", "csdn:authorize", "csdn:publish"), McpOAuthService.resourceScopes(BASE_URL + "/api/mcp/csdn"));
         assertEquals(Set.of("juejin:status", "juejin:publish", "blog:write"), McpOAuthService.resourceScopes(BASE_URL + "/api/mcp/juejin"));

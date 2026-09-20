@@ -35,8 +35,8 @@ public class McpOAuthController {
     @GetMapping(value = "/.well-known/oauth-protected-resource", produces = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, Object> protectedResourceMetadata(@RequestParam(required = false) String resource) {
         String base = properties.getPublicBaseUrl();
-        String resolvedResource = resource == null || resource.isBlank() ? base + "/api/mcp" : resource;
-        if (!List.of(base + "/api/mcp", base + "/api/mcp/csdn", base + "/api/mcp/dual",
+        String resolvedResource = resource == null || resource.isBlank() ? base + "/mcp" : resource;
+        if (!List.of(base + "/mcp", base + "/api/mcp", base + "/api/mcp/csdn", base + "/api/mcp/dual",
                 base + "/api/mcp/juejin").contains(resolvedResource)) {
             throw new McpOAuthException("invalid_request", 400, "resource is not an DinQorAI MCP endpoint");
         }

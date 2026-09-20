@@ -14,6 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,6 +35,7 @@ class McpOAuthBearerFilterConfigurationTest {
                 new McpOAuthRequestContext.Principal(42L, "codex", Set.of("blog:write")));
         FilterRegistrationBean<OncePerRequestFilter> registration =
                 new McpOAuthBearerFilterConfiguration(oauthService, properties).mcpOAuthBearerFilter();
+        assertTrue(registration.getUrlPatterns().contains("/mcp"));
 
         MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/mcp");
         request.setDispatcherType(DispatcherType.ASYNC);

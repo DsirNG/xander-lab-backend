@@ -43,6 +43,7 @@ public class McpOAuthService {
 
     /** Scopes each MCP endpoint actually enforces, so metadata and authorize never advertise useless ones. */
     public static final Map<String, Set<String>> RESOURCE_SCOPES = Map.of(
+            "/mcp", Set.of("blog:read", "blog:write"),
             "/api/mcp", Set.of("blog:read", "blog:write"),
             "/api/mcp/csdn", Set.of("csdn:status", "csdn:authorize", "csdn:publish"),
             "/api/mcp/juejin", Set.of("juejin:status", "juejin:publish", "blog:write"),
@@ -384,7 +385,7 @@ public class McpOAuthService {
 
     private boolean isMcpResource(String resource) {
         String base = properties.getPublicBaseUrl();
-        return resource.equals(base + "/api/mcp") || resource.equals(base + "/api/mcp/csdn")
+        return resource.equals(base + "/mcp") || resource.equals(base + "/api/mcp") || resource.equals(base + "/api/mcp/csdn")
                 || resource.equals(base + "/api/mcp/dual") || resource.equals(base + "/api/mcp/juejin");
     }
 
