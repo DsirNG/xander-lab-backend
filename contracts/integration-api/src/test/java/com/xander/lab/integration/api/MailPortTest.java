@@ -94,11 +94,21 @@ class MailPortTest {
         assertEquals("html", method.getParameters()[3].getName());
     }
 
+    /**
+     * 按名字取方法，并且断言**恰好一个**同名方法。
+     *
+     * <p>⚠️ 原来收齐了同名方法却用 {@code findFirst()} 取第一个 —— 端口上出现**重载**时
+     * 它会**按 JVM 的方法顺序**挑一个，上面的断言就开始检查另一个方法 ——
+     * 而它们仍然"通过"。**没有失败信息，因为根本没有失败。**</p>
+     */
     private static Method methodNamed(String name) {
-        return Arrays.stream(MailPort.class.getDeclaredMethods())
+        List<Method> matches = Arrays.stream(MailPort.class.getDeclaredMethods())
                 .filter(method -> !method.isSynthetic())
                 .filter(method -> method.getName().equals(name))
-                .findFirst()
-                .orElseThrow(() -> new AssertionError("端口上没有名为 " + name + " 的方法"));
+                .toList();
+        assertEquals(1, matches.size(),
+                "端口上应当恰好有一个方法叫 " + name + "，实际 " + matches.size()
+                        + " 个。重载会让上面这些按名字取方法的断言悄悄检查错对象。");
+        return matches.get(0);
     }
 }

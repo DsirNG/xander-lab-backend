@@ -137,10 +137,24 @@ class RecitationQuizPortTest {
                         + "去掉它会让 recordQuiz 的会话校验失去来源。");
     }
 
+    /**
+     * 按名字取方法，并且断言**恰好一个**同名方法。
+     *
+     * <p>⚠️ 只"按名字取第一个"不够：端口上出现**重载**时它会**按 JVM 的方法顺序**挑一个，
+     * 上面的 {@code openQuiz} 断言（读 {@code getParameterTypes()[2]}）就会开始检查另一个
+     * 方法 —— 而它仍然"通过"。**没有失败信息，因为根本没有失败。**</p>
+     */
     private static Method methodNamed(String name) {
+        Method found = null;
+        int count = 0;
         for (Method method : RecitationQuizPort.class.getDeclaredMethods()) {
-            if (method.getName().equals(name)) return method;
+            if (method.isSynthetic() || !name.equals(method.getName())) continue;
+            found = method;
+            count++;
         }
-        throw new AssertionError("端口上没有方法 " + name);
+        assertEquals(1, count,
+                "端口上应当恰好有一个方法叫 " + name + "，实际 " + count
+                        + " 个。重载会让上面这些按名字取方法的断言悄悄检查错对象。");
+        return found;
     }
 }

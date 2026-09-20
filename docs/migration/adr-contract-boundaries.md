@@ -3804,7 +3804,8 @@ E / G 的 `restore` 行打印 `1ae8d38b…`，而驱动脚本与收尾 `git stat
    写反的机会一直存在（§22.1）。
 3. `BlogContentPlanService` 的 `toVO` 残留（待办 53）—— 它**会改变行为**，
    所以不是重构，要单独决定。
-4. 三处端口测试的 `methodNamed` 仍是"取第一个"的旧写法（待办 57）。
+4. 端口测试的 `methodNamed` 仍是"取第一个"的旧写法（待办 57）。**✅ 已做，见 §23** ——
+   ⚠️ 实测是**七处**不是三处，而且清单里还多写了一个（§23.2）。
 
 ⚠️ 还有一件**更大**的事：`cross-domain-imports.yaml` 里剩下的 7 条边**全部同单元**。
 `deployment-unit-coupling` 三条判据此后只剩"不许变坏"的含义 ——
@@ -3979,7 +3980,99 @@ PublishPostToolTest.reconcilesPersistedCsdnResultWithoutCallingThePlatformAgain:
 - **没有改任何生产代码。** 三处改动全在测试里，外加两个端口的 javadoc 各加一段提示
   （下一个接入者读端口注释，不读测试）。所以**六个指标一动不动**。
 
-## 23. 待办
+## 23. 落地记录（二十）：待办 57 —— `methodNamed` 断言「恰好一个」，以及一张又错了的清单
+
+同样是**纯测试加强**：没动生产代码，六个指标一动不动（17 / 7 / 0 / 0 / 9 / 6）。
+
+### 23.1 缝
+
+反射测试里"按名字取方法"的旧写法是：遍历 `getDeclaredMethods()`、**返回第一个**同名方法。
+端口上出现**重载**时，它会**按 JVM 的方法顺序**挑一个，后面的断言就开始检查**另一个**方法 ——
+而它们仍然**通过**。**没有失败信息，因为根本没有失败。**
+
+⚠️ 这与 §11.2 的"同名同参重载"是同一个坑的两面：那一条讲**生产代码**里的转发点，
+这一条讲**测试自己**取方法的方式。§11.2 的修法是"注入验证用 `thenAnswer` 断言实收参数"，
+这一条的修法是"断言恰好一个同名方法"。
+
+### 23.2 ⚠️ 实测：清单上写的是**三处**，实际是**七处**
+
+待办 57 原文：「`NotificationPortTest` / `ContentPlanPortTest` / `EmailReminderPortTest`
+三处仍是旧写法」。实测（`grep -rn 'getName()\.equals(name)\|indexOf(String' contracts/*/src/test`）：
+
+| 文件 | 形状 | 原清单里有吗 |
+|---|---|---|
+| `automation-api/NotificationPortTest.methodNamed` | 遍历取第一个 | ✅ |
+| `automation-api/ContentPlanPortTest.indexOf` | 取第一个**下标**，再 `getDeclaredMethods()[i]` | ✅ |
+| `blogagent-api/BlogAgentPortTest.methodNamed` | 遍历取第一个 | ❌ **漏了** |
+| `blogagent-api/BlogAgentImagePortTest.methodNamed` | 遍历取第一个 | ❌ **漏了** |
+| `recitation-api/RecitationMaterialPortTest.methodNamed` | 遍历取第一个 | ❌ **漏了** |
+| `recitation-api/RecitationQuizPortTest.methodNamed` | 遍历取第一个 | ❌ **漏了** |
+| `integration-api/MailPortTest.methodNamed` | 收齐了同名方法却 `.findFirst()` | ❌ **漏了** |
+| `automation-api/EmailReminderPortTest` | **没有这个写法** | ⚠️ 清单里**多写**了 |
+
+⇒ 清单上的三处里，**一处不存在、四处没列**。**与 §22.1 同族：清单是"推"出来的，不是"数"出来的。**
+⚠️ 漏掉的四处里有**两个别的模块** —— 写清单时只扫了 `automation-api`，
+而"端口测试"这件事横跨六个契约模块。
+
+⚠️ 顺带确认：**今天没有任何端口上有重载**（`RecitationQuizPort` 那个"两参重载"在
+**服务**上，不在端口上）⇒ 这是**潜在**缺陷，不是活缺陷。
+风险此前被"完整签名清单"那条断言**间接**挡着（端口多一个方法它先红）——
+但守卫不该依赖**另一条**测试先红，那正是待办 51 记下的错。
+
+### 23.3 修法
+
+七处统一改成"**先数一遍、断言恰好一个、再返回**"：
+
+```java
+Method found = null;
+int count = 0;
+for (Method method : XPort.class.getDeclaredMethods()) {
+    if (method.isSynthetic() || !name.equals(method.getName())) continue;
+    found = method;
+    count++;
+}
+assertEquals(1, count,
+        "端口上应当恰好有一个方法叫 " + name + "，实际 " + count
+                + " 个。重载会让下面这些按名字取方法的断言悄悄检查错对象。");
+return found;
+```
+
+`ContentPlanPortTest.indexOf` 顺带**从"返回下标"改成"返回 `Method`"** ——
+`getDeclaredMethods()[indexOf("create")]` 这个下标间接层本身就是同一个坑的另一种写法。
+
+### 23.4 注入验证：两次，两种实现形状
+
+⚠️ 这条守卫的注入比前几刀麻烦：往端口上加一个**重载**会**同时**踩中"完整签名清单"那条断言，
+而它会**先**红 —— 红数里就分不清是不是"恰好一个"那条在起作用。
+⇒ 注入必须**两处一起改**：端口加重载 **+** 签名清单加上那个签名
+（清单按**字典序**整体比对，见 `ContractShape.declaredSignatures` 的 `.sorted()`）。
+省掉第二处，就是一次"通过消息失真"式的假测量。
+
+| 注入 | 变异 | 目标测试 | 实测 |
+|---|---|---|---|
+| H1 | `RecitationQuizPort` 加 `openQuiz(Long, Long)` 两参重载（javadoc 里点名的那个真实形状） | `RecitationQuizPortTest` | 10 run / **2 fail** —— `:44` 与 `:136`，两条按名字取方法的断言 |
+| H2 | `MailPort` 加 `sendHtmlMail(String, String)` 两参重载（stream 形状的那一处） | `MailPortTest` | 6 run / **1 fail** —— `:90` |
+
+两次的失败信息都是 `端口上应当恰好有一个方法叫 …，实际 2 个` ——
+**是具名断言，不是 `ArrayIndexOutOfBoundsException`，也不是 NPE**。
+两次 `apply` / `restore` 的 blob 逐字节相同。
+
+⚠️ **另外四处没有逐处注入**（`ContentPlanPortTest` / `BlogAgentPortTest` /
+`BlogAgentImagePortTest` / `RecitationMaterialPortTest`）：它们与 H1 是**同一段 8 行代码**，
+只换了端口类名。两种实现形状各验一次比"七处各跑一遍 mvn"划算 ——
+**但这句判断本身是"推"的，不是"数"的**，记在这里，不要当成已验证。
+
+### 23.5 刻意没做的事
+
+- **没有把七个 `methodNamed` 收成一个共享工具。** `automation-api` 里两个测试共用同一个
+  `ContractShape`，本可以把 helper 放进去；但契约模块**不能互相依赖**（测试作用域也不行），
+  所以每个模块至少得有一份。七份里只有两份同模块可合并 —— 收益小、diff 大。
+  ⚠️ 真正的代价是**七份可以各自漂移**（`ContractShape` 的 javadoc 已经抱怨过同一件事）。
+- **没有顺手给 `getParameterTypes()[1]` / `[2]` 加 `getParameterCount()` 前置守卫。**
+  那是**另一个**已记录的形状（"守卫的失败信息必须指向真正的原因"），
+  与"恰好一个"不是同一件事；混在一起会让这次改动的性质变模糊。记进待办 59。
+
+## 24. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -4039,10 +4132,11 @@ PublishPostToolTest.reconcilesPersistedCsdnResultWithoutCallingThePlatformAgain:
 | 54 | **⚠️ `CsdnBlogSyncPort` / `JuejinBlogSyncPort` 缺"同形不同源"守卫** —— `findSucceeded(Long, Long) -> BlogSyncResult` 在两个端口上**签名逐字相同**（`sync` 不同形，参数表不同 ⇒ 写反编译不过） | **已做**（§22，**不是抽取刀**）。⚠️ **原文那句"今天没有调用点会写反只是巧合 / 暂时没有写反的机会"是错的**：`PublishPostTool`（`dinqor-agent`）**早就**同时持有两个端口，`reconcile` 的 131 / 135 行两个 `findSucceeded` **相邻、参数表逐字相同、只有接收者不同** ⇒ 写反的机会一直存在，只是从来没有东西会报错。⚠️ 纸面为什么会错：结论是从"谁注入了什么"**推**出来的，没**数**。修法三条：①契约侧钉「可互换的方法集**恰好** `{findSucceeded}`」（**双向**）；②`core-host` 扫类路径，出现同时持有两个端口的类就红（基线 `PublishPostTool` + **反向 sanity**）；③`PublishPostToolTest` 补**不对称桩**两条（两个方向各一条，桩取不同的值 + 断言另一个端口**零交互** + `thenAnswer` 断言实收参数）。⭐ **②写出来当天就抓到①** —— 基线还是空的时候它直接点名了 `PublishPostTool`。注入 A–G 七次全部按预期变红（§22.4）。⚠️ 既有用例其实也挡得住写反，但症状是 `NoSuchElementException: No value present` —— **红的原因指不到错因**，容易被当 flaky（待办 45 / 51 同族） |
 | 55 | **⚠️ 注入验证与"判据强度"的边界要说清** —— 注入**能**发现"某个具体位置没人守"，**不能**发现"判据的**形状**够不够" | **本刀澄清**（§19.4 末）。前一条此前被写成"这类缺陷注入验证发现不了"，**过宽了**：注入 D 就发现了一处真的没人守的位置。正确的区分是 —— 前者是**位置**问题，注入落在那里就能看见；后者是**判据**问题（例如只断言参数类型不断言参数名），注入永远看不见，只能**反着用一次**：拿判据去断言它本该拒绝的形状。待办 11 / 46 / 51 都是后者 |
 | 56 | **⚠️ 跨单元实现边归零之后，"= 0"这条不变式没有任何门禁守着** | **已做**（§21，**不是抽取刀**）。修法：`ci_gates.py` 加常量 `EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0` + `deployment-unit-coupling` 第 4 条判据（放在三条形状判据**之后**，双向）。⭐ 实测**直接对照**：注入 D（消费方退回具体类）时，**常量=1 ⇒ 24 pass / 0 fail，而且 detail 仍印着 `1 cross-unit edge(s) left`**；**常量=0 ⇒ 23 pass / 1 fail，唯一红的就是它**。⇒ 形状判据不是漏了，是**结构上看不见**单向边。⚠️ 归零**之前**这个常量写不出来（数字一直在动）⇒ 是 §20 解锁的。⚠️ **待办 16 仍未修**（修它要人工维护的基线文件，代价不同，已问过九次） |
-| 57 | **⚠️ 反射测试"按名字取方法"要断言**恰好一个**同名方法** | **本刀修了新测试、其余未修**（§20.3 末）。原来的写法是"遍历取第一个同名方法" ⇒ 端口上出现**重载**时，它会**按 JVM 的方法顺序**挑一个，后续断言开始检查另一个方法，而它们仍然**通过**（**没有失败信息，因为根本没有失败**）。⚠️ 现状：`NotificationPortTest` / `ContentPlanPortTest` / `EmailReminderPortTest` 三处仍是旧写法；风险被"恰好签名清单"那条断言**间接**挡住（端口多一个方法它先红），所以不是活缺陷 —— 但守卫不该依赖**另一条**测试先红。注入 A 同时踩中本刀新测试的这条与 `noMethodIsDefault` |
+| 57 | **⚠️ 反射测试"按名字取方法"要断言**恰好一个**同名方法** | **已做**（§23）。⚠️ **原清单是错的**：写着三处，实测是**七处** —— `EmailReminderPortTest` **根本没有这个写法**（多写了），而 `blogagent-api` 两个 / `recitation-api` 两个 / `integration-api/MailPortTest`（收齐了却 `.findFirst()`）**四处没列**（漏了）。⇒ 与待办 54 同族：**清单是推出来的，不是数出来的**，而且漏的四处里有两个别的模块（写清单时只扫了 `automation-api`）。七处统一改成"先数一遍、断言恰好一个、再返回"；`ContentPlanPortTest.indexOf` 顺带从"返回下标"改成"返回 `Method`"。⚠️ 今天**没有任何端口上有重载**（`RecitationQuizPort` 那个两参重载在**服务**上，不在端口上）⇒ 潜在缺陷，不是活缺陷。注入 H1 / H2（两种实现形状；⚠️ 必须**同时**改签名清单，否则清单断言先红会掩盖它）实测 2 fail / 1 fail，报的都是具名断言。⚠️ 另四处是同一段代码、**没有逐处注入** —— 那句判断本身是推的 |
+| 59 | **⚠️ 反射断言读 `getParameterTypes()[n]` 前要先查 `getParameterCount()`** | **未做**（§23.5）。`ContentPlanPortTest` 的 `[1]` / `[2]`、`RecitationQuizPortTest` 的 `[2]`、`BlogAgentPortTest` 一类都没有前置守卫 ⇒ 参数表缩短时症状是 `ArrayIndexOutOfBoundsException`，**报的是"下标越界"而不是"这个方法的参数表变了"**。与待办 45 / 57 同族（失败信息指不到真正的原因）。⚠️ `NotificationPortTest` / `EmailReminderPortTest` / `ContentPlanPortTest` 里"首参必须是调用方 id"那几条**已经**有守卫，可作模板 |
 | 58 | **⚠️ 同一次注入验证里混用了两种哈希算法** —— 注入脚本自己打印一个（原始字节），驱动脚本打印另一个（`git hash-object`，先 CRLF→LF 归一），**两条输出挨着** | **本刀踩到、已修**（§20.7）。`BlogPlanSseService.java` 的 `restore` 行报 `1ae8d38b…`、收尾报 `8df1c761…`，看起来像还原没到位，白查一轮。实测三种算法同一文件三个值：原始字节带 `blob <len>\0` 头 `1ae8d38b…` / `sha1sum` 原始字节 `87578e00…` / `git hash-object` 归一后 `8df1c761…`（本仓 `core.autocrlf=true`）。⚠️ 这是待办 42 的**第三种形态**：42 是"两个**外部工具**给出不同值"，本刀是"**同一个脚本的两条代码路径**各自打印一个"。⇒ 判据已统一：`inj20.py` 的 `blob()` 改成先归一再哈希，与 `git hash-object` 逐字等价，复跑验证通过。⚠️ 通用规则：**"脚本打印了一个陌生的哈希" ≠ "文件被改坏了"**；分辨它们的是 `git diff`（差异是否逐行都是本次意图），不是哈希比对 |
 
-### 23.1 第 1 项的边界（明确不许顺手放宽）
+### 24.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -4053,7 +4147,7 @@ PublishPostToolTest.reconcilesPersistedCsdnResultWithoutCallingThePlatformAgain:
 
 ---
 
-## 24. 一句话记法
+## 25. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

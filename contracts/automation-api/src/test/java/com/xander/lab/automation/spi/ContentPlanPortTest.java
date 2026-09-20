@@ -2,6 +2,7 @@ package com.xander.lab.automation.spi;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -73,16 +74,29 @@ class ContentPlanPortTest {
         // 两个写入方法的参数类型刻意不同：创建要幂等键，修改不要。同类型的话，
         // "把创建草稿传给 update"会编译通过 —— 而 update 会静默忽略幂等键。
         assertEquals(ContentPlanDraft.class,
-                ContentPlanPort.class.getDeclaredMethods()[indexOf("create")].getParameterTypes()[1]);
+                methodNamed("create").getParameterTypes()[1]);
         assertEquals(ContentPlanEdit.class,
-                ContentPlanPort.class.getDeclaredMethods()[indexOf("update")].getParameterTypes()[2]);
+                methodNamed("update").getParameterTypes()[2]);
     }
 
-    private int indexOf(String name) {
-        var methods = ContentPlanPort.class.getDeclaredMethods();
-        for (int i = 0; i < methods.length; i++) {
-            if (methods[i].getName().equals(name)) return i;
+    /**
+     * 按名字取方法，并且断言**恰好一个**同名方法。
+     *
+     * <p>⚠️ 原来的写法是"遍历取第一个"（还把它换算成下标再 {@code getDeclaredMethods()[i]}）。
+     * 端口上出现**重载**时，它会**按 JVM 的方法顺序**挑一个，下面几条断言就开始检查另一个
+     * 方法 —— 而它们仍然"通过"。**没有失败信息，因为根本没有失败。**</p>
+     */
+    private static Method methodNamed(String name) {
+        Method found = null;
+        int count = 0;
+        for (Method method : ContentPlanPort.class.getDeclaredMethods()) {
+            if (method.isSynthetic() || !name.equals(method.getName())) continue;
+            found = method;
+            count++;
         }
-        throw new AssertionError("端口上没有方法 " + name);
+        assertEquals(1, count,
+                "端口上应当恰好有一个方法叫 " + name + "，实际 " + count
+                        + " 个。重载会让下面这些按名字取方法的断言悄悄检查错对象。");
+        return found;
     }
 }
