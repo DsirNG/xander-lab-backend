@@ -306,7 +306,7 @@ checksum
 |---|---|---|
 | 出站 MCP 的 Owner 口径冲突 | 见 §5 末尾：`route-inventory.yaml` 说管理接口归 `integration`，§76 说出站客户端归 `dinqor-agent`。两种解释都自洽，但没有任何文件区分它们 → Wave 2 切流时不知道这五个路由该发给谁 | **Wave 2 前必须拍板** |
 | `integration/mcp/client` → `agent/tool/mcp` 未迁移 | §76 的迁入动作尚未执行。当前包名与目标归属不一致 | Wave 2 |
-| `probe` 在事务内做 HTTP | 见 §2.5，当前就是错的 | 建议 Wave 0B 修 |
+| `probe` 在事务内做 HTTP | 见 §2.5，已移除事务注解，远端往返与单条结果 UPDATE 已分离 | ✅ 已修 |
 | `owner_transition` 无门禁校验阶段合法性 | `table-ownership.yaml` 登记了 `stage-a-integration-write`，但没有门禁校验这个取值合法、也没有门禁校验"Stage C 完成前不得 REVOKE integration WRITE" | Wave 0B |
 | STDIO transport 的可信边界未定义 | §76 说"仅可信 Sandbox / Worker"，但"可信"如何判定（配置白名单？部署单元？）未定义。STDIO 会启动子进程，边界不清等于命令执行面 | Wave 2 设计 |
 | DNS rebinding 残余风险 | 见 §2.2，已显式接受并记录理由 | 已接受 |

@@ -355,7 +355,7 @@ allowed = {
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | 五个指标 | `LegacyRedisMetrics` 已接入低频 SCAN 盘点四个存量指标；`UserAdminService.revokeSessions` 已记录 `legacy_revoke_duration` | ✅ 基础观测已完成；T1/T2/T3 仍待切流 |
-| 计数器 `identity:legacy_access_*` 未实现 | §6.1 的两个计数器不存在，退场判据无法量化 | T1 之前 |
+| 遗留 Access 计数器 | `legacy_access_issued_total` 与 `legacy_access_revoked_total` 已接入；T1 后前者必须停止增长 | ✅ 已完成；T1/T2/T3 仍待切流 |
 | T3 的清理脚本未写 | §57 要求显式删除两个键族，脚本尚未编写（Wave 0A 不删是对的） | T3 |
 | `allowed` 集合未随 T1/T3 收缩 | 见 §9 末尾 | T1 / T3 |
 | 无门禁校验 Set 是否有 TTL | `login:user_tokens` 无 TTL 是**当前唯一写入点**造成的。若将来有人在别处 `SADD` 一个带 TTL 的变体，门禁不会发现 | 已知（允许清单已限制写入点） |
