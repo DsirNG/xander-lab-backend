@@ -23,7 +23,7 @@
                    WS : afterConnectionEstablished 取一次 userId 存进局部变量
 
 所以只有两条路：
-  手段 A（主要）  每实例 ConnectionRegistry + reconciler 命中后 closeAll
+  手段 A（主要）  每实例 ConnectionRegistry + Pub/Sub / reconciler 命中后 closeAll
   手段 B（兜底）  每一帧出站前（含心跳）O(1) 查本地 SecurityStateCache
 ```
 
@@ -184,7 +184,7 @@ WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403
 
 | 段 | 预算 | 由什么保证 | 可观测吗 |
 |---|---|---|---|
-| 事件产生 → 到达宿主服务 | ≤ 2 秒 | reconciler 的 `fixedDelay`（默认 1500ms） | 是（`securityStateAge`） |
+| 事件产生 → 到达宿主服务 | ≤ 2 秒 | Redis Pub/Sub 快路径；reconciler `fixedDelay`（默认 1500ms）兜底 | 是（`securityStateAge`） |
 | 宿主本地标记 denied | ≤ 0.1 秒 | `SecurityStateCache.markDisabled`，一个 `ConcurrentHashMap.put` | 否（无 IO，无法单独采样） |
 | 遍历并关闭该 account 连接 | ≤ 1 秒 | `ConnectionRegistry.closeAll`，单实例连接数有限 | 是（`admin_ban_stream_disconnect_latency`） |
 | 余量 | ≥ 1.9 秒 | — | — |
@@ -227,8 +227,8 @@ WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403
 | `AgentStreamWebSocketHandler` | 20s | > 5s，只能靠手段 A |
 | `Img2ThreeController` | **无心跳调度器** | 手段 B 实际不存在，**唯一**手段是 A |
 
-所以这 8 条流里，**5 秒 SLO 完全由手段 A（reconciler 主动断开）承担**，
-心跳校验只是"如果 reconciler 恰好还没扫到，也不会继续推"的兜底。
+所以这 8 条流里，**5 秒 SLO 由手段 A（Pub/Sub 快路径或 reconciler 主动断开）承担**，
+心跳校验只是"如果传播路径恰好还没扫到，也不会继续推"的兜底。
 
 **没有一条流把心跳当主要手段**，因此 §28.4 要求的
 「`heartbeat interval` 必须 ≤ 2 秒并写入 `contract-changes.yaml`」这条附加契约
@@ -284,8 +284,8 @@ admin_ban_stream_disconnect_latency
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | 两个 SLO 指标未接入 | §53 要求的两类观测目前只能靠 `ConnectionRegistry.totalClosed()` 与日志人工核对 | Wave 2 |
-| 手段 A 的传播依赖 reconciler | 多实例下，非抢到锁的实例靠各自 reconciler 在 1.5 秒内收敛（仍在预算内，但"快路径"名不副实） | Wave 1（Redis PubSub） |
-| `SecurityStateCache` 无持久化 | 实例重启后靠 `fullReconcile`（默认 5 分钟）重新收敛；重启窗口内已建立的流不会被主动断开，只能靠手段 B | 设计取舍 |
+| 多实例部署未开启 Redis Pub/Sub | 开关关闭时只有抢到 ShedLock 的实例走发件箱本地快路径，其余实例靠各自 reconciler 在 1.5 秒内收敛；多实例切流前必须开启 `auth.refresh.security-pubsub-enabled` | 部署配置项 |
+| `SecurityStateCache` 无持久化 | 实例启动先由 Bootstrap 做快照 + replay，再开放流量；运行期仍靠 reconciler 增量/全量对账，缓存不持久化是有意取舍 | 设计取舍 |
 | `Img2ThreeController` 无心跳 | 见 §6，该流在无业务事件时完全依赖手段 A | 已知 |
 | `contract-changes.yaml` 的 `security-plane-fail-closed` | §28.2 的 stale fail-closed 与 §103 互相否定（security plane 与 refresh 表同库），Wave 2 放行评审前必须二选一 | 待对齐 |
 
