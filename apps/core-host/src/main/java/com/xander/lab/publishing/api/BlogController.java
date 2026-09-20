@@ -43,22 +43,6 @@ public class BlogController {
         return Result.success(blogService.createBlog(dto, publish, requestId));
     }
 
-    @GetMapping("/posts/publish-status")
-    public Result<PublishStatus> getPublishStatus(@RequestParam String requestId) {
-        Long postId = blogService.getPublishedPostId(requestId);
-        return Result.success(new PublishStatus(postId == null ? "pending" : "published", postId));
-    }
-
-    @GetMapping("/posts/publish-rhythm")
-    public Result<BlogPublishRhythmVO> getMyPublishRhythm() {
-        return Result.success(blogService.getWeeklyPublishRhythm(UserContext.getUserId(), null));
-    }
-
-    @GetMapping("/posts/manage-stats")
-    public Result<BlogManageStatsVO> getManageStats() {
-        return Result.success(blogService.getManageStats(UserContext.getUserId(), null));
-    }
-
     @PutMapping("/posts/{id}")
     public Result<BlogPostVO> updatePost(@PathVariable Long id, @RequestBody BlogPostDTO dto) {
         try {
@@ -113,5 +97,4 @@ public class BlogController {
         return Result.badRequest(message);
     }
 
-    public record PublishStatus(String status, Long postId) {}
 }

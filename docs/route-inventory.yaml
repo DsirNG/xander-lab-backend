@@ -1121,9 +1121,9 @@ routes:
     path: "/api/blog/posts/manage-stats"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getManageStats"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 57
+    handler: "com.xander.lab.publishing.api.BlogPrivateStatsController#manageStats"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPrivateStatsController.java
+    line: 43
   - id: publishing-get-blog-posts-mine
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1154,9 +1154,9 @@ routes:
     path: "/api/blog/posts/publish-rhythm"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getMyPublishRhythm"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 52
+    handler: "com.xander.lab.publishing.api.BlogPrivateStatsController#publishRhythm"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPrivateStatsController.java
+    line: 34
   - id: publishing-get-blog-posts-publish-status
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1165,9 +1165,9 @@ routes:
     path: "/api/blog/posts/publish-status"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getPublishStatus"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 46
+    handler: "com.xander.lab.publishing.api.BlogPrivateStatsController#publishStatus"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPrivateStatsController.java
+    line: 22
   - id: publishing-get-blog-posts-recent
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1189,7 +1189,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#softDeletePost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 82
+    line: 66
   - id: publishing-get-blog-posts-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1211,7 +1211,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#updatePost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 62
+    line: 46
   - id: publishing-delete-blog-posts-id-permanent
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1222,7 +1222,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#permanentlyDeletePost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 92
+    line: 76
   - id: publishing-patch-blog-posts-id-status
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1233,7 +1233,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#updatePostStatus"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 71
+    line: 55
   - id: publishing-post-blog-posts-id-view
     logical_owner: publishing
     deployment_unit: dinqor-content-automation

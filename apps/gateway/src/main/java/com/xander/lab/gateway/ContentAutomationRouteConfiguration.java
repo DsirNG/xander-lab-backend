@@ -21,6 +21,12 @@ public class ContentAutomationRouteConfiguration {
                         .and()
                         .method(org.springframework.http.HttpMethod.GET)
                         .uri(contentAutomationUri))
+                .route("content-publishing-private-stats", route -> route
+                        .path("/api/blog/posts/publish-status", "/api/blog/posts/publish-rhythm",
+                                "/api/blog/posts/manage-stats")
+                        .and()
+                        .method(org.springframework.http.HttpMethod.GET)
+                        .uri(contentAutomationUri))
                 .route("content-publishing-public-reads", route -> route
                         .path("/api/blog/posts", "/api/blog/posts/recent")
                         .and()
