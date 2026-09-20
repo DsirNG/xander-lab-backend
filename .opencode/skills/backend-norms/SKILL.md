@@ -1036,12 +1036,26 @@ assertTrue(captor.getValue().getParamNameValuePairs().containsValue(777L));
 // ❌ 顺序一变就静默换检查对象。getDeclaredMethods() 的顺序 JVM 并不保证。
 Method m = SomePort.class.getDeclaredMethods()[0];
 
-// ✅
+// ❌ 退一步"按名字取第一个"也**不够** —— 端口上一旦出现重载，它同样静默换检查对象。
 Method m = null;
 for (Method each : SomePort.class.getDeclaredMethods()) {
-    if (each.getName().equals("notifyResource")) m = each;
+    if (each.getName().equals("notifyResource")) m = each;   // 取的是"最后一个"，同样没断言个数
 }
-assertNotNull(m, "端口上没有 notifyResource 方法");
+
+// ✅ 先数一遍、断言**恰好一个**、再返回
+private static Method methodNamed(String name) {
+    Method found = null;
+    int count = 0;
+    for (Method each : SomePort.class.getDeclaredMethods()) {
+        if (each.isSynthetic() || !name.equals(each.getName())) continue;
+        found = each;
+        count++;
+    }
+    assertEquals(1, count,
+            "端口上应当恰好有一个方法叫 " + name + "，实际 " + count
+                    + " 个。重载会让按名字取方法的断言悄悄检查错对象。");
+    return found;
+}
 ```
 
 2026-09-17 实测：给 `NotificationPort` 加一个方法后，`getDeclaredMethods()[0]` 变成了新方法，
@@ -1049,6 +1063,18 @@ assertNotNull(m, "端口上没有 notifyResource 方法");
 `String`）。如果新方法也返回 `Long`，它会继续绿着而检查对象早已换人。
 同款写法在 `contracts/core-api/UserLookupPortTest` 里也有一处（已一并修）。
 **同文件里"只有一个方法"那条断言救不了它** —— 两条断言是独立的。
+
+⚠️ **2026-09-20 补：光"按名字取"还不够，要断言"恰好一个"。**
+端口上出现**重载**时，"取第一个（或最后一个）"会**按 JVM 的方法顺序**挑一个，
+后面的断言开始检查另一个方法 —— 而它们仍然**通过**。**没有失败信息，因为根本没有失败。**
+这类失败无法从"红了的测试"里发现，只能靠"这条断言本身会不会红"来发现。
+
+⚠️ **改造时先数一遍，不要照清单做。** 当时 ADR 里写着"三处仍是旧写法"，
+实测是**七处**：`EmailReminderPortTest` **根本没有这个写法**（多写了），
+而 `blogagent-api` 两个 / `recitation-api` 两个 / `integration-api/MailPortTest`
+（收齐了同名方法却 `.findFirst()`）**四处没列**。
+⇒ **凡文档里写"某处/几处还有 X"，动手前先 `grep` 数一遍** ——
+清单通常是**推**出来的，不是**数**出来的（这个动作连续两刀都栽过）。
 
 ### ⚠️ 断言"第一个参数是调用方 id"之前，先查参数个数
 
@@ -1731,6 +1757,22 @@ detail = f"{recomputed} implementation statements across {len(base_edges)} edges
 
 所以：**"注入后门禁没红"不等于"这个注入没意义"**，也可能是"这个不变量本来就不归门禁管"。
 两种情况都要写进记录 —— 前者的证据是门禁名，后者的证据是**测试方法名 + 行号**。
+
+### ⚠️ 注入必须让**目标断言**先红，否则红数分不清是谁在起作用
+
+一条注入常常**同时**踩中不止一条判据。若"更早"的那条先红，
+红数里就看不出目标判据到底有没有接着线 —— 那是一次**假测量**（与"通过消息失真"同族）。
+
+实测（2026-09-20，第二十三刀 / 待办 57）：往端口上加一个**重载**，
+既该踩中"按名字取方法要**恰好一个**"，也必然踩中"**完整签名清单**"那条断言
+（端口多一个方法它一定红）。
+⇒ 注入必须**两处一起改**：端口加重载 **+** 签名清单加上那个签名
+（清单按**字典序**整体比对，见 `ContractShape.declaredSignatures` 的 `.sorted()`）。
+这样清单断言绿着，唯一红的就是目标那条（实测 2 fail / 1 fail，报的都是具名断言）。
+
+**规矩**：注入施加后先问一句"**除了我想验的那条，还有哪条会红？**"
+处理方式二选一：①把别的判据**同步改到通过**；②把 `-Dtest` 收窄到只跑目标断言所在的类。
+⚠️ 省掉这一步，得到的是"红了 N 条"这种**无法归因**的数字。
 反过来说，凡是"只有测试能守"的不变量，测试**必须**存在且必须钉到**完整签名**
 （见前面端口宽度那条），否则这个不变量实际上无人看守。
 
