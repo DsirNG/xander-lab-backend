@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 818
-  leaves: 581
+  total: 822
+  leaves: 583
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -888,6 +888,21 @@ config:
   - key: blog-content-plan.max-created-per-day
     source: apps/content-automation/src/main/resources/application.yml
     value: "${BLOG_CONTENT_PLAN_MAX_CREATED_PER_DAY:20}"
+    leaf: true
+    logical_owner: content-automation
+  - key: blog
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: blog.agent
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: content-automation
+  - key: blog.agent.stale-task-minutes
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${BLOG_AGENT_STALE_TASK_MINUTES:30}"
     leaf: true
     logical_owner: content-automation
   - key: management
@@ -3594,6 +3609,13 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 12
+  - key: blog.agent.stale-task-minutes
+    source: apps/content-automation/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentReadProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 13
   - key: admin.model-gateway.enabled
     source: apps/core-host/src/main/java/com/xander/lab/admin/infrastructure/ModelGatewayProperties.java
     value: "<java-default>"

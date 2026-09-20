@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 261
+  total: 267
   streams: 8
   websocket: 1
   sse: 7
@@ -783,12 +783,12 @@ routes:
     handler: "com.xander.lab.identity.api.AuthController#wechatSkip"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 160
-  - id: automation-any-blog-agent
+  - id: automation-any-blog-agent-tasks
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
     http_method: ANY
-    path: "/api/blog-agent/**"
+    path: "/api/blog-agent/tasks"
     stream: none
     last_event_id: false
     handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
@@ -802,9 +802,9 @@ routes:
     path: "/api/blog-agent/tasks"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.blogagent.api.BlogAgentController#list"
-    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 107
+    handler: "com.xander.lab.blogagent.api.BlogAgentReadController#list"
+    file: apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentReadController.java
+    line: 26
   - id: blogagent-post-blog-agent-tasks
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -815,7 +815,18 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#create"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 97
+    line: 96
+  - id: automation-any-blog-agent-tasks-id
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/blog-agent/tasks/{id}"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 45
   - id: blogagent-get-blog-agent-tasks-id
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -824,9 +835,20 @@ routes:
     path: "/api/blog-agent/tasks/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.blogagent.api.BlogAgentController#get"
-    file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 102
+    handler: "com.xander.lab.blogagent.api.BlogAgentReadController#detail"
+    file: apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentReadController.java
+    line: 35
+  - id: automation-any-blog-agent-tasks-id-events
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/blog-agent/tasks/{id}/events"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 45
   - id: blogagent-get-blog-agent-tasks-id-events
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -837,7 +859,18 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#subscribe"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 155
+    line: 144
+  - id: automation-any-blog-agent-tasks-id-messages-stream
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/blog-agent/tasks/{id}/messages/stream"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 45
   - id: blogagent-post-blog-agent-tasks-id-messages-stream
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -848,7 +881,18 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#reviseStream"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 138
+    line: 127
+  - id: automation-any-blog-agent-tasks-id-publish
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/blog-agent/tasks/{id}/publish"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 45
   - id: blogagent-post-blog-agent-tasks-id-publish
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -859,7 +903,18 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#publish"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 117
+    line: 106
+  - id: automation-any-blog-agent-tasks-id-run
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/blog-agent/tasks/{id}/run"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 45
   - id: blogagent-post-blog-agent-tasks-id-run
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -870,7 +925,18 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#run"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 112
+    line: 101
+  - id: automation-any-blog-agent-tasks-id-run-stream
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/blog-agent/tasks/{id}/run/stream"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 45
   - id: blogagent-post-blog-agent-tasks-id-run-stream
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -881,7 +947,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#runStream"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 124
+    line: 113
   - id: bloghtml-post-blog-html-previews
     logical_owner: bloghtml
     deployment_unit: dinqor-bloghtml-preview

@@ -7,7 +7,6 @@ import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentMessageRequest;
-import com.xander.lab.blogagent.api.BlogAgentSessionVO;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.blogagent.domain.BlogAgentEvent;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
@@ -97,16 +96,6 @@ public class BlogAgentController {
     @PostMapping
     public Result<BlogAgentTask> create(@Valid @RequestBody BlogAgentTaskCreateRequest request) {
         return Result.success(service.create(UserContext.getUserId(), request));
-    }
-
-    @GetMapping("/{id}")
-    public Result<BlogAgentTaskVO> get(@PathVariable Long id) {
-        return Result.success(service.get(id, UserContext.getUserId()));
-    }
-
-    @GetMapping
-    public Result<List<BlogAgentSessionVO>> list() {
-        return Result.success(service.listSessions(UserContext.getUserId()));
     }
 
     @PostMapping("/{id}/run")

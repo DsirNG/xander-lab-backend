@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 581
-  service_private: 507
+  total: 583
+  service_private: 509
   secret: 62
   shared: 12
 config:
@@ -684,7 +684,17 @@ config:
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: blog.agent.stale-task-minutes
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.stale-task-minutes
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: blog.agent.stale-task-minutes
+    source: apps/content-automation/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentReadProperties.java
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION

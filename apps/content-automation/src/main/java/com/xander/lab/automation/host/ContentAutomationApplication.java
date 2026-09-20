@@ -9,7 +9,8 @@ import org.springframework.context.annotation.ComponentScan;
 @SpringBootApplication
 @ComponentScan(basePackages = {
         "com.xander.lab.automation",
-        "com.xander.lab.publishing"
+        "com.xander.lab.publishing",
+        "com.xander.lab.blogagent"
 })
 @EnableConfigurationProperties(ContentAutomationProperties.class)
 public class ContentAutomationApplication {

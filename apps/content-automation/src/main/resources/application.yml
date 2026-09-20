@@ -45,6 +45,10 @@ blog-content-plan:
   max-active-per-user: ${BLOG_CONTENT_PLAN_MAX_ACTIVE_PER_USER:50}
   max-created-per-day: ${BLOG_CONTENT_PLAN_MAX_CREATED_PER_DAY:20}
 
+blog:
+  agent:
+    stale-task-minutes: ${BLOG_AGENT_STALE_TASK_MINUTES:30}
+
 management:
   endpoints:
     web:
