@@ -1,9 +1,9 @@
 package com.xander.lab.common.security;
 
 /**
- * 安全平面就绪标记（V11 §27.1 第 1 步与第 8 步）。
+ * 安全平面就绪标记。
  *
- * <p>V11 §27.1 把一个实例的生命周期切成两段：{@code NOT_READY}（本地 deny cache
+ * <p>一个实例的生命周期切成两段：{@code NOT_READY}（本地 deny cache
  * 尚未建立，<b>不得</b>接流量）与 {@code READY}（snapshot + replay 已完成，可以进入
  * 服务发现 / 负载均衡）。本类就是这两段之间的唯一开关。</p>
  *
@@ -11,7 +11,7 @@ package com.xander.lab.common.security;
  * <p>因为写入者必须唯一。缓存有三个写入者（{@code SecurityStateBootstrap}、
  * {@code SecurityStateReconciler}、{@code SecurityEventOutboxPublisher}），
  * 若就绪标记长在缓存上，任何一次"顺手置位"都能让实例在缓存不完整时宣布自己就绪 ——
- * 而这正是 §27.1 明令禁止的失败模式（"实例启动后先接流量，再慢慢填 deny cache"）。
+ * 而这正是必须禁止的失败模式（"实例启动后先接流量，再慢慢填 deny cache"）。
  * 独立成对象之后，唯一的写入者是 {@code SecurityStateBootstrap}。</p>
  *
  * <h3>为什么放在共享内核</h3>

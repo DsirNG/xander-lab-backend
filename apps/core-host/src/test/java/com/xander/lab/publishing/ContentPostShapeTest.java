@@ -37,7 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>{@code ContentPost} 与 {@code ContentPostPage} 是<b>镜像</b>而不是收窄：同名、同类型、
  * 同顺序，只少了 {@code tagsRaw}（那是被 {@code @JsonIgnore} 挡掉的内部字段）。
  * 选择镜像的全部价值就在于"换类型后序列化逐字节不变"，从而这次抽取可以被证明是纯重构 ——
- * 不进 {@code contract-changes.yaml}，不需要走 §11 的契约变更流程。</p>
+ * 不进契约变更清单，不需要走契约变更流程。</p>
  *
  * <p>这个价值只在"镜像关系真的成立"时才有。而它成立与否<b>没有任何编译期保证</b>：
  * 给 {@code BlogPostVO} 加一个字段、或给 {@code ContentPost} 少写一个分量，两边都照常编译。
@@ -151,7 +151,7 @@ class ContentPostShapeTest {
      * 所以这里用反射直接调它。</p>
      *
      * <p>反射而非公开：如果哪天有人把它改名或改成非静态，本测试会失败并提示改这里 ——
-     * 这是有意的，因为那条映射是这次重构里唯一"人工逐个字段抄"的地方。</p>
+     * 这是有意的，因为那条映射是唯一"人工逐个字段抄"的地方。</p>
      */
     @Test
     void theProductionMappingKeepsTheWireShapeIdentical() throws ReflectiveOperationException {
@@ -207,10 +207,10 @@ class ContentPostShapeTest {
                 fieldName + " 必须是 ContentPostStatus 里那个值的别名，不能是独立字面量");
     }
 
-    // ---------------------------------------------------------------- ADR-1
+    // ------------------------------------------------- 契约与序列化框架无关
 
     /**
-     * ADR-1：契约模块必须与序列化框架无关。
+     * 契约模块必须与序列化框架无关。
      *
      * <p>门禁 {@code contract-dependency-boundary} 查的是 import 与 POM 依赖；
      * 这里补一个类型层面的检查 —— 分量上不许挂 Jackson 注解。注解不产生 import 的
@@ -229,7 +229,7 @@ class ContentPostShapeTest {
                 String name = annotation.annotationType().getName();
                 assertTrue(!name.startsWith("com.fasterxml.jackson"),
                         type.getSimpleName() + "." + component.getName() + " 上挂了 " + name
-                                + "：ADR-1 要求契约与序列化框架无关，DTO 能不能序列化由适配器决定");
+                                + "：契约与序列化框架无关，DTO 能不能序列化由适配器决定");
             }
         }
     }

@@ -73,7 +73,7 @@ class EmailReminderMailRendererTest {
     /**
      * ⭐ 选了 {@code "none"}（不要版式）时，<b>纯文本兜底里不带时间与时区</b>。
      *
-     * <p>这两行本来就是"版式模板才会渲染的页脚"——改造前就是这样（
+     * <p>这两行本来就是"版式模板才会渲染的页脚"（
      * {@code TEMPLATE_NONE.equals(normalizedTemplate) ? "" : formattedTime}）。
      * 搬家时最容易被"顺手统一"掉的一处，所以专门钉一条。</p>
      */
@@ -91,7 +91,7 @@ class EmailReminderMailRendererTest {
     /**
      * ⚠️ 时区只在 HTML 分支里解析 —— {@code display-zone} 配错不该连带把纯文本提醒打死。
      *
-     * <p>这是改造前就有的行为（{@code ZoneId.of} 原本就在 HTML 分支内），
+     * <p>时区解析必须在 HTML 分支内（{@code ZoneId.of} 就在那里），
      * 也是本类收 {@code String displayZoneId} 而不是 {@code ZoneId} 的<b>唯一</b>理由：
      * 收 {@code ZoneId} 的话，调用方必须在调 render 之前就解析，纯文本提醒会跟着一起炸。</p>
      */

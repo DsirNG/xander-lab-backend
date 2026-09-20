@@ -9,7 +9,7 @@ import java.lang.reflect.Method;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * MCP 服务器管理的事务边界（V9 §75 跨域事务边界）。
+ * MCP 服务器管理的事务边界。
  *
  * <p>本类只守一件事：<b>做外部 MCP 往返的方法不得在事务里</b>。
  * 这件事只能靠注解反射守 —— 纯单测拿不到 Spring 代理，

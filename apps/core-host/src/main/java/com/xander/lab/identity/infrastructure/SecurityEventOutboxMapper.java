@@ -10,7 +10,7 @@ import org.apache.ibatis.annotations.Update;
 import java.util.List;
 
 /**
- * 安全事件发件箱 Mapper（V9 §27）。
+ * 安全事件发件箱 Mapper。
  */
 @Mapper
 public interface SecurityEventOutboxMapper extends BaseMapper<SecurityEventOutboxEntry> {
@@ -35,7 +35,7 @@ public interface SecurityEventOutboxMapper extends BaseMapper<SecurityEventOutbo
     /**
      * 标记投递成功。
      *
-     * <p>{@code published_at} 取数据库时钟而不是 JVM 时钟：§87 的
+     * <p>{@code published_at} 取数据库时钟而不是 JVM 时钟：
      * {@code admin_ban_propagation_latency} 由 {@code published_at - created_at} 得出，
      * 两端必须同源，否则容器与数据库的时区/时钟偏差会直接污染这个 SLO 指标。</p>
      *

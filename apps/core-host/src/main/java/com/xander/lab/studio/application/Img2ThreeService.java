@@ -184,7 +184,7 @@ public class Img2ThreeService {
                 throw new IllegalStateException("任务状态已变化，本次重建结果未覆盖较新的任务状态");
             }
             // 网关口径 ModelUsage -> 计费契约口径 TokenUsage：分量同名同序，直接映射。
-            // 契约不能依赖带 Jackson 的 xander-model（ADR-1），换算只能落在调用方边界上。
+            // 契约不能依赖带 Jackson 的 xander-model，换算只能落在调用方边界上。
             ModelUsage billed = generated.usage();
             if (!billed.isEmpty()) {
                 billingPort.chargeTokens(userId, BillingBiz.IMG2THREE, "img2three:" + taskId,

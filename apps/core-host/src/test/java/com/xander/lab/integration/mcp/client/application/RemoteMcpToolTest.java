@@ -22,10 +22,10 @@ import static org.mockito.Mockito.when;
 /**
  * {@link RemoteMcpTool} 作为 {@code agent.spi.RemoteTool} 的行为。
  *
- * <p>这一刀把本类从 {@code agent.application.AgentTool} 改成了契约
- * {@code agent.spi.RemoteTool}：schema、参数、返回值三处 JSON 全部改走文本，理由是
+ * <p>本类实现的是契约
+ * {@code agent.spi.RemoteTool}，而不是 {@code agent.application.AgentTool}：schema、参数、返回值三处 JSON 全部走文本，理由是
  * {@code AgentTool.parametersSchema()} 返回 {@code JsonNode}，而契约不许带 Jackson。
- * 所以这里除了原有的行为，还多钉住两件新东西：schema 的 JSON 文本与原来的
+ * 所以这里除了原有的行为，还要钉住两件事：schema 的 JSON 文本与
  * {@code JsonNode} 等价，以及参数 / 结果在文本与树之间来回转换时不多不少。</p>
  */
 class RemoteMcpToolTest {
@@ -93,7 +93,7 @@ class RemoteMcpToolTest {
      * <p>顺序是这条断言的重点：工具面 JSON 是进提示词前缀的，字段顺序变了前缀就变了，
      * 上游 prompt 缓存整段失效。契约把 schema 改成文本之后，这里多了一次
      * {@code toString()} → {@code readTree()}，所以必须证明它不改变序列化结果——
-     * 这也正是这次抽取能被证明是纯重构、不进 {@code docs/contract-changes.yaml} 的依据。</p>
+     * 这也正是这条边界能被证明是纯重构、不进契约变更清单的依据。</p>
      */
     @Test
     void passesThroughTheRemoteSchemaWithItsFieldOrderIntact() {

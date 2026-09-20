@@ -28,7 +28,7 @@ import static org.mockito.Mockito.when;
 /**
  * {@link CsdnBlogSyncService} 作为 {@link CsdnBlogSyncPort} 实现的边界行为。
  *
- * <p>本类在改造前<b>没有自己的测试</b>（只被 {@code PublishPostToolTest} 间接覆盖）。
+ * <p>本类此前<b>没有自己的测试</b>（只被 {@code PublishPostToolTest} 间接覆盖）。
  * 它现在是一个契约端口的实现，所以三件事必须被钉住：</p>
  * <ol>
  *   <li><b>两份投影的换算。</b>{@code content.api.PublishResult} →

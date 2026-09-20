@@ -130,7 +130,7 @@ public class AgentRequestAssembler {
      *
      * <p>三种卡片（计划、答题卡、交付卡）都要带前缀。漏掉前缀时正文照样进提示词，所以不会有
      * 任何报错——只是模型看到一段光秃秃的 JSON，分不清那是它自己下发的哪张卡。
-     * {@code plan} 曾经就是这样：它是最后加进来的一张卡，switch 没跟上。</p>
+     * {@code plan} 就踩过这个坑：它是最后加进来的一张卡，switch 没跟上。</p>
      */
     private AgentInputTurn renderMessage(AgentMessage message, boolean latestToolResult, boolean playbook) {
         String content = switch (message.getKind()) {

@@ -18,8 +18,8 @@ import static org.mockito.Mockito.when;
 /**
  * {@link McpToolSource} 作为 {@code agent.spi.RemoteToolCatalog} 的行为。
  *
- * <p>除了原有的可见性与目录读取，这里多守一件新东西：<b>目录版本号</b>。它是这一刀的核心
- * 机制——原来 integration 在配置变更后反向调 agent 的
+ * <p>除了可见性与目录读取，这里多守一件东西：<b>目录版本号</b>。它是这条边界的核心
+ * 机制——若 integration 在配置变更后反向调 agent 的
  * {@code AgentToolRegistry#invalidate()}，现在改成 agent 读这里的版本号。所以"变更后版本必须
  * 变"和"不变更时版本必须不动"两条都要钉：前者不成立改动不生效，后者不成立缓存每轮都白重建
  * （工具面就不再逐字节稳定，上游 prompt 缓存整段失效）。</p>

@@ -168,7 +168,7 @@ public class AgentModelClient {
                                                 BooleanSupplier cancellationRequested) {
         long requestStartedNanos = System.nanoTime();
         // 接口风格由配置决定：管理台把某个功能指到 CHAT_COMPLETIONS 时就走 /chat/completions，
-        // 否则维持原先的 /responses。两种协议的 payload 与事件流都不一样，见下面两个分支。
+        // 否则走 /responses。两种协议的 payload 与事件流都不一样，见下面两个分支。
         boolean chatCompletions = ModelGateway.API_STYLE_CHAT_COMPLETIONS.equals(endpoint.apiStyle());
         Map<String, Object> payload = chatCompletions
                 ? chatCompletionsPayload(endpoint.model(), turns, toolDescriptions, attachments)

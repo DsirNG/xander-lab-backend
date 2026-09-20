@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 刷新会话 Mapper（V9 §32 / §34）。
+ * 刷新会话 Mapper。
  *
  * <p>轮换必须在事务里 {@code SELECT ... FOR UPDATE} 锁住会话行，否则并发刷新
  * （同一用户多标签页）会各自生成一个 successor，把正常使用误判成 theft。
@@ -46,7 +46,7 @@ public interface AuthRefreshSessionMapper extends BaseMapper<AuthRefreshSession>
     /**
      * 撤销整个会话族（Reuse Detection 命中）。
      *
-     * <p>V9 §39 第 3 行：真正的 Reuse 必须 revoke 当前 family，
+     * <p>真正的 Reuse 必须 revoke 当前 family，
      * 而不只是当前会话 —— 攻击者与受害者可能各自持有族内不同代的 token。</p>
      */
     @Update("""
@@ -65,9 +65,9 @@ public interface AuthRefreshSessionMapper extends BaseMapper<AuthRefreshSession>
     /**
      * 撤销某账号的全部会话。
      *
-     * <p>管理员封禁（V9 §26 第 2 条）与「登出全部设备」都走这里。
+     * <p>管理员封禁与「登出全部设备」都走这里。
      * 与旧的 {@code revokeSessions} 相比，这里是一条按索引更新的语句，
-     * 不需要遍历无 TTL 的 Redis Set —— 旧实现的封禁延迟随时间单调恶化（V9 §56）。</p>
+     * 不需要遍历无 TTL 的 Redis Set —— 旧实现的封禁延迟随时间单调恶化。</p>
      */
     @Update("""
             UPDATE auth_refresh_session
@@ -82,7 +82,7 @@ public interface AuthRefreshSessionMapper extends BaseMapper<AuthRefreshSession>
                         @Param("reason") String reason,
                         @Param("now") LocalDateTime now);
 
-    /** 列出某账号仍有效的会话，供设备 / 会话管理 UI 使用（V9 §25）。 */
+    /** 列出某账号仍有效的会话，供设备 / 会话管理 UI 使用。 */
     @Select("""
             SELECT * FROM auth_refresh_session
              WHERE account_id = #{accountId}

@@ -42,10 +42,10 @@ import static org.mockito.Mockito.when;
  * {@code String}（{@code title} / {@code knowledgeType} / {@code testMode} / {@code content}），
  * 换位不会有任何编译错误 —— 把正文当标题写进智能体的提示词，只有这里会红。</p>
  *
- * <h2>为什么这一刀不能用 spy</h2>
- * <p>材料那一刀（{@code RecitationMaterialPortMappingTest}）能用 spy，是因为端口方法是
+ * <h2>为什么这里不能用 spy</h2>
+ * <p>材料那边（{@code RecitationMaterialPortMappingTest}）能用 spy，是因为端口方法是
  * "薄壳 + 换算 + 转调同类富方法" —— 把富方法打桩就能单独观察换算。
- * 测验这一刀<b>没有富方法可打桩</b>：{@code openQuiz} / {@code recordQuiz} 本身就是端口方法，
+ * 测验这里<b>没有富方法可打桩</b>：{@code openQuiz} / {@code recordQuiz} 本身就是端口方法，
  * 换算写在它们的函数体里。所以这里只能走真实实现，代价是要把三个 mapper 与
  * {@code TransactionTemplate} 都打桩、并手工初始化 MyBatis 的 lambda 元数据。</p>
  */

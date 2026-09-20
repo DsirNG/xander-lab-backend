@@ -97,7 +97,7 @@ public class QueryKnowledgeTool implements AgentTool {
         if (fullContent) limit = Math.min(limit, FULL_CONTENT_ITEM_LIMIT);
         int excerptChars = fullContent ? FULL_CONTENT_CHARS : EXCERPT_CHARS;
 
-        // 过滤条件下推到 SQL。曾经的做法是取"最近 100 条"再在内存里筛，
+        // 过滤条件下推到 SQL。取"最近 100 条"再在内存里筛的话，
         // 知识超过 100 条之后智能体是查不到也不报错，只会退回凭印象作答。
         MaterialFilter filter = new MaterialFilter(search, level, dueOnly, limit);
         List<MaterialView> matched = materialPort.searchMaterials(userId, filter);

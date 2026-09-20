@@ -48,9 +48,9 @@ public class AgentConversationController {
     private final TaskExecutor agentTaskExecutor;
     private final TaskExecutor agentSseExecutor;
     private final TaskScheduler agentHeartbeatScheduler;
-    /** 本实例的已封禁账号集合：SSE 发送前 O(1) 校验（V9 §50 手段 B）。 */
+    /** 本实例的已封禁账号集合：SSE 发送前 O(1) 校验。 */
     private final SecurityStateCache securityStateCache;
-    /** 本实例的活跃连接注册表：封禁时主动断开已建立的流（V9 §49 / §28.2 手段 A）。 */
+    /** 本实例的活跃连接注册表：封禁时主动断开已建立的流。 */
     private final ConnectionRegistry connectionRegistry;
 
     @Autowired
@@ -344,7 +344,7 @@ public class AgentConversationController {
 
     private void send(SseConnectionHandle handle, Long eventId, String event, Object data) {
         if (!handle.subscriberOpen.get()) return;
-        // V9 §50 手段 B（兜底）：SseEmitter(0L) 永不超时，所以每次发送前都要校验封禁状态。
+        // 兜底手段：SseEmitter(0L) 永不超时，所以每次发送前都要校验封禁状态。
         // 手段 A（reconciler 主动断开）是主要手段；这里保证即使事件丢失也不会继续推送。
         if (securityStateCache.isDisabled(handle.accountId)) {
             log.info("[Security] 账号已封禁，终止已建立的 SSE 推送 account={}", handle.accountId);
@@ -391,10 +391,9 @@ public class AgentConversationController {
 
     private void sendHeartbeat(SseConnectionHandle handle) {
         if (!handle.subscriberOpen.get()) return;
-        // 心跳同样触发封禁校验：这样即使业务长时间无事件，也能在 SLO 内断开
-        // （V9 §50「Heartbeat 也应触发检查」）。
-        // 注意 §28.4：心跳只是兜底，主要手段是 reconciler 的主动断开；
-        // 若要把心跳当主要手段，interval 必须 <= 2 秒并写进 contract-changes.yaml。
+        // 心跳同样触发封禁校验：这样即使业务长时间无事件，也能在 SLO 内断开。
+        // 心跳只是兜底，主要手段是 reconciler 的主动断开；
+        // 若要把心跳当主要手段，interval 必须 <= 2 秒。
         if (securityStateCache.isDisabled(handle.accountId)) {
             log.info("[Security] 账号已封禁，心跳终止 SSE account={}", handle.accountId);
             completeSubscriber(handle);
@@ -438,7 +437,7 @@ public class AgentConversationController {
     }
 
     /**
-     * 一条 SSE 订阅的连接句柄（V9 §49）。
+     * 一条 SSE 订阅的连接句柄。
      *
      * <p>把「会话、账号、emitter、开闭标志、心跳任务」打成一个对象，
      * 既让发送边界能一次拿到全部上下文，也让封禁时可以从注册表里

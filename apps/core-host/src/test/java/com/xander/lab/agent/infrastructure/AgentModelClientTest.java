@@ -232,7 +232,7 @@ class AgentModelClientTest {
     /**
      * grok 族群必须也收到 effort。
      *
-     * <p>生产主供应商就是 grok-4.5。原先只认 gpt-5 / o 系，grok 被判成"不支持"而漏传，
+     * <p>生产主供应商就是 grok-4.5。只认 gpt-5 / o 系的话，grok 被判成"不支持"而漏传，
      * 端点于是退回自己的默认 {@code high}：实测同一句 "hi" 的 reasoning_tokens 从 566
      * 掉到 180 只靠这一个参数。漏传时是静默的——请求照样成功，只是每次都贵且重。</p>
      */

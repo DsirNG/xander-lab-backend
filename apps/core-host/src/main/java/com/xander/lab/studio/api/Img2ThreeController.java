@@ -27,11 +27,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 图片转三维任务的 REST + SSE 门面。
  *
- * <p><b>封禁（V9 §50 / §51 / §52）</b>：本 SSE 用 {@code new SseEmitter(0L)} 永不超时。
- * 注意本端点<b>没有</b>心跳调度器，所以 §28.4 的「心跳兜底」在这里不存在 ——
- * 主要手段只能是每实例 reconciler 的主动断开（手段 A）。这也是 §52 把
+ * <p><b>封禁</b>：本 SSE 用 {@code new SseEmitter(0L)} 永不超时。
+ * 注意本端点<b>没有</b>心跳调度器，所以「心跳兜底」在这里不存在 ——
+ * 主要手段只能是每实例 reconciler 的主动断开（手段 A）。这也是把
  * {@code dinqor-core-host} 列进 Security Local Cache 清单的原因：
- * Wave 2 之后、Wave 3 之前，studio 的这个流仍由 core-host 承载。</p>
+ * 在 studio 拆出去之前，studio 的这个流仍由 core-host 承载。</p>
  *
  * <p>手段 B（{@link #send} 逐帧 O(1) 校验）依然实现，用于覆盖
  * 「封禁事件已到、reconciler 尚未扫到」的那 1~2 秒窗口。</p>
@@ -42,9 +42,9 @@ public class Img2ThreeController {
     private static final Logger log = LoggerFactory.getLogger(Img2ThreeController.class);
     private final Img2ThreeService service;
     private final TaskExecutor img2ThreeTaskExecutor;
-    /** 本实例的已封禁账号集合（V9 §48）。 */
+    /** 本实例的已封禁账号集合。 */
     private final SecurityStateCache securityStateCache;
-    /** 本实例的活跃连接注册表（V9 §49）。 */
+    /** 本实例的活跃连接注册表。 */
     private final ConnectionRegistry connectionRegistry;
 
     public Img2ThreeController(Img2ThreeService service,
@@ -115,7 +115,7 @@ public class Img2ThreeController {
     }
 
     /**
-     * 统一推送出口（V9 §50 手段 B）：任何一帧出站前都校验封禁状态。
+     * 统一推送出口：任何一帧出站前都校验封禁状态。
      *
      * <p>命中封禁时关闭的是<b>推送</b>，不是后台重建任务 —— 任务本身是持久化的，
      * 关掉它会让用户的资产状态与数据库不一致。</p>
@@ -149,7 +149,7 @@ public class Img2ThreeController {
     }
 
     /**
-     * 一条 img2three SSE 订阅的连接句柄（V9 §49 / §50）。
+     * 一条 img2three SSE 订阅的连接句柄。
      *
      * <p>与其它宿主不同的是：这里的 {@link #close(String)} 只终止推送，
      * 后台重建任务继续跑完并落库。断开连接与取消任务在这个端点上<b>是两件事</b>。</p>

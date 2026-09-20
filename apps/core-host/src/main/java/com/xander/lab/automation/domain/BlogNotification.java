@@ -14,7 +14,7 @@ import java.time.Instant;
  * <p>⚠️ 这里的 {@code TYPE_*} 是 <b>automation 自己的词表</b>，由 {@code BlogPlanRunService} 使用。
  * 跨域消费方（{@code knowledgebase}）用的那两个常量（{@code KNOWLEDGE_STRUCTURE_PENDING} /
  * {@code KNOWLEDGE_FILE}）已经搬到 {@link com.xander.lab.automation.spi.NotificationPort}
- * —— 见 Wave 0B 第十刀。它们留在实体上的话，消费方为了拿常量仍要 import 这个实体，
+ * 它们留在实体上的话，消费方为了拿常量仍要 import 这个实体，
  * 端口就白抽了。要加新的跨域通知类型，请加到端口上，不要加回这里。</p> */
 @Data
 @TableName("blog_notification")

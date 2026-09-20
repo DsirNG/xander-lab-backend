@@ -36,7 +36,7 @@ import java.util.Map;
  *
  * <p>本类的方法体<b>一行没动</b>：{@link TokenUsage} 与 {@code com.xander.lab.common.ModelUsage}
  * 的访问器同名同序（{@code inputTokens/cachedTokens/outputTokens/isEmpty}），
- * 所以这一刀在实现侧只是换了参数类型 —— 端口带来的全部改动都落在调用方的边界换算上。</p>
+ * 所以实现侧只是换了参数类型 —— 端口带来的全部改动都落在调用方的边界换算上。</p>
  */
 @Slf4j
 @Service

@@ -39,7 +39,7 @@ public class BlogMediaService implements MediaAssetPort {
 
     private static final Set<String> SUPPORTED_TYPES = Set.of("image/png", "image/jpeg", "image/webp", "image/gif");
 
-    /** 提成静态字段：原来在 {@link #findReusableGenerated} 的循环里每次 {@code new} 一个。 */
+    /** 提成静态字段：避免在 {@link #findReusableGenerated} 的循环里每次 {@code new} 一个。 */
     private static final ObjectMapper META_MAPPER = new ObjectMapper();
 
     private final BlogMediaAssetMapper assetMapper;
@@ -110,7 +110,7 @@ public class BlogMediaService implements MediaAssetPort {
     /**
      * 本域内便捷重载，只服务同域的 {@code BlogMediaController}，所以返回**实体**。
      *
-     * <p>⚠️ 两个判断的顺序都与改造前一致：先登录、再类型、再大小。类型不需要读字节，
+     * <p>⚠️ 两个判断的顺序是有意的：先登录、再类型、再大小。类型不需要读字节，
      * 所以可以照原样排在大小前面；大小必须排在 {@code getBytes()} <b>之前</b>，否则一个
      * 100MB 的请求会被整份读进内存才被拒（{@code spring.servlet.multipart.max-file-size}
      * 是 100MB，这里只收 10MB）。端口上因此公开了 {@link MediaAssetPort#MAX_IMAGE_BYTES}，

@@ -56,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 的富 {@code create} 第一句都是
  * {@code SELECT id FROM sys_user WHERE id = #{userId} FOR UPDATE}，那个行锁的全部意义就是
  * 串行化同一用户的并发创建；没有事务时它<b>锁不住任何东西</b>，后面的"先查幂等键再插入"与
- * "先数配额再插入"一起退化成 TOCTOU。这个缺陷真的发生过：第九刀（{@code automation-api}）
+ * "先数配额再插入"一起退化成 TOCTOU。这个缺陷真的发生过：{@code automation-api}
  * 漏标了 5 个方法，直到本测试写出来才发现。</p>
  *
  * <h2>判据</h2>
@@ -66,8 +66,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>这是一个<b>保守近似</b>：它不解析方法体去证明 M 真的转调了那个兄弟方法，
  * 只检查"危险区"里有没有缺注解。这样宁可要求一个用不上的注解，也不会漏掉一个真的转调。
  * 实测在全仓 <b>21</b> 个端口实现上零误报（见 {@code @see} 记录；
- * 数字随 {@link #PORT_IMPLEMENTATIONS} 变化，第十六刀从 15 加到 17、第十八刀加到 18、
- * 第十九刀加到 20、第二十刀加到 21）。</p>
+ * 数字随 {@link #PORT_IMPLEMENTATIONS} 变化，
+ * 所以它每次都要跟着端口实现数一起更新）。</p>
  *
  * <p>为什么 {@code @Override} 不能用来判"这是端口方法"：{@code java.lang.Override} 是
  * {@code SOURCE} 保留，反射看不见。所以改为拿方法签名去比它实现的那组接口方法。</p>

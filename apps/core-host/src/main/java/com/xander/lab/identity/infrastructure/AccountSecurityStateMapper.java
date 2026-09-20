@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 账号安全状态 Mapper（V9 §27 / §48 / §70）。
+ * 账号安全状态 Mapper。
  */
 @Mapper
 public interface AccountSecurityStateMapper extends BaseMapper<AccountSecurityState> {
@@ -31,7 +31,7 @@ public interface AccountSecurityStateMapper extends BaseMapper<AccountSecuritySt
     Long currentChangeSeq();
 
     /**
-     * 幂等写入账号安全状态（V9 §26 第 3 条 / §48）。
+     * 幂等写入账号安全状态。
      *
      * <p>两条约束写死在 SQL 里，不能挪到 Java 侧：</p>
      *
@@ -70,10 +70,10 @@ public interface AccountSecurityStateMapper extends BaseMapper<AccountSecuritySt
                     @Param("reason") String reason);
 
     /**
-     * per_instance reconciler 的增量拉取（V9 §70）。
+     * per_instance reconciler 的增量拉取。
      *
      * <p>每个实例维护自己的 {@code lastSeenSeq}，不使用全局单例游标 ——
-     * 否则先到的实例会把游标推高，其他实例永久漏掉那段区间（V9 §27）。</p>
+     * 否则先到的实例会把游标推高，其他实例永久漏掉那段区间。</p>
      */
     @Select("""
             SELECT * FROM account_security_state

@@ -41,8 +41,8 @@ public class EmailReminderScheduler {
      * 提醒邮件的展示时区。
      *
      * <p>⚠️ 这个键的 owner 是 content-automation（见 {@code docs/config-ownership.yaml}），
-     * 而改造前它由 {@code integration.mail.MailService} 读取 —— 那是"integration 读
-     * automation 的配置"。渲染搬回本域之后，读它的人与拥有它的人终于是同一个。</p>
+     * 而它若由 {@code integration.mail.MailService} 读取，那就是"integration 读
+     * automation 的配置"。渲染留在本域，读它的人与拥有它的人才是同一个。</p>
      */
     @Value("${email-reminder.display-zone:Asia/Shanghai}")
     private String displayZone;

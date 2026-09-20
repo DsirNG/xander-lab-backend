@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
  *
  * <p>⚠️ 本类此前<b>不存在</b>：{@code MailService} 在此之前没有实现任何契约，
  * 于是"它做了什么"只在三个消费方的测试里以 mock 的形式出现 —— 真实实现一次都没被跑过。
- * 本刀让它成为端口实现，按第十四刀定下的规矩（"端口实现必须有测试"）补上。</p>
+ * 它成为端口实现之后，按"端口实现必须有测试"的规矩补上本类。</p>
  *
  * <p>这里刻意<b>不</b>断言"模板被调用了"：模板是 {@code LoginVerificationMailTemplates}，
  * 它有自己的测试。本类只断言"投递这一步把该带的东西带上了"。</p>
@@ -65,7 +65,7 @@ class MailServiceTest {
     /**
      * ⭐ {@code sendHtmlMail} 收的是<b>两份成品正文</b>，两份都要进 MIME 树。
      *
-     * <p>这一条同时钉住"端口只带发什么"：改造前调用方给的是
+     * <p>这一条同时钉住"端口只带发什么"：若调用方给的是
      * {@code scheduledAt / contentType / templateId}，HTML 由邮件服务自己渲染；
      * 现在调用方给的是渲染好的 {@code plainText} 与 {@code html}，邮件服务<b>不做任何加工</b>。
      * 断言"原样出现"就是在钉这一点。</p>

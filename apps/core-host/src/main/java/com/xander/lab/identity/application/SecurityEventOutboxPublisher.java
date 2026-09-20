@@ -14,7 +14,7 @@ import org.springframework.stereotype.Component;
 import java.util.List;
 
 /**
- * 安全事件发件箱投递器 —— V9 §27 的<b>快路径</b>。
+ * 安全事件发件箱投递器 —— 封禁传播的<b>快路径</b>。
  *
  * <pre>
  * execution_scope:      global_once
@@ -33,15 +33,15 @@ import java.util.List;
  * 所以执行体只能有一个 —— 否则 N 个实例会各自领取同一批行、各自标记，
  * 而"已投递"变成了 N 份互相矛盾的判断。</p>
  *
- * <p>跨实例传播因此<b>不是调度器的事，而是投递目标的事</b>：Wave 0A 的投递目标就是
- * 本实例的安全平面（{@link SecurityStateApplier}），Wave 1 把它换成 Redis PubSub 广播。
+ * <p>跨实例传播因此<b>不是调度器的事，而是投递目标的事</b>：当前的投递目标就是
+ * 本实例的安全平面（{@link SecurityStateApplier}）。多实例部署时把它换成 Redis PubSub 广播，
  * 届时本类只换投递那一行，领取/标记/退避的生命周期不变。</p>
  *
- * <h3>⚠️ Wave 0A 的能力边界（不得误报）</h3>
- * <p>因为 Wave 0A 的投递目标是"本实例"，所以<b>快路径目前只对抢到锁的那个实例生效</b>，
+ * <h3>⚠️ 当前单实例部署的能力边界（不得误报）</h3>
+ * <p>因为投递目标是"本实例"，所以<b>快路径目前只对抢到锁的那个实例生效</b>，
  * 其余实例仍然只靠各自的 {@link SecurityStateReconciler} 在 1.5 秒内收敛 ——
- * 这仍在 §28.3 的 5 秒预算内，所以<b>SLO 没有被违反</b>，但"快路径"这个词在多实例下
- * 暂时名不副实。真正意义上的多实例快路径要等 Wave 1 的 Redis PubSub 广播。
+ * 这仍在 5 秒预算内，所以<b>SLO 没有被违反</b>，但"快路径"这个词在多实例下
+ * 暂时名不副实。真正意义上的多实例快路径要等 Redis PubSub 广播落地。
  * 本类当前还承担另一个不可省略的职责：<b>让 {@code security_event_outbox} 有界</b>
  * （没有消费者时它会无界增长）。</p>
  *
@@ -149,7 +149,7 @@ public class SecurityEventOutboxPublisher {
             return;
         }
         if (SecurityEventOutboxEntry.TYPE_REFRESH_TOKEN_REUSE.equals(eventType)) {
-            // 家族撤销已经在检测到重用的那个写事务里完成（V9 §39），本地安全平面无需动作。
+            // 家族撤销已经在检测到重用的那个写事务里完成，本地安全平面无需动作。
             // 这里显式确认而不是留给 default 分支：否则这条事件会被误判成"未知类型"并判死。
             log.debug("[Security] 收到 {} 事件，本地安全平面无需动作 aggregate={}",
                     eventType, entry.getAggregateId());

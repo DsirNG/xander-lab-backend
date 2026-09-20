@@ -119,7 +119,7 @@ public class OssService implements OssPort {
                     (long) content.length, contentType, extension);
         } catch (Exception e) {
             // 措辞保持中立：这条端口方法服务 4 个域（智能体附件、知识库文件、博客媒体、
-            // 背诵音频），原先写死"智能体图片"会让其余三处失败时的日志指向错误的对象。
+            // 背诵音频），写死"智能体图片"会让其余三处失败时的日志指向错误的对象。
             log.error("[OSS] 内容上传失败: {}", e.getMessage());
             throw new IllegalStateException("文件上传至云存储失败", e);
         }

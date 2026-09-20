@@ -9,7 +9,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 安全事件事务性发件箱（V9 §27）。
+ * 安全事件事务性发件箱。
  *
  * <p>管理员封禁的事务里必须原子地完成「写用户状态 + 撤销 Refresh Session +
  * 提升 security_version + 写安全事件」。但"把 accountId 推给每个宿主的本地
@@ -44,7 +44,7 @@ public class SecurityEventOutboxEntry {
      * {@code DEAD} 把它从领取集合里摘出去，同时让"这条事件永远不会被投递"成为一个
      * <b>可查询的显式状态</b>，而不是一个被反复重试掩盖的隐性状态。</p>
      *
-     * <p>把事件判死是安全的，这正是 §27 选择事务性发件箱的原因：发件箱只负责
+     * <p>把事件判死是安全的，这正是选择事务性发件箱的原因：发件箱只负责
      * <b>通知</b>，不负责<b>状态</b>。{@code account_security_state} 才是 SOT，
      * 每个实例的 {@code SecurityStateReconciler} 仍会按 {@code change_seq} 收敛 ——
      * 所以一条 DEAD 事件不会让封禁失效，只会让"快路径"晚 1.5 秒。</p>

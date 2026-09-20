@@ -4,7 +4,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * 安全平面（Security Plane）的本地组件装配（V9 §48 / §49 / §52 / V11 §27.1）。
+ * 安全平面（Security Plane）的本地组件装配。
  *
  * <p>三个组件都必须<b>每实例一份</b>，所以是普通单例 Bean，不能用任何分布式单例机制包装。</p>
  *
@@ -29,7 +29,7 @@ public class SecurityPlaneConfiguration {
     }
 
     /**
-     * 本实例的安全平面就绪标记（V11 §27.1）。
+     * 本实例的安全平面就绪标记。
      *
      * <p>初始态是 {@code NOT_READY}，唯一的写入者是 identity 的
      * {@code SecurityStateBootstrap}；消费者是 {@code HealthController}

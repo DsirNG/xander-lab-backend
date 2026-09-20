@@ -22,8 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 类路径上不许<b>悄悄</b>出现同时持有两个站外同步端口的类。
  *
  * <h2>这条守卫补的是哪一步</h2>
- * <p>第十九刀发现了"同形不同源"这一种静默换位点（{@code notes/contract-extraction.md}），
- * 并在两个凭证端口上配了不对称桩。但第十六刀那两个<b>同步</b>端口的同名方法
+ * <p>"同形不同源"是一种静默换位点，
+ * 两个凭证端口上已经配了不对称桩。但两个<b>同步</b>端口的同名方法
  * （{@code sync} 与 {@code findSucceeded}）里，{@code findSucceeded(Long, Long) -> BlogSyncResult}
  * 在两个端口上<b>逐字相同</b>：把 {@code csdnPort.findSucceeded(u, p)} 写成
  * {@code juejinPort.findSucceeded(u, p)} <b>编译通过</b>（{@code sync} 的参数表不同，
@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>⚠️ 这条守卫<b>写出来当天就抓到一个</b>：{@code PublishPostTool} 早就同时持有两个端口，
  * 而且 {@code reconcile} 里那两行 {@code findSucceeded(context.userId(), local.id())}
  * <b>相邻、参数表逐字相同、只是接收者不同</b> —— 正是本测试要拦的形状。
- * ADR 待办 54 原文写的是"今天没有调用点会写反只是巧合 / 暂时没有写反的机会"，
+ * 纸面上写的是"今天没有调用点会写反只是巧合 / 暂时没有写反的机会"，
  * <b>那句是错的</b>：写反的机会一直存在，只是从来没有东西会报错。
  * 这正是"先写判据、再用判据去测一遍自己相信的话"的价值 ——
  * 直接量出来的东西推翻了纸面上的结论。</p>

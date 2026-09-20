@@ -48,7 +48,7 @@ import java.util.UUID;
  * 背诵材料、录音上传和用户侧任务查询用例。
  *
  * <h2>为什么 implements {@link RecitationMaterialPort}</h2>
- * <p>跨域消费方（{@code agent} 的两个知识工具、{@code automation} 的两个发文服务）原来直接
+ * <p>跨域消费方（{@code agent} 的两个知识工具、{@code automation} 的两个发文服务）若直接
  * import 本类，于是它们离了本类的实现就无法构建，也被绑在本类给控制器用的那十几个公开方法上。
  * 本类实现端口之后，跨域那四条路径走端口，同域的控制器继续走下面那些富方法。</p>
  *
@@ -59,8 +59,8 @@ import java.util.UUID;
  *
  * <p>⚠️ 代价是：端口方法上的 {@code @Transactional} <b>必须自己标一份</b>。同类自调用不走代理，
  * 富方法上的注解不会生效。四个端口方法都标了与富方法一致的注解，并由
- * {@code PortDelegationTransactionTest} 守着 —— 第九刀就是因为漏了这件事，
- * 让 {@code SELECT ... FOR UPDATE} 在无事务下执行、锁不住任何东西。</p>
+ * {@code PortDelegationTransactionTest} 守着 —— 漏掉这件事会让
+ * {@code SELECT ... FOR UPDATE} 在无事务下执行、锁不住任何东西。</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -265,7 +265,7 @@ public class RecitationService implements RecitationMaterialPort {
      * 修改一条已有知识：只改传了的字段。
      *
      * <p>正文或测试方式发生实质变化时会重置掌握度（分数归零、等级回到 NEW、清掉下次复习时间），
-     * 因为原来的分数衡量的是改动前的文本和改动前的考法。不重置的话，把正文整段换掉之后
+     * 因为存下来的分数衡量的是改动前的文本和改动前的考法。不重置的话，把正文整段换掉之后
      * 这条知识仍然显示"已掌握、30 天后再复习"——那是一个没有出处的数字，
      * 复习计划也会把一条其实从没测过的内容一直排在最后。已完成的测试次数与最近测试时间作为
      * 历史保留，不清零。</p>

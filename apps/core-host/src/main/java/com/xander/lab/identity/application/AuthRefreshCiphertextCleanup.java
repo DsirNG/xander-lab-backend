@@ -10,7 +10,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 
 /**
- * 已过期 successor 密文的物理清空（V9 §43）。
+ * 已过期 successor 密文的物理清空。
  *
  * <pre>
  * execution_scope:      global_once
@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
  * </pre>
  *
  * <h3>这个任务不承担任何安全语义</h3>
- * <p>§43 原文：「即使物理字段晚几十秒清空，业务代码也必须在 grace 到期后拒绝返回。
+ * <p>「即使物理字段晚几十秒清空，业务代码也必须在 grace 到期后拒绝返回。
  * 所以安全语义依赖<b>时间判断</b>，不是依赖清理任务刚好准点运行。」</p>
  *
  * <p>代码侧已经按这个要求实现：重放路径在解密<b>之前</b>先问
@@ -33,7 +33,7 @@ import java.time.LocalDateTime;
  *
  * <h3>为什么是 UPDATE 而不是 DELETE</h3>
  * <p>密文窗口（秒级）远短于 Reuse 判定窗口（{@code retained_until}，24 小时）。
- * 删行会让这段时间里的真实盗用无法被识别（§39 分支 3 依赖行还在）。
+ * 删行会让这段时间里的真实盗用无法被识别（分支 3 依赖行还在）。
  * 所以只清空字节，行留着。</p>
  *
  * <h3>依赖的索引</h3>

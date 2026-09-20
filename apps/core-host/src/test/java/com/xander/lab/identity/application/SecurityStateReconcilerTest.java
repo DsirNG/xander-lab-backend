@@ -20,7 +20,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 安全状态对账的就绪闸门测试（V11 §27.1）。
+ * 安全状态对账的就绪闸门测试。
  *
  * <p>本类只钉一件事：<b>安全平面 READY 之前，两个调度方法必须什么都不做</b>。
  * 启动期的缓存归 {@link SecurityStateBootstrap} 独占 —— 调度器在容器 refresh 期间

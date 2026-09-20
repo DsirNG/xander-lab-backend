@@ -21,8 +21,8 @@ public class BlogAgentTaskVO {
     /**
      * 跨域字段：用契约引用 {@link MediaAssetRef}，不用 {@code publishing} 的实体。
      *
-     * <p>13 个字段与实体逐一同名，所以序列化后的 JSON 与改造前完全一致 —— 这次是纯重构。
-     * 前端（AgentPreviewPanel）实际只读 id / url / originalName，收窄属于 §11 契约变更，另开一次。</p>
+     * <p>13 个字段与实体逐一同名，所以序列化后的 JSON 逐字节不变。
+     * 前端（AgentPreviewPanel）实际只读 id / url / originalName，收窄属于契约变更，要单独评估。</p>
      */
     private List<MediaAssetRef> illustrations;
     private List<BlogAgentMessage> messages;

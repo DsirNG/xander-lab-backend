@@ -21,7 +21,7 @@ import java.util.List;
  *
  * <p>端口显式收 {@code userId}，所以 {@link #asUser} 里那句 {@code UserContext.setUserId}
  * 现在<b>已经是冗余的</b>（内容域的实现全部走参数，不再读 ThreadLocal）。保留它是因为
- * 这条路径改造前就依赖它、而它本身无害；要删就是一次独立的清理，不该夹在契约抽取里 ——
+ * 这条路径一直依赖它、而它本身无害；要删就是一次独立的清理，不该夹在契约抽取里 ——
  * 删错了会让 {@code UserContext} 泄漏到下一条复用该线程的请求上。</p>
  */
 @Service

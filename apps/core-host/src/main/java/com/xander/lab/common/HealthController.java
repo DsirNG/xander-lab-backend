@@ -12,8 +12,8 @@ import java.util.Map;
 /**
  * 存活探针与就绪探针。
  *
- * <h3>两个探针为什么要分开（V11 §27.1 第 9 步）</h3>
- * <p>§27.1 要求实例在安全平面就绪之前"不得进入服务发现 / 负载均衡"。这条约束只能由
+ * <h3>两个探针为什么要分开</h3>
+ * <p>实例在安全平面就绪之前"不得进入服务发现 / 负载均衡"。这条约束只能由
  * 负载均衡侧的就绪探针落地，所以必须有一个"未就绪即 503"的端点。</p>
  * <p>但不能把 {@link #health()} 直接改成那个端点：它是<b>存活</b>探针，
  * {@code docker-compose.yml} 的 healthcheck 正在用它，而存活探针失败会触发容器重启。
@@ -66,7 +66,7 @@ public class HealthController {
     }
 
     /**
-     * 就绪探针：本实例是否可以接流量（V11 §27.1 第 9 步）。
+     * 就绪探针：本实例是否可以接流量。
      *
      * <p>安全平面 {@code READY} 之前一律 503，即使进程活着、端口已监听。这是
      * {@code SecurityStateBootstrap} 的 fail-fast 之外<b>唯一</b>能拦住"先接流量再慢慢填
@@ -86,7 +86,7 @@ public class HealthController {
                 status.put("securityPlaneFailure", failure);
             }
             status.put("status", "DOWN");
-            status.put("message", "安全平面尚未就绪：本地 deny cache 建立完成前不得接流量（V11 §27.1）");
+            status.put("message", "安全平面尚未就绪：本地 deny cache 建立完成前不得接流量");
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(status);
         }
 

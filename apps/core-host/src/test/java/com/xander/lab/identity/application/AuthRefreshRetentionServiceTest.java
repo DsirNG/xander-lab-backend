@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 保留策略事务边界测试（V9 §42）。
+ * 保留策略事务边界测试。
  *
  * <p>这个类的存在价值就是"一批一事务"，而这件事<b>只能</b>靠注解反射来守：
  * 纯单测拿不到 Spring 代理，而注解被删掉或挪到循环外面时，功能测试全绿 ——
@@ -24,7 +24,7 @@ class AuthRefreshRetentionServiceTest {
                     .getMethod(name, LocalDateTime.class, int.class);
 
             assertThat(method.getAnnotation(Transactional.class))
-                    .as("%s 必须带 @Transactional，否则「每批独立事务」（§42）无声失效", name)
+                    .as("%s 必须带 @Transactional，否则「每批独立事务」无声失效", name)
                     .isNotNull();
         }
     }

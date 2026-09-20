@@ -33,7 +33,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 封禁事务边界测试（V9 §26 / §27 / §48）。
+ * 封禁事务边界测试。
  *
  * <p>纯单测拿不到 Spring 事务代理，因此这里断言的是<b>事务内应有的调用序列</b>，
  * 而"它们真的在同一个事务里"由 {@link #applyStateIsTransactional()} 用注解反射守住 ——
@@ -81,7 +81,7 @@ class AccountSecurityStateServiceTest {
         return captor.getValue();
     }
 
-    // ===================== §26：封禁必须原子完成的四件事 =====================
+    // ===================== 封禁必须原子完成的四件事 =====================
 
     @Test
     void banWritesSotRevokesSessionsAndWritesOutboxInOrder() {
@@ -218,7 +218,7 @@ class AccountSecurityStateServiceTest {
         Method method = AccountSecurityStateService.class
                 .getMethod("applyState", Long.class, boolean.class, String.class);
         assertThat(method.getAnnotation(Transactional.class))
-                .as("applyState 必须带 @Transactional，否则 §26 的原子性无声失效")
+                .as("applyState 必须带 @Transactional，否则封禁的原子性无声失效")
                 .isNotNull();
     }
 }

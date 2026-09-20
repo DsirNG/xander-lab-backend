@@ -30,22 +30,22 @@ import java.util.Set;
  * identity 拥有用户与会话，其它模块（如 admin）只能通过本服务操作，不得直接
  * 修改 sys_user 或登录 Redis 键。</p>
  *
- * <h3>双写：遗留 Redis 撤销 + 新安全平面（V9 §2.3 能力守恒）</h3>
+ * <h3>双写：遗留 Redis 撤销 + 新安全平面（能力守恒）</h3>
  * <p>当前鉴权仍然以 Redis 为准（{@code AuthInterceptor} 查 {@code login:token:<jwt>}），
  * 所以封禁必须<b>继续</b>走 {@link #revokeSessions} —— 换成新 SOT 就删掉它，
- * 会让封禁在 Wave 2 切换之前完全失效。同时把安全状态写进
+ * 会让封禁在切换之前完全失效。同时把安全状态写进
  * {@code account_security_state} 并发一条事务性事件，让长连接封禁
- * （§50 / §51）与 Gateway 侧的本地 deny cache 提前就位。</p>
+ * 与 Gateway 侧的本地 deny cache 提前就位。</p>
  *
- * <p>两条路径都幂等，重复执行不会互相干扰；Wave 2 切换后遗留那条再退场
- * （已登记在 {@code contract-changes.yaml} 的 {@code legacy-redis-user-tokens}）。</p>
+ * <p>两条路径都幂等，重复执行不会互相干扰；切换之后遗留那条再退场
+ * （对应契约条目 {@code legacy-redis-user-tokens}）。</p>
  *
- * <h3>事务边界（V9 §26）</h3>
+ * <h3>事务边界</h3>
  * <p>{@link #setUserStatus} 与 {@link AccountSecurityStateService#applyState} 在同一个
  * 事务里：SOT 写入、Refresh Session 撤销、Outbox 事件三者要么全成、要么全不成。
  * 唯一不在事务里的是 {@link #revokeSessions} —— Redis 没有回滚。这是<b>故意保留</b>的：
  * 它只可能"多撤销"，不可能"少撤销"，因此最坏结果是用户被迫重新登录一次，
- * 而不会出现"封禁没生效"。方向上的不对称是安全的，且它在 Wave 2 就消失了。</p>
+ * 而不会出现"封禁没生效"。方向上的不对称是安全的，且它在切换后就消失了。</p>
  */
 @Slf4j
 @Service
@@ -122,14 +122,14 @@ public class UserAdminService {
                 .ne(User::getStatus, status)
                 .set(User::getStatus, status));
 
-        // ② 遗留 Redis 撤销。鉴权在 Wave 2 切换前仍以 Redis 为准，所以这一条
-        //    绝不能删 —— 删掉会让封禁在切换前完全失效（§2.3 能力守恒）。
+        // ② 遗留 Redis 撤销。鉴权在切换前仍以 Redis 为准，所以这一条
+        //    绝不能删 —— 删掉会让封禁在切换前完全失效（能力守恒）。
         int revoked = 0;
         if (disabled) {
             revoked = revokeSessions(targetId);
         }
 
-        // ③ 新安全平面：SOT + 事务性事件（§26 / §27 / §48）。
+        // ③ 新安全平面：SOT + 事务性事件。
         //    注意这里【无条件】写，不跟随 ① 的 rows：① 只保证 sys_user 与目标一致，
         //    而 account_security_state 可能因为历史数据、上一次崩溃、手工改库而与它
         //    不一致。每次管理员操作都顺手收敛一次，是这张表最便宜的自愈机会。
@@ -146,7 +146,7 @@ public class UserAdminService {
      * 构造写入 SOT 与安全事件的审计说明。
      *
      * <p>不带管理员自由文本：本接口的请求体只有 {@code status}，凭空加一个可写字段
-     * 属于新增产品能力，要走 §11 Contract 流程。当前先把"谁做的、做了什么"记全，
+     * 属于新增产品能力，要走契约变更流程。当前先把"谁做的、做了什么"记全，
      * 已经能回答审计最常问的那个问题。</p>
      */
     private String auditReason(Long operatorId, boolean disabled) {

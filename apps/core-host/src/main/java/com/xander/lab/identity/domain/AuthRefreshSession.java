@@ -9,7 +9,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 刷新会话（Refresh Session SOT，V9 §30 / §32）。
+ * 刷新会话（Refresh Session SOT）。
  *
  * <p>一个登录会话一行。轮换时**原地修改** {@code currentTokenId} /
  * {@code currentTokenHash} / {@code generation}，因此这一行是唯一知道
@@ -17,11 +17,11 @@ import java.time.LocalDateTime;
  *
  * <p>它取代了旧的纯无状态 refresh JWT —— 旧模型只验签名 + {@code type} +
  * 用户 status，不查任何存储，所以 logout 无法吊销，登出后 30 天内仍可换出
- * 全新令牌对（V9 §22）。</p>
+ * 全新令牌对。</p>
  *
  * <p>注意：{@code sid} 位于 refresh token 的明文前缀 {@code rt_<sid>.<tokenId>.<secret>}，
  * 所以它不是秘密 —— 日志 / Referer / 客户端存储任一处泄漏即可获得。这条事实
- * 直接决定了 Reuse Detection 必须有"垃圾 token 不撤销会话族"的分支（V9 §39.1）。</p>
+ * 直接决定了 Reuse Detection 必须有"垃圾 token 不撤销会话族"的分支。</p>
  */
 @Data
 @TableName("auth_refresh_session")

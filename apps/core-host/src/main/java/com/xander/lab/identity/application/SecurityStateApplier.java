@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
 import java.util.OptionalLong;
 
 /**
- * 把一条账号安全状态变更落到<b>本实例</b>的安全平面（V9 §27 / §28.2 / §48）。
+ * 把一条账号安全状态变更落到<b>本实例</b>的安全平面。
  *
  * <h3>为什么必须只有一份实现</h3>
  * <p>封禁在本地只有两个动作：写 {@link SecurityStateCache}，以及关闭该账号在本实例
@@ -18,7 +18,7 @@ import java.util.OptionalLong;
  *   <li>{@link SecurityStateReconciler} —— 兜底路径，按 {@code change_seq} 增量拉取</li>
  *   <li>{@link SecurityEventOutboxPublisher} —— 快路径，消费 {@code security_event_outbox}</li>
  * </ul>
- * <p>如果两边各写一遍"标记 + closeAll"，Wave 1 把投递换成 Redis PubSub 时就会有人只改
+ * <p>如果两边各写一遍"标记 + closeAll"，把投递换成 Redis PubSub 时就会有人只改
  * 一边：结果是封禁在快路径上能标记但不断连，或者在兜底路径上能断连但漏标记。
  * 两条路径都"看起来在工作"，缺陷只在多实例 + 已建立连接时暴露。</p>
  *
@@ -28,9 +28,9 @@ import java.util.OptionalLong;
  * 这是"至少一次投递"能安全成立的前提 —— 见
  * {@link com.xander.lab.identity.infrastructure.SecurityEventOutboxMapper#claimDue}。</p>
  *
- * <h3>版本单调（V11 §27.1 第 6 步）</h3>
+ * <h3>版本单调</h3>
  * <p>封禁方向带一道版本闸门：仅当 {@code incoming.securityVersion > cached.securityVersion}
- * 时才应用。它防的是"一条迟到的重放把缓存里的版本号改回旧值" —— 版本号被 §87 的
+ * 时才应用。它防的是"一条迟到的重放把缓存里的版本号改回旧值" —— 版本号被
  * {@code admin_ban_*} 指标用来按版本下钻，回退会让指标读到过期版本。</p>
  * <p><b>解封方向刻意没有闸门</b>：缓存只为被封禁账号保存版本号，解封即从缓存移除，
  * 所以解封时根本<b>没有</b>可比较的 cached version。给解封也加闸门需要为每个曾经
@@ -39,12 +39,11 @@ import java.util.OptionalLong;
  * {@link SecurityStateBootstrap} 里对"分配顺序即提交顺序"的论证）。</p>
  * <p>⚠️ 已知残留：一条<b>迟到且版本更低的封禁事件</b>，若该账号此刻在缓存里
  * <b>不存在</b>（已被解封），闸门无法拒绝它，账号会被重新封禁。这需要为"已解封账号"
- * 也保留版本号才能修，属独立改动，已登记在
- * {@code docs/migration/admin-ban-security-plane.md} 的「已知缺口」表。</p>
+ * 也保留版本号才能修，属独立改动，已登记在「已知缺口」表。</p>
  *
- * <h3>本实例语义（Wave 0A 的能力边界）</h3>
- * <p>本方法<b>只影响调用方所在实例</b>。跨实例传播不是它的职责：Wave 0A 由每个实例
- * 自己的 reconciler 在 1.5 秒内收敛（V9 §28.3 的 5 秒预算内），Wave 1 起由 Redis PubSub
+ * <h3>本实例语义</h3>
+ * <p>本方法<b>只影响调用方所在实例</b>。跨实例传播不是它的职责：由每个实例
+ * 自己的 reconciler 在 1.5 秒内收敛，多实例部署时改由 Redis PubSub
  * 广播。因此本类不持有任何"全局"状态，也不得被赋予广播语义。</p>
  */
 @Slf4j
@@ -57,7 +56,7 @@ public class SecurityStateApplier {
      *
      * <p>是 {@link ConnectionRegistry#REASON_ACCOUNT_DISABLED} 的别名：词汇由共享内核
      * 拥有，这样 automation / studio 的 SSE 宿主不必为了一个字符串常量反向依赖
-     * identity（V9 §21 共享内核边界）。</p>
+     * identity。</p>
      */
     public static final String CLOSE_REASON_ACCOUNT_DISABLED =
             ConnectionRegistry.REASON_ACCOUNT_DISABLED;
@@ -87,7 +86,7 @@ public class SecurityStateApplier {
             return wasDisabled ? Outcome.NEWLY_ENABLED : Outcome.NONE;
         }
 
-        // V11 §27.1 第 6 步：仅当 incoming > cached 时才应用。
+        // 版本闸门：仅当 incoming > cached 时才应用。
         OptionalLong cachedVersion = securityStateCache.versionOf(accountId);
         if (cachedVersion.isPresent() && cachedVersion.getAsLong() >= securityVersion) {
             // 迟到的一次重放：缓存里已经是更新（或同版本）的状态。不改版本号、不重复断连。
@@ -101,7 +100,7 @@ public class SecurityStateApplier {
         }
         int closed = connectionRegistry.closeAll(accountId, CLOSE_REASON_ACCOUNT_DISABLED);
         if (closed > 0) {
-            // V9 §28.2 手段 A（主要手段）：主动断开已建立的长连接。
+            // 手段 A（主要手段）：主动断开已建立的长连接。
             // 手段 B（每次发送前 O(1) 校验）是兜底，见 SSE / WS 的发送边界。
             log.warn("[Security] 封禁生效，关闭已建立连接 account={} closed={}", accountId, closed);
         }

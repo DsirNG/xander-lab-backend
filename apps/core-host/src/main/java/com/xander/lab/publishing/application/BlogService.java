@@ -232,7 +232,7 @@ public class BlogService implements ContentPostPort {
         return getPublishedPostId(UserContext.getUserId(), requestId);
     }
 
-    /** 核心：身份由参数传入。原来三次读 {@code UserContext} 的写法在一次请求内是同一个值，改成一次读取。 */
+    /** 核心：身份由参数传入。三次读 {@code UserContext} 在一次请求内是同一个值，所以只读一次。 */
     private Long getPublishedPostId(Long userId, String requestId) {
         if (requestId == null || requestId.isBlank() || userId == null) return null;
         String key = PUBLISH_REQUEST_PREFIX + userId + ":" + requestId.trim();
@@ -629,7 +629,7 @@ public class BlogService implements ContentPostPort {
     // 端口边界：共用校验与契约换算
     // ------------------------------------------------------------------
 
-    /** 未登录的判定文案与 HTTP 状态都靠这一句，改造前分散在 7 处，文案必须逐字一致。 */
+    /** 未登录的判定文案与 HTTP 状态都靠这一句，多处共用，文案必须逐字一致。 */
     private static void requireUser(Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("未登录或登录已过期");

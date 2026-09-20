@@ -28,7 +28,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 安全事件发件箱投递器测试（V9 §27 / §28.3 / §68）。
+ * 安全事件发件箱投递器测试。
  *
  * <p>投递目标用<b>真实</b>的 {@link SecurityStateApplier} + {@link SecurityStateCache} +
  * {@link ConnectionRegistry}：本类的职责是"把事件真正作用到本地安全平面"，
@@ -120,7 +120,7 @@ class SecurityEventOutboxPublisherTest {
     }
 
     /**
-     * 同理，本类不得伪报"已同步"：§87 的 {@code securityStateAge} 可能被用于
+     * 同理，本类不得伪报"已同步"：{@code securityStateAge} 可能被用于
      * fail-closed 判定，把它刷新成"刚刚同步过"会掩盖一个已经停摆的 reconciler。
      */
     @Test
@@ -295,7 +295,7 @@ class SecurityEventOutboxPublisherTest {
     }
 
     /**
-     * 注解守卫（V9 §68）。
+     * 注解守卫。
      *
      * <p>{@code execution_scope = global_once} 的落地形式就是"带 {@code @SchedulerLock}"。
      * 单测跑不到 ShedLock 切面，所以一旦有人把注解删掉，除了多实例下重复投递之外
@@ -310,7 +310,7 @@ class SecurityEventOutboxPublisherTest {
                 .as("@Scheduled 缺失则整个投递器不会运行")
                 .isNotNull();
         SchedulerLock lock = method.getAnnotation(SchedulerLock.class);
-        assertThat(lock).as("global_once 任务必须带 @SchedulerLock（V9 §68）").isNotNull();
+        assertThat(lock).as("global_once 任务必须带 @SchedulerLock").isNotNull();
         assertThat(lock.name())
                 .as("锁名必须等于 scheduled-ownership.yaml 里的 id")
                 .isEqualTo("security-event-outbox-publisher");

@@ -41,7 +41,7 @@ import static org.mockito.Mockito.when;
 /**
  * 钉住 {@link BlogAgentService} 作为 {@code BlogAgentPort} 实现时的<b>换算落点与换位</b>。
  *
- * <h2>为什么这一刀能只用 mock + {@code thenCallRealMethod}</h2>
+ * <h2>为什么这里能只用 mock + {@code thenCallRealMethod}</h2>
  * <p>四个"薄壳"端口方法（{@code create} / {@code findReadyTaskByClientRequestId} /
  * {@code publish} / {@code runStream}）的函数体是"纯换算 + 转调同类富方法"，字段一个都不碰 ——
  * 所以可以在 mock 上直接跑真实方法体，让里面的 {@code this.xxx(...)} 落到打桩的富方法上，
@@ -51,7 +51,7 @@ import static org.mockito.Mockito.when;
  *
  * <h2>⚠️ 字面量必须互不相同</h2>
  * <p>端口是 {@code (userId, taskId)}，域侧是 {@code (taskId, userId)}。{@code 42L} 与 {@code 9L}
- * 一旦取成同一个数，换位写反不会有任何断言变红 —— 这是这一刀最容易静默出错的地方。</p>
+ * 一旦取成同一个数，换位写反不会有任何断言变红 —— 这是最容易静默出错的地方。</p>
  */
 class BlogAgentPortMappingTest {
 
@@ -269,10 +269,10 @@ class BlogAgentPortMappingTest {
      * 兜底端点；走管理台网关路径时 {@code properties.getImageModel()} 甚至可能是空的。
      * 下面两个字面量刻意不同，取错会红。</p>
      *
-     * <p>改这一处之前，跨域的 {@code ImageGenerationTool} 写进素材 meta 的是<b>配置里的首选模型</b>，
+     * <p>跨域的 {@code ImageGenerationTool} 写进素材 meta 的是<b>配置里的首选模型</b>，
      * 于是"兜底端点生成的图"会被记成首选模型的名字 —— 而图片已经生成、已经入库，没人会发现。
      * 同域的插图路径（{@code generateIllustrations}）一直是写 {@code generated.model()} 的，
-     * 这一刀把同一个口径带给了跨域消费方。</p>
+     * 跨域消费方必须用同一个口径。</p>
      */
     @Test
     void imageModelComesFromTheGeneratedResultNotFromTheConfiguration() {

@@ -224,7 +224,7 @@ class RecitationServiceTest {
     /**
      * "智能体看不到归档知识"这条不变量的<b>新家</b>。
      *
-     * <p>它原来住在 {@code QueryKnowledgeToolTest}：抓取工具构造的 {@code MaterialQuery}，
+     * <p>它的旧载体是 {@code QueryKnowledgeToolTest}：抓取工具构造的 {@code MaterialQuery}，
      * 断言 {@code archive()} 是 {@code ACTIVE}。抽契约时筛选条件收窄成
      * {@code MaterialFilter}（四个分量，不带归档维度），工具连"把归档的也查出来"都表达不出来，
      * 那条断言在工具层已无处可写。不变量没有消失，只是整体落到了这次换算上 ——

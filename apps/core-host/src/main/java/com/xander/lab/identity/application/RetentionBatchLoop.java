@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 保留策略的批次循环（V9 §42 / §43 共用的执行骨架）。
+ * 保留策略的批次循环（历史清理与密文清理共用的执行骨架）。
  *
  * <h3>为什么抽出来</h3>
  * <p>两个清理任务（历史删除、密文清空）的循环体只有"调哪个方法"不同，其余全是
@@ -93,7 +93,7 @@ public class RetentionBatchLoop {
     }
 
     /**
-     * 批间停顿 + jitter（§42：100～500ms）。
+     * 批间停顿 + jitter（100～500ms）。
      *
      * <p>jitter 的意义不是"更好看"：多实例（ShedLock 未启用时）或与业务高峰重叠时，
      * 固定间隔会让清理批次与轮换写入形成同频共振，锁等待被反复放大。</p>

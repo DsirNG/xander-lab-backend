@@ -24,9 +24,9 @@ import java.util.concurrent.TimeUnit;
 /**
  * 发布编排：幂等判重、平台选路、落 {@code blog_publish_record}、CSDN 限流。
  *
- * <p><b>同时是 {@link PublicationPort} 的实现。</b>这一刀是零换算的：两个端口方法的参数与返回值
+ * <p><b>同时是 {@link PublicationPort} 的实现。</b>这是零换算的：两个端口方法的参数与返回值
  * 本来就已经全是 {@code content-api} 里的类型（{@link PublishCommand} / {@link PublishResult}），
- * 所以类体一行没动，只是多了一个 {@code implements} —— 与 {@code BillingPort} 那次
+ * 所以类体不需要改动，只需多一个 {@code implements} —— 与 {@code BillingPort}
  * “选与现有实现同形的端口形状”是同一个手法。</p>
  *
  * <p>同域的 {@code BlogPlanRunService} 与 {@code BlogAgentService} 仍然注入本具体类：

@@ -15,13 +15,13 @@ import java.util.Optional;
 /**
  * 把一个 {@link RemoteTool}（契约）翻成 {@link AgentTool}（agent 自己的工具类型）。
  *
- * <p>它是这一刀的<b>防腐层</b>：契约那一侧只认 JDK 类型，agent 这一侧的工具词汇表
+ * <p>它是这条边界的<b>防腐层</b>：契约那一侧只认 JDK 类型，agent 这一侧的工具词汇表
  * （{@code AgentPromptSection}、{@code ProgressListener}、{@code JsonNode}）全在这里收口。
  * 没有它，integration 就得实现 {@code AgentTool}，而那是 {@code integration -> agent}
  * 这条跨部署单元实现依赖的来源。</p>
  *
  * <h2>为什么 Jackson 在这里</h2>
- * <p>契约把 schema、参数、返回值都当作 JSON 文本搬运（ADR-1：契约必须与序列化框架无关）。
+ * <p>契约把 schema、参数、返回值都当作 JSON 文本搬运（契约必须与序列化框架无关）。
  * 本类是入站适配器，把文本解析回 {@code JsonNode} 正是它的职责。schema 只解析一次并缓存：
  * 它是不变的，而 {@link #parametersSchema()} 每轮渲染工具面都会被调一次。</p>
  *

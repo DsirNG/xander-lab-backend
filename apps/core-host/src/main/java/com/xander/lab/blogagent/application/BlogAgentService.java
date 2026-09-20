@@ -224,7 +224,7 @@ public class BlogAgentService implements BlogAgentPort, BlogAgentImagePort {
      * {@inheritDoc}
      *
      * <p>⚠️ <b>参数是换位的</b>：端口收 {@code (userId, taskId)}，而上面那个方法收
-     * {@code (taskId, userId)}。这一行是这一刀最容易静默出错的地方 —— 写反了会把 userId 当 taskId
+     * {@code (taskId, userId)}。这一行是最容易静默出错的地方 —— 写反了会把 userId 当 taskId
      * 去查，落到"任务不存在"（响亮的失败，不是静默的错数据），但仍然由
      * {@code BlogAgentPortMappingTest} 用互不相同的字面量（42 vs 9）钉住。</p>
      *
@@ -734,7 +734,7 @@ public class BlogAgentService implements BlogAgentPort, BlogAgentImagePort {
      *
      * <p>端口那一侧走 {@link #publish(Long, Long)}。{@code ForView} 后缀的受众就是这里：
      * {@code BlogAgentController#publish} 把 {@code BlogPostVO} 直接当响应体，
-     * 换掉它就是这个前端路由的响应体变更（ADR §11），不属于这一刀。</p>
+     * 换掉它就是这个前端路由的响应体变更，属于契约变更。</p>
      */
     public BlogPostVO publishForView(Long taskId, Long userId) {
         BlogAgentTask task = requireOwnedTask(taskId, userId);
@@ -767,7 +767,7 @@ public class BlogAgentService implements BlogAgentPort, BlogAgentImagePort {
      * {@inheritDoc}
      *
      * <p>这个方法<b>直接就是端口实现</b>，没有 {@code ForView} 兄弟：它唯一的调用方是跨域的
-     * {@code PublishPostTool}，同域没有任何人读它的 {@code BlogPostVO} 形态，所以按 ADR §7.5
+     * {@code PublishPostTool}，同域没有任何人读它的 {@code BlogPostVO} 形态，所以
      * 直接换返回类型、直接把参数归一成 {@code (userId, taskId)}。给一个没有调用方的富方法留后缀
      * 是死代码，而"删掉它不会有别的症状"这件事由全量测试守着（{@code BlogAgentController}
      * 从不调用它）。</p>
@@ -805,7 +805,7 @@ public class BlogAgentService implements BlogAgentPort, BlogAgentImagePort {
      * {@code properties.getImageModel()}。客户端会在候选端点之间兜底重试，真正产出这张图的
      * 可能是兜底端点；而走管理台网关路径时 {@code properties.getImageModel()} 甚至可能是空的。
      * 同域的插图路径（{@code generateIllustrations}）一直是写 {@code generated.model()} 的，
-     * 这一刀把同一个口径带给了跨域消费方。</p>
+     * 跨域消费方必须用同一个口径。</p>
      */
     @Override
     public BlogAgentImage generate(String prompt) {
@@ -983,7 +983,7 @@ public class BlogAgentService implements BlogAgentPort, BlogAgentImagePort {
      * 域实体 → 契约视图。
      *
      * <p>只带 4 个分量：两个消费方（{@code BlogGenerationTool}）读的就是这 4 个。
-     * 域实体是 25 个字段的 {@code @TableName} 实体，按 ADR-2 不许跨边界。</p>
+     * 域实体是 25 个字段的 {@code @TableName} 实体，不许跨边界。</p>
      */
     private static BlogAgentTaskView toTaskView(BlogAgentTask task) {
         if (task == null) return null;
@@ -1036,8 +1036,8 @@ public class BlogAgentService implements BlogAgentPort, BlogAgentImagePort {
      * 网关口径 {@code ModelUsage} -> 计费契约口径 {@link TokenUsage}。
      *
      * <p>两者分量同名同序，所以这是一次直接映射，没有"漏了哪个字段"的可能。换算之所以
-     * 必须落在调用方，是因为契约不能依赖带 Jackson 的 {@code libs/xander-model}（ADR-1，
-     * 见 {@code docs/migration/adr-contract-boundaries.md}）。</p>
+     * 必须落在调用方，是因为契约不能依赖带 Jackson 的 {@code libs/xander-model}（
+     * 契约必须与序列化框架无关）。</p>
      *
      * <p>{@code null} 归一到 {@link TokenUsage#NONE}：网关没返回用量时端口按"空用量"处理
      * （插图类会因此拒绝扣费，其它业务退回一口价），而不是抛 NPE。</p>

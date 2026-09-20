@@ -14,10 +14,10 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 
 /**
- * 账号安全状态写入方：管理员封禁/解封的唯一事务边界（V9 §26 / §27 / §48）。
+ * 账号安全状态写入方：管理员封禁/解封的唯一事务边界。
  *
  * <h3>为什么必须是一个事务</h3>
- * <p>V9 §26 要求封禁<b>原子地</b>完成四件事：</p>
+ * <p>封禁必须<b>原子地</b>完成四件事：</p>
  * <ol>
  *   <li>写 {@code sys_user.status}（由调用方在同一个事务里完成）</li>
  *   <li>撤销该账号全部 Refresh Session</li>
@@ -28,7 +28,7 @@ import java.time.LocalDateTime;
  * <p>第 5、6 件事 —— "把 accountId 推进每个宿主的本地 deny cache" 与
  * "关闭该账号已建立的 SSE / WS" —— <b>不可能</b>在事务内完成，因为它们要触碰
  * 别的进程。所以事件先在事务内落库、提交后再投递，这就是封禁能扛住
- * "提交后立刻崩溃"的原因（V9 §27）。</p>
+ * "提交后立刻崩溃"的原因。</p>
  *
  * <h3>为什么封禁和解封不对称</h3>
  * <p>封禁要撤销全部刷新会话；解封<b>不恢复</b>任何已撤销的会话 ——
@@ -100,14 +100,14 @@ public class AccountSecurityStateService {
 
         int revoked = 0;
         if (disabled) {
-            // V9 §26 第 2 条：封禁必须同时撤销全部刷新会话。
-            // 这是按索引的一条 UPDATE，不像遗留 Redis 实现那样随时间单调恶化（V9 §56）。
+            // 封禁必须同时撤销全部刷新会话。
+            // 这是按索引的一条 UPDATE，不像遗留 Redis 实现那样随时间单调恶化。
             revoked = refreshTokenService.revokeAllForAccount(
                     accountId, AuthRefreshSession.REASON_ADMIN_DISABLE);
         }
 
         // 回读权威值：security_version 由 SQL 侧 +1 得出，Java 侧不知道新值，
-        // 而事件负载必须带上它（§87 的 admin_ban_* 指标要按版本下钻）。
+        // 而事件负载必须带上它（admin_ban_* 指标要按版本下钻）。
         AccountSecurityState state = stateMapper.selectById(accountId);
         if (state == null) {
             // 刚 upsert 过却读不到，说明事务或权限有问题，必须炸掉而不是静默继续。
@@ -127,7 +127,7 @@ public class AccountSecurityStateService {
     }
 
     /**
-     * 写安全事件（V9 §27 的事务性发件箱）。
+     * 写安全事件。
      *
      * <p>事件只负责"通知"，不负责"状态"：投递失败不会让封禁失效，
      * 因为 {@code account_security_state} 已经是 SOT，而每个实例还有

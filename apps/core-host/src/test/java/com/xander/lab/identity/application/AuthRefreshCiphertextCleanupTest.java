@@ -24,7 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 密文清空任务测试（V9 §43）。
+ * 密文清空任务测试。
  */
 @ExtendWith(MockitoExtension.class)
 class AuthRefreshCiphertextCleanupTest {
@@ -72,7 +72,7 @@ class AuthRefreshCiphertextCleanupTest {
     /**
      * 本任务不承担安全语义，所以"清理失败"必须是可容忍的。
      *
-     * <p>§43：安全语义依赖时间判断（{@code isCiphertextReadable}），不依赖本任务准点运行。
+     * <p>安全语义依赖时间判断（{@code isCiphertextReadable}），不依赖本任务准点运行。
      * 因此数据库抖动导致本轮失败时，正确行为是记日志并在下一轮重试，
      * <b>而不是</b>抛出去打断调度 —— 后者会让"密文永远清不掉"，也会让日志里
      * 出现一条看起来像安全故障的错误。</p>
@@ -110,8 +110,8 @@ class AuthRefreshCiphertextCleanupTest {
     /**
      * 同 {@code AuthRefreshHistoryCleanupTest}：注解占位符的默认值与配置类默认值必须一致。
      *
-     * <p>§43 的间隔是 30~60 秒，比历史清理敏感得多 —— 漂移成 5 分钟会让密文在库里
-     * 多留几分钟（虽然不影响安全语义，但会放大 §43 想避免的存储占用）。</p>
+     * <p>密文清理的间隔是 30~60 秒，比历史清理敏感得多 —— 漂移成 5 分钟会让密文在库里
+     * 多留几分钟（虽然不影响安全语义，但会放大它想避免的存储占用）。</p>
      */
     @Test
     void scheduledPlaceholderDefaultMatchesThePropertyDefault() throws NoSuchMethodException {

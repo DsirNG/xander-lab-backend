@@ -12,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
- * 保留策略批次循环测试（V9 §42 / §43）。
+ * 保留策略批次循环测试。
  *
  * <p>这里守的都是"跑得通但语义错了"的边界：批数上界、时间边界是否整轮一致、
  * 中断是否被吞掉、单批变慢是否退让。它们在生产里表现为"清理任务看起来正常，
@@ -62,7 +62,7 @@ class RetentionBatchLoopTest {
      *
      * <p>每批各取一次 {@code now()} 会让删除边界随时间前移：一轮跑得越久，
      * 越可能删到"刚刚才到期"的行 —— 效果就是"清理跑得越勤，实际保留窗口越短"，
-     * 而 §40 的 24 小时保留是安全语义（Reuse 判定窗口）。</p>
+     * 而 24 小时保留是安全语义（Reuse 判定窗口）。</p>
      */
     @Test
     void passesTheSameTimeBoundaryToEveryBatch() {
@@ -75,7 +75,7 @@ class RetentionBatchLoopTest {
         assertThat(seen).hasSize(3).containsOnly(NOW);
     }
 
-    /** 单批变慢即退让：这是 §42「数据库负载高时自动暂停」的落地形式。 */
+    /** 单批变慢即退让：这是「数据库负载高时自动暂停」的落地形式。 */
     @Test
     void backsOffWhenABatchIsSlowerThanTheThreshold() {
         properties.setCleanupSlowBatchMs(0);

@@ -25,7 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 实例启动 Bootstrap 测试（V11 §27.1 九步）。
+ * 实例启动 Bootstrap 测试。
  *
  * <p>这里用<b>真实</b>的 {@link SecurityStateCache} / {@link SecurityStateApplier} /
  * {@link SecurityPlaneReadiness}，只把 {@link AccountSecurityStateMapper} 换成桩：
@@ -36,7 +36,7 @@ import static org.mockito.Mockito.when;
  * <p>mapper 桩刻意按真实 SQL 的语义实现（{@code listDisabled} = 取
  * {@code disabled = 1}；{@code pullChangesAfter} = 取 {@code change_seq > cursor}
  * 升序截断），并且区分"快照看到的那一版表"与"重放看到的那一版表" ——
- * 这个区分正是 §27.1 要修的场景（快照期间发生的新封禁）。</p>
+ * 这个区分正是要覆盖的场景（快照期间发生的新封禁）。</p>
  */
 class SecurityStateBootstrapTest {
 
@@ -109,7 +109,7 @@ class SecurityStateBootstrapTest {
         bootstrap.run(arguments);
 
         assertThat(cache.isDisabled(ACCOUNT_C))
-                .as("快照之后提交的封禁必须被 replay 补上（V11 §27.1 第 5 步）")
+                .as("快照之后提交的封禁必须被 replay 补上")
                 .isTrue();
         assertThat(cache.versionOf(ACCOUNT_C)).hasValue(1L);
         assertThat(cache.lastSeenSeq()).isEqualTo(9L);
@@ -159,7 +159,7 @@ class SecurityStateBootstrapTest {
 
     @Test
     void theWatermarkIsDerivedFromTheSameReadAsTheSnapshot() {
-        // §27.1 要求 snapshot 与 watermark 取自同一一致性点。本实现的强制方式是
+        // snapshot 与 watermark 必须取自同一一致性点。本实现的强制方式是
         // "只有一条查询"：除 listDisabled 与按游标的增量拉取之外，不得再有别的取数查询，
         // 否则两次读之间的提交就会落进缝里。
         givenTable(row(ACCOUNT_A, true, 1L, 3L));
@@ -236,7 +236,7 @@ class SecurityStateBootstrapTest {
     @Test
     void aReplayWithAnOlderVersionCannotRegressTheCachedVersion() {
         // 写入方保证 security_version 单账号单调，所以"重放到更旧的版本"在真实 SQL 下
-        // 不可达。这条断言钉的是 §27.1 第 6 步的闸门本身：一旦将来写入路径改成
+        // 不可达。这条断言钉的是版本闸门本身：一旦将来写入路径改成
         // 读-改-写（而不是 SQL 侧 +1），它必须仍然拦得住。
         snapshotView = List.of(row(ACCOUNT_A, true, 5L, 3L));
         replayView = List.of(row(ACCOUNT_A, true, 3L, 9L));
@@ -264,7 +264,7 @@ class SecurityStateBootstrapTest {
         bootstrap.run(arguments);
 
         assertThat(readyDuringSnapshot)
-                .as("§27.1 第 1 步：读快照时实例必须还是 NOT_READY")
+                .as("读快照时实例必须还是 NOT_READY")
                 .containsExactly(false);
     }
 
@@ -303,7 +303,7 @@ class SecurityStateBootstrapTest {
         long now = System.currentTimeMillis();
         assertThat(cache.lastSuccessfulSyncAt()).as("markSynced 必须被调用").isPositive();
         assertThat(cache.ageMillis(now))
-                .as("未 markSynced 时 ageMillis 返回 Long.MAX_VALUE，§28.2 的 stale 判定会把刚启动的实例直接封锁")
+                .as("未 markSynced 时 ageMillis 返回 Long.MAX_VALUE，stale 判定会把刚启动的实例直接封锁")
                 .isLessThan(1_000L);
     }
 
@@ -317,7 +317,7 @@ class SecurityStateBootstrapTest {
 
         assertThatThrownBy(() -> bootstrap.run(arguments))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("§27.1")
+                .hasMessageContaining("不得进入负载均衡")
                 .hasMessageContaining("连接池耗尽");
 
         assertThat(readiness.isReady()).isFalse();

@@ -100,8 +100,8 @@ public class BlogContentPlanService implements ContentPlanPort {
     /**
      * 派生字段查询失败时的<b>固定日志标记</b>，同时是将来那条指标的名字。
      *
-     * <p>本仓<b>没有</b> Micrometer / Actuator（{@code core-host-lifecycle.md} 把指标列为
-     * Wave 2 的事），所以这条不变式今天只能由日志承载。标记取的就是指标名本身、逐字相同：
+     * <p>本仓<b>没有</b> Micrometer / Actuator（指标列为
+     * 后续工作），所以这条不变式今天只能由日志承载。标记取的就是指标名本身、逐字相同：
      * 将来接入 Micrometer 时是"加一个同名 Counter"，不是"再想一个名字"，
      * 基于日志的告警规则也不必改。</p>
      */
@@ -699,7 +699,7 @@ public class BlogContentPlanService implements ContentPlanPort {
      *
      * <p>⚠️ 捕 {@link RuntimeException} 而不是某个具体类型：端口契约说的是
      * "未授权返回 {@code false}、不抛"，但<b>查询机制本身</b>失败（库不可用、拆服务后
-     * 提供方不可达）抛什么类型取决于实现，而契约不许依赖框架类型（ADR-1）。
+     * 提供方不可达）抛什么类型取决于实现，而契约不许依赖框架类型。
      * 范围由"单语句 try"保证，<b>不由异常类型保证</b>。</p>
      *
      * <p>⚠️ 只打消息、<b>不打堆栈</b>：{@code list} / {@code listAll} 是逐行调 {@code toVO}，

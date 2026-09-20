@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
- * 新 Refresh 协议（V9 §23 / §29–§40）。
+ * 新 Refresh 协议。
  *
  * <p>目标模型：<b>短 Access JWT + MySQL Refresh Session + Refresh Rotation +
  * 幂等 Grace + 有界 Reuse Detection</b>。</p>
@@ -27,9 +27,9 @@ import java.util.Optional;
  * <h3>为什么不能沿用旧模型</h3>
  * <p>旧的 refresh 是纯无状态 JWT（{@code AuthService.refresh} 只验签名 +
  * {@code type} + 用户 status，不查任何存储），logout 只删 access 键，
- * 所以<b>登出后 30 天内仍可用 refresh token 换出全新令牌对</b>（V9 §22）。</p>
+ * 所以<b>登出后 30 天内仍可用 refresh token 换出全新令牌对</b>。</p>
  *
- * <h3>Reuse Detection 四分支（V9 §39，缺一不可）</h3>
+ * <h3>Reuse Detection 四分支（缺一不可）</h3>
  * <table>
  *   <tr><th>#</th><th>条件</th><th>判定</th><th>动作</th></tr>
  *   <tr><td>1</td><td>tokenId == current 且 hash 匹配</td><td>正常轮换</td>
@@ -45,7 +45,7 @@ import java.util.Optional;
  * <p>第 4 行是<b>安全设计，不是可选优化</b>：{@code sid} 位于明文前缀，
  * 知道 sid 不是假设。若按"校验失败即可疑"处理，攻击者构造
  * {@code rt_<已知sid>.<随机>.<随机>} 反复提交就能让该会话族被反复撤销、
- * 用户被反复强制登出（V9 §39.1）。</p>
+ * 用户被反复强制登出。</p>
  */
 @Slf4j
 @Service
@@ -83,7 +83,7 @@ public class RefreshTokenService {
             return outcome == Outcome.ROTATED || outcome == Outcome.REPLAYED;
         }
 
-        /** 客户端是否应当清除本地凭据并跳登录页（V9 §45）。 */
+        /** 客户端是否应当清除本地凭据并跳登录页。 */
         public boolean isUnrecoverable() {
             return outcome == Outcome.REUSE_DETECTED
                     || outcome == Outcome.ACCOUNT_DISABLED
@@ -150,7 +150,7 @@ public class RefreshTokenService {
      *
      * <p>一个登录 = 一个 sid = 一个 family。轮换原地修改这一行，
      * 所以 family 与 session 目前是 1:1；保留 {@code family_id} 是为了将来
-     * 「同设备重新登录继承同一族」这类分组语义（V9 §32）。</p>
+     * 「同设备重新登录继承同一族」这类分组语义。</p>
      */
     @Transactional
     public IssuedSession issue(Long accountId) {
@@ -210,7 +210,7 @@ public class RefreshTokenService {
                     "account missing");
         }
         if (user.getStatus() != null && user.getStatus() == 0) {
-            // V9 §45：403 ACCOUNT_DISABLED → 会话不可恢复 → forceLoggedOut
+            // 403 ACCOUNT_DISABLED → 会话不可恢复 → forceLoggedOut
             return new Rotation(Outcome.ACCOUNT_DISABLED, null, session.getSid(),
                     session.getAccountId(), "account disabled");
         }
@@ -278,7 +278,7 @@ public class RefreshTokenService {
         }
 
         // ---------- 超过 retention：仍无效，但不再报 theft ----------
-        // V9 §39.2：更老的 token 不触发 family theft alarm，避免把陈旧客户端
+        // 更老的 token 不触发 family theft alarm，避免把陈旧客户端
         // 的正常重试升级成安全事件。
         return new Rotation(Outcome.INVALID, null, session.getSid(),
                 session.getAccountId(), "beyond retention window");
@@ -300,13 +300,13 @@ public class RefreshTokenService {
         history.setUsedAt(now);
         history.setSuccessorTokenId(newTokenId);
         history.setGraceExpiresAt(graceExpiresAt);
-        // V9 §40.2：retained_until 必须在写 history 行时显式写入 now()+retention，
+        // retained_until 必须在写 history 行时显式写入 now()+retention，
         // 不得留空、不得依赖后续任务回填。
         history.setRetainedUntil(now.plusHours(properties.getRetentionHours()));
         if (cipher.isActive()) {
             history.setSuccessorTokenCiphertext(cipher.encrypt(newRawToken));
-            // V9 §38：密文在逻辑 grace 窗口内必须保持可恢复，所以窗口不短于 grace。
-            // 物理清空由 §43 任务在 grace 之后异步执行，两者解耦。
+            // 密文在逻辑 grace 窗口内必须保持可恢复，所以窗口不短于 grace。
+            // 物理清空由清理任务在 grace 之后异步执行，两者解耦。
             history.setSuccessorCiphertextExpiresAt(graceExpiresAt);
         }
         historyMapper.insert(history);
@@ -319,7 +319,7 @@ public class RefreshTokenService {
         update.setLastRotatedAt(now);
         sessionMapper.updateById(update);
 
-        // V9 §40.3：时间上界之外还要有每 sid 条数上界
+        // 时间上界之外还要有每 sid 条数上界
         historyMapper.pruneGenerationsBeyondBound(session.getSid(),
                 properties.getMaxGenerationsPerSid(), now);
 
@@ -332,13 +332,13 @@ public class RefreshTokenService {
     // -----------------------------------------------------------------------
 
     /**
-     * 普通 logout（V9 §47）。
+     * 普通 logout。
      *
      * <p>撤销当前 Refresh Session；客户端删掉本地 Access / Refresh。
      * 当前 Access 默认可存活到 exp，所以普通用户 logout 的最大 Access 窗口
      * 是 {@code <= accessTtl} —— 这是明确取舍，不是缺陷。</p>
      *
-     * <p>管理员封禁<b>不能</b>套用这个语义，必须走 deny cache + 长连接关闭（V9 §26 / §48）。</p>
+     * <p>管理员封禁<b>不能</b>套用这个语义，必须走 deny cache + 长连接关闭。</p>
      */
     @Transactional
     public boolean logout(String rawRefreshToken) {
@@ -359,17 +359,17 @@ public class RefreshTokenService {
     }
 
     /**
-     * 管理员封禁 / 改密时撤销该账号全部刷新会话（V9 §26 第 2 条）。
+     * 管理员封禁 / 改密时撤销该账号全部刷新会话。
      *
      * <p>相比旧的 {@code revokeSessions}（遍历无 TTL 的 Redis Set 逐个 delete），
-     * 这是一条按索引更新的语句 —— 旧实现的封禁延迟随时间单调恶化（V9 §56）。</p>
+     * 这是一条按索引更新的语句 —— 旧实现的封禁延迟随时间单调恶化。</p>
      */
     @Transactional
     public int revokeAllForAccount(Long accountId, String reason) {
         return sessionMapper.revokeByAccount(accountId, reason, now());
     }
 
-    /** 写一条 RefreshTokenReuse 安全事件（V9 §39 分支 3）。 */
+    /** 写一条 RefreshTokenReuse 安全事件。 */
     private void writeReuseSecurityEvent(AuthRefreshSession session, String tokenId,
                                          LocalDateTime now) {
         SecurityEventOutboxEntry entry = new SecurityEventOutboxEntry();

@@ -12,7 +12,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
- * 本地安全平面应用逻辑测试（V9 §27 / §28.2 / §48）。
+ * 本地安全平面应用逻辑测试。
  *
  * <p>这里用<b>真实</b>的 {@link SecurityStateCache} 与 {@link ConnectionRegistry}
  * 而不是 mock：本类的价值就在于"标记缓存"和"关闭连接"这两件事的<b>组合顺序与次数</b>，
@@ -31,7 +31,7 @@ class SecurityStateApplierTest {
     void setUp() {
         // 缓存用 spy 包一层：版本闸门在"同版本重放"这一档上<b>没有</b>可观测的
         // 状态差异（写入的是同一个版本号），只能靠"有没有调用写入方法"来钉住
-        // §27.1 第 6 步的 `incoming > cached` 判据。
+        // 版本闸门的 `incoming > cached` 判据。
         cache = spy(new SecurityStateCache());
         registry = new ConnectionRegistry();
         applier = new SecurityStateApplier(cache, registry);
@@ -81,7 +81,7 @@ class SecurityStateApplierTest {
         assertThat(second.newlyDisabled()).as("已是封禁态，不算一次新的翻转").isFalse();
         assertThat(second.closedConnections()).isZero();
         assertThat(handle.closeCount).as("重复投递不得重复断连").isZero();
-        // 版本号仍要更新到最新值，否则 §87 的按版本下钻会读到过期版本
+        // 版本号仍要更新到最新值，否则按版本下钻的指标会读到过期版本
         assertThat(cache.versionOf(ACCOUNT)).hasValue(2L);
     }
 
@@ -134,14 +134,14 @@ class SecurityStateApplierTest {
         handle.closeCount = 0;
         registry.register(handle);
 
-        // 一条迟到的重放，版本比缓存里旧（V11 §27.1 第 6 步：incoming <= cached 不应用）
+        // 一条迟到的重放，版本比缓存里旧（incoming <= cached 不应用）
         SecurityStateApplier.Outcome stale = applier.apply(ACCOUNT, true, 3L);
 
         assertThat(stale.newlyDisabled()).isFalse();
         assertThat(stale.closedConnections()).isZero();
         assertThat(handle.closeCount).isZero();
         assertThat(cache.versionOf(ACCOUNT))
-                .as("版本号被 §87 的指标用来按版本下钻，回退会让指标读到过期版本")
+                .as("版本号被指标用来按版本下钻，回退会让指标读到过期版本")
                 .hasValue(7L);
     }
 

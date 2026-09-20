@@ -16,7 +16,7 @@
 
     <dependencies>
         <!--
-            Shared kernel extracted in Wave 0B (V9 §19 / §20).
+            Shared kernel.
             Version is ${project.version} because the library is released in lockstep with the
             application; it is resolved from the reactor, so `mvn test` at the repo root builds
             it first and no `mvn install` step is needed.
@@ -26,14 +26,14 @@
             <artifactId>xander-model</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <!-- MyBatis / MyBatis-Plus support: MybatisPlusConfig + PageData (V9 §20). -->
+        <!-- MyBatis / MyBatis-Plus support: MybatisPlusConfig + PageData. -->
         <dependency>
             <groupId>com.xander</groupId>
             <artifactId>xander-mybatis-support</artifactId>
             <version>${project.version}</version>
         </dependency>
         <!--
-            Auth core: UserContext (trusted identity model) + JwtUtil (token verifier), V9 §20.
+            Auth core: UserContext (trusted identity model) + JwtUtil (token verifier).
             This is the lib the WebFlux Gateway will share with us, which is why it must stay
             free of MVC, WebFlux implementation and Redis.
         -->
@@ -55,7 +55,7 @@
 
         <!--
             Content-domain service-to-service contract: BlogPublisher / PublishCommand /
-            PublishResult / PublishingLimits (V9 §18 / §91). Both the content domain and the
+            PublishResult / PublishingLimits. Both the content domain and the
             integration domain reach for these types, so they cannot live in either one.
             Zero transitive dependencies by design; see contracts/content-api/pom.xml.
         -->
@@ -67,7 +67,7 @@
 
         <!--
             Object-storage service-to-service contract: OssPort / UploadResponse
-            (V9 §18 / §91). Four domains across four deployment units injected the concrete
+            Four domains across four deployment units injected the concrete
             integration.oss.OssService and read its result type, so the port and its data
             cannot live in the integration domain. Zero transitive dependencies by design;
             see contracts/integration-api/pom.xml.
@@ -80,7 +80,7 @@
 
         <!--
             Core-host service-to-service contract: ModelGateway + ModelEndpoint +
-            FeatureModelNotConfiguredException (V9 §18 / §91). The implementation
+            FeatureModelNotConfiguredException. The implementation
             (ModelGatewayService, reading model_provider / model_feature_config) stays in the
             admin domain, but the consumers sit in three future deployment units: dinqor-agent,
             dinqor-content-automation and dinqor-core-host. Zero transitive dependencies by
@@ -94,7 +94,7 @@
 
         <!--
             Payment / points service-to-service contract: BillingBiz, the biz_type catalogue
-            (V9 §18 / §91). Every charging call site has to name what it charges for, and those
+            Every charging call site has to name what it charges for, and those
             call sites sit in six domains across three future deployment units. The
             implementation (BillingService over three MyBatis mappers) stays in the billing
             domain and needs a port, not a move; see contracts/payment-api/pom.xml.
@@ -107,7 +107,7 @@
 
         <!--
             Remote-tool-supply service-to-service contract: RemoteToolCatalog / RemoteTool /
-            RemoteToolCall (V9 §18 / §91). The integration domain's MCP client implemented the
+            RemoteToolCall. The integration domain's MCP client implemented the
             agent domain's AgentTool / AgentDynamicToolSource and called AgentToolRegistry,
             which points the wrong way across the dinqor-platform-integration /
             dinqor-agent boundary. Note the package is com.xander.lab.agent.spi, not
@@ -122,7 +122,7 @@
 
         <!--
             Automation service-to-service contract: EmailReminderPort / ContentPlanPort and the
-            read models and write drafts they carry (V9 §18 / §91). Six agent tools injected
+            read models and write drafts they carry. Six agent tools injected
             automation's concrete @Service classes (EmailReminderService / BlogContentPlanService)
             straight from their application layer, crossing the dinqor-agent /
             dinqor-content-automation boundary. Note the package is
@@ -268,11 +268,11 @@
             <version>3.17.4</version>
         </dependency>
         <!--
-            ShedLock：多实例定时任务互斥（V9 §67 / §69）。
+            ShedLock：多实例定时任务互斥。
             后端刻意选 MySQL 而不是 Redis —— 定时任务本身不该依赖 Redis，
             否则 Redis 故障会连带停掉所有后台任务。
             默认关闭（shedlock.enabled），见 config/ShedLockConfiguration：
-            Wave 0A 是单实例，靠 DB 原子领取已能保证恰好一次；锁是扩到多实例时才需要的能力。
+            当前是单实例部署，靠 DB 原子领取已能保证恰好一次；锁是扩到多实例时才需要的能力。
         -->
         <dependency>
             <groupId>net.javacrumbs.shedlock</groupId>

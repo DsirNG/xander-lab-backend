@@ -12,7 +12,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 /**
- * successor refresh token 的静态加密（V9 §38 / §16）。
+ * successor refresh token 的静态加密。
  *
  * <p>轮换时把新 token 的密文写进 {@code auth_refresh_token_history}，这样 grace
  * 窗口内的第 2、第 3、第 N 次重放都能返回<b>同一个</b> successor，而不需要
@@ -75,7 +75,7 @@ public class SuccessorTokenCipher {
     /**
      * 解密。返回 {@code null} 表示不可恢复（密文缺失或已损坏）。
      *
-     * <p>调用方必须先自行判断时间窗口（V9 §38：{@code now > successorCiphertextExpiresAt}
+     * <p>调用方必须先自行判断时间窗口（{@code now > successorCiphertextExpiresAt}
      * 之后禁止解密/返回），本方法不做时间判断。</p>
      */
     public String decrypt(String ciphertext) {

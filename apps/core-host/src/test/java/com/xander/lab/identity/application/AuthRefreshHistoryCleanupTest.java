@@ -24,7 +24,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * 历史清理任务测试（V9 §42）。
+ * 历史清理任务测试。
  *
  * <p>清理任务的循环骨架由 {@link RetentionBatchLoop} 单独测；这里只测"这个任务
  * 接对了没有"以及两个注解约束。</p>
@@ -99,7 +99,7 @@ class AuthRefreshHistoryCleanupTest {
     }
 
     /**
-     * 注解守卫（V9 §68）：{@code global_once} 的落地形式就是"带 {@code @SchedulerLock}"。
+     * 注解守卫：{@code global_once} 的落地形式就是"带 {@code @SchedulerLock}"。
      * 删掉它除了多实例下重复删除之外没有任何症状，所以必须显式守。
      */
     @Test
@@ -110,7 +110,7 @@ class AuthRefreshHistoryCleanupTest {
                 .as("@Scheduled 缺失则任务不会运行")
                 .isNotNull();
         SchedulerLock lock = method.getAnnotation(SchedulerLock.class);
-        assertThat(lock).as("global_once 任务必须带 @SchedulerLock（V9 §68）").isNotNull();
+        assertThat(lock).as("global_once 任务必须带 @SchedulerLock").isNotNull();
         assertThat(lock.name())
                 .as("锁名必须等于 scheduled-ownership.yaml 里的 id")
                 .isEqualTo("auth-refresh-history-cleanup");
@@ -119,7 +119,7 @@ class AuthRefreshHistoryCleanupTest {
     /**
      * ⚠️ 调度方法本身<b>不得</b>是事务性的。
      *
-     * <p>§42 要求「每批独立事务」。把 {@code @Transactional} 写在循环外面是这里最容易犯、
+     * <p>必须「每批独立事务」。把 {@code @Transactional} 写在循环外面是这里最容易犯、
      * 后果最重的错：20 批 × 500 行会在一个事务里删 10,000 行，并且批间 sleep 期间
      * <b>一直持锁</b>（4~8 秒），于是并发的 refresh 写入撞上锁等待、undo log 与复制延迟
      * 一起膨胀。它没有任何功能性症状 —— 测试全绿、功能正常，只在生产高峰暴露。</p>

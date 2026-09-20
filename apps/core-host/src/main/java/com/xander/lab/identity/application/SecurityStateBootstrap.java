@@ -15,9 +15,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 实例启动 Bootstrap —— V11 §27.1 的落地（硬性要求）。
+ * 实例启动 Bootstrap（硬性要求）。
  *
- * <p>V11 §27.1 把启动切成九步，本类逐条实现：</p>
+ * <p>启动切成九步，本类逐条实现：</p>
  *
  * <pre>
  * 1. readiness = NOT_READY              {@link SecurityPlaneReadiness} 的初始态
@@ -34,8 +34,8 @@ import java.util.Map;
  * <h3>为什么本类必须存在</h3>
  * <p>没有它，实例启动后 {@link SecurityStateCache} 是<b>空的</b>：一个已被封禁的账号
  * 拿着一张仍然有效的 JWT 就能被放行，直到 {@link SecurityStateReconciler} 在 1.5 秒后
- * 第一次收敛。这 1.5 秒里封禁是失效的，而且失败得很安静 —— 这正是 V9-1 风险项
- * （"实例可能在加载封禁状态前接流量"）描述的场景，也是 §27.1 用"硬性"二字禁止的。</p>
+ * 第一次收敛。这 1.5 秒里封禁是失效的，而且失败得很安静 —— 这正是风险项
+ * （"实例可能在加载封禁状态前接流量"）描述的场景，也是必须禁止的。</p>
  *
  * <h3>⚠️ 第 9 步的强制力来自探针，不来自端口</h3>
  * <p>本类实现为 {@link ApplicationRunner}，它在 Spring 容器 refresh 完成之后运行；
@@ -55,7 +55,7 @@ import java.util.Map;
  * "起来但没就绪"实际上等于"起来就接流量"。等就绪探针接上之后，这条取舍可以再评估。</p>
  *
  * <h3>水位（E0）为什么从 snapshot 的行里取，而不是另发一条查询</h3>
- * <p>§27.1 要求 snapshot 与 watermark 取自<b>同一个一致性点</b>，否则副本延迟或两次
+ * <p>snapshot 与 watermark 必须取自<b>同一个一致性点</b>，否则副本延迟或两次
  * 读之间的新封禁会被永久漏掉。本类的做法是：<b>只发一条查询</b>
  * （{@code listDisabled()}），然后把 E0 取为这些行里最大的 {@code change_seq}。
  * 这样"同一一致性点"不是靠事务隔离级别来保证的，而是靠<b>构造</b>保证的 ——
@@ -78,18 +78,17 @@ import java.util.Map;
  * REPEATABLE READ 事务里</b>同时读 watermark 与 snapshot，而不是退回到两次独立读。</p>
  *
  * <h3>⚠️ 为什么 replay 的数据源是 account_security_state，而不是 security_event_outbox</h3>
- * <p>V11 修订说明声称新增了 §27.0 的 {@code security_event} 表作为"Bootstrap 与 reconcile
- * 的取数来源"，但 V11 正文里<b>没有</b>这一节，仓库里也没有这张表。现有的
+ * <p>设计文档声称有一张 {@code security_event} 表作为"Bootstrap 与 reconcile
+ * 的取数来源"，但正文里<b>没有</b>这一节，仓库里也没有这张表。现有的
  * {@code security_event_outbox} <b>不能</b>当 replay 源：它是投递机制而不是只追加的事件日志 ——
  * 行会被标成 {@code PUBLISHED}、会退避、会判 {@code DEAD}，而且它由
  * {@code global_once} 的单消费者领取。真正的 SOT 是 {@code account_security_state}
- * 本身（其 {@code change_seq} 就是全局单调变更序号），所以 §27.1 的 "eventId" 在本仓库里
+ * 本身（其 {@code change_seq} 就是全局单调变更序号），所以设计文档里的 "eventId" 在本仓库里
  * <b>映射为 {@code change_seq}</b>，replay 就是按 {@code change_seq} 的增量拉取。
- * 该映射与 §27.0 缺失一事已登记在
- * {@code docs/migration/admin-ban-security-plane.md} 的「已知缺口」表。</p>
+ * 该映射与那张表的缺失已登记在「已知缺口」表。</p>
  *
  * <h3>为什么 replay 不会把新状态覆盖回旧状态</h3>
- * <p>§27.1 第 6 步的版本闸门实现在 {@link SecurityStateApplier#apply}（两条路径唯一的
+ * <p>版本闸门实现在 {@link SecurityStateApplier#apply}（两条路径唯一的
  * 收口点），本类不重复实现。此外 replay 的查询本身是 {@code ORDER BY change_seq}，
  * 且由上面的提交顺序性质保证有序，所以"顺序乱了"这一前提在本仓库里也不会出现 ——
  * 版本闸门是纵深防御，而不是唯一防线。</p>
@@ -112,21 +111,21 @@ public class SecurityStateBootstrap implements ApplicationRunner {
             BootstrapResult result = loadSnapshotAndReplay();
             long now = System.currentTimeMillis();
             // markSynced 不是可选项：ageMillis() 在 lastSuccessfulSyncAt == 0 时返回
-            // Long.MAX_VALUE，§28.2 的"stale 即 fail-closed"会把刚启动的实例直接判成
+            // Long.MAX_VALUE，"stale 即 fail-closed"会把刚启动的实例直接判成
             // 陈旧并拒绝一切请求 —— 一个启动即自我封锁的失败。
             securityStateCache.markSynced(now);
             readiness.markReady(now);
-            log.info("[Security] 安全平面 Bootstrap 完成（V11 §27.1）：封禁账号={} 快照水位={} "
+            log.info("[Security] 安全平面 Bootstrap 完成：封禁账号={} 快照水位={} "
                             + "replay={} 条 游标={} 耗时={} ms",
                     securityStateCache.size(), result.watermark(), result.replayed(),
                     securityStateCache.lastSeenSeq(), now - startedAt);
         } catch (RuntimeException ex) {
             String reason = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             readiness.markFailed(reason);
-            log.error("[Security] 安全平面 Bootstrap 失败（V11 §27.1），拒绝以 NOT_READY 状态提供服务: {}",
+            log.error("[Security] 安全平面 Bootstrap 失败，拒绝以 NOT_READY 状态提供服务: {}",
                     reason, ex);
             throw new IllegalStateException(
-                    "安全平面 Bootstrap 失败，本实例不得进入负载均衡（V11 §27.1）: " + reason, ex);
+                    "安全平面 Bootstrap 失败，本实例不得进入负载均衡: " + reason, ex);
         }
     }
 
@@ -176,7 +175,7 @@ public class SecurityStateBootstrap implements ApplicationRunner {
      * {@code change_seq} 能把游标往前推，循环就永远前进不了。这在当前 DDL 下不可能
      * （{@code change_seq BIGINT NOT NULL}），但它是一个"不会报错、只会挂死启动"的
      * 失败模式，所以这里显式抛异常：拉取契约被破坏时，无法证明缓存是完整的，
-     * 按 §27.1 就不能提供服务。</p>
+     * 就不能提供服务。</p>
      *
      * @param watermark 快照水位，即 replay 的下界
      * @return 实际应用的行数

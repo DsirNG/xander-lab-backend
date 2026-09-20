@@ -38,7 +38,7 @@ import java.util.function.Consumer;
 /**
  * 博客生成助手的 REST + SSE 门面。
  *
- * <p><b>封禁（V9 §50 / §51）</b>：三条 SSE 端点都用 {@code new SseEmitter(0L)} 永不超时，
+ * <p><b>封禁</b>：三条 SSE 端点都用 {@code new SseEmitter(0L)} 永不超时，
  * 建连之后不再做任何账号状态校验。所以每条连接都登记进 {@link ConnectionRegistry}
  * （手段 A：reconciler 主动断开），且 {@link #emit} 在每一帧出站前（含心跳）做
  * O(1) 校验（手段 B：兜底）。</p>
@@ -56,9 +56,9 @@ public class BlogAgentController {
     private final TaskExecutor blogAgentTaskExecutor;
     private final TaskExecutor blogAgentSseExecutor;
     private final TaskScheduler blogAgentHeartbeatScheduler;
-    /** 本实例的已封禁账号集合：每次发送前 O(1) 校验（V9 §50 手段 B）。 */
+    /** 本实例的已封禁账号集合：每次发送前 O(1) 校验。 */
     private final SecurityStateCache securityStateCache;
-    /** 本实例的活跃连接注册表：封禁时主动断开已建立的流（V9 §49 手段 A）。 */
+    /** 本实例的活跃连接注册表：封禁时主动断开已建立的流。 */
     private final ConnectionRegistry connectionRegistry;
 
     public BlogAgentController(BlogAgentService service,
@@ -293,7 +293,7 @@ public class BlogAgentController {
     }
 
     /**
-     * 统一推送出口（V9 §50 手段 B）：任何一帧出站前都校验封禁状态。
+     * 统一推送出口：任何一帧出站前都校验封禁状态。
      *
      * <p>心跳也走这里 —— 长工具调用期间可能长时间无业务事件，若只在业务事件上校验，
      * 被封禁的标签页会一直保持"生成中"，直到用户主动刷新。</p>
@@ -375,8 +375,8 @@ public class BlogAgentController {
 
     private void sendHeartbeat(SseSubscriber subscriber) {
         if (!subscriber.isOpen()) return;
-        // 心跳同样触发封禁校验：这样即使业务长时间无事件，也能在 SLO 内断开
-        // （V9 §50「Heartbeat 也应触发检查」）。§28.4 提醒：心跳只是兜底，
+        // 心跳同样触发封禁校验：这样即使业务长时间无事件，也能在 SLO 内断开。
+        // 心跳只是兜底，
         // 主要手段是 reconciler 的主动断开。
         if (securityStateCache.isDisabled(subscriber.userId)) {
             log.info("[Security] 账号已封禁，心跳终止 SSE account={} task={}",
@@ -422,7 +422,7 @@ public class BlogAgentController {
     }
 
     /**
-     * 一条 blog-agent SSE 订阅的连接句柄（V9 §49 / §50）。
+     * 一条 blog-agent SSE 订阅的连接句柄。
      *
      * <p>把「任务、账号、emitter、开闭标志、心跳任务」打成一个对象：既让发送出口
      * 一次拿到全部上下文，也让封禁时能从注册表反查到需要关闭的连接。
@@ -454,7 +454,7 @@ public class BlogAgentController {
             return ConnectionRegistry.KIND_SSE;
         }
 
-        /** 封禁路径入口（V9 §50 手段 A）：以 403 结束该条流，而不是静默丢弃事件。 */
+        /** 封禁路径入口：以 403 结束该条流，而不是静默丢弃事件。 */
         @Override
         public void close(String reason) {
             if (!subscriberOpen.getAndSet(false)) return;

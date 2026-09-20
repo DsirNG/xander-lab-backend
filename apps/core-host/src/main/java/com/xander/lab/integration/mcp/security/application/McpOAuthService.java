@@ -307,7 +307,7 @@ public class McpOAuthService {
     /**
      * 把 {@code Authorization: Bearer <DinQorAI 访问令牌>} 换成用户 id。
      *
-     * <p>这里曾经自己做两步：{@code authService.validateAccessToken(token)} 判有效性，
+     * <p>若这里自己做两步：{@code authService.validateAccessToken(token)} 判有效性，
      * 再 {@code Long.parseLong(jwtUtil.getSubject(token))} 解析主体。那两步合起来
      * <b>就是</b> {@code AccessTokenLookupPort.resolveUserId} —— 也就是说这个消费方
      * 复制了一份身份解析，还得知道「用户 id 是数字形式的主体」这条实现细节，

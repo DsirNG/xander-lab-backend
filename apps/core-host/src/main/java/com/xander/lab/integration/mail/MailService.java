@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
  *
  * <p>⚠️ 这里<b>只做投递</b>，不做渲染。提醒邮件的模板、显示时区格式化与 PLAIN/HTML 归一化
  * 全部在调用方一侧（{@code automation.domain.EmailReminderMailRenderer}）。
- * 改造前它们住在这个类里，于是本类必须 import
+ * 它们若住在这个类里，本类就必须 import
  * {@code automation.domain.EmailReminderMailTemplates}（业务域类型）、
  * 并读 {@code email-reminder.display-zone}（配置台账里 owner 记在 content-automation 名下的键）
  * ——提供方反过来依赖消费方，而且读的是别人的配置。</p>
@@ -76,7 +76,7 @@ public class MailService implements MailPort {
      * HTML 正文 + 纯文本兜底的多段投递。
      *
      * <p>⚠️ 这里<b>不认识模板、也不认识时区</b>——{@code plainText} 与 {@code html}
-     * 都是调用方渲染好的成品。改造前这个位置是
+     * 都是调用方渲染好的成品。若这个位置收的是
      * {@code sendReminderMail(..., scheduledAt, contentType, templateId)}，
      * 六个参数里四个只服务于渲染，而渲染需要业务域的模板类与别人家的配置键。</p>
      */

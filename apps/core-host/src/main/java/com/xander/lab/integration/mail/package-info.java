@@ -3,7 +3,7 @@
  *
  * <p>⚠️ 本包<b>只做投递</b>。提醒邮件（定时提醒）的模板与渲染<b>不在这里</b>——
  * 它们在 {@code automation.domain}（{@code EmailReminderMailTemplates} /
- * {@code EmailReminderMailRenderer}）。改造前 {@code MailService} 自己渲染提醒邮件，
+ * {@code EmailReminderMailRenderer}）。若 {@code MailService} 自己渲染提醒邮件，
  * 于是它必须 import 业务域的模板类、并读 {@code email-reminder.display-zone}
  * （配置台账里 owner 记在 content-automation 名下的键），
  * 让 {@code integration → automation} 成了一条反向边。</p>

@@ -26,13 +26,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * in-memory registry below. The blog_notification table remains the durable
  * fallback for offline users, so this stream is loss-tolerant by design.
  *
- * <p><b>封禁（V9 §50 / §51）</b>：本流用 {@code new SseEmitter(0L)} 永不超时，
+ * <p><b>封禁</b>：本流用 {@code new SseEmitter(0L)} 永不超时，
  * 建连之后不再有任何账号状态校验。所以这里同样实现两条手段：
  * 手段 A 是把每条连接登记进 {@link ConnectionRegistry}，由每实例的 reconciler 主动关闭；
  * 手段 B 是 {@link #emit} 在每一帧出站前（含心跳）做 O(1) 校验。
  * 命中时以 403 结束该条连接，而不是静默丢弃事件 —— 静默丢弃会让前端一直显示"在线"。</p>
  *
- * <p><b>跨域面（第二十刀）</b>：本类只对外暴露<b>一个</b>契约方法
+ * <p><b>跨域面</b>：本类只对外暴露<b>一个</b>契约方法
  * {@link #broadcast}（{@link NotificationBroadcastPort}）。{@link #subscribe} 返回
  * {@code SseEmitter}（框架类型），{@link #push} 收 {@code planId} / {@code runId}
  * （blog-plan 域的概念），连接注册表与封禁校验都是实现细节 —— 它们全部留在本类里。
@@ -44,9 +44,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class BlogPlanSseService implements NotificationBroadcastPort {
 
     private final ObjectMapper objectMapper;
-    /** 本实例的已封禁账号集合（V9 §48）。 */
+    /** 本实例的已封禁账号集合。 */
     private final SecurityStateCache securityStateCache;
-    /** 本实例的活跃连接注册表（V9 §49）。 */
+    /** 本实例的活跃连接注册表。 */
     private final ConnectionRegistry connectionRegistry;
     private final Map<Long, List<NotificationConnection>> subscribers = new ConcurrentHashMap<>();
     private final ScheduledExecutorService heartbeat =
@@ -137,7 +137,7 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
      *
      * <p>{@inheritDoc}</p>
      *
-     * <p>⚠️ 这里<b>不再收</b> {@code planId} / {@code runId}（第二十刀）。它们是 blog-plan 域
+     * <p>⚠️ 这里<b>不再收</b> {@code planId} / {@code runId}。它们是 blog-plan 域
      * 的概念，而唯一调用方 {@code admin} 的诊断端点永远传 {@code null} —— 一个要求调用方
      * 每次都撒谎的参数不该出现在契约上。收窄可证是行为保持的：转发给 {@link #push} 的两个值
      * 由"调用方传 null"变成"这里写死 null"，而 {@code push} 本来就把 null 序列化成空串，
@@ -156,7 +156,7 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
     }
 
     /**
-     * 统一推送出口（V9 §50 手段 B）：任何一帧出站前都校验封禁状态。
+     * 统一推送出口：任何一帧出站前都校验封禁状态。
      *
      * <p>心跳也走这里 —— 通知流可能长时间没有业务事件，如果只在业务事件上校验，
      * 被封禁的标签页会一直保持"已连接"，直到用户主动刷新。</p>
@@ -211,7 +211,7 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
     }
 
     /**
-     * 一条通知流的连接句柄（V9 §49 / §50）。
+     * 一条通知流的连接句柄。
      *
      * <p>{@link #close(String)} 是封禁路径入口，由 reconciler 通过
      * {@code connectionRegistry.closeAll(accountId, reason)} 触发。用

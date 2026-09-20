@@ -18,9 +18,9 @@ import org.springframework.web.server.ResponseStatusException;
 /** Reads and acknowledges user notifications for the Navbar bell. Notifications
  * are written by background plan runs (see BlogPlanRunService).
  *
- * <p>实现 {@link NotificationPort}（Wave 0B 第十刀）：这是 {@code knowledgebase} 发
+ * <p>实现 {@link NotificationPort}：这是 {@code knowledgebase} 发
  * 「大部头未自动出结构图」通知的唯一入口。端口方法 {@link #notifyResource} 与本类原有的
- * 方法<b>逐字同形</b>，所以这一刀在提供方只是加了一个 {@code implements} 与一个
+ * 方法<b>逐字同形</b>，所以提供方只是加了一个 {@code implements} 与一个
  * {@code @Override} —— 可证明是纯重构。读侧四个方法（{@code list} / {@code unreadCount} /
  * {@code markRead} / {@code markAllRead}）服务的是前端 Navbar 铃铛，不跨域，<b>刻意不进端口</b>。</p> */
 @Service

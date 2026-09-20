@@ -44,7 +44,7 @@ public class AgentToolInvocationReconciler {
     /**
      * Periodically settles only effects that can be proven through an owning service lookup.
      *
-     * <p>{@code execution_scope = global_once}（V9 §68）：操作的是 DB 行，
+     * <p>{@code execution_scope = global_once}：操作的是 DB 行，
      * 多实例下必须互斥。锁名与 {@code docs/scheduled-ownership.yaml} 的 id 一致。</p>
      */
     @Scheduled(fixedDelayString = "${agent-harness.reconciliation-delay-ms:60000}")

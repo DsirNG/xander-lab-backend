@@ -27,8 +27,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>可见性：平台级配置（owner 0）人人可用，用户自己配的只对自己可见。
  * 这条规则在这里生效，是「甲的服务器不该出现在乙的工具面里」的唯一实现点。</p>
  *
- * <p>本类实现 {@link RemoteToolCatalog}，即 agent 拥有的契约（ADR-2：跨域走消费方拥有的
- * 契约）。在此之前它实现的是 {@code agent.application.AgentDynamicToolSource}、
+ * <p>本类实现 {@link RemoteToolCatalog}，即 agent 拥有的契约（跨域走消费方拥有的
+ * 契约）。若实现的是 {@code agent.application.AgentDynamicToolSource}、
  * 产出的是 {@code agent.application.AgentTool}——那是 integration 域在实现 agent 域的
  * 实现类，跨了 {@code dinqor-platform-integration} / {@code dinqor-agent} 这条部署单元边界，
  * 方向也是反的。现在它只认契约，把契约翻成 agent 自己的工具类型这件事由 agent 侧的

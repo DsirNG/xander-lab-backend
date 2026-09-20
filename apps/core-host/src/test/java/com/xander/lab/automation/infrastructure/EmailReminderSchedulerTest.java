@@ -130,9 +130,9 @@ class EmailReminderSchedulerTest {
     /**
      * HTML 路径：{@code templateId} 选中一个版式 ⇒ 渲染成 HTML，走 {@code sendHtmlMail}。
      *
-     * <p>⚠️ 这条用例是本刀之后<b>唯一</b>能证明"渲染发生在 automation 侧、而端口只收成品"的
-     * 地方 —— 断言的是"两个正文都非空"，而不是"某个模板被调用了"。改造前这里断言的是
-     * {@code sendReminderMail(..., NOW, null, "classic")}，即把渲染参数原样交给了邮件服务。</p>
+     * <p>⚠️ 这条用例是<b>唯一</b>能证明"渲染发生在 automation 侧、而端口只收成品"的
+     * 地方 —— 断言的是"两个正文都非空"，而不是"某个模板被调用了"。若断言的是
+     * {@code sendReminderMail(..., NOW, null, "classic")}，那就是把渲染参数原样交给了邮件服务。</p>
      */
     @Test
     void htmlTemplateIsRenderedHereAndThePortReceivesFinishedBodies() {

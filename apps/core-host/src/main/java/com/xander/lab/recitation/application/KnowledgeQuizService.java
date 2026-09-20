@@ -42,9 +42,9 @@ import java.util.List;
  * 逐题判分必须逐题给出证据，虚高的代价就大得多。</p>
  *
  * <p>本类实现跨域契约 {@link RecitationQuizPort}（{@code recitation.spi}）。
- * {@code openQuiz} 与 {@code recordQuiz} 就是端口方法本身 —— 它们的返回类型原来有一对
+ * {@code openQuiz} 与 {@code recordQuiz} 就是端口方法本身 —— 它们的返回类型有一对
  * 域内 record（{@code QuizSession} / {@code QuizOutcome}），但**没有同域调用方**：
- * 唯一的调用者是 agent 的两个工具和服务自己的测试，所以按 ADR §7.5 直接换返回类型，
+ * 唯一的调用者是 agent 的两个工具和服务自己的测试，所以直接换返回类型，
  * 不保留带 {@code ForView} 后缀的富方法（那个后缀是用来说明受众的，而这里受众是空的）。</p>
  */
 @Service

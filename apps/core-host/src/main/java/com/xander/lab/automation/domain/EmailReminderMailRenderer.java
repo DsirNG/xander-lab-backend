@@ -8,7 +8,7 @@ import java.time.format.DateTimeFormatter;
  * 把一条提醒任务渲染成"要投递的内容"。
  *
  * <h2>为什么渲染在 automation，而不是在邮件服务里</h2>
- * <p>改造前这段逻辑住在 {@code integration.mail.MailService.sendReminderMail(...)}，
+ * <p>这段逻辑若住在 {@code integration.mail.MailService.sendReminderMail(...)}，
  * 于是那个类必须 import 本域的 {@link EmailReminderMailTemplates}、并读
  * {@code email-reminder.display-zone}（配置台账里 owner 记在 {@code content-automation}
  * 名下的键）。结果是<b>提供方反过来依赖消费方</b>，而且读的是别人家的配置。</p>
@@ -71,7 +71,7 @@ public final class EmailReminderMailRenderer {
 
         // ⚠️ 为什么这里收的是 String 而不是 ZoneId：解析必须留在 HTML 分支**里面**。
         // 纯文本提醒根本不需要时区，`email-reminder.display-zone` 配错时不该连带把纯文本
-        // 提醒也打死。改造前 ZoneId.of 就在这个位置（HTML 分支内），逐字保留。
+        // 提醒也打死。ZoneId.of 必须留在这个位置（HTML 分支内）。
         ZoneId displayZone = ZoneId.of(displayZoneId);
         String formattedTime = TIME_FORMAT.withZone(displayZone).format(scheduledAt);
         String bodyHtml = EmailReminderMailTemplates.resolveBodyHtml(message, normalizedType);
@@ -83,7 +83,7 @@ public final class EmailReminderMailRenderer {
                 displayZone.getId()
         );
         // ⚠️ 选了 "none"（不要版式）时，纯文本兜底里不带时间与时区 ——
-        // 与改造前逐字一致：那两行本来就是"版式模板才会渲染的页脚"。
+        // 那两行本来就是"版式模板才会渲染的页脚"。
         boolean wrapped = !EmailReminderMailTemplates.TEMPLATE_NONE.equals(normalizedTemplate);
         String plainText = EmailReminderMailTemplates.resolvePlainText(
                 message,

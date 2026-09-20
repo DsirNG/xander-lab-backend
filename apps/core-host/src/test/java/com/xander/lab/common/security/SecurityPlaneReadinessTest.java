@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 安全平面就绪标记测试（V11 §27.1 第 1 / 8 步）。
+ * 安全平面就绪标记测试。
  */
 class SecurityPlaneReadinessTest {
 
@@ -13,7 +13,7 @@ class SecurityPlaneReadinessTest {
     void startsNotReady() {
         SecurityPlaneReadiness readiness = new SecurityPlaneReadiness();
 
-        assertThat(readiness.isReady()).as("§27.1 第 1 步：readiness 必须是 NOT_READY 起步").isFalse();
+        assertThat(readiness.isReady()).as("readiness 必须是 NOT_READY 起步").isFalse();
         assertThat(readiness.state()).isEqualTo(SecurityPlaneReadiness.STATE_NOT_READY);
         assertThat(readiness.readyAtMillis()).isZero();
         assertThat(readiness.failureReason()).isNull();

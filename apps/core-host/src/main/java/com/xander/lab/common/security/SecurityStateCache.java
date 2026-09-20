@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
- * 每实例的本地安全状态缓存（V9 §48 / §69 / §70）。
+ * 每实例的本地安全状态缓存。
  *
  * <p>被封禁账号集合通常很小，所以这里就是一个本地 Set 查询，成本近似 O(1)。
  * <b>不做远程 Auth Service 调用</b> —— 那样会让每个请求的可用性绑在 identity 上。</p>
@@ -18,12 +18,12 @@ import java.util.function.Consumer;
  * {@code SecurityStateReconciler}（{@code execution_scope = per_instance}）。</p>
  *
  * <h3>为什么每个实例各持一份，而不是共享一份</h3>
- * <p>V9 §69：{@code per_instance} 任务<b>不得</b>使用全局 ShedLock。加锁会让 N-1 个
+ * <p>{@code per_instance} 任务<b>不得</b>使用全局 ShedLock。加锁会让 N-1 个
  * 实例的本地缓存永不刷新，而验收指标（"不重复执行"）<b>仍然通过</b> ——
  * 这是一个不会失败的失败。</p>
  *
  * <h3>游标为什么在实例内部</h3>
- * <p>V9 §27：每个实例维护独立 cursor。用全局单例游标时，先到的实例会把游标推高，
+ * <p>每个实例维护独立 cursor。用全局单例游标时，先到的实例会把游标推高，
  * 其他实例就永久漏掉那段区间。</p>
  */
 public class SecurityStateCache {
@@ -34,7 +34,7 @@ public class SecurityStateCache {
     /** 本实例自己的增量游标；只被本实例的 reconciler 推进。 */
     private final AtomicLong lastSeenSeq = new AtomicLong(0L);
 
-    /** 上次成功 reconcile 的时间戳（毫秒），供 §87 `securityStateAge` 使用。 */
+    /** 上次成功 reconcile 的时间戳（毫秒），供 `securityStateAge` 指标使用。 */
     private final AtomicLong lastSuccessfulSyncAt = new AtomicLong(0L);
 
     /** 命中缓存而拒绝的请求数，供观测使用。 */
@@ -82,7 +82,7 @@ public class SecurityStateCache {
         disabledAccounts.putAll(disabled);
     }
 
-    /** 当前本地记录的封禁账号数，供 §87 `service_security_cache_size` 使用。 */
+    /** 当前本地记录的封禁账号数，供 `service_security_cache_size` 指标使用。 */
     public int size() {
         return disabledAccounts.size();
     }
@@ -107,7 +107,7 @@ public class SecurityStateCache {
     /**
      * 缓存年龄（毫秒）。{@code Long.MAX_VALUE} 表示从未成功同步过。
      *
-     * <p>V9 §87 要求 {@code securityStateAge} / {@code lastSuccessfulSecuritySyncAt}
+     * <p>{@code securityStateAge} / {@code lastSuccessfulSecuritySyncAt} 必须
      * 可观测 —— 否则任何基于"stale 即拒绝"的 fail-closed 语义都不可测。</p>
      */
     public long ageMillis(long nowEpochMillis) {
@@ -127,7 +127,7 @@ public class SecurityStateCache {
     /**
      * 对一个账号集合逐个执行动作，用于"封禁后关闭已建立的长连接"。
      *
-     * <p>V9 §49：不需要中心化全局连接表 —— 连接句柄不可跨进程迁移，
+     * <p>不需要中心化全局连接表 —— 连接句柄不可跨进程迁移，
      * 中心表只会引入新的单点与一致性成本。</p>
      */
     public void forEachDisabled(Consumer<Long> action) {

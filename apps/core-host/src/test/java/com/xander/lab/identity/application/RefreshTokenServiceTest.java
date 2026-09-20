@@ -35,7 +35,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * V9 §39 Reuse Detection 四分支 + §37 / §38 / §40 的回归测试。
+ * Reuse Detection 四分支与保留窗口的回归测试。
  *
  * <p>这些用例是"能力守恒"的机器保障：任何一个分支被后续改动悄悄删掉，
  * 都会在这里失败，而不是等到线上出现"随机垃圾 token 把用户踢下线"。</p>
@@ -155,12 +155,12 @@ class RefreshTokenServiceTest {
         assertThat(updated.getValue().getCurrentTokenId())
                 .isEqualTo(history.getValue().getSuccessorTokenId());
 
-        // §40.3 条数上界每次轮换都要执行
+        // 条数上界每次轮换都要执行
         verify(historyMapper).pruneGenerationsBeyondBound(eq(sid), eq(48), any());
     }
 
     @Test
-    @DisplayName("§40.2：retained_until 必须在写 history 行时显式写入 now()+24h")
+    @DisplayName("retained_until 必须在写 history 行时显式写入 now()+24h")
     void retainedUntilIsWrittenExplicitly() {
         String sid = "sid-retention";
         givenActiveUser();
@@ -177,7 +177,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("§38：密文窗口不得短于 grace，否则第 N 次重放取不回同一个 successor")
+    @DisplayName("密文窗口不得短于 grace，否则第 N 次重放取不回同一个 successor")
     void ciphertextWindowIsNotShorterThanGrace() {
         String sid = "sid-cipher";
         givenActiveUser();
@@ -220,7 +220,7 @@ class RefreshTokenServiceTest {
         RefreshTokenService.Rotation third =
                 service.rotate(RefreshTokenFormat.format(sid, consumedId, "secret-consumed"));
 
-        // 第 2、第 3、第 N 次语义完全相同（V9 §37）
+        // 第 2、第 3、第 N 次语义完全相同
         assertThat(first.outcome()).isEqualTo(RefreshTokenService.Outcome.REPLAYED);
         assertThat(second.outcome()).isEqualTo(RefreshTokenService.Outcome.REPLAYED);
         assertThat(third.outcome()).isEqualTo(RefreshTokenService.Outcome.REPLAYED);
@@ -263,7 +263,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("§39.2：超出 retention 的老 token 仍然无效，但不再触发 family theft alarm")
+    @DisplayName("超出 retention 的老 token 仍然无效，但不再触发 family theft alarm")
     void doesNotAlarmBeyondRetention() {
         String sid = "sid-old";
         String consumedId = "token-ancient";
@@ -361,7 +361,7 @@ class RefreshTokenServiceTest {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("§45：账号被封禁 → ACCOUNT_DISABLED（客户端必须 forceLoggedOut）")
+    @DisplayName("账号被封禁 → ACCOUNT_DISABLED（客户端必须 forceLoggedOut）")
     void reportsAccountDisabled() {
         String sid = "sid-banned";
         User banned = new User();
@@ -379,7 +379,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("§47：logout 撤销当前 Refresh Session")
+    @DisplayName("logout 撤销当前 Refresh Session")
     void logoutRevokesCurrentSession() {
         when(sessionMapper.revokeSession(eq("sid-logout"), eq(AuthRefreshSession.REASON_LOGOUT), any()))
                 .thenReturn(1);
@@ -390,7 +390,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("§26：管理员封禁撤销该账号全部刷新会话，一条语句完成")
+    @DisplayName("管理员封禁撤销该账号全部刷新会话，一条语句完成")
     void revokeAllForAccountIsSingleStatement() {
         when(sessionMapper.revokeByAccount(anyLong(), anyString(), any())).thenReturn(3);
 
@@ -401,7 +401,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("§32：新建会话生成独立的 sid / family / token，且 generation 从 0 起")
+    @DisplayName("新建会话生成独立的 sid / family / token，且 generation 从 0 起")
     void issuesNewSession() {
         RefreshTokenService.IssuedSession issued = service.issue(ACCOUNT_ID);
 
@@ -433,10 +433,10 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("§35：grace 必须覆盖 refresh timeout(15s) + 1 次退避重试 + 余量")
+    @DisplayName("grace 必须覆盖 refresh timeout(15s) + 1 次退避重试 + 余量")
     void graceCoversFrontendTimeout() {
         // ⚠️ 这里的 15 是前端 src/api/http.js 的 REFRESH_TIMEOUT，属于 Contract
-        // （docs/contract-changes.yaml → refresh-grace-window.frontend_refresh_timeout_ms）。
+        // （契约项 refresh-grace-window.frontend_refresh_timeout_ms）。
         //
         // 注意它**不是** VITE_REQUEST_TIMEOUT：后者开发 15000、生产 30000，
         // 而 refresh 请求刻意与全局超时解耦（否则生产会 grace(25s) < timeout(30s)，
@@ -450,7 +450,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("§40.4：30 分钟 Access 下 history 容量上界为 480,000 行")
+    @DisplayName("30 分钟 Access 下 history 容量上界为 480,000 行")
     void historyCapacityBound() {
         long activeUsers = 10_000;
         long rotationsPerDay = 24 * 60 / (properties.getAccessTtlSeconds() / 60);

@@ -34,7 +34,7 @@ public class AgentWebSocketConfig implements WebSocketConfigurer {
     private final TaskExecutor agentSseExecutor;
     private final TaskScheduler agentHeartbeatScheduler;
     private final AgentConversationMapper conversationMapper;
-    /** §52 判定：/ws/agent 的宿主必须维护 Security Local Cache 与连接注册表。 */
+    /** /ws/agent 的宿主必须维护 Security Local Cache 与连接注册表。 */
     private final SecurityStateCache securityStateCache;
     private final ConnectionRegistry connectionRegistry;
 

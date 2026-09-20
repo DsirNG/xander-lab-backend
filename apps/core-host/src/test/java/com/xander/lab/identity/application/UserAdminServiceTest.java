@@ -198,7 +198,7 @@ class UserAdminServiceTest {
         verify(redisTemplate).delete(anyString());
     }
 
-    // ===================== 新安全平面写入（V9 §26 / §27 / §48） =====================
+    // ===================== 新安全平面写入 =====================
 
     @Test
     void banWritesSecurityStateSotAndKeepsLegacyRedisRevoke() {
@@ -213,7 +213,7 @@ class UserAdminServiceTest {
 
         // SOT 写入：disabled=true，reason 里必须带上操作人（审计要能回答"谁封的"）。
         verify(accountSecurityStateService).applyState(7L, true, "admin-ban operator=1");
-        // 能力守恒（§2.3）：Wave 2 之前遗留 Redis 撤销必须仍然执行。
+        // 能力守恒：切换之前遗留 Redis 撤销必须仍然执行。
         verify(redisTemplate).delete(Constants.REDIS_TOKEN_PREFIX + "token-a");
     }
 

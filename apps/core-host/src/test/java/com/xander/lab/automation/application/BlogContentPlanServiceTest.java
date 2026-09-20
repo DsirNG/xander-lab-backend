@@ -262,7 +262,7 @@ class BlogContentPlanServiceTest {
     }
 
     /**
-     * generateTopics 必须【没有】事务注解（V9 §75 跨域事务边界）。
+     * generateTopics 必须【没有】事务注解。
      *
      * <p>它调用的 {@code agentService.generateTopicSeries} 会做外部模型 HTTP 调用
      * 并调用 {@code billingPort.chargeTokens} 写库。加了 {@code @Transactional}
@@ -307,7 +307,7 @@ class BlogContentPlanServiceTest {
      *
      * <p>钉住它的唯一办法是让两个桩取<b>不同</b>的值。两个都返回 {@code true}
      * （或都 {@code false}）的用例，把接收者对调之后<b>照样全绿</b> ——
-     * 这正是"注入验证发现不了判据强度不够"那一族：能证明已写的断言会红，
+     * 这正是"判据强度不够是测不出来的"那一族：能证明已写的断言会红，
      * 证明不了"断言选的值分不开两个被测对象"。</p>
      *
      * <p>方向与 {@code BlogPlanRunServiceTest} 里那条相反（那边 CSDN 授权、掘金不授权），
@@ -334,7 +334,7 @@ class BlogContentPlanServiceTest {
     }
 
     // ---------------------------------------------------------------------
-    // 派生字段的 fail-soft（ADR 待办 53）
+    // 派生字段查询失败必须 fail-soft
     //
     // 语义角色：csdnAuthorized / juejinAuthorized 只是"补充信息"，不参与鉴权、
     // 租户隔离、执行身份判定，也不决定是否允许操作 ⇒ 它们的查询失败**不得**改变
@@ -361,7 +361,7 @@ class BlogContentPlanServiceTest {
     /**
      * ① 端口路径：凭证查询失败时，一次状态变更必须<b>照常成功</b>。
      *
-     * <p>这就是 ADR 待办 53 登记的缺陷本身：{@code ContentPlanPort.updateStatus} 会经过
+     * <p>这就是一个已登记的缺陷：{@code ContentPlanPort.updateStatus} 会经过
      * {@code toVO}，而 {@code toVO} 为了两个智能体并不读的派生字段去查凭证 ——
      * 一个补充字段的查询失败，能让一次状态变更整体失败。</p>
      *
@@ -417,9 +417,9 @@ class BlogContentPlanServiceTest {
     /**
      * ③ 可观测性：失败必须留下一条带<b>固定标记</b>的 WARN，且标记与将来的指标名逐字相同。
      *
-     * <p>本仓没有 Micrometer / Actuator（指标是 Wave 2 的事），所以这条不变式今天由日志承载。
+     * <p>本仓没有 Micrometer / Actuator（指标属于后续的可观测性工作），所以这条不变式今天由日志承载。
      * 没有这条断言的话，"fail-soft"会退化成"fail-silent" —— 一个永远不报错的降级路径，
-     * 和 §ADR 里反复出现的"绿着撒谎的判据"是同一族。</p>
+     * 和"绿着撒谎的判据"是同一族。</p>
      */
     @Test
     void aFailingCredentialLookupLeavesAWarningWithTheStableMarker() {

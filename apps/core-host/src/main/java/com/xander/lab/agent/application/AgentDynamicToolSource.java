@@ -33,7 +33,7 @@ public interface AgentDynamicToolSource {
      * 与摘要调用各渲染一次，只有两次一致，摘要请求才是主请求的真前缀）。所以缓存不能省。
      * 那么配置变更之后谁来让缓存失效？</p>
      *
-     * <p>原来的答案是"来源方反向调 {@code AgentToolRegistry#invalidate()}"。那个答案在单进程里
+     * <p>一个显然的做法是"来源方反向调 {@code AgentToolRegistry#invalidate()}"。它在单进程里
      * 能用，但它要求<b>提供方依赖消费方的实现类</b>——MCP 客户端在 integration 域，注册表在
      * agent 域，拆服务之后这就是一条反向的跨服务依赖。改成消费方读版本号之后，控制流只剩一个
      * 方向：注册表问，来源答，来源永远不需要知道注册表是谁。</p>

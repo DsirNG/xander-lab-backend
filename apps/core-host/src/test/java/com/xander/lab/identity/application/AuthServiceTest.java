@@ -133,7 +133,7 @@ class AuthServiceTest {
     /**
      * {@code AccessTokenLookupPort} 的实现本体。
      *
-     * <p>⚠️ 这几条是这一刀补的：在此之前 {@code getUserIdFromAccessToken}
+     * <p>⚠️ 这几条是本类补上的：此前 {@code getUserIdFromAccessToken}
      * <b>一个测试都没有</b> —— 它只是 identity 内部的一个便捷方法，
      * 没有测试也没人发现。现在它变成了 {@code core.api.AccessTokenLookupPort}
      * 的实现，也就是 agent 的 WebSocket 握手唯一的身份来源，

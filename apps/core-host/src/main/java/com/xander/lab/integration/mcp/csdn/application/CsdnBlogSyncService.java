@@ -27,7 +27,7 @@ import org.springframework.stereotype.Service;
  *
  * <h2>⚠️ 这里有一次"两份投影"的换算，改动必须成对</h2>
  * <p>{@code content.api.PublishResult} 与 {@link BlogSyncResult} 分量逐字相同却必须是两个类型
- * —— 契约不许依赖契约（ADR-2），{@code integration-api} 不能把 {@code content-api} 写进 POM。
+ * —— 契约不许依赖契约，{@code integration-api} 不能把 {@code content-api} 写进 POM。
  * 换算只有 {@link #toContract} 一处，三个分量<b>逐个点名</b>而不是靠位置：
  * 三个都是 String，调换顺序编译器不会有任何意见。
  * {@code CsdnBlogSyncServiceTest} 里有一条断言钉住"两份投影在共享字段上相等"。</p>

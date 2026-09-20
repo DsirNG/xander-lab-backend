@@ -236,7 +236,7 @@ class AgentStreamWebSocketHandlerTest {
         verify(eventService, never()).listAfter(any(), anyLong(), anyLong());
     }
 
-    // ---------- V9 §51：账号封禁必须终止已建立的 WS 订阅 ----------
+    // ---------- 账号封禁必须终止已建立的 WS 订阅 ----------
 
     @Test
     void closesWith4403WhenAccountAlreadyDisabled() throws Exception {
@@ -299,7 +299,7 @@ class AgentStreamWebSocketHandlerTest {
                     executor::execute, 50L)
                     .afterConnectionEstablished(wsSession);
 
-            // 连接必须已登记，reconciler 才能在本实例上找到它（§49 每实例注册表）。
+            // 连接必须已登记，reconciler 才能在本实例上找到它。
             assertEquals(1, registry.activeCount(42L));
 
             // 模拟 SecurityStateReconciler 命中封禁：手段 A，主动断开已建立的连接。

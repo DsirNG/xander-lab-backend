@@ -10,12 +10,12 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 账号安全状态（封禁 SOT，V9 §48）。
+ * 账号安全状态（封禁 SOT）。
  *
  * <p>每个承载流量的宿主（Gateway / core-host / agent / content-automation /
- * studio）都保留一份<b>本地</b>的"已封禁账号集合"，并必须在 §28 的 SLO 内
+ * studio）都保留一份<b>本地</b>的"已封禁账号集合"，并必须在封禁传播 SLO 内
  * 与这张表收敛。本地缓存按 {@code accountId} 建索引 —— 这也是为什么
- * {@code sid} 现阶段只是审计与关联标识，没有会话级 deny 的消费者（V9 §25）。</p>
+ * {@code sid} 现阶段只是审计与关联标识，没有会话级 deny 的消费者。</p>
  */
 @Data
 @TableName("account_security_state")

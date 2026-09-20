@@ -22,7 +22,7 @@ import com.xander.lab.integration.mcp.client.domain.McpRemoteTool;
  * 现在它只实现契约，agent 侧的 {@code RemoteToolAdapter} 负责把它翻成 {@code AgentTool}。</p>
  *
  * <h2>Jackson 为什么在这里</h2>
- * <p>契约不能带 Jackson（ADR-1），所以 schema 以 JSON 文本出入。本类是<b>出站适配器</b>，
+ * <p>契约不能带 Jackson，所以 schema 以 JSON 文本出入。本类是<b>出站适配器</b>，
  * 序列化正是它的职责——契约把框架挡在外面，适配器把它接回来。</p>
  */
 public class RemoteMcpTool implements RemoteTool {

@@ -32,7 +32,7 @@ import java.util.List;
  *
  * <h2>⚠️ 这里有一次"两份投影"的换算，改动必须成对</h2>
  * <p>{@code content.api.PublishResult} 与 {@link BlogSyncResult} 分量逐字相同却必须是两个类型
- * —— 契约不许依赖契约（ADR-2）。换算只有 {@link #toContract} 一处，三个分量<b>逐个点名</b>：
+ * —— 契约不许依赖契约。换算只有 {@link #toContract} 一处，三个分量<b>逐个点名</b>：
  * 三个都是 String，靠位置写的话调换顺序不会有任何编译错误。
  * {@code JuejinBlogSyncServiceTest} 里有一条断言钉住"两份投影在共享字段上相等"，
  * 与 {@code CsdnBlogSyncService} 里那条是同一个判据的两次落地。</p>

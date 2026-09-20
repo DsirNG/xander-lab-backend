@@ -57,11 +57,11 @@ class RemoteToolAdapterTest {
     /**
      * <b>schema 的 JSON 文本与它解析出来的树逐字节一致。</b>
      *
-     * <p>这是这次抽取能被证明是"纯重构"的那条证据。改造前 {@code AgentTool.parametersSchema()}
+     * <p>这是这条边界能被证明是"纯重构"的那条证据。若 {@code AgentTool.parametersSchema()}
      * 直接返回远端给的 {@code JsonNode}；改造后走
      * {@code toString()} → {@code readTree()} → 再被 {@code describeTools} 序列化回 JSON。
      * 只要这一来一回不改变字节，渲染出的工具面就完全没变，于是不需要进
-     * {@code docs/contract-changes.yaml}。字段顺序也在断言里：它变了提示词前缀就变了，
+     * 契约变更。字段顺序也在断言里：它变了提示词前缀就变了，
      * 上游 prompt 缓存整段失效。</p>
      */
     @Test

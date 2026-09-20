@@ -20,7 +20,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * 智能体已注册的全部工具。
  *
- * <p>这里只做登记。"这一轮该给哪些"曾经是一个真问题——早先由一张关键词表挑技能、
+ * <p>这里只做登记，不回答"这一轮该给哪些"。若由一张关键词表挑技能、
  * 技能再决定工具表，于是一句"帮我记住这段话"没命中词表，模型就只能空口答应；
  * 一句"给我一个 sse 代码"只命中交付类技能，当轮只剩 emit_artifact，除了开交付卡别无选择。
  * 现在工具表每轮固定（{@link #allowedNames(Long)}），要不要用、怎么用由模型自己判断，
@@ -36,7 +36,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * <p>为什么是版本号而不是"来源反向调用 {@link #invalidate()}"：那个形状要求提供方依赖
  * 消费方的实现类（MCP 客户端在 integration 域，注册表在 agent 域），拆服务之后就是一条
- * 反向的跨服务依赖，而这一刀的全部意义正是把它拆掉。{@link #invalidate()} 仍然保留，
+ * 反向的跨服务依赖，必须避免。{@link #invalidate()} 仍然保留，
  * 但只用于装配期与测试。</p>
  */
 @Component

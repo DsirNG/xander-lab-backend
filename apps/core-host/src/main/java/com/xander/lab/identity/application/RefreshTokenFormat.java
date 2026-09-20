@@ -8,15 +8,15 @@ import java.util.Base64;
 import java.util.Optional;
 
 /**
- * Refresh Token 的格式与哈希（V9 §29）。
+ * Refresh Token 的格式与哈希。
  *
  * <p>格式：{@code rt_<sid>.<tokenId>.<secret>} —— <b>Opaque Random Token</b>，
  * 不是 JWT。数据库长期只保存 secret 的哈希，不长期存明文。</p>
  *
- * <h3>安全提示（V9 §29）</h3>
+ * <h3>安全提示</h3>
  * <p>{@code sid} 位于<b>明文前缀</b>，因此 <b>sid 不是秘密</b>。任何拿到过一次
  * token 的地方（日志、Referer、客户端存储）都会泄漏 sid。这条事实直接决定了
- * Reuse Detection 判定表必须包含"垃圾 token 不撤销会话族"的分支（V9 §39.1）——
+ * Reuse Detection 判定表必须包含"垃圾 token 不撤销会话族"的分支——
  * 否则攻击者构造 {@code rt_<已知sid>.<随机>.<随机>} 反复提交即可让用户被反复踢下线。</p>
  *
  * <h3>为什么哈希带上 tokenId</h3>

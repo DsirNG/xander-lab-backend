@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * 每实例的活跃长连接注册表（V9 §49 / §52）。
+ * 每实例的活跃长连接注册表。
  *
  * <p>结构就是 {@code ConcurrentMap<accountId, Set<ConnectionHandle>>}，
  * 只存在于本机内存。封禁事件到达后：标记 denied → 遍历该账号在本实例的连接
@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public class ConnectionRegistry {
 
-    /** 连接类型标签，用于 §87 的 {@code active_sse} / {@code active_ws} 指标。 */
+    /** 连接类型标签，用于 {@code active_sse} / {@code active_ws} 指标。 */
     public static final String KIND_SSE = "sse";
     public static final String KIND_WS = "ws";
 
@@ -38,17 +38,17 @@ public class ConnectionRegistry {
      *
      * <p>放在共享内核而不是某个业务域：SSE / WS 的每个宿主都要用同一个词汇，
      * 否则 automation 的 SSE 得反向依赖 identity 才能拿到这个字符串常量，
-     * 而 §21 明确禁止业务域之间这种"为了一个常量"的依赖。</p>
+     * 而业务域之间不允许这种"为了一个常量"的依赖。</p>
      */
     public static final String REASON_ACCOUNT_DISABLED = "ACCOUNT_DISABLED";
 
     /**
-     * 账号封禁时 WS 使用的应用层 Close Code（V9 §51）。
+     * 账号封禁时 WS 使用的应用层 Close Code。
      *
      * <p>落在 RFC 6455 的「应用私有」区间（3000–4999），客户端可以把它与网络故障
      * 区分开，从而「停止重连 + 提示已封禁」，而不是陷入重连风暴。
-     * 该值是对外契约，登记在 {@code docs/contract-changes.yaml} 的
-     * {@code ws-account-disabled-close} 条目下。</p>
+     * 该值是对外契约，登记为
+     * {@code ws-account-disabled-close}。</p>
      */
     public static final int WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403;
 
@@ -132,7 +132,7 @@ public class ConnectionRegistry {
         return handles == null ? 0 : handles.size();
     }
 
-    /** 全实例活跃连接总数。多实例下 §55.2 要求逐实例读，不得用聚合值代替。 */
+    /** 全实例活跃连接总数。多实例下必须逐实例读，不得用聚合值代替。 */
     public int activeCount() {
         int total = 0;
         for (Set<ConnectionHandle> handles : byAccount.values()) {

@@ -1259,7 +1259,7 @@ class AgentConversationServiceTest {
 
     @Test
     void namingAToolThatDoesNotExistTripsTheFailureCapInsteadOfBurningEveryStep() {
-        // 曾经这条分支只是静默 continue：模型可以一直点名不存在的工具，
+        // 这条分支不能只是静默 continue：模型可以一直点名不存在的工具，
         // 把 maxSteps 全烧完，用户等半天只收到一句"步数已达上限"。
         stubTransactions();
         ObjectNode bogus = decisionNode(false, "我要用这个工具", "并不存在的工具", null);
@@ -1373,7 +1373,7 @@ class AgentConversationServiceTest {
                 .doesNotContain("第1条：").doesNotContain("第7条：");
         // 摘要是一次真实的模型调用，不报账就等于让压缩绕过计费。
         // 断言的是换算后的值：网关口径 ModelUsage(1200,800,60) 必须按位置变成
-        // 计费口径 TokenUsage(1200,800,60) —— 这一步跨越 ADR-1 的边界，位置写反
+        // 计费口径 TokenUsage(1200,800,60) —— 这一步跨越契约边界，位置写反
         // 不会编译报错，只会静默错账，所以连位置一起钉。
         org.mockito.ArgumentCaptor<TokenUsage> billed = org.mockito.ArgumentCaptor.forClass(TokenUsage.class);
         verify(billingPort).chargeTokens(eq(42L), any(), any(), any(), billed.capture(), any(), any());

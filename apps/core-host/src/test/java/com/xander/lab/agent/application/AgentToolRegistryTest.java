@@ -213,7 +213,7 @@ class AgentToolRegistryTest {
     /**
      * 来源的版本号一变，合并视图自己重建，不需要任何人来调 {@code invalidate()}。
      *
-     * <p>这是"把反向调用换成轮询"的那一半：原来 MCP 客户端（integration 域）在配置变更后
+     * <p>这是"把反向调用换成轮询"的那一半：若 MCP 客户端（integration 域）在配置变更后
      * 反向调注册表的 {@code invalidate()}，那是跨部署单元的实现类依赖。现在提供方只推进自己的
      * 版本号，消费方每次读取时比对——控制流只剩一个方向。</p>
      *

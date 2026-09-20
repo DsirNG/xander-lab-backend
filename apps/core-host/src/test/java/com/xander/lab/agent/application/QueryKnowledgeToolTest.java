@@ -22,7 +22,7 @@ import static org.mockito.Mockito.when;
 /**
  * 这个测试本身就是"工具只需要端口"的证明：mock 的是 {@link RecitationMaterialPort}。
  *
- * <p><b>⚠️ 一条不变量搬走了。</b>这里原来有一个
+ * <p><b>⚠️ 一条不变量搬走了。</b>它的载体本该是
  * {@code archivedKnowledgeStaysOutOfWhatTheAgentCanSee}：抓取工具构造的
  * {@code RecitationService.MaterialQuery}，断言它的 {@code archive()} 是 {@code ACTIVE}。
  * 契约筛选条件 {@link MaterialFilter} 只有四个分量、**不带归档维度**，所以工具连"把归档的

@@ -39,7 +39,7 @@ import java.util.Set;
  *       {@link EmailReminderPort} 的 {@link EmailReminderView} 拿。</li>
  * </ul>
  * <p>两者不是"同一个方法两个返回类型"—— Java 不允许只靠返回类型重载。
- * 所以按本仓库既有的做法（见 {@code docs/migration/adr-contract-boundaries.md} §5.2）：
+ * 所以按本仓库既有的做法：
  * <b>端口方法拿规范名</b>（{@code updateStatus}），<b>同域的富方法加后缀说明它服务谁</b>
  * （{@code updateStatusForView}）。</p>
  *
