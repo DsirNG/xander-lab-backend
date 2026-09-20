@@ -137,12 +137,19 @@
 refresh_session_rows
 refresh_history_rows
 history_storage_size
+history_cleanup_rate
+history_cleanup_duration
 ```
 
 统计不放在 Micrometer 的 scrape 回调中，避免监控抓取直接占用数据库连接；每个
 core-host 实例独立保留最近一次成功值，观测 SQL 失败时保留旧值并等待下一轮，
 不会把监控故障变成 Refresh 故障。`history_storage_size` 统计两张 Refresh 表的
 数据与索引占用字节数，依赖 MySQL `information_schema.tables` 的只读可见性。
+
+历史清理任务另外记录 `history_cleanup_duration` Timer，以及以累计删除行数为
+基础的 `history_cleanup_rate` Counter；仪表盘应对 Counter 使用 `rate()`，并可用
+`history_cleanup_latest_rate` 查看最近一轮的行/秒快照。清理任务本身的数据库锁等待
+仍需 MySQL / 运维侧指标，不由应用层猜测。
 
 ---
 

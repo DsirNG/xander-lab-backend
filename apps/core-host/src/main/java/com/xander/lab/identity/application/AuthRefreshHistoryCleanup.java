@@ -46,12 +46,14 @@ public class AuthRefreshHistoryCleanup {
     private final RetentionBatchLoop batchLoop;
     private final RefreshTokenProperties properties;
     private final Clock clock;
+    private final RefreshRetentionMetrics metrics;
 
     @Autowired
     public AuthRefreshHistoryCleanup(AuthRefreshRetentionService retentionService,
                                      RetentionBatchLoop batchLoop,
-                                     RefreshTokenProperties properties) {
-        this(retentionService, batchLoop, properties, Clock.systemDefaultZone());
+                                     RefreshTokenProperties properties,
+                                     RefreshRetentionMetrics metrics) {
+        this(retentionService, batchLoop, properties, Clock.systemDefaultZone(), metrics);
     }
 
     /** 供测试注入固定时钟，让本轮的时间边界可被确定性断言。 */
@@ -59,10 +61,19 @@ public class AuthRefreshHistoryCleanup {
                               RetentionBatchLoop batchLoop,
                               RefreshTokenProperties properties,
                               Clock clock) {
+        this(retentionService, batchLoop, properties, clock, null);
+    }
+
+    AuthRefreshHistoryCleanup(AuthRefreshRetentionService retentionService,
+                              RetentionBatchLoop batchLoop,
+                              RefreshTokenProperties properties,
+                              Clock clock,
+                              RefreshRetentionMetrics metrics) {
         this.retentionService = retentionService;
         this.batchLoop = batchLoop;
         this.properties = properties;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     /**
@@ -76,8 +87,12 @@ public class AuthRefreshHistoryCleanup {
     public void cleanupExpiredHistory() {
         int batchSize = Math.max(1, properties.getHistoryCleanupBatchSize());
         int maxBatches = Math.max(1, properties.getHistoryCleanupMaxBatches());
+        long startedAt = System.nanoTime();
         int deleted = batchLoop.run("历史清理", LocalDateTime.now(clock), batchSize, maxBatches,
                 retentionService::deleteExpiredHistory);
+        if (metrics != null) {
+            metrics.recordHistoryCleanup(deleted, System.nanoTime() - startedAt);
+        }
         if (deleted > 0) {
             log.info("[Refresh] 历史清理本轮删除 {} 行", deleted);
         }
