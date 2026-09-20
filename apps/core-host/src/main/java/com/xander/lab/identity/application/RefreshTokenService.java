@@ -302,7 +302,7 @@ public class RefreshTokenService {
             int revoked = sessionMapper.revokeFamily(session.getFamilyId(),
                     AuthRefreshSession.REASON_REUSE_DETECTED, now);
             historyMapper.markReuseDetected(token.tokenId(), now);
-            writeReuseSecurityEvent(session, token.tokenId(), now);
+            writeReuseSecurityEvent(session, token.tokenId());
             log.warn("[Refresh] 检测到 refresh token 重用：sid={} account={} tokenId={} 撤销会话数={}",
                     session.getSid(), session.getAccountId(), token.tokenId(), revoked);
             return new Rotation(Outcome.REUSE_DETECTED, null, session.getSid(),
@@ -414,8 +414,7 @@ public class RefreshTokenService {
     }
 
     /** 写一条 RefreshTokenReuse 安全事件。 */
-    private void writeReuseSecurityEvent(AuthRefreshSession session, String tokenId,
-                                         LocalDateTime now) {
+    private void writeReuseSecurityEvent(AuthRefreshSession session, String tokenId) {
         SecurityEventOutboxEntry entry = new SecurityEventOutboxEntry();
         entry.setAggregateType("ACCOUNT");
         entry.setAggregateId(String.valueOf(session.getAccountId()));
@@ -425,7 +424,6 @@ public class RefreshTokenService {
                 + "\",\"tokenId\":\"" + tokenId + "\"}");
         entry.setStatus(SecurityEventOutboxEntry.STATUS_PENDING);
         entry.setAttempts(0);
-        entry.setNextAttemptAt(now);
-        outboxMapper.insert(entry);
+        outboxMapper.insertPending(entry);
     }
 }

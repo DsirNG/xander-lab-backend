@@ -148,8 +148,7 @@ public class AccountSecurityStateService {
                 + ",\"occurredAt\":\"" + now + "\"}");
         entry.setStatus(SecurityEventOutboxEntry.STATUS_PENDING);
         entry.setAttempts(0);
-        entry.setNextAttemptAt(now);
-        outboxMapper.insert(entry);
+        outboxMapper.insertPending(entry);
     }
 
     private String truncate(String reason) {

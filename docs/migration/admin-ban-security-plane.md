@@ -342,7 +342,7 @@ WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403
 | **迟到且版本更低的封禁事件** | `SecurityStateApplier` 的版本闸门只在缓存里**已有**该账号时才生效。若账号已被解封（缓存里不存在），一条迟到的旧封禁事件无法被拒绝，账号会被重新封禁。修它需要为「已解封账号」也保留版本号（内存随历史账号数增长），代价与收益不成比例 | 已知，低风险，需独立改动 |
 | **bootstrap 的水位偏小** | `E0` 取快照行的最大 `change_seq`，历史上被封禁过又解封的账号（`disabled = 0` 的行）不计入，所以启动时会多扫一遍 `account_security_state`。这是刻意选的安全方向（偏小只多扫，偏大才漏封禁） | 设计取舍 |
 | `shedlock.enabled` 默认 `false` | 单实例下无影响；**多实例前必须置 true 并校准 `lockAtMostFor`**（当前 7+1 个任务的取值是按任务间隔启发式给的，未按实测运行时长校准） | 切流前 |
-| `next_attempt_at` 写端用 JVM 时钟 | `applyState` 插入时用 `LocalDateTime.now(clock)`，而领取条件用 `NOW(3)`（DB 时钟）。退避路径已改为 DB 时钟（`NOW(3) + INTERVAL ? MICROSECOND`），只有**首次**插入仍用 JVM 时钟；时钟偏差只会让事件早投或略晚投，不影响正确性 | 已知，低风险 |
+| `next_attempt_at` 写端用 JVM 时钟 | 首次发件箱写入已改为 `SecurityEventOutboxMapper.insertPending` 使用 `NOW(3)`；领取与退避路径均使用数据库时钟，首投与重试的时间基准一致 | ✅ 已修 |
 | `contract-changes.yaml` 的 `security-plane-fail-closed` | §28.2 的 stale fail-closed 与 §103 互相否定（security plane 与 refresh 表同库），Wave 2 放行评审前必须二选一 | 待对齐 |
 
 > `SecurityStateCache` 无持久化原本是这里的一行缺口（「实例重启后靠 `fullReconcile`

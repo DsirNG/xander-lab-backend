@@ -2,6 +2,7 @@ package com.xander.lab.identity.infrastructure;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.xander.lab.identity.domain.SecurityEventOutboxEntry;
+import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -14,6 +15,22 @@ import java.util.List;
  */
 @Mapper
 public interface SecurityEventOutboxMapper extends BaseMapper<SecurityEventOutboxEntry> {
+
+    /**
+     * 写入一条可立即投递的发件箱事件。
+     *
+     * <p>{@code next_attempt_at} 必须和 {@link #claimDue} 的 {@code NOW(3)} 使用同一
+     * 时钟。不要调用 MyBatis-Plus 的通用 {@code insert} 把 JVM 时间写进去：容器时钟
+     * 与数据库时钟有偏差时，首投会提前或延迟；失败重试路径已经遵守这个约束。</p>
+     */
+    @Insert("""
+            INSERT INTO security_event_outbox
+                (aggregate_type, aggregate_id, event_type, payload, status, attempts, next_attempt_at)
+            VALUES
+                (#{entry.aggregateType}, #{entry.aggregateId}, #{entry.eventType}, #{entry.payload},
+                 #{entry.status}, #{entry.attempts}, NOW(3))
+            """)
+    int insertPending(@Param("entry") SecurityEventOutboxEntry entry);
 
     /**
      * 领取待投递事件。

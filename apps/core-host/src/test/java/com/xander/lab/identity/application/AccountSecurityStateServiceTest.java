@@ -5,6 +5,7 @@ import com.xander.lab.identity.domain.AuthRefreshSession;
 import com.xander.lab.identity.domain.SecurityEventOutboxEntry;
 import com.xander.lab.identity.infrastructure.AccountSecurityStateMapper;
 import com.xander.lab.identity.infrastructure.SecurityEventOutboxMapper;
+import org.apache.ibatis.annotations.Insert;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -77,7 +78,7 @@ class AccountSecurityStateServiceTest {
     private SecurityEventOutboxEntry captureEvent() {
         ArgumentCaptor<SecurityEventOutboxEntry> captor =
                 ArgumentCaptor.forClass(SecurityEventOutboxEntry.class);
-        verify(outboxMapper).insert(captor.capture());
+        verify(outboxMapper).insertPending(captor.capture());
         return captor.getValue();
     }
 
@@ -102,7 +103,7 @@ class AccountSecurityStateServiceTest {
         order.verify(stateMapper).upsertState(eq(7L), eq(1), eq(42L), any(), eq("admin-ban operator=1"));
         order.verify(refreshTokenService).revokeAllForAccount(7L, AuthRefreshSession.REASON_ADMIN_DISABLE);
         order.verify(stateMapper).selectById(7L);
-        order.verify(outboxMapper).insert(any());
+        order.verify(outboxMapper).insertPending(any());
     }
 
     @Test
@@ -118,8 +119,8 @@ class AccountSecurityStateServiceTest {
         assertThat(event.getAggregateId()).isEqualTo("7");
         assertThat(event.getStatus()).isEqualTo(SecurityEventOutboxEntry.STATUS_PENDING);
         assertThat(event.getAttempts()).isZero();
-        // 事件必须先落库、立即可投递：next_attempt_at = now，而不是 now + 退避。
-        assertThat(event.getNextAttemptAt()).isEqualTo(LocalDateTime.of(2026, 9, 15, 8, 0));
+        // 首次投递时间由 SQL 的 NOW(3) 写入，与 claimDue 的数据库时钟同源。
+        assertThat(event.getNextAttemptAt()).isNull();
         assertThat(event.getPayload())
                 .contains("\"accountId\":7")
                 .contains("\"securityVersion\":2")
@@ -220,5 +221,17 @@ class AccountSecurityStateServiceTest {
         assertThat(method.getAnnotation(Transactional.class))
                 .as("applyState 必须带 @Transactional，否则封禁的原子性无声失效")
                 .isNotNull();
+    }
+
+    @Test
+    void pendingOutboxInsertUsesDatabaseClockForFirstAttempt() throws NoSuchMethodException {
+        Insert insert = SecurityEventOutboxMapper.class
+                .getMethod("insertPending", SecurityEventOutboxEntry.class)
+                .getAnnotation(Insert.class);
+
+        assertThat(insert).isNotNull();
+        assertThat(String.join(" ", insert.value()))
+                .contains("NOW(3)")
+                .contains("next_attempt_at");
     }
 }

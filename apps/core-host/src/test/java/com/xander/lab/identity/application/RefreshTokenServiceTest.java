@@ -259,7 +259,7 @@ class RefreshTokenServiceTest {
         verify(sessionMapper).revokeFamily("family-" + sid,
                 AuthRefreshSession.REASON_REUSE_DETECTED, NOW);
         verify(historyMapper).markReuseDetected(eq(consumedId), eq(NOW));
-        verify(outboxMapper).insert(any(SecurityEventOutboxEntry.class));
+        verify(outboxMapper).insertPending(any(SecurityEventOutboxEntry.class));
     }
 
     @Test
