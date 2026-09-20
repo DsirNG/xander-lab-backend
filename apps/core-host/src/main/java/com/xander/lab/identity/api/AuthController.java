@@ -7,6 +7,7 @@ import com.xander.lab.identity.api.RegisterRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.application.AuthService;
 import com.xander.lab.identity.application.QrLoginService;
+import com.xander.lab.identity.application.RefreshTokenException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -205,6 +206,9 @@ public class AuthController {
         try {
             TokenResponse response = authService.refresh(request.getRefreshToken());
             return ResponseEntity.ok(Result.success(response));
+        } catch (RefreshTokenException e) {
+            return ResponseEntity.status(e.status())
+                    .body(Result.error(e.status(), e.code()));
         } catch (IllegalArgumentException e) {
             return unauthorizedResponse();
         }

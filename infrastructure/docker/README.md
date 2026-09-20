@@ -54,6 +54,9 @@ credentials, but its database username/password are overridden by the two servic
 pairs above. When `BACKEND_ENV_FILE` is omitted, `.env.wave1` itself is injected into all four
 containers.
 
+Wave 2 切换新 Refresh Session 协议前，在部署环境设置 `AUTH_REFRESH_ENABLED=true`，并先
+完成客户端联调；Wave 1 默认值为 `false`，不会改变现有无状态 JWT refresh 行为。
+
 Compose waits for `migration-runner` to exit successfully before starting `core-host`, then
 waits for core readiness before starting Gateway. BlogHTML Preview is independent apart from
 the shared Redis/Nacos environment. The core readiness probe is `/health/ready`; the other

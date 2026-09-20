@@ -304,6 +304,10 @@ enabled = false  → 旧的无状态 refresh JWT 行为完全不变（实现与�
 enabled = true   → 新协议生效（切流是 Wave 2 的事，§94）
 ```
 
+当前接入状态：`AuthService` 已把登录签发、`/api/auth/refresh` 轮换和 logout 的
+当前 Session 撤销接到这个开关；默认值仍为 `false`。开启前必须完成客户端错误分类、
+多标签页协调、Access TTL 与数据库恢复演练，不能把“代码已接入”当成“生产已切流”。
+
 配置类：`RefreshTokenProperties`（`@ConfigurationProperties(prefix = "auth.refresh")`）。
 
 > ⚠️ `RefreshTokenProperties` 的 19 个键目前**只以 Java 默认值存在**，
@@ -332,9 +336,9 @@ server grace
 
 | 缺口 | 影响 | 归属 |
 |---|---|---|
-| `RefreshTokenService.rotate()` 尚未接上 HTTP 端点 | 生产仍走 `AuthService.refresh` 旧实现（无轮换 / 无重放检测 / 失败全 401） | Wave 2 切流 |
+| `RefreshTokenService.rotate()` 已接上 HTTP 端点，但开关默认关闭 | 生产默认仍走旧实现；开启新协议后由 MySQL Session、轮换、grace 与 reuse 分类接管 | Wave 2 切流 |
 | `login:user_tokens` 无 TTL 且存完整 JWT | 封禁成本随时间恶化；需退役 | `legacy-redis-retirement.md` |
-| Access Token 尚无 `jti` / `sid` | 会话关联与审计能力缺失 | Wave 2 |
+| 旧模式 Access Token 尚未携带新协议 `sid` | 新协议开启时 Access 会携带 `sid`，JWT 统一生成 `jti`；旧模式保持兼容 | Wave 2 |
 | MySQL 备份 / RPO / RTO 未演练 | §31 的可靠性承诺无观测量兑现 | `flyway-strategy.md` |
 
 ---

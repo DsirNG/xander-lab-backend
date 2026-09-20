@@ -12,6 +12,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * JWT 工具类
@@ -103,6 +104,7 @@ public class JwtUtil {
         Date expiry = new Date(now.getTime() + expireMs);
         return Jwts.builder()
                 .claims(claims)
+                .id(UUID.randomUUID().toString())
                 .subject(subject)
                 .issuedAt(now)
                 .expiration(expiry)

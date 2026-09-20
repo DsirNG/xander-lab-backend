@@ -346,7 +346,16 @@ public class RefreshTokenService {
         if (parsed.isEmpty()) {
             return false;
         }
-        int affected = sessionMapper.revokeSession(parsed.get().sid(),
+        return logoutBySid(parsed.get().sid());
+    }
+
+    /** 按 Access JWT 的 sid 撤销当前 Refresh Session。 */
+    @Transactional
+    public boolean logoutBySid(String sid) {
+        if (sid == null || sid.isBlank()) {
+            return false;
+        }
+        int affected = sessionMapper.revokeSession(sid,
                 AuthRefreshSession.REASON_LOGOUT, now());
         return affected > 0;
     }

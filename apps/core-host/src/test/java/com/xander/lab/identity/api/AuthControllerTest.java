@@ -2,6 +2,7 @@ package com.xander.lab.identity.api;
 
 import com.xander.lab.common.Result;
 import com.xander.lab.identity.application.AuthService;
+import com.xander.lab.identity.application.RefreshTokenException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,6 +88,21 @@ class AuthControllerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getCode()).isEqualTo(401);
+    }
+
+    @Test
+    void refreshMapsBackendUnavailableWithoutTurningItIntoLogout() {
+        RefreshTokenRequest request = new RefreshTokenRequest();
+        request.setRefreshToken("opaque");
+        when(authService.refresh("opaque"))
+                .thenThrow(RefreshTokenException.backendUnavailable(new RuntimeException("db down")));
+
+        ResponseEntity<Result<TokenResponse>> response = controller.refresh(request);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getCode()).isEqualTo(503);
+        assertThat(response.getBody().getMessage()).isEqualTo("AUTH_BACKEND_UNAVAILABLE");
     }
 
     @Test

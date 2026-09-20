@@ -120,6 +120,56 @@ class AuthServiceTest {
     }
 
     @Test
+    void enabledRefreshUsesOpaqueRotationAndCarriesSessionIdIntoAccessToken() {
+        RefreshTokenService rotationService = mock(RefreshTokenService.class);
+        when(rotationService.isEnabled()).thenReturn(true);
+        when(rotationService.rotate("opaque-refresh")).thenReturn(
+                new RefreshTokenService.Rotation(
+                        RefreshTokenService.Outcome.ROTATED,
+                        "rt_sid.next.secret",
+                        "sid-42",
+                        7L,
+                        "rotated"));
+        User user = user(7L, "bob", "secret", 1);
+        when(userMapper.selectById(7L)).thenReturn(user);
+        when(jwtUtil.generateAccessToken(anyString(), any(Map.class))).thenReturn("access-token");
+        when(jwtUtil.getAccessTokenExpire()).thenReturn(60_000L);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(redisTemplate.opsForSet()).thenReturn(setOperations);
+
+        AuthService enabled = new AuthService(jwtUtil, mailPort, userMapper, redisTemplate,
+                passwordEncoder, billingPort, wechatMiniAppClient, accountMergeMapper,
+                rotationService);
+
+        TokenResponse response = enabled.refresh("opaque-refresh");
+
+        assertThat(response.getRefreshToken()).isEqualTo("rt_sid.next.secret");
+        verify(rotationService).rotate("opaque-refresh");
+        verify(jwtUtil).generateAccessToken(eq("7"), argThat(claims ->
+                "sid-42".equals(claims.get("sid"))
+                        && "access".equals(claims.get("type"))));
+        verify(jwtUtil, never()).isValid("opaque-refresh");
+    }
+
+    @Test
+    void enabledLogoutRevokesRefreshSessionFromAccessTokenSid() {
+        RefreshTokenService rotationService = mock(RefreshTokenService.class);
+        when(rotationService.isEnabled()).thenReturn(true);
+        io.jsonwebtoken.Claims claims = mock(io.jsonwebtoken.Claims.class);
+        when(jwtUtil.isValid("access")).thenReturn(true);
+        when(jwtUtil.parseToken("access")).thenReturn(claims);
+        when(claims.get("sid", String.class)).thenReturn("sid-42");
+
+        AuthService enabled = new AuthService(jwtUtil, mailPort, userMapper, redisTemplate,
+                passwordEncoder, billingPort, wechatMiniAppClient, accountMergeMapper,
+                rotationService);
+
+        enabled.logout("access");
+
+        verify(rotationService).logoutBySid("sid-42");
+    }
+
+    @Test
     void accessTokenRequiresJwtAndRedisPresence() {
         when(jwtUtil.isValid("access")).thenReturn(true);
         when(jwtUtil.isRefreshToken("access")).thenReturn(false);

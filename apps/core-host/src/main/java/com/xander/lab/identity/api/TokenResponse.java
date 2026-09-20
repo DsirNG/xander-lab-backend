@@ -18,10 +18,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class TokenResponse {
 
-    /** 访问令牌（有效期 2 小时） */
+    /** 访问令牌；旧模式沿用部署配置，新 Refresh 模式按 Wave 2 的 TTL 配置切流 */
     private String accessToken;
 
-    /** 刷新令牌（有效期 7 天） */
+    /** 刷新令牌；旧模式为 JWT，新 Refresh 模式为 opaque session token */
     private String refreshToken;
 
     /** 令牌类型，固定为 Bearer */

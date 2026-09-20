@@ -128,8 +128,11 @@ capabilities:
     since: V7
     ref: V9 §29 / §34
     status: planned
-    evidence: "现状 refresh 是纯无状态 JWT（AuthService.refresh 557-570 行只验签名 + isRefreshToken + status != 0）"
-    notes: "Opaque Random Token rt_<sid>.<tokenId>.<secret>，DB 只存 secret hash。sid 位于明文前缀 → sid 不是秘密。"
+    evidence: >-
+      RefreshTokenService.rotate 已接入 AuthService.refresh，但受
+      auth.refresh.enabled 特性开关保护；开启后登录签发 MySQL Session，刷新走
+      SELECT ... FOR UPDATE 的 opaque rotation，关闭时保留旧 JWT 路径。
+    notes: "Opaque Random Token rt_<sid>.<tokenId>.<secret>，DB 只存 secret hash。sid 位于明文前缀 → sid 不是秘密。当前仍需 Wave 2 客户端联调与切流。"
     acceptance: "并发 refresh 不产生重复 successor"
 
   - id: refresh-grace-idempotent-replay
@@ -161,7 +164,8 @@ capabilities:
     ref: V9 §33 / §40 / §42 / §43
     status: planned
     evidence: >-
-      四个实现点均已落地（但整个新 Token 模型在 auth.refresh.enabled=false 下未生效，故仍为 planned）：
+      四个实现点均已落地，并已由 AuthService 的新协议接入层引用；但整个新 Token 模型默认在
+      auth.refresh.enabled=false 下未生效，故仍为 planned：
       ① §40.2 写入规则 —— RefreshTokenService 轮换成功写 history 行时显式写 retained_until = now()+24h；
       ② §40.3 条数上界 —— AuthRefreshTokenHistoryMapper.pruneGenerationsBeyondBound（48 代）；
       ③ §42 时间清理 —— AuthRefreshHistoryCleanup + AuthRefreshRetentionService.deleteExpiredHistory；
@@ -174,8 +178,8 @@ capabilities:
     since: V7
     ref: V9 §47
     status: planned
-    evidence: "现状 AuthService.logout()（585-601 行）只删 access 键 + 从 Set 里 remove 一个 → 登出后持有 refresh token 仍可换出全新令牌对，30 天会话恢复"
-    notes: "新模型：logout revoke 当前 Refresh Session。普通用户 logout 的最大 Access 窗口 <= 30m，这是明确取舍。"
+    evidence: "auth.refresh.enabled=true 时，AuthService.logout() 从 Access JWT 的 sid 撤销当前 Refresh Session；关闭时保留旧 Redis access-token 注销行为。"
+    notes: "新模型：logout revoke 当前 Refresh Session。普通用户 logout 的最大 Access 窗口 <= 30m，这是明确取舍。当前仍需 Wave 2 切流。"
     acceptance: "§87 指标：logout 后旧 refresh 可用性必须为 0"
 
   - id: mysql-refresh-sot-persistent

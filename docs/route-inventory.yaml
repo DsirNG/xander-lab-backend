@@ -584,7 +584,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#sendCode"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 96
+    line: 97
   - id: identity-post-auth-login
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -595,7 +595,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#login"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 110
+    line: 111
   - id: identity-post-auth-logout
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -606,7 +606,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#logout"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 221
+    line: 225
   - id: identity-get-auth-me
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -617,7 +617,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#getCurrentUser"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 239
+    line: 243
   - id: identity-put-auth-password
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -628,7 +628,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#changePassword"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 275
+    line: 279
   - id: identity-put-auth-profile
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -639,7 +639,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#updateProfile"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 257
+    line: 261
   - id: identity-post-auth-qr-confirm
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -650,7 +650,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#confirmQrLogin"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 70
+    line: 71
   - id: identity-post-auth-qr-create
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -661,7 +661,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#createQrLogin"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 56
+    line: 57
   - id: identity-post-auth-qr-exchange
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -672,7 +672,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#exchangeQrLogin"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 82
+    line: 83
   - id: identity-get-auth-qr-status
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -683,7 +683,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#qrStatus"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 65
+    line: 66
   - id: identity-post-auth-refresh
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -694,7 +694,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#refresh"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 203
+    line: 204
   - id: identity-post-auth-register
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -705,7 +705,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#register"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 302
+    line: 306
   - id: identity-post-auth-reset-password
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -716,7 +716,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#resetPassword"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 288
+    line: 292
   - id: identity-get-auth-validate
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -727,7 +727,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#validateToken"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 319
+    line: 323
   - id: identity-post-auth-wechat-bind
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -738,7 +738,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#wechatBind"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 144
+    line: 145
   - id: identity-post-auth-wechat-bind-existing
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -749,7 +749,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#wechatBindExisting"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 174
+    line: 175
   - id: identity-post-auth-wechat-login
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -760,7 +760,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#wechatLogin"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 129
+    line: 130
   - id: identity-post-auth-wechat-skip
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -771,7 +771,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.AuthController#wechatSkip"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
-    line: 159
+    line: 160
   - id: blogagent-get-blog-agent-tasks
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation

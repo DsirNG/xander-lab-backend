@@ -29,6 +29,7 @@ class JwtUtilTest {
         assertThat(jwtUtil.isRefreshToken(token)).isFalse();
         assertThat(claims.getSubject()).isEqualTo("42");
         assertThat(claims.get("role", String.class)).isEqualTo("USER");
+        assertThat(claims.getId()).isNotBlank();
     }
 
     @Test

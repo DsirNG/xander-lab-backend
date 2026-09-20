@@ -147,6 +147,8 @@ jwt:
 # 多实例安全事件快路径：默认关闭；所有 core-host 实例必须一起开启。
 auth:
   refresh:
+    # 新 Refresh Session 协议默认关闭；切流前必须先完成 Wave 2 客户端联调。
+    enabled: ${AUTH_REFRESH_ENABLED:false}
     security-pubsub-enabled: ${AUTH_REFRESH_SECURITY_PUBSUB_ENABLED:false}
     security-pubsub-channel: ${AUTH_REFRESH_SECURITY_PUBSUB_CHANNEL:dinqor:security-events}
 

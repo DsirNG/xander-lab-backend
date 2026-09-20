@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 433
-  service_private: 377
+  total: 434
+  service_private: 378
   secret: 47
   shared: 9
 config:
@@ -635,6 +635,11 @@ config:
     nacos_group: DINQOR-CORE
   - key: auth.refresh.cleanup-slow-batch-ms
     source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.enabled
+    source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: core
     nacos_group: DINQOR-CORE

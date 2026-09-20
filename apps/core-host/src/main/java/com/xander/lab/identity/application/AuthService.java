@@ -14,8 +14,8 @@ import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient;
 import com.xander.lab.identity.infrastructure.wechat.WechatMiniAppClient.WechatSession;
 import com.xander.lab.auth.core.JwtUtil;
 import com.xander.lab.integration.api.MailPort;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -40,7 +40,6 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthService implements AccessTokenLookupPort {
 
     private static final SecureRandom CODE_RANDOM = new SecureRandom();
@@ -56,6 +55,41 @@ public class AuthService implements AccessTokenLookupPort {
     private final BillingPort billingPort;
     private final WechatMiniAppClient wechatMiniAppClient;
     private final AccountMergeMapper accountMergeMapper;
+    private final RefreshTokenService refreshTokenService;
+
+    /** 保留旧测试与本地构造路径；新协议默认关闭时完全走旧行为。 */
+    public AuthService(JwtUtil jwtUtil,
+                       MailPort mailPort,
+                       UserMapper userMapper,
+                       StringRedisTemplate redisTemplate,
+                       PasswordEncoder passwordEncoder,
+                       BillingPort billingPort,
+                       WechatMiniAppClient wechatMiniAppClient,
+                       AccountMergeMapper accountMergeMapper) {
+        this(jwtUtil, mailPort, userMapper, redisTemplate, passwordEncoder, billingPort,
+                wechatMiniAppClient, accountMergeMapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthService(JwtUtil jwtUtil,
+                       MailPort mailPort,
+                       UserMapper userMapper,
+                       StringRedisTemplate redisTemplate,
+                       PasswordEncoder passwordEncoder,
+                       BillingPort billingPort,
+                       WechatMiniAppClient wechatMiniAppClient,
+                       AccountMergeMapper accountMergeMapper,
+                       RefreshTokenService refreshTokenService) {
+        this.jwtUtil = jwtUtil;
+        this.mailPort = mailPort;
+        this.userMapper = userMapper;
+        this.redisTemplate = redisTemplate;
+        this.passwordEncoder = passwordEncoder;
+        this.billingPort = billingPort;
+        this.wechatMiniAppClient = wechatMiniAppClient;
+        this.accountMergeMapper = accountMergeMapper;
+        this.refreshTokenService = refreshTokenService;
+    }
 
 /**
      * 发送登录验证码
@@ -552,10 +586,13 @@ public class AuthService implements AccessTokenLookupPort {
     }
 
     /**
-     * 刷新 Access Token
-     * 验证 refreshToken JWT 有效性，生成新的 token 对
+     * 刷新 Access Token。
+     * 新 Refresh 协议开启时走 MySQL Session rotation；关闭时兼容旧的无状态 JWT。
      */
     public TokenResponse refresh(String refreshToken) {
+        if (newRefreshProtocolEnabled()) {
+            return refreshWithRotation(refreshToken);
+        }
         if (!jwtUtil.isValid(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
             throw new IllegalArgumentException("无效的 Token");
         }
@@ -567,6 +604,27 @@ public class AuthService implements AccessTokenLookupPort {
         }
 
         return generateTokenResponse(user);
+    }
+
+    private TokenResponse refreshWithRotation(String refreshToken) {
+        try {
+            RefreshTokenService.Rotation rotation = refreshTokenService.rotate(refreshToken);
+            if (!rotation.isSuccess()) {
+                throw RefreshTokenException.from(rotation);
+            }
+            if (rotation.accountId() == null) {
+                throw new RefreshTokenException("INVALID_REFRESH_TOKEN", 401,
+                        "刷新令牌缺少账号身份");
+            }
+            User user = userMapper.selectById(rotation.accountId());
+            if (user == null || user.getStatus() == 0) {
+                throw RefreshTokenException.accountDisabled();
+            }
+            return generateTokenResponse(user, rotation.refreshToken(), rotation.sid());
+        } catch (DataAccessException ex) {
+            // 数据库不可用不能伪装成登录失效：客户端必须保留凭据并重试一次。
+            throw RefreshTokenException.backendUnavailable(ex);
+        }
     }
 
     /** Issues an independent browser session after a verified QR handoff. */
@@ -587,6 +645,10 @@ public class AuthService implements AccessTokenLookupPort {
     public void logout(String accessToken) {
         if (accessToken == null || accessToken.isBlank()) return;
 
+        if (newRefreshProtocolEnabled()) {
+            revokeRefreshSessionFromAccessToken(accessToken);
+        }
+
         try {
             if (jwtUtil.isValid(accessToken)) {
                 String userId = jwtUtil.getSubject(accessToken);
@@ -601,6 +663,23 @@ public class AuthService implements AccessTokenLookupPort {
         // 删除 token 在 Redis 中的记录
         redisTemplate.delete(Constants.REDIS_TOKEN_PREFIX + accessToken);
         log.info("[Auth] 用户登出，当前设备 Token 已失效");
+    }
+
+    private void revokeRefreshSessionFromAccessToken(String accessToken) {
+        try {
+            if (!jwtUtil.isValid(accessToken)) {
+                return;
+            }
+            String sid = jwtUtil.parseToken(accessToken).get("sid", String.class);
+            if (sid != null && !sid.isBlank()) {
+                refreshTokenService.logoutBySid(sid);
+            }
+        } catch (DataAccessException ex) {
+            // 保留 access token 清理行为，但不能把 refresh session 未撤销伪装成成功。
+            throw RefreshTokenException.backendUnavailable(ex);
+        } catch (RuntimeException ex) {
+            log.warn("[Auth] 从 access token 撤销 Refresh Session 失败: {}", ex.getMessage());
+        }
     }
 
     /**
@@ -638,10 +717,23 @@ public class AuthService implements AccessTokenLookupPort {
     }
 
     private TokenResponse generateTokenResponse(User user) {
+        if (newRefreshProtocolEnabled()) {
+            RefreshTokenService.IssuedSession session = refreshTokenService.issue(user.getId());
+            return generateTokenResponse(user, session.refreshToken(), session.sid());
+        }
+
+        return generateTokenResponse(user, jwtUtil.generateRefreshToken(String.valueOf(user.getId())), null);
+    }
+
+    private TokenResponse generateTokenResponse(User user, String refreshToken, String sid) {
         String userIdStr = String.valueOf(user.getId());
-        Map<String, Object> claims = Map.of("role", user.getRole(), "type", "access");
+        Map<String, Object> claims = new java.util.HashMap<>();
+        claims.put("role", user.getRole());
+        claims.put("type", "access");
+        if (sid != null && !sid.isBlank()) {
+            claims.put("sid", sid);
+        }
         String accessToken = jwtUtil.generateAccessToken(userIdStr, claims);
-        String refreshToken = jwtUtil.generateRefreshToken(userIdStr);
 
         // 多设备支持：每个 token 独立存储，互不覆盖
         redisTemplate.opsForValue().set(
@@ -661,6 +753,10 @@ public class AuthService implements AccessTokenLookupPort {
                 .needsEmailBinding(user.getEmail() == null || user.getEmail().isBlank())
                 .userInfo(buildUserInfo(user))
                 .build();
+    }
+
+    private boolean newRefreshProtocolEnabled() {
+        return refreshTokenService != null && refreshTokenService.isEnabled();
     }
 
     private TokenResponse.UserInfo buildUserInfo(User user) {
