@@ -1,4 +1,4 @@
-package com.xander.lab.integration.mcp;
+package com.xander.lab.mcp;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
