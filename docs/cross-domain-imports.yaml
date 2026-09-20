@@ -24,11 +24,15 @@ counts:
     - core.api
     - filter
     - integration.api
+    - observability
     - payment.api
     - recitation.spi
+    - testsupport
     - webmvc
   unclassified_sources:
     - DinQorAIApplication.java
+    - gateway
+    - migration
 edges:
   - from: virtualpay
     to: identity

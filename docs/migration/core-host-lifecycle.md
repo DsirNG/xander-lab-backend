@@ -32,7 +32,7 @@
 | 阶段 | 宿主 | 拥有哪些域 | 关键动作 |
 |---|---|---|---|
 | **Wave 0** | `xander-lab-backend:30002` | 全部 15 个域 | 不改部署。产出全部清单与文档 |
-| **Wave 1** | 同一宿主注册为 `dinqor-core-host` | 全部 15 个域 − `bloghtml` | BlogHTML 被抽出并从宿主禁用；其余域仍由 core-host **唯一**拥有 |
+| **Wave 1** | 同一宿主注册为 `dinqor-core-host` | 全部 15 个域 − `bloghtml` | `apps/bloghtml-preview` 已建立并承接 BlogHTML；生产流量切换与 core-host 旧入口禁用仍按发布窗口执行；其余域仍由 core-host **唯一**拥有 |
 | **Wave 2** | `dinqor-core-host` + 三个新服务 | − `agent` / `integration` / `publishing` / `blogagent` / `automation` | 对应 Controller / Scheduler / Mapper 权限同时禁用或移除；长连接按 §54 Drain；**Drain 完成后**才 REVOKE 表权限 |
 | **Wave 3+** | `dinqor-core-host` + 更多 | − `knowledgebase` / `recitation` / `studio` / `components` / `virtualpay` | 继续减法抽出 Knowledge / Studio / Payment |
 | **最终** | 改名 `dinqor-core` | 仅 `identity` / `billing` / `admin` / `profile` | 正式改名 |

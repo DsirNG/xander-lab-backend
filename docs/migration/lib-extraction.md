@@ -16,11 +16,12 @@
 1 个是 MyBatis、2 个是运维型 Redis。**WebFlux Gateway 一旦依赖它就会启动失败**，
 所以 §19 必须拆。
 
-Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`xander-auth-core`）
+Wave 0B 已抽出 **6 个 lib**（`xander-model`、`xander-mybatis-support`、`xander-auth-core`、
+`xander-webmvc-support`、`xander-observability-core`、`xander-test-support`）
 与 **8 个契约模块**（`content-api`、`integration-api`、`core-api`、`payment-api`、
 `agent-api`、`automation-api`、`recitation-api`、`blogagent-api`），`common` 从 12 类降到 6 类，
 另有 2 个类从**业务域包** `identity.security` 迁出、4 个类从 `publishing.domain` 迁出。
-剩下 3 个 lib 与 2 个契约模块（`knowledge-api`、`studio-api`）未开始。
+2 个契约模块（`knowledge-api`、`studio-api`）仍按 V9 后续拆分节奏保留。
 
 ⚠️ **"8 个契约模块"数的是模块，不是刀次。** 已经有模块被扩展过多轮：
 `core-api` 加过 `UserLookupPort`（§3septies），`automation-api` 加过 `NotificationPort`（§3duodecies），
@@ -71,8 +72,8 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `xander-mybatis-support` | **已完成** | `MybatisPlusConfig` `PageData` |
 | `xander-auth-core` | **已完成** | `UserContext`（可信身份模型）`JwtUtil`（Token 校验器） |
 | `xander-webmvc-support` | **已完成** | `GlobalExceptionHandler` `ResultStatusResponseBodyAdvice` `AuthInterceptor`（§20 的 "MVC 认证适配器"）`WebConfig`。包是 `com.xander.lab.webmvc`，**不是** `identity.security`（§3.4.2） | 见 §3.4 |
-| `xander-observability-core` | 未开始 | 目标 TraceId/requestId + MDC 约定 + 指标命名约定（不含具体 exporter） |
-| `xander-test-support` | 未开始 | — |
+| `xander-observability-core` | **已完成（基础层）** | `CorrelationContext` + `CorrelationHeaders`：安全的 traceId/requestId 生成、校验与传播名称；不含 Servlet/WebFlux、MDC 生命周期或 exporter |
+| `xander-test-support` | **已完成（骨架）** | 独立的 test-facing 模块与包边界；只有跨服务复用的测试契约才允许继续加入 |
 
 ### 2.2 业务契约（§18 `contracts/`，§91）
 
@@ -121,7 +122,7 @@ filter/RequestLoggingFilter.java          ← 目标是 xander-observability-cor
 
 ---
 
-## 3. 四个已抽出的 lib
+## 3. 六个已抽出的 lib
 
 ### 3.1 `xander-model`
 
@@ -4267,29 +4268,21 @@ python scripts/migration/ci_gates.py
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| 2 个 lib 未抽 | §91 的 Wave 0B 完成 **4/6**（剩余 `observability-core` / `test-support`）。⚠️ 原文写"3 个 lib 未抽 / 3/6"，是搬出 `xander-webmvc-support`（ADR §26）之前的数 | Wave 0B 剩余 |
-| ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
+| `xander-observability-core` 的 exporter / 指标实现未开始 | 基础层已提供安全的 traceId/requestId 值与传播名称；Servlet Filter、Gateway Reactor Context、Actuator/Prometheus 已接入，具体 exporter 仍按 Wave 1/2 观测方案推进 | Wave 1/2 |
 | 2 个 `*-api` 契约未建 | ⚠️ **2026-09-20 订正：本行的数字早已过期**（自第十八刀起没再更新）。**实测当前：跨部署单元实现依赖 `0` 条、边 `0` 条**（第二十刀归零，见 §3trevicies），剩下 17 条 impl 语句**全部同单元**；头条指标 17 / 7 / 0 / 0 / 9 / 6。以下是**当时**记的，留作过程记录：剩余跨部署单元实现依赖 **9** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → 15 → 13 → 12 → **9**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` **6/6**、`blogagent` 5/1、`identity` **8**/**0**、`publishing` 4/**0**、`automation` 2/2、`virtualpay` 1/0、`admin` 0/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）、**`agent → identity` 已归零**（2/0 → 0/0，见 §3septdecies）、**`integration → identity` 已归零**（1/0 → 0/0，见 §3octodecies）⇒ **`identity` 作为目标域的跨单元边全部归零**（剩余 8 条 impl 全是同单元边：`virtualpay` 5 / `admin` 2 / `profile` 1）。**`agent → integration` 已归零**（2/0 → 0/0，见 §3novemdecies）⇒ ⭐ **`agent` 作为来源域在实现层与 api 层都一条出边都没有了**。⚠️ 当前最大的跨单元边是 `automation -> integration` **5** 条（卡在 `MailService` 与两个凭证服务，§3quater.5 / §3novemdecies.10） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |
 | `BlogPublisher` 跨进程会失效 | 见 §3bis.5，Wave 2 前必须决定适配器归属 | **需要决策** |
 | 空目录已清理但无法提交 | 六个旧式分层空目录（`controller` `dto` `entity` `mapper` `service` `util`）**从未被 Git 跟踪** —— Git 不跟踪空目录。清理只影响本地工作区，仓库里本来就没有它们 | 已处理 |
 
-### 9.1 ⚠️ `xander-observability-core`：§20 描述的东西在这份代码里不存在
+### 9.1 `xander-observability-core`：先落框架无关基础层
 
-按 §20 去找它的落点，结果是：
+§20 要求 Gateway 能依赖这项能力，因此本轮没有把 Servlet Filter 搬进共享库，而是先落地
+纯 JDK 的 `CorrelationContext` 与 `CorrelationHeaders`：
 
-- `grep -rn "MDC\.\|TraceId\|traceId"` 全仓**零命中**（唯一叫 `requestId` 的是 MCP OAuth
-  的授权请求 id，与链路追踪无关）；
-- 无 micrometer、无 actuator、无 `logback-spring.xml`，`application.yml` 里没有任何
-  `logging.pattern` / `%X{`；
-- `filter/` 包里只有 1 个类 `RequestLoggingFilter`，而它
-  **`extends OncePerRequestFilter` + `import jakarta.servlet.*`** —— 是 Servlet 组件。
+- 入站 header 缺失或包含换行、控制字符、超长内容时生成新的 UUID，避免日志和响应头注入；
+- `X-Trace-Id` / `X-Request-Id` 与 `traceId` / `requestId` 的 MDC 名称统一；
+- `apps/core-host` 的 `RequestLoggingFilter` 负责 Servlet/MDC 生命周期，库本身不依赖 Spring、
+  Servlet、WebFlux、Redis 或 exporter。
 
-也就是说 §20 说的"TraceId/requestId 生成与传播 + MDC 约定 + 指标命名约定"**整体不存在**；
-唯一看起来相关的文件还**不能**放进这个库 —— §20 要求 Gateway 可依赖它，而 Gateway 是
-WebFlux，把 Servlet 组件塞进去与"WebFlux 应用依赖 spring-boot-starter-web 启动失败"
-是同一类事故。
-
-这与 §4.2（"公共 TypeHandler 不存在"）同类，但更严重：**§20 的 Gateway 依赖清单里，
-三个库有一个目前是空的。** 处置方向（本轮未定）：要么在 Wave 1 引入 Actuator/Micrometer 时
-**新建**这个库，要么承认它是 §20 的一处过度设计并修订 §20。
+Micrometer、Actuator 和 WebFlux Reactor Context 适配已经留在各宿主模块；库本身仍不引入框架耦合，
+具体 exporter 与业务指标按 Wave 1/2 的观测方案继续推进。

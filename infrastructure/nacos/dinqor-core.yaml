@@ -1,0 +1,11 @@
+# V9 §16 — service-private Nacos DataId: dinqor-core.yaml / DINQOR-CORE.
+spring:
+  application:
+    name: dinqor-core-host
+  flyway:
+    enabled: false
+  cloud:
+    nacos:
+      discovery:
+        group: DINQOR-CORE
+        service: dinqor-core-host

@@ -70,10 +70,29 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
 ## Config keys
 
-- total keys: **312** (leaf: 228)
-- unassigned leaves: **1**
+- total keys: **426** (leaf: 286)
+- unassigned leaves: **20**
 
-  - `shedlock.enabled` (application.yml)
+  - `management.endpoints.web.exposure.include` (apps/bloghtml-preview/src/main/resources/application.yml)
+  - `management.endpoint.health.probes.enabled` (apps/bloghtml-preview/src/main/resources/application.yml)
+  - `management.endpoint.health.show-details` (apps/bloghtml-preview/src/main/resources/application.yml)
+  - `management.metrics.tags.application` (apps/bloghtml-preview/src/main/resources/application.yml)
+  - `management.endpoints.web.exposure.include` (apps/core-host/src/main/resources/application.yml)
+  - `management.endpoint.health.probes.enabled` (apps/core-host/src/main/resources/application.yml)
+  - `management.endpoint.health.show-details` (apps/core-host/src/main/resources/application.yml)
+  - `management.metrics.tags.application` (apps/core-host/src/main/resources/application.yml)
+  - `management.metrics.connect-timeout-millis` (apps/core-host/src/main/resources/application.yml)
+  - `management.metrics.read-timeout-millis` (apps/core-host/src/main/resources/application.yml)
+  - `management.metrics.env-version` (apps/core-host/src/main/resources/application.yml)
+  - `management.virtual-pay.message-token` (apps/core-host/src/main/resources/application.yml)
+  - `management.virtual-pay.api-base-url` (apps/core-host/src/main/resources/application.yml)
+  - `management.virtual-pay.connect-timeout-millis` (apps/core-host/src/main/resources/application.yml)
+  - `management.virtual-pay.read-timeout-millis` (apps/core-host/src/main/resources/application.yml)
+  - `shedlock.enabled` (apps/core-host/src/main/resources/application.yml)
+  - `management.endpoints.web.exposure.include` (apps/gateway/src/main/resources/application.yml)
+  - `management.endpoint.health.probes.enabled` (apps/gateway/src/main/resources/application.yml)
+  - `management.endpoint.health.show-details` (apps/gateway/src/main/resources/application.yml)
+  - `management.metrics.tags.application` (apps/gateway/src/main/resources/application.yml)
 
 ## Cross-domain implementation imports (V9 section 81)
 

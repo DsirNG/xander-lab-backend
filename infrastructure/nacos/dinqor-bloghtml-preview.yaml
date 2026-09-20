@@ -1,0 +1,12 @@
+# V9 §16 — service-private Nacos DataId: dinqor-bloghtml-preview.yaml /
+# DINQOR-BLOGHTML-PREVIEW. Secrets remain deployment-injected.
+spring:
+  application:
+    name: dinqor-bloghtml-preview
+  cloud:
+    nacos:
+      discovery:
+        group: DINQOR-BLOGHTML-PREVIEW
+        service: dinqor-bloghtml-preview
+  flyway:
+    enabled: false

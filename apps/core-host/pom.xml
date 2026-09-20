@@ -42,6 +42,12 @@
             <artifactId>xander-auth-core</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Framework-neutral correlation identifiers shared by MVC now and WebFlux later. -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>xander-observability-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             MVC 支撑：GlobalExceptionHandler / ResultStatusResponseBodyAdvice / WebConfig /
@@ -199,6 +205,21 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <!-- Wave 1 operational surface; the separate migration-runner owns Flyway. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- Disabled by default locally; enabled in the Wave 1 deployment profile. -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
         <!-- 智能体对话 WebSocket 流式推送（小程序不支持 SSE 流式读取） -->
         <dependency>

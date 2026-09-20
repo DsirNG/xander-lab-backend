@@ -12,6 +12,8 @@ COPY settings.xml .
 COPY libs/xander-model/pom.xml ./libs/xander-model/pom.xml
 COPY libs/xander-mybatis-support/pom.xml ./libs/xander-mybatis-support/pom.xml
 COPY libs/xander-auth-core/pom.xml ./libs/xander-auth-core/pom.xml
+COPY libs/xander-observability-core/pom.xml ./libs/xander-observability-core/pom.xml
+COPY libs/xander-test-support/pom.xml ./libs/xander-test-support/pom.xml
 COPY libs/xander-webmvc-support/pom.xml ./libs/xander-webmvc-support/pom.xml
 COPY contracts/content-api/pom.xml ./contracts/content-api/pom.xml
 COPY contracts/integration-api/pom.xml ./contracts/integration-api/pom.xml
@@ -21,7 +23,10 @@ COPY contracts/agent-api/pom.xml ./contracts/agent-api/pom.xml
 COPY contracts/automation-api/pom.xml ./contracts/automation-api/pom.xml
 COPY contracts/recitation-api/pom.xml ./contracts/recitation-api/pom.xml
 COPY contracts/blogagent-api/pom.xml ./contracts/blogagent-api/pom.xml
+COPY apps/bloghtml-preview/pom.xml ./apps/bloghtml-preview/pom.xml
+COPY apps/gateway/pom.xml ./apps/gateway/pom.xml
 COPY apps/core-host/pom.xml ./apps/core-host/pom.xml
+COPY apps/migration-runner/pom.xml ./apps/migration-runner/pom.xml
 
 # Download dependencies using Aliyun mirror
 RUN mvn dependency:go-offline -B -s settings.xml
@@ -30,6 +35,8 @@ RUN mvn dependency:go-offline -B -s settings.xml
 COPY libs ./libs
 COPY contracts ./contracts
 COPY apps ./apps
+COPY docs ./docs
+COPY migrations ./migrations
 RUN mvn package -DskipTests -s settings.xml
 
 

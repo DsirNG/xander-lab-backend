@@ -32,9 +32,9 @@ spring:
     enabled: false
 ```
 
-⚠️ **但当前这份策略还只是"设计已定、尚未接线"**：`pom.xml` 里没有 Flyway 依赖，
-`application.yml` 里没有 `spring.flyway.*` 配置，`migrations/` 下的 6 个
-`V2026*` 文件也从未被执行过。详见 §7。
+当前策略已经接入构建：`apps/migration-runner` 是唯一启用 Flyway 的可执行模块，
+业务服务（当前 `apps/core-host`）显式关闭 `spring.flyway.enabled`。生产数据库仍需按本文件
+的 baseline 流程执行，仓库测试不会连接真实数据库。
 
 ---
 
@@ -211,31 +211,29 @@ REVOKE 在十步里的位置是**第 9 步**，且必须在第 7 步
 
 ---
 
-## 7. ⚠️ 当前落地状态：设计已定，接线未做
+## 7. 当前落地状态：Migration Runner 已接线
 
 这是本文最重要的一节。§89 的交付物清单里有 `flyway-strategy.md`，
 容易让人以为"Flyway 已经就绪"。实际状态是：
 
 | 项 | 期望 | 实际 |
 |---|---|---|
-| `pom.xml` 有 Flyway 依赖 | 有 | **无**（`grep -i flyway pom.xml` 无匹配） |
-| `application.yml` 有 `spring.flyway.*` | 有 | **无** |
-| 业务服务 `flyway.enabled=false` | 显式关闭 | **未配置**（因为依赖也不在） |
+| `apps/migration-runner/pom.xml` 有 Flyway 依赖 | 有 | ✅ `flyway-core` + `flyway-mysql` |
+| Migration Runner 加载 `migrations/versioned` | 有 | ✅ 构建资源映射到 `classpath:db/migration` |
+| 业务服务 `flyway.enabled=false` | 显式关闭 | ✅ `apps/core-host/application.yml` |
 | `V2026091500..1505` 被执行过 | 有 | **无**（`flyway_schema_history` 尚未建立） |
 | `migrations/legacy/AUDIT.md` | 有 | ✅ 已生成（实测数据） |
 | `migrations/grants/*.sql` | 有 | ✅ 已生成（由 `gen_grants.py` 产出） |
 
-也就是说：**迁移脚本、审计报告、GRANT 脚本三样都已就绪，
-但 Flyway 本身还没接进构建。**
-
-⚠️ 这个状态是**有意的**（Wave 0A 不改部署），但必须在 Wave 1 之前补齐，
-否则 §96 第 1 步「Migration Job」无从执行。补齐的最小动作是：
+也就是说：迁移脚本、审计报告、GRANT 脚本和 Runner 构建接线都已就绪，
+但真实数据库 baseline/migrate 尚未执行。首次部署仍必须使用独立的 `dinqor_migration` 账号，
+不能让业务服务代跑。部署动作是：
 
 ```text
-1. pom.xml 加 flyway-core + flyway-mysql
-2. 建 CI/CD 的 Migration Job（用 dinqor_migration 账号，独立于业务部署）
-3. 业务服务显式写 spring.flyway.enabled=false
-4. 加门禁：业务服务的 application.yml 不得出现 spring.flyway.enabled=true
+1. 构建并运行 `apps/migration-runner`（用 `dinqor_migration` 账号，独立于业务部署）
+2. 首次库按 §5 执行 baseline，再运行 migrate
+3. 业务服务保持 `spring.flyway.enabled=false`
+4. CI 门禁继续禁止业务服务重新启用 Flyway
 ```
 
 第 4 条是必要的 —— 否则某天有人为了"方便本地调试"打开它，
@@ -314,13 +312,13 @@ restore_drill_date
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| **Flyway 未接入构建** | 见 §7。`pom.xml` 无依赖、无配置、无 `flyway_schema_history`。§96 第 1 步无法执行 | **Wave 1 前必须补** |
+| **真实数据库尚未执行 Flyway** | Runner 已接入构建，但 `flyway_schema_history` 仍需由部署 Job 在目标库建立 | 首次 baseline / migrate |
 | RPO/RTO 四项观测量未接入 | 见 §8.3，RPO/RTO 目前无法被监控，只能人工确认 | Wave 2 |
 | 恢复演练未做 | §61 要求"至少一次 restore drill"并记录实际 RPO/RTO | Wave 2 放行前 |
 | GRANT 脚本未实际执行 | `migrations/grants/*.sql` 已生成，但 Wave 0A 不拆进程，所以没有账号被创建 | Wave 1 |
 | `baseline-schema.sql` 未生成 | §64 第 1 步需要线上 schema 快照用于 drift 比对，当前 `migrations/legacy/` 只有 `AUDIT.md` 与 `SHA256SUMS` | 首次 baseline 时 |
 | binlog 状态未核实 | §31 把"binlog 开启"列为前置项，当前未记录实际状态 | Wave 2 |
-| `flyway.enabled=true` 无门禁 | 见 §7 第 4 条。Flyway 尚未接入构建，所以这条门禁**现在无法生效**（属性还不存在）；等 Wave 1 接线时补 | Wave 1 接线时 |
+| `flyway.enabled=true` 无门禁 | `apps/core-host` 已显式关闭；业务服务启用 Flyway 的门禁仍需扩展到新增服务 | Wave 1 持续治理 |
 | ~~`SHA256SUMS` 无门禁~~ | **已补**：`gate_flyway_validation` 现在校验归档清单（见 §10） | ✅ Wave 0B 已完成 |
 
 ---

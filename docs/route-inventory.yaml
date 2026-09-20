@@ -869,7 +869,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.bloghtml.api.BlogHtmlPreviewController#createPreview"
-    file: apps/core-host/src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
+    file: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
     line: 40
   - id: automation-get-blog-plans
     logical_owner: automation
@@ -2365,7 +2365,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.bloghtml.api.BlogHtmlPreviewController#renderPage"
-    file: apps/core-host/src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
+    file: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/api/BlogHtmlPreviewController.java
     line: 51
   - id: shared-kernel-get-health
     logical_owner: shared-kernel

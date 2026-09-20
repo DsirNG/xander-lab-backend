@@ -208,13 +208,20 @@ empty except for shared infrastructure:
    jar: `Result` and the model call/usage types in `libs/xander-model`, the
    pagination response `PageData` and the MyBatis-Plus interceptor in
    `libs/xander-mybatis-support`, the trusted identity model (`UserContext`) and
-   token verifier (`JwtUtil`) in `libs/xander-auth-core`, and the operational
-   health endpoints still on the application module (`apps/core-host`). The split
-   is deliberate, not cosmetic: a WebFlux gateway can depend on `xander-model` and
-   `xander-auth-core` but must never pull in MyBatis, so they cannot share one jar.
-   The auth lib also keeps `HandlerInterceptor` out on purpose — `AuthInterceptor`
-   stays in `identity.security`, where the Servlet-side wiring lives.
-7. Types that cross a future *service* boundary live in `contracts/`, not in
+   token verifier (`JwtUtil`) in `libs/xander-auth-core`, and framework-neutral
+   correlation headers and identifier validation in `libs/xander-observability-core`.
+   The operational health endpoints still stay on the application module
+   (`apps/core-host`). The split is deliberate, not cosmetic: a WebFlux gateway can
+   depend on `xander-model`, `xander-auth-core` and `xander-observability-core` but
+   must never pull in MVC or MyBatis, so they cannot share one jar.
+    The auth lib also keeps `HandlerInterceptor` out on purpose — `AuthInterceptor`
+    stays in `xander-webmvc-support`, where the Servlet-side wiring lives.
+    Wave 1 also has separate runtime boundaries: `apps/gateway` is WebFlux-only, while
+    `apps/migration-runner` is the only executable with Flyway enabled and loads the immutable
+    `migrations/versioned` resources. `apps/core-host` exposes health/Prometheus metrics but
+    explicitly disables Flyway. The production Gateway fallback is `lb://dinqor-core-host`,
+    with a local direct URI available through configuration.
+ 7. Types that cross a future *service* boundary live in `contracts/`, not in
    either domain. `contracts/content-api` holds the publish SPI (`BlogPublisher`)
    and its data (`PublishCommand`, `PublishResult`, `PublishingLimits`), because
    the CSDN and Juejin adapters implement that port from the `integration` domain
@@ -492,11 +499,15 @@ server {
     # existing TLS config ...
 
     location /raw {
-        proxy_pass http://127.0.0.1:30002/blog-html/$sid/raw;
+        proxy_pass http://127.0.0.1:30003/blog-html/$sid/raw;
         proxy_set_header Host $host;
     }
 }
 ```
+
+The checked-in deployment template is [`infrastructure/nginx/bloghtml-preview.conf`](../infrastructure/nginx/bloghtml-preview.conf).
+Preview page traffic goes directly to `dinqor-bloghtml-preview`; only
+`POST /api/blog-html/previews` remains an API route handled by the Gateway.
 
 The blog site must allow embedding the preview origin, e.g. CSP
 `frame-src 'self' https://*.blogHTML.dinqor.cn`; the sandbox page

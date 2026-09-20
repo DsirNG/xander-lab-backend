@@ -1,0 +1,9 @@
+# V9 §16 — service-private Nacos DataId: dinqor-gateway.yaml / DINQOR-GATEWAY.
+spring:
+  application:
+    name: dinqor-gateway
+  cloud:
+    nacos:
+      discovery:
+        group: DINQOR-GATEWAY
+        service: dinqor-gateway

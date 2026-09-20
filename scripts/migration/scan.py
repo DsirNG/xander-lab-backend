@@ -57,6 +57,13 @@ def module_source_roots() -> list[Path]:
     return roots
 
 
+def application_source_roots() -> list[Path]:
+    """Every ``apps/<service>/src/main/java`` root, including newly split services."""
+    return sorted(
+        path for path in (REPO / "apps").glob("*/src/main/java") if path.is_dir()
+    )
+
+
 def java_roots() -> list[Path]:
     """Every Java source root in the repo, not just the application's.
 
@@ -65,7 +72,7 @@ def java_roots() -> list[Path]:
     the legacy-Redis key list, which is exactly how a moved constant would quietly stop
     being tracked. So every root is always scanned.
     """
-    return [JAVA_ROOT, *module_source_roots()]
+    return [*application_source_roots(), *module_source_roots()]
 
 
 def java_files() -> list[Path]:
@@ -173,8 +180,8 @@ BUSINESS_DOMAINS = [
 # ``shared-kernel-classification`` gate compares the two. Adding a module means adding its
 # package here; the gate fails until you do.
 SHARED_KERNEL = ["agent.spi", "auth", "automation.spi", "blogagent.spi", "common", "config", "content",
-                 "core.api", "filter", "integration.api", "payment.api", "recitation.spi", "util",
-                 "webmvc"]
+                 "core.api", "filter", "integration.api", "observability", "payment.api", "recitation.spi",
+                 "testsupport", "util", "webmvc"]
 
 # Import prefixes a ``contracts/*`` module is allowed to use (V9 §19 / §21).
 #
@@ -632,31 +639,36 @@ def scan_tables() -> list[dict]:
 
 def scan_config() -> list[dict]:
     entries: list[dict] = []
-    for name in ("application.yml", "application-local.yml"):
-        path = RESOURCES / name
-        if not path.exists():
-            continue
-        stack: list[tuple[int, str]] = []
-        for raw in read_text(path).splitlines():
-            if not raw.strip() or raw.lstrip().startswith("#"):
+    resource_roots = sorted(
+        path for path in (REPO / "apps").glob("*/src/main/resources") if path.is_dir()
+    )
+    for resources in resource_roots:
+        for name in ("application.yml", "application-local.yml"):
+            path = resources / name
+            if not path.exists():
                 continue
-            indent = len(raw) - len(raw.lstrip(" "))
-            body = raw.strip()
-            match = re.match(r"^([\w.\-]+)\s*:\s*(.*)$", body)
-            if not match:
-                continue
-            key, value = match.group(1), match.group(2).strip()
-            while stack and stack[-1][0] >= indent:
-                stack.pop()
-            stack.append((indent, key))
-            full = ".".join(item[1] for item in stack)
-            entries.append({
-                "key": full,
-                "source": name,
-                "value": value,
-                "leaf": bool(value),
-                "logical_owner": owner_of_config(full),
-            })
+            source = path.relative_to(REPO).as_posix()
+            stack: list[tuple[int, str]] = []
+            for raw in read_text(path).splitlines():
+                if not raw.strip() or raw.lstrip().startswith("#"):
+                    continue
+                indent = len(raw) - len(raw.lstrip(" "))
+                body = raw.strip()
+                match = re.match(r"^([\w.\-]+)\s*:\s*(.*)$", body)
+                if not match:
+                    continue
+                key, value = match.group(1), match.group(2).strip()
+                while stack and stack[-1][0] >= indent:
+                    stack.pop()
+                stack.append((indent, key))
+                full = ".".join(item[1] for item in stack)
+                entries.append({
+                    "key": full,
+                    "source": source,
+                    "value": value,
+                    "leaf": bool(value),
+                    "logical_owner": owner_of_config(full),
+                })
     return entries
 
 

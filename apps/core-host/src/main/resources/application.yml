@@ -5,7 +5,18 @@ spring:
   config:
     import: optional:application-local.yml
   application:
-    name: dinqorai-backend
+    name: ${SPRING_APPLICATION_NAME:dinqorai-backend}
+  # DDL belongs to the standalone migration-runner, never to a business service.
+  flyway:
+    enabled: false
+  cloud:
+    nacos:
+      discovery:
+        enabled: ${NACOS_DISCOVERY_ENABLED:false}
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DINQOR-CORE}
+        service: ${NACOS_SERVICE_NAME:${spring.application.name}}
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&connectionTimeZone=Asia%2FShanghai&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true}
     username: ${SPRING_DATASOURCE_USERNAME:root}
@@ -181,18 +192,6 @@ mcp:
     max-description-length: ${MCP_CLIENT_MAX_DESCRIPTION_LENGTH:400}
     max-result-length: ${MCP_CLIENT_MAX_RESULT_LENGTH:8000}
 
-# Blog HTML preview sandbox. The page is hosted on its own origin (production:
-# per-session subdomain of the preview domain) and embedded via iframe src;
-# sessions expire via Redis TTL.
-blog-html:
-  preview:
-    page-url-pattern: ${BLOG_HTML_PAGE_URL_PATTERN:https://%s.blogHTML.dinqor.cn/raw}
-    frame-ancestors: ${BLOG_HTML_FRAME_ANCESTORS:https://dinqor.cn}
-    ttl-seconds: ${BLOG_HTML_PREVIEW_TTL_SECONDS:1800}
-    max-code-bytes: ${BLOG_HTML_PREVIEW_MAX_CODE_BYTES:262144}
-    rate-limit-max-requests: ${BLOG_HTML_PREVIEW_RATE_LIMIT_MAX_REQUESTS:10}
-    rate-limit-window-seconds: ${BLOG_HTML_PREVIEW_RATE_LIMIT_WINDOW_SECONDS:60}
-
 # 管理台模型网关：关闭时各功能继续使用下方环境变量配置；开启前必须先应用 db 迁移 SQL。
 admin:
   model-gateway:
@@ -217,6 +216,22 @@ wechat:
     encryption-key: ${WECHAT_CREDENTIAL_ENCRYPTION_KEY:}
   miniapp:
     code-2-session-url: ${WECHAT_MINI_CODE_2_SESSION_URL:https://api.weixin.qq.com/sns/jscode2session}
+
+# Wave 1 operational endpoints. Prometheus is exposed for the platform network;
+# application-level authorization remains the responsibility of the deployment edge.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  metrics:
+    tags:
+      application: ${spring.application.name}
     connect-timeout-millis: ${WECHAT_MINI_CONNECT_TIMEOUT_MILLIS:5000}
     read-timeout-millis: ${WECHAT_MINI_READ_TIMEOUT_MILLIS:5000}
     # 二维码使用的版本：develop（开发版）、trial（体验版）、release（正式版）

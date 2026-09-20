@@ -1122,6 +1122,29 @@ def gate_flyway_validation() -> None:
            f"{archived_count} archived scripts match migrations/legacy/SHA256SUMS")
 
 
+def gate_business_flyway_disabled() -> None:
+    """Only the standalone migration runner may enable Flyway (V9 §62)."""
+    gate = "business-flyway-disabled"
+    offenders: list[str] = []
+    for path in (REPO / "apps").rglob("application*.y*ml"):
+        if "migration-runner" in path.parts:
+            continue
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as exc:
+            report(gate, False, f"cannot parse {path.relative_to(REPO)}: {exc}")
+            return
+        spring = document.get("spring") or {}
+        flyway = spring.get("flyway") or {}
+        enabled = flyway.get("enabled")
+        if enabled is True or (isinstance(enabled, str) and enabled.strip().lower() == "true"):
+            offenders.append(path.relative_to(REPO).as_posix())
+    if offenders:
+        report(gate, False, f"business services enable Flyway: {offenders}")
+        return
+    report(gate, True, "all business-service application configs keep spring.flyway.enabled=false")
+
+
 def gate_stream_ban_boundary_coverage() -> None:
     """V9 §12 / §50 / §51：每条长连接流都必须有封禁边界实现。
 
@@ -1688,6 +1711,7 @@ GATES = {
     "gateway-forbidden-dependency-check": gate_gateway_forbidden_dependency,
     "gateway-stream-proxy-config-check": gate_gateway_stream_proxy_config,
     "flyway-validation": gate_flyway_validation,
+    "business-flyway-disabled": gate_business_flyway_disabled,
     "stream-ban-boundary-coverage": gate_stream_ban_boundary_coverage,
     "xml-authoring-safety": gate_xml_authoring_safety,
     "dockerfile-module-coverage": gate_dockerfile_module_coverage,

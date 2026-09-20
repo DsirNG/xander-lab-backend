@@ -1,0 +1,6 @@
+# V9 §16 — shared non-secret Nacos DataId: dinqor-shared.yaml / COMMON.
+spring:
+  jackson:
+    time-zone: Asia/Shanghai
+    deserialization:
+      fail-on-unknown-properties: false

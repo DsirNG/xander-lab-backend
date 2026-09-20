@@ -1,10 +1,13 @@
 package com.xander.lab.filter;
 
+import com.xander.lab.observability.CorrelationContext;
+import com.xander.lab.observability.CorrelationHeaders;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -40,29 +43,51 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
+        CorrelationContext correlation = CorrelationContext.fromHeaders(
+                request.getHeader(CorrelationHeaders.TRACE_ID),
+                request.getHeader(CorrelationHeaders.REQUEST_ID));
+        response.setHeader(CorrelationHeaders.TRACE_ID, correlation.traceId());
+        String previousTraceId = MDC.get(CorrelationHeaders.MDC_TRACE_ID);
+        String previousRequestId = MDC.get(CorrelationHeaders.MDC_REQUEST_ID);
         long startTime = System.currentTimeMillis();
-        log.info("Received request: method={} uri={}", request.getMethod(), request.getRequestURI());
+        MDC.put(CorrelationHeaders.MDC_TRACE_ID, correlation.traceId());
+        MDC.put(CorrelationHeaders.MDC_REQUEST_ID, correlation.requestId());
         try {
+            log.info("Received request: method={} uri={} traceId={} requestId={}",
+                    request.getMethod(), request.getRequestURI(), correlation.traceId(), correlation.requestId());
             filterChain.doFilter(request, response);
         } finally {
-            logRequestMetadata(request, response, System.currentTimeMillis() - startTime);
+            logRequestMetadata(request, response, correlation, System.currentTimeMillis() - startTime);
+            restoreMdc(CorrelationHeaders.MDC_TRACE_ID, previousTraceId);
+            restoreMdc(CorrelationHeaders.MDC_REQUEST_ID, previousRequestId);
         }
     }
 
-    private void logRequestMetadata(HttpServletRequest request, HttpServletResponse response, long duration) {
+    private void logRequestMetadata(HttpServletRequest request, HttpServletResponse response,
+                                    CorrelationContext correlation, long duration) {
         String headers = collectHeaders(request);
         String queryString = safeQueryPresence(request.getQueryString());
 
         if (response.getStatus() >= 400) {
-            log.warn("\nRequest: {} {} query={} status={} time={}ms headers={}",
+            log.warn("\nRequest: {} {} traceId={} requestId={} query={} status={} time={}ms headers={}",
                     request.getMethod(), request.getRequestURI(),
+                    correlation.traceId(), correlation.requestId(),
                     queryString,
                     response.getStatus(), duration, headers);
         } else {
-            log.info("\nRequest: {} {} query={} status={} time={}ms headers={}",
+            log.info("\nRequest: {} {} traceId={} requestId={} query={} status={} time={}ms headers={}",
                     request.getMethod(), request.getRequestURI(),
+                    correlation.traceId(), correlation.requestId(),
                     queryString,
                     response.getStatus(), duration, headers);
+        }
+    }
+
+    private void restoreMdc(String key, String previousValue) {
+        if (previousValue == null) {
+            MDC.remove(key);
+        } else {
+            MDC.put(key, previousValue);
         }
     }
 
@@ -91,6 +116,8 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         return "authorization".equalsIgnoreCase(name)
                 || "cookie".equalsIgnoreCase(name)
                 || "x-csrf-token".equalsIgnoreCase(name)
-                || "proxy-authorization".equalsIgnoreCase(name);
+                || "proxy-authorization".equalsIgnoreCase(name)
+                || CorrelationHeaders.TRACE_ID.equalsIgnoreCase(name)
+                || CorrelationHeaders.REQUEST_ID.equalsIgnoreCase(name);
     }
 }

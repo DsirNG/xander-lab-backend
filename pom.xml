@@ -19,11 +19,10 @@
         dependency-management source, so every module inherits Boot's BOM.
 
         Layout, and why it is not the full V9 §18 tree yet:
-        §18 says "Wave 0 不全仓搬目录": Wave 0 does not move the whole repo. So this commit
-        creates only what Wave 0B needs: libs/ (extracted shared kernels) and apps/core-host/
-        (the existing monolith, which Wave 1 will register as dinqor-core-host).
-        apps/gateway, contracts/*, infrastructure/* are deliberately absent: they are Wave 1 /
-        Wave 2 deliverables, and the two gates that read them report SKIP until they exist.
+        §18 says "Wave 0 不全仓搬目录": the repository grows by migration wave. The current
+        tree contains the extracted libs/contracts plus the first Wave 1 runtime boundaries:
+        apps/core-host, apps/gateway, apps/bloghtml-preview and apps/migration-runner.
+        Agent, integration and content-automation remain in core-host until their Wave 2 drain.
 
         Note that the application module keeps artifactId xander-lab-backend on purpose:
         renaming it would change the built jar name, and the deploy scripts reference the
@@ -35,6 +34,8 @@
         <module>libs/xander-model</module>
         <module>libs/xander-mybatis-support</module>
         <module>libs/xander-auth-core</module>
+        <module>libs/xander-observability-core</module>
+        <module>libs/xander-test-support</module>
         <module>libs/xander-webmvc-support</module>
         <module>contracts/content-api</module>
         <module>contracts/integration-api</module>
@@ -44,7 +45,10 @@
         <module>contracts/automation-api</module>
         <module>contracts/recitation-api</module>
         <module>contracts/blogagent-api</module>
+        <module>apps/bloghtml-preview</module>
+        <module>apps/gateway</module>
         <module>apps/core-host</module>
+        <module>apps/migration-runner</module>
     </modules>
 
     <properties>
@@ -62,6 +66,10 @@
             classpath is a signature-verification failure that reads like a bad token.
         -->
         <jjwt.version>0.12.6</jjwt.version>
+        <!-- Spring Cloud Gateway 4.1.x is the WebFlux line for Spring Boot 3.2.x. -->
+        <spring-cloud-gateway.version>4.1.0</spring-cloud-gateway.version>
+        <spring-cloud-loadbalancer.version>4.1.0</spring-cloud-loadbalancer.version>
+        <spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
     </properties>
 
 </project>
