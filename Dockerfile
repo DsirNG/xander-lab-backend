@@ -56,13 +56,17 @@ RUN sed -i \
         python3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy the built jar from the builder stage (the application module is apps/core-host)
-COPY --from=builder /app/apps/core-host/target/*.jar app.jar
+# The default remains the legacy-compatible core-host image. Wave 1 deployments select
+# another executable with --build-arg APP_MODULE=apps/gateway (or bloghtml-preview /
+# migration-runner) without changing the dependency/build graph above.
+ARG APP_MODULE=apps/core-host
+ARG APP_PORT=30002
+COPY --from=builder /app/${APP_MODULE}/target/*.jar app.jar
 # Keep the upstream pipeline in the runtime image; the backend executes these scripts by path.
 COPY plugins/img2threejs ./plugins/img2threejs
 
-# Spring Boot 运行在 30002
-EXPOSE 30002
+# Spring Boot port is selected together with APP_MODULE.
+EXPOSE ${APP_PORT}
 
 # 启动运行
 ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]

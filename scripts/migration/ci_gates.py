@@ -1424,6 +1424,27 @@ def gate_dockerfile_module_coverage() -> None:
            f"{len(modules)} module(s) all COPYed into the Docker build context")
 
 
+def gate_dockerfile_runtime_target() -> None:
+    """The shared Dockerfile must be able to emit every Wave 1 executable jar."""
+    gate = "dockerfile-runtime-target"
+    dockerfile = REPO / "Dockerfile"
+    if not dockerfile.is_file():
+        report(gate, False, "Dockerfile is missing")
+        return
+    text = dockerfile.read_text(encoding="utf-8")
+    required = [
+        "ARG APP_MODULE=apps/core-host",
+        "ARG APP_PORT=30002",
+        "/app/${APP_MODULE}/target/*.jar",
+        "EXPOSE ${APP_PORT}",
+    ]
+    missing = [token for token in required if token not in text]
+    if missing:
+        report(gate, False, f"parameterized runtime target missing: {missing}")
+        return
+    report(gate, True, "shared Dockerfile supports APP_MODULE and APP_PORT runtime targets")
+
+
 # V9 section 80 bans the global ``classpath*:/mapper/*.xml`` swallow once services
 # are split. It is still *correct* today: there is exactly one application module,
 # so there is nothing else on the classpath for it to swallow. And changing it now
@@ -1798,6 +1819,7 @@ GATES = {
     "stream-ban-boundary-coverage": gate_stream_ban_boundary_coverage,
     "xml-authoring-safety": gate_xml_authoring_safety,
     "dockerfile-module-coverage": gate_dockerfile_module_coverage,
+    "dockerfile-runtime-target": gate_dockerfile_runtime_target,
     "mybatis-scan-scope": gate_mybatis_scan_scope,
 }
 
