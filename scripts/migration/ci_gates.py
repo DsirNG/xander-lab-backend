@@ -1068,6 +1068,50 @@ def gate_gateway_stream_proxy_config() -> None:
     report(gate, True, "stream proxy settings present")
 
 
+def gate_nacos_config_profile() -> None:
+    """V9 §16 / §17: runtime services must wire the stable Nacos DataIds.
+
+    The deployment YAMLs alone are not executable configuration. Each Wave 1 service
+    therefore carries an opt-in ``nacos`` profile that imports the shared DataId and
+    exactly one service-private DataId. The default profile remains local and does not
+    contact Nacos.
+    """
+    gate = "nacos-config-profile"
+    expected = {
+        "apps/core-host": ("dinqor-shared.yaml", "dinqor-core.yaml"),
+        "apps/gateway": ("dinqor-shared.yaml", "dinqor-gateway.yaml"),
+        "apps/bloghtml-preview": (
+            "dinqor-shared.yaml", "dinqor-bloghtml-preview.yaml"
+        ),
+    }
+    problems: list[str] = []
+    for module, data_ids in expected.items():
+        module_dir = REPO / module
+        pom = module_dir / "pom.xml"
+        profile = module_dir / "src" / "main" / "resources" / "application-nacos.yml"
+        if not pom.is_file():
+            problems.append(f"{module}: pom.xml is missing")
+            continue
+        if "spring-cloud-starter-alibaba-nacos-config" not in pom.read_text(encoding="utf-8"):
+            problems.append(f"{module}: Nacos Config starter is missing")
+        if not profile.is_file():
+            problems.append(f"{module}: application-nacos.yml is missing")
+            continue
+        text = profile.read_text(encoding="utf-8")
+        if text.count("optional:nacos:") != len(data_ids):
+            problems.append(
+                f"{module}: expected {len(data_ids)} optional Nacos imports, "
+                f"found {text.count('optional:nacos:')}"
+            )
+        for data_id in data_ids:
+            if f"optional:nacos:{data_id}" not in text:
+                problems.append(f"{module}: missing import {data_id}")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True, f"{len(expected)} Wave 1 services import shared + private DataIds")
+
+
 def _archived_script_problems() -> tuple[list[str], int]:
     """V9 §64：那 80 个历史脚本是**冻结的历史**，改了必须有人发现。
 
@@ -1744,6 +1788,7 @@ GATES = {
     "legacy-redis-reference-check": gate_legacy_redis_reference_check,
     "gateway-forbidden-dependency-check": gate_gateway_forbidden_dependency,
     "gateway-stream-proxy-config-check": gate_gateway_stream_proxy_config,
+    "nacos-config-profile": gate_nacos_config_profile,
     "flyway-validation": gate_flyway_validation,
     "business-flyway-disabled": gate_business_flyway_disabled,
     "stream-ban-boundary-coverage": gate_stream_ban_boundary_coverage,

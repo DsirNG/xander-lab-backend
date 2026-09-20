@@ -35,6 +35,12 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
             <version>${spring-cloud-alibaba.version}</version>
         </dependency>
+        <!-- The nacos profile imports shared and gateway-private DataIds in production. -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+            <version>${spring-cloud-alibaba.version}</version>
+        </dependency>
         <dependency>
             <groupId>com.xander</groupId>
             <artifactId>xander-model</artifactId>
