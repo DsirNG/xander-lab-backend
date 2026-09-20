@@ -15,6 +15,7 @@ import com.xander.lab.blogagent.application.BlogAgentEventService;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
@@ -61,6 +62,7 @@ public class BlogAgentController {
     /** 本实例的活跃连接注册表：封禁时主动断开已建立的流。 */
     private final ConnectionRegistry connectionRegistry;
 
+    @Autowired
     public BlogAgentController(BlogAgentService service,
                                BlogAgentEventService eventService,
                                @Qualifier("blogAgentTaskExecutor") TaskExecutor blogAgentTaskExecutor,

@@ -1,4 +1,5 @@
 target/
+**/target/
 !.medical-lab.jar
 *.class
 *.jar
@@ -9,6 +10,7 @@ target/
 # Local secrets (application-local.yml is auto-loaded and must never be committed or baked
 # into an image). Path follows the V9 §18 move of the application to apps/core-host/.
 apps/core-host/src/main/resources/application-local.yml
+**/application-local.yml
 
 # IDEs
 .idea/

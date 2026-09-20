@@ -37,7 +37,7 @@ COPY contracts ./contracts
 COPY apps ./apps
 COPY docs ./docs
 COPY migrations ./migrations
-RUN mvn package -DskipTests -s settings.xml
+RUN mvn clean package -DskipTests -s settings.xml
 
 
 # Stage 2: Run the application
