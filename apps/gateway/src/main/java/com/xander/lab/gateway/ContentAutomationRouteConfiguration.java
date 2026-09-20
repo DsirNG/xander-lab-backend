@@ -26,6 +26,11 @@ public class ContentAutomationRouteConfiguration {
                         .and()
                         .method(org.springframework.http.HttpMethod.GET)
                         .uri(contentAutomationUri))
+                .route("content-publishing-public-taxonomy", route -> route
+                        .path("/api/blog/categories", "/api/blog/tags", "/api/blog/tags/popular")
+                        .and()
+                        .method(org.springframework.http.HttpMethod.GET)
+                        .uri(contentAutomationUri))
                 .route("content-automation-cutover", route -> route
                         .path("/api/blog-agent/**", "/api/blog-plans/**", "/api/email-reminders/**",
                                 "/api/notifications/**")

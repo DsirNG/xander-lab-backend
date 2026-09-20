@@ -144,22 +144,6 @@ public class BlogController {
         return Result.success(new ViewResult(counted));
     }
 
-    @GetMapping("/categories")
-    public Result<List<CategoryVO>> getCategories() {
-        return Result.success(blogService.getCategories());
-    }
-
-    @GetMapping("/tags")
-    public Result<List<TagVO>> getAllTags() {
-        return Result.success(blogService.getAllTags());
-    }
-
-    @GetMapping("/tags/popular")
-    public Result<List<TagVO>> getPopularTags(
-            @RequestParam(required = false, defaultValue = "8") int limit) {
-        return Result.success(blogService.getPopularTags(limit));
-    }
-
     private <T> Result<T> mapBlogError(IllegalArgumentException e) {
         String message = e.getMessage() == null ? "请求无效" : e.getMessage();
         if (message.contains("未登录")) {

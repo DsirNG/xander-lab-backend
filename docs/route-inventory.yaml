@@ -1044,9 +1044,9 @@ routes:
     path: "/api/blog/categories"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getCategories"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 147
+    handler: "com.xander.lab.publishing.api.BlogTaxonomyController#categories"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogTaxonomyController.java
+    line: 23
   - id: publishing-get-blog-media-images
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1275,9 +1275,9 @@ routes:
     path: "/api/blog/tags"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getAllTags"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 152
+    handler: "com.xander.lab.publishing.api.BlogTaxonomyController#tags"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogTaxonomyController.java
+    line: 28
   - id: publishing-get-blog-tags-popular
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1286,9 +1286,9 @@ routes:
     path: "/api/blog/tags/popular"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getPopularTags"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 157
+    handler: "com.xander.lab.publishing.api.BlogTaxonomyController#popularTags"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogTaxonomyController.java
+    line: 33
   - id: components-get-components-menu
     logical_owner: components
     deployment_unit: dinqor-core-host

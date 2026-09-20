@@ -2,6 +2,8 @@ package com.xander.lab.publishing.application;
 
 import com.xander.lab.common.PageData;
 import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.publishing.api.CategoryVO;
+import com.xander.lab.publishing.api.TagVO;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -96,7 +98,7 @@ public class BlogPublicReadService {
                         + " p.cover_image, p.user_id, p.author, p.published_at, p.read_time,"
                         + " p.tips, p.views, p.status"
                         + " ORDER BY p.published_at DESC LIMIT ? OFFSET ?",
-                new BlogPostRowMapper(), append(query.args(), safeSize, (safePage - 1) * safeSize));
+                new BlogPostRowMapper(false), append(query.args(), safeSize, (safePage - 1) * safeSize));
 
         PageData<BlogPostVO> result = new PageData<>();
         result.setRecords(records);
@@ -116,7 +118,7 @@ public class BlogPublicReadService {
                         + " p.cover_image, p.user_id, p.author, p.published_at, p.read_time,"
                         + " p.tips, p.views, p.status"
                         + " ORDER BY p.published_at DESC LIMIT ?",
-                new BlogPostRowMapper(), safeLimit);
+                new BlogPostRowMapper(false), safeLimit);
     }
 
     public BlogPostVO findPublished(long id) {
@@ -125,8 +127,54 @@ public class BlogPublicReadService {
                         + " GROUP BY p.id, p.title, p.summary, p.content, p.category_id, c.name,"
                         + " p.cover_image, p.user_id, p.author, p.published_at, p.read_time,"
                         + " p.tips, p.views, p.status",
-                new BlogPostRowMapper(), id);
+                new BlogPostRowMapper(true), id);
         return posts.isEmpty() ? null : posts.get(0);
+    }
+
+    public List<CategoryVO> categories() {
+        return jdbcTemplate.query(
+                "SELECT c.id, c.name, COUNT(p.id) AS count"
+                        + " FROM blog_category c"
+                        + " LEFT JOIN blog_post p ON p.category_id = c.id AND p.status = 1"
+                        + " GROUP BY c.id, c.name, c.sort"
+                        + " ORDER BY c.sort ASC",
+                (rs, rowNum) -> {
+                    CategoryVO category = new CategoryVO();
+                    category.setId(rs.getString("id"));
+                    category.setName(rs.getString("name"));
+                    category.setCount(rs.getInt("count"));
+                    return category;
+                });
+    }
+
+    public List<TagVO> tags() {
+        return jdbcTemplate.query(
+                "SELECT t.name, COUNT(pt.post_id) AS count"
+                        + " FROM blog_tag t"
+                        + " LEFT JOIN blog_post_tag pt ON pt.tag_id = t.id"
+                        + " LEFT JOIN blog_post p ON p.id = pt.post_id AND p.status = 1"
+                        + " GROUP BY t.id, t.name"
+                        + " ORDER BY count DESC",
+                (rs, rowNum) -> tag(rs));
+    }
+
+    public List<TagVO> popularTags(int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 50);
+        return jdbcTemplate.query(
+                "SELECT t.name, COUNT(pt.post_id) AS count"
+                        + " FROM blog_tag t"
+                        + " LEFT JOIN blog_post_tag pt ON pt.tag_id = t.id"
+                        + " LEFT JOIN blog_post p ON p.id = pt.post_id AND p.status = 1"
+                        + " GROUP BY t.id, t.name"
+                        + " ORDER BY count DESC LIMIT ?",
+                (rs, rowNum) -> tag(rs), safeLimit);
+    }
+
+    private static TagVO tag(ResultSet rs) throws SQLException {
+        TagVO tag = new TagVO();
+        tag.setName(rs.getString("name"));
+        tag.setCount(rs.getInt("count"));
+        return tag;
     }
 
     private QueryParts queryParts(String search, String category, String tag) {
@@ -168,13 +216,21 @@ public class BlogPublicReadService {
     }
 
     private static final class BlogPostRowMapper implements org.springframework.jdbc.core.RowMapper<BlogPostVO> {
+        private final boolean includesContent;
+
+        private BlogPostRowMapper(boolean includesContent) {
+            this.includesContent = includesContent;
+        }
+
         @Override
         public BlogPostVO mapRow(ResultSet rs, int rowNum) throws SQLException {
             BlogPostVO post = new BlogPostVO();
             post.setId(rs.getLong("id"));
             post.setTitle(rs.getString("title"));
             post.setSummary(rs.getString("summary"));
-            post.setContent(rs.getString("content"));
+            if (includesContent) {
+                post.setContent(rs.getString("content"));
+            }
             post.setCategory(rs.getString("category"));
             post.setCategoryName(rs.getString("categoryName"));
             post.setCoverImage(rs.getString("coverImage"));
