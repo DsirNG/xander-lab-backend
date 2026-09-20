@@ -1055,17 +1055,57 @@ def gate_gateway_forbidden_dependency() -> None:
 
 def gate_gateway_stream_proxy_config() -> None:
     gate = "gateway-stream-proxy-config-check"
-    config = REPO / "infrastructure" / "gateway"
-    if not config.exists():
-        skip(gate, "infrastructure/gateway does not exist yet (Wave 1 deliverable)")
+    config = REPO / "infrastructure" / "nacos" / "dinqor-gateway.yaml"
+    if not config.is_file():
+        report(gate, False, "infrastructure/nacos/dinqor-gateway.yaml is missing")
         return
-    text = "".join(p.read_text(encoding="utf-8") for p in sorted(config.rglob("*.y*ml")))
-    required = ["X-Accel-Buffering", "Last-Event-ID"]
-    missing = [token for token in required if token not in text]
-    if missing:
-        report(gate, False, f"gateway stream proxy config missing: {missing}")
+    try:
+        document = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        report(gate, False, f"gateway Nacos YAML is invalid: {exc}")
         return
-    report(gate, True, "stream proxy settings present")
+    spring = document.get("spring", {})
+    cloud = spring.get("cloud", {}) if isinstance(spring, dict) else {}
+    gateway = cloud.get("gateway", {}) if isinstance(cloud, dict) else {}
+    routes = gateway.get("routes", []) if isinstance(gateway, dict) else []
+    fallback = next(
+        (route for route in routes
+         if isinstance(route, dict) and route.get("id") == "monolith-fallback"),
+        None,
+    )
+    stream_proxy = document.get("gateway", {}).get("stream-proxy", {})
+    problems: list[str] = []
+    if not isinstance(fallback, dict):
+        problems.append("monolith-fallback route is missing")
+    else:
+        if fallback.get("uri") != "lb://dinqor-core-host":
+            problems.append("monolith-fallback must target lb://dinqor-core-host")
+        predicates = fallback.get("predicates", [])
+        if "Path=/**" not in predicates:
+            problems.append("monolith-fallback must cover Path=/**")
+        filters = fallback.get("filters", [])
+        if not any(str(item).startswith("AddResponseHeader=X-Accel-Buffering")
+                   for item in filters):
+            problems.append("monolith-fallback must disable X-Accel-Buffering")
+    if not isinstance(stream_proxy, dict):
+        problems.append("gateway.stream-proxy is missing")
+    else:
+        expected = {
+            "preserve-response-header": "X-Accel-Buffering",
+            "preserve-request-header": "Last-Event-ID",
+            "websocket-upgrade": True,
+            "response-timeout": "disabled",
+        }
+        for key, value in expected.items():
+            if stream_proxy.get(key) != value:
+                problems.append(f"gateway.stream-proxy.{key} must be {value!r}")
+    httpclient = gateway.get("httpclient", {}) if isinstance(gateway, dict) else {}
+    if httpclient.get("response-timeout") != "-1ms":
+        problems.append("spring.cloud.gateway.httpclient.response-timeout must be -1ms")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True, "Nacos gateway DataId preserves streaming and fallback semantics")
 
 
 def gate_nacos_config_profile() -> None:
@@ -1109,6 +1149,10 @@ def gate_nacos_config_profile() -> None:
         if module == "apps/core-host" and "dinqor_core" not in text:
             problems.append(
                 "apps/core-host: nacos profile does not select the dinqor_core runtime account"
+            )
+        if "discovery:\n        enabled: true" not in text:
+            problems.append(
+                f"{module}: nacos profile must explicitly enable service discovery"
             )
     core_nacos = REPO / "infrastructure" / "nacos" / "dinqor-core.yaml"
     if not core_nacos.is_file():

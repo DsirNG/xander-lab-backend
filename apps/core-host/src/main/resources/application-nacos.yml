@@ -19,3 +19,5 @@ spring:
         namespace: ${NACOS_NAMESPACE:}
         group: ${NACOS_GROUP:DINQOR-CORE}
         file-extension: yaml
+      discovery:
+        enabled: true

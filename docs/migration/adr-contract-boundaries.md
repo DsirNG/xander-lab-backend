@@ -4548,11 +4548,10 @@ if f"{module}/pom.xml" not in docker:
 `libs/xander-webmvc-support: its pom.xml is not COPYed`；干净树上仍 PASS。
 判据自己的 docstring 记了这次实测，包括"修之前报的是 13 module(s) all COPYed"。
 
-⚠️ **同类形状还有两处未修**（都是"token 在不在全文里"，注释同样能满足）：
-`gate_gateway_stream_proxy_config`（读 `infrastructure/gateway` 的 YAML，今天 SKIP）与
-`stream-ban-boundary-coverage`（`"ConnectionRegistry" not in text` 读 Java 文件）。
-⇒ 记为新待办 63，**不在这刀顺手改**：前者 Wave 1 才有落点，后者要先想清楚
-"注释里出现类名算不算注册"。
+⚠️ **同类形状还剩一处**：`stream-ban-boundary-coverage`（`"ConnectionRegistry" not in text`
+读 Java 文件）。Gateway 这一处后来随 Wave 1 落点改为解析
+`infrastructure/nacos/dinqor-gateway.yaml` 的结构化路由与 stream-proxy 字段；剩余这一处仍要先
+想清楚"注释里出现类名算不算注册"。
 
 ### 26.6 注入验证（十次）
 

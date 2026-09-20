@@ -6,6 +6,7 @@ spring:
   cloud:
     nacos:
       discovery:
+        enabled: true
         group: DINQOR-BLOGHTML-PREVIEW
         service: dinqor-bloghtml-preview
   flyway:

@@ -231,11 +231,10 @@ filter/RequestLoggingFilter.java          ← 目标是 xander-observability-cor
 而"注释掉一行"正是有人要禁用某行时会写的形状。修法是匹配前逐行丢掉注释行
 （`ci_gates.py` 里那 3 行）。判据自己的 docstring 记了这次实测。
 
-⚠️ **同类形状还有两处未修**（都是"token 在不在全文里"）：
-`gate_gateway_stream_proxy_config`（第 1031 行，读 `infrastructure/gateway` 的 YAML，
-现在 SKIP）与 `stream-ban-boundary-coverage`（第 1176 行，`"ConnectionRegistry" not in text`
-读 Java 文件）。两者都只做子串匹配，注释同样能满足 —— 记为新待办，不在这刀顺手改
-（前者在 Wave 1 才有落点，后者要先想清楚"注释里出现类名算不算注册"）。
+⚠️ **还剩一处同类形状未修**：`stream-ban-boundary-coverage`（第 1176 行，
+`"ConnectionRegistry" not in text` 读 Java 文件）仍只做子串匹配，注释同样能满足 ——
+记为新待办，先要想清楚"注释里出现类名算不算注册"。Gateway 这一处已随 Wave 1 落点
+改为解析 `infrastructure/nacos/dinqor-gateway.yaml` 的结构化路由与 stream-proxy 字段。
 
 #### 3.4.5 文档与允许清单动了哪些，以及为什么不新增契约变更条目
 

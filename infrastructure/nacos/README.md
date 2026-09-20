@@ -1,14 +1,17 @@
 # Nacos configuration layout
 
-This directory contains the non-secret deployment overlays described by V9 §16. The service
-runtime defaults keep discovery disabled for local development; deployment enables it with
-`NACOS_DISCOVERY_ENABLED=true` and injects the server address and namespace.
+This directory contains the non-secret Nacos DataIds described by V9 §16. The service runtime
+defaults keep discovery disabled for local development; the opt-in `nacos` profile enables
+discovery and deployment supplies the server address, namespace and secrets.
 
 Stable DataIds and Groups:
 
 - `dinqor-shared.yaml` / `COMMON`: platform-wide non-secret defaults.
 - `dinqor-core.yaml` / `DINQOR-CORE`: `dinqor-core-host` private settings.
 - `dinqor-gateway.yaml` / `DINQOR-GATEWAY`: Gateway routes and edge settings.
+
+`dinqor-gateway.yaml` is the source of truth for the fallback route and stream proxy settings;
+there is no second checked-in gateway overlay to drift from the Nacos DataId.
 
 Passwords, JWT secrets, API keys, encryption keys and database credentials never belong in these
 files. They are provided by deployment secrets or environment variables.

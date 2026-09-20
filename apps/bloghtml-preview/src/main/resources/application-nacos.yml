@@ -15,3 +15,5 @@ spring:
         namespace: ${NACOS_NAMESPACE:}
         group: ${NACOS_GROUP:DINQOR-BLOGHTML-PREVIEW}
         file-extension: yaml
+      discovery:
+        enabled: true
