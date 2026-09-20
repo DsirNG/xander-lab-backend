@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 255
+  total: 257
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -1009,7 +1009,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-post-email-reminders
+  - id: automation-post-email-reminders-contentautomationproxycontroller
     owner: automation
     old:
       method: POST
@@ -1025,14 +1025,14 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-any-email-reminders
+  - id: automation-post-email-reminders-emailremindercontroller
     owner: automation
     old:
-      method: ANY
-      path: "/api/email-reminders/**"
+      method: POST
+      path: "/api/email-reminders"
     new:
-      method: ANY
-      path: "/api/v2/automations/email-reminders/**"
+      method: POST
+      path: "/api/v2/automations/email-reminders"
     clients:
       web: pending
       miniprogram: pending
@@ -1041,7 +1041,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-delete-email-reminders-id
+  - id: automation-delete-email-reminders-id-contentautomationproxycontroller
     owner: automation
     old:
       method: DELETE
@@ -1057,7 +1057,39 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-patch-email-reminders-id-status
+  - id: automation-delete-email-reminders-id-emailremindercontroller
+    owner: automation
+    old:
+      method: DELETE
+      path: "/api/email-reminders/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/automations/email-reminders/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-patch-email-reminders-id-status-contentautomationproxycontroller
+    owner: automation
+    old:
+      method: PATCH
+      path: "/api/email-reminders/{id}/status"
+    new:
+      method: PATCH
+      path: "/api/v2/automations/email-reminders/{id}/status"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-patch-email-reminders-id-status-emailremindercontroller
     owner: automation
     old:
       method: PATCH
