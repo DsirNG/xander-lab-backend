@@ -61,6 +61,7 @@ management:
 
 # Fast path only. Durable Gateway bootstrap/reconcile is a separate Wave 2 step.
 gateway:
+  platform-integration-uri: ${GATEWAY_PLATFORM_INTEGRATION_URI:lb://dinqor-platform-integration}
   security-state:
     pubsub-enabled: ${GATEWAY_SECURITY_STATE_PUBSUB_ENABLED:false}
     pubsub-channel: ${GATEWAY_SECURITY_STATE_PUBSUB_CHANNEL:dinqor:security-events}

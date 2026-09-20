@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 242
+  total: 251
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -2209,6 +2209,23 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-any-well-known
+    owner: integration
+    old:
+      method: ANY
+      path: "/.well-known/**"
+    new:
+      method: ANY
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: integration-get-well-known-oauth-authorization-server
     owner: integration
     old:
@@ -2243,6 +2260,22 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-any-blog-posts-sync
+    owner: integration
+    old:
+      method: ANY
+      path: "/api/blog/posts/*/sync/**"
+    new:
+      method: ANY
+      path: "/api/v2/content/blog/posts/*/sync/**"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: integration-post-blog-posts-postid-sync-csdn
     owner: integration
     old:
@@ -2275,6 +2308,22 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: integration-any-download
+    owner: integration
+    old:
+      method: ANY
+      path: "/api/download/**"
+    new:
+      method: ANY
+      path: "/api/v2/integrations/download/**"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: integration-get-download-filename
     owner: integration
     old:
@@ -2283,6 +2332,22 @@ entries:
     new:
       method: GET
       path: "/api/v2/integrations/download/{filename:.+}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-any-export
+    owner: integration
+    old:
+      method: ANY
+      path: "/api/export/**"
+    new:
+      method: ANY
+      path: "/api/v2/content/export/**"
     clients:
       web: pending
       miniprogram: pending
@@ -2315,6 +2380,22 @@ entries:
     new:
       method: GET
       path: "/api/v2/content/export/excel"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-any-mcp-platformintegrationproxycontroller
+    owner: integration
+    old:
+      method: ANY
+      path: "/api/mcp/**"
+    new:
+      method: ANY
+      path: "/api/v2/integrations/mcp/**"
     clients:
       web: pending
       miniprogram: pending
@@ -2467,6 +2548,22 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: integration-any-publishing-csdn
+    owner: integration
+    old:
+      method: ANY
+      path: "/api/publishing/csdn/**"
+    new:
+      method: ANY
+      path: "/api/v2/integrations/csdn/**"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: integration-delete-publishing-csdn-authorization
     owner: integration
     old:
@@ -2523,6 +2620,22 @@ entries:
     new:
       method: GET
       path: "/api/v2/integrations/csdn/authorization/status"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-any-publishing-juejin
+    owner: integration
+    old:
+      method: ANY
+      path: "/api/publishing/juejin/**"
+    new:
+      method: ANY
+      path: "/api/v2/integrations/juejin/**"
     clients:
       web: pending
       miniprogram: pending
@@ -2627,6 +2740,22 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: integration-any-upload
+    owner: integration
+    old:
+      method: ANY
+      path: "/api/upload/**"
+    new:
+      method: ANY
+      path: "/api/v2/integrations/upload/**"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: integration-post-upload-batch
     owner: integration
     old:
@@ -2659,6 +2788,23 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: integration-any-mcp-platformintegrationproxycontroller-2
+    owner: integration
+    old:
+      method: ANY
+      path: "/mcp/**"
+    new:
+      method: ANY
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: knowledgebase-get-knowledge-base-files
     owner: knowledgebase
     old:

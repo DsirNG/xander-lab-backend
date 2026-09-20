@@ -33,6 +33,7 @@ counts:
   unclassified_sources:
     - DinQorAIApplication.java
     - gateway
+    - integrationhost
     - migration
     - operations
 edges:

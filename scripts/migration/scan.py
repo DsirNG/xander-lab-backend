@@ -857,6 +857,8 @@ CONFIG_OWNERS = [
     (r"^recitation\.", "knowledge"),
     (r"^knowledge-base\.", "knowledge"),
     (r"^agent\.", "agent"),
+    (r"^platform-integration\.", "integration"),
+    (r"^gateway\.platform-integration-uri$", "gateway"),
     # Outbound MCP client is part of the Agent tool plane (V9 §94). Inbound MCP
     # servers remain owned by platform integration, so the more-specific rule
     # must precede the broad mcp.* fallback.

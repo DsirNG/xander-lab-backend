@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 715
-  leaves: 524
+  total: 752
+  leaves: 541
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -2670,6 +2670,11 @@ config:
     value: ""
     leaf: false
     logical_owner: unassigned
+  - key: gateway.platform-integration-uri
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_PLATFORM_INTEGRATION_URI:lb://dinqor-platform-integration}"
+    leaf: true
+    logical_owner: gateway
   - key: gateway.security-state
     source: apps/gateway/src/main/resources/application.yml
     value: ""
@@ -2810,6 +2815,181 @@ config:
     value: "${SERVER_PORT:0}"
     leaf: true
     logical_owner: shared
+  - key: server
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: server.port
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${SERVER_PORT:30005}"
+    leaf: true
+    logical_owner: shared
+  - key: spring
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: spring.application
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.application.name
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${SPRING_APPLICATION_NAME:dinqor-platform-integration}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${NACOS_DISCOVERY_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.server-addr
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${NACOS_SERVER_ADDR:127.0.0.1:8848}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.namespace
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${NACOS_NAMESPACE:}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.group
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${NACOS_GROUP:DINQOR-PLATFORM-INTEGRATION}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.service
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${NACOS_SERVICE_NAME:${spring.application.name}}"
+    leaf: true
+    logical_owner: shared
+  - key: platform-integration
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: platform-integration.core-base-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_CORE_BASE_URL:http://localhost:30002}"
+    leaf: true
+    logical_owner: integration
+  - key: management
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web.exposure
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web.exposure.include
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "health,info,prometheus"
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.probes
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.probes.enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "true"
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint.health.show-details
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: never
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint.health.group
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.group.readiness
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.group.readiness.include
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: readinessState
+    leaf: true
+    logical_owner: unassigned
+  - key: management.metrics
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.metrics.tags
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.metrics.tags.application
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${spring.application.name}"
+    leaf: true
+    logical_owner: unassigned
   - key: agent.conversation.compaction-enabled
     source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     value: "<java-default>"
@@ -3895,3 +4075,10 @@ config:
     logical_owner: unassigned
     source_kind: java-configuration-properties
     line: 19
+  - key: platform-integration.core-base-url
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 11

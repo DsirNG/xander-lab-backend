@@ -37,6 +37,32 @@ services:
     networks:
       - dinqor-wave2
 
+  platform-integration:
+    image: ${DINQOR_PLATFORM_INTEGRATION_IMAGE:-dinqor-platform-integration:wave2}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: apps/platform-integration
+        APP_PORT: "30005"
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 30005
+      PLATFORM_INTEGRATION_CORE_BASE_URL: ${PLATFORM_INTEGRATION_CORE_BASE_URL:-http://core-host:30002}
+      NACOS_CONFIG_ENABLED: ${PLATFORM_INTEGRATION_NACOS_CONFIG_ENABLED:-false}
+      NACOS_CONFIG_IMPORT_CHECK_ENABLED: ${PLATFORM_INTEGRATION_NACOS_CONFIG_IMPORT_CHECK_ENABLED:-false}
+      NACOS_DISCOVERY_ENABLED: ${PLATFORM_INTEGRATION_NACOS_DISCOVERY_ENABLED:-false}
+    ports:
+      - ${PLATFORM_INTEGRATION_PORT:-30005}:30005
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:30005/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - dinqor-wave2
+
 networks:
   dinqor-wave2:
     name: ${DINQOR_WAVE2_NETWORK:-dinqor-wave2}
