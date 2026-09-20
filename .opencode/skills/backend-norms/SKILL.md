@@ -1076,7 +1076,7 @@ private static Method methodNamed(String name) {
 ⇒ **凡文档里写"某处/几处还有 X"，动手前先 `grep` 数一遍** ——
 清单通常是**推**出来的，不是**数**出来的（这个动作连续两刀都栽过）。
 
-### ⚠️ 断言"第一个参数是调用方 id"之前，先查参数个数
+### ⚠️ 读 `getParameterTypes()[n]` / `getParameters()[n]` 之前，先查参数个数
 
 ```java
 for (Method method : Port.class.getDeclaredMethods()) {
@@ -1090,6 +1090,47 @@ for (Method method : Port.class.getDeclaredMethods()) {
 
 **断言失败的信息必须指向真正的问题**，否则下次有人看到"下标越界"会去查数组而不是查契约。
 `automation-api` 的三个端口测试都补了这个守卫（2026-09-17）。
+
+⚠️ **这条规则对"定点断言"同样适用，而定点断言才是容易漏的那种**（2026-09-20 实测：
+`grep` 命中 28 处读数，13 处已守卫、**11 处没守卫**，分布在 5 个测试方法 / 4 个文件里）：
+
+```java
+// ❌ 参数表缩短 ⇒ ArrayIndexOutOfBoundsException，报的是"下标越界"
+assertEquals(ContentPlanDraft.class, methodNamed("create").getParameterTypes()[1]);
+
+// ✅ 守卫要**恰好够宽**，而且必须排在读数**之前**
+Method create = methodNamed("create");        // 顺带存局部变量：连写两次会让
+assertTrue(create.getParameterCount() > 1,    // "恰好一个同名方法"那条断言跑两遍
+        "create 的参数表变了：下面读的是第 2 个参数（幂等键 ContentPlanDraft），"
+                + "现在只有 " + create.getParameterCount() + " 个。");
+assertEquals(ContentPlanDraft.class, create.getParameterTypes()[1]);
+```
+
+**两条容易做错的判据：**
+
+1. **用下界 `> n`，不用精确值 `== n`。** 守卫的职责只是"让失败信息指到真正的原因"，
+   而"下标越界"只在**参数表比读数需要的短**时出现 ⇒ 下界就是恰好够宽的那条。
+   精确值会**多出一条主张**（"参数表恰好 n 个"—— 同一文件里的逐字签名清单已经有了），
+   还会对"末尾追加参数"产生**假阳性**：给 `openQuiz` 追加第 4 个参数，第 3 个仍然是会话 id，
+   那条断言的主张仍然成立，它却会红。
+   ⇒ 与"fail-soft 的 `try` 只包一条语句"是同一条原则：**守卫的范围恰好和它要保护的东西一样宽。**
+   （⚠️ 唯一的例外是**移位**：既有断言原来就是精确值，移动它时**文本逐字保留**，
+   顺手改性质会让这次改动不再是可证明的纯加固。）
+
+2. **守卫必须排在读数之前。** 判据**在**、但排在症状后面，**等于没有** ——
+   参数表缩短时先抛 `ArrayIndexOutOfBoundsException`，那条写好的消息根本轮不到说。
+
+⚠️ **"顺序"这个主张用注入测不出来**（只把守卫的绑定值抬高一点看它变红是**无效**的）：
+"守卫通过 ⇒ 读数必然在范围内"是**逻辑蕴含**，任何只改守卫的注入都分不开两者。
+**要换掉被测方法本身**，让它变成参数更少的方法，再分别跑两种顺序：
+
+| 注入 | 期望 |
+|---|---|
+| `methodNamed("runStream")` → `methodNamed("publish")`（两参），**守卫在前** | 具名消息，**无越界** |
+| 同上，**守卫挪回读数之后** | `ArrayIndexOutOfBoundsException`，**守卫那句话一个字都没出现** |
+
+2026-09-20 实测：前者 `Failures: 1` + 「runStream 是四参形式…`expected: <4> but was: <2>`」，
+后者 `Errors: 1` + `Index 2 out of bounds for length 2`。
 
 ### ⚠️ 断言"第一个参数是调用方 id"时，**类型**不够，要断言**参数名**
 
@@ -1896,6 +1937,35 @@ def blob(path):
 
 ⚠️ **通用规则**：**"脚本打印了一个陌生的哈希" ≠ "文件被改坏了"。**
 分辨它们的是 `git diff` —— 差异是否**逐行都是本次意图**；不是哈希比对。
+
+### ⚠️ 注入脚本从 Python 起 Maven：两个会造假信号的坑
+
+2026-09-20 第二十二刀踩到，两个坑都在"脚本跑完了"和"结果可信"之间：
+
+1. **别用 `subprocess.run(["bash", "mvn.sh", ...])`。** Windows 上 PATH 查找会先命中
+   `C:\Windows\System32\bash.exe`（**WSL 启动器**），它在本机被安全策略拦掉 ⇒
+   **拿到的是空输出**，于是"没有 `Failures: 0, Errors: 0`"被误判成**"变红"**。
+   ⇒ 照抄 `mvn.sh` 里那条 java 命令行**内联**起 JVM（与 `mvn.sh` 保持同步），不要经过 shell。
+2. **别从 stdout 抓断言消息。** Maven 往 Windows 控制台写的字节是 **GBK**，
+   用 `encoding="utf-8", errors="replace"` 解出来中文全被抹掉 ⇒
+   明明红的用例看起来"变红了但消息不对"。
+   ⇒ 断言消息从 `contracts/<m>/target/surefire-reports/TEST-*.xml` 里读（那份是 UTF-8）。
+
+```python
+subprocess.run(
+    ["C:/jdk-17.0.2/bin/java",
+     "-classpath", "C:/apache-maven-3.9.9/boot/plexus-classworlds-2.8.0.jar",
+     "-Dclassworlds.conf=C:/apache-maven-3.9.9/bin/m2.conf",
+     "-Dmaven.home=C:/apache-maven-3.9.9",
+     "-Dmaven.multiModuleProjectDirectory=D:/blog/xander-lab-backend",
+     "org.codehaus.plexus.classworlds.launcher.Launcher",
+     "-pl", module, "test", "-Dtest=" + test_class, "-DfailIfNoTests=false"],
+    capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=REPO)
+```
+
+⚠️ 两个坑的**共同形状**：**"红"这个信号本身是假的**（一个是没跑，一个是消息读不出来）。
+⇒ 注入脚本里"变红"**不能**作为唯一判据，必须同时断言**消息里出现了预期的关键词**，
+并且**断言对照组（删掉守卫）退回的是原来那个坏症状**。
 
 ### ⚠️ 多行锚点：除了"唯一"，还要查"它是不是真的相邻"
 

@@ -90,6 +90,12 @@ class BlogAgentPortTest {
     void theTwoTaskIdMethodsPutTheCallerIdFirst() {
         for (String name : List.of("findPublishedPost", "publish")) {
             Method method = methodNamed(name);
+            // ⚠️ 读第 n 个参数之前先查参数个数（待办 59）：参数表缩短时直接读下标抛
+            // ArrayIndexOutOfBoundsException —— 报的是"下标越界"而不是"这个方法的参数表变了"。
+            // 这一条守卫覆盖下面四个读数（类型 [0]/[1] 与参数名 [0]/[1]）。
+            assertTrue(method.getParameterCount() > 1,
+                    name + " 的参数表变了：下面读的是前两个参数的类型与名字，"
+                            + "现在只有 " + method.getParameterCount() + " 个。");
             assertEquals(Long.class, method.getParameterTypes()[0]);
             assertEquals(Long.class, method.getParameterTypes()[1]);
             assertEquals("userId", method.getParameters()[0].getName(),
@@ -110,13 +116,16 @@ class BlogAgentPortTest {
     @Test
     void runStreamTakesAJdkEventCallbackAndACancellationProbe() {
         Method runStream = methodNamed("runStream");
+        // ⚠️ 这条参数个数断言必须**排在两个下标读数之前**（待办 59）：它原来在最后一行，
+        // 于是参数表缩短时先抛的是 ArrayIndexOutOfBoundsException，这条消息根本轮不到说 ——
+        // 判据在、但排在症状后面，等于没有。
+        assertEquals(4, runStream.getParameterCount(),
+                "runStream 是四参形式。三参的 Consumer<String> 重载只服务同域的前端 HTTP 层，"
+                        + "不上端口 —— 端口只收跨域真正用到的形状。");
         assertEquals(BiConsumer.class, runStream.getParameterTypes()[2],
                 "第三个参数必须是 BiConsumer<String, String>（event + data）。");
         assertEquals(BooleanSupplier.class, runStream.getParameterTypes()[3],
                 "第四个参数必须是 BooleanSupplier（协作式取消查询）。");
-        assertEquals(4, runStream.getParameterCount(),
-                "runStream 是四参形式。三参的 Consumer<String> 重载只服务同域的前端 HTTP 层，"
-                        + "不上端口 —— 端口只收跨域真正用到的形状。");
     }
 
     /** 端口的返回类型必须是契约记录，不能是域侧实体（那会把 MyBatis 拖过边界，ADR-2）。 */

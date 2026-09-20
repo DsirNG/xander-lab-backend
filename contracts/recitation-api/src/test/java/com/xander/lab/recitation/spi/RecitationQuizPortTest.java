@@ -132,7 +132,14 @@ class RecitationQuizPortTest {
     void openQuizKeepsTheConversationIdSoGradingCannotBorrowAnotherChatsQuiz() {
         // 三参版本是端口唯一的形式：两参重载（没有生产调用方）用传 null 覆盖同一语义。
         // 保留会话这一维是因为提供方用它做归属校验 —— "评分只能落到这次真实出题上"。
-        assertEquals(Long.class, methodNamed("openQuiz").getParameterTypes()[2],
+        //
+        // ⚠️ 读第 n 个参数之前先查参数个数（待办 59）：参数表缩短时直接读下标抛
+        // ArrayIndexOutOfBoundsException —— 报的是"下标越界"而不是"这个方法的参数表变了"。
+        Method openQuiz = methodNamed("openQuiz");
+        assertTrue(openQuiz.getParameterCount() > 2,
+                "openQuiz 的参数表变了：下面读的是第 3 个参数（会话 id），"
+                        + "现在只有 " + openQuiz.getParameterCount() + " 个。");
+        assertEquals(Long.class, openQuiz.getParameterTypes()[2],
                 "openQuiz 的第三个参数必须是会话 id（可为 null）。"
                         + "去掉它会让 recordQuiz 的会话校验失去来源。");
     }

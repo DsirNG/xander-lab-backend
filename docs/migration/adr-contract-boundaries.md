@@ -4073,6 +4073,8 @@ return found;
 - **没有顺手给 `getParameterTypes()[1]` / `[2]` 加 `getParameterCount()` 前置守卫。**
   那是**另一个**已记录的形状（"守卫的失败信息必须指向真正的原因"），
   与"恰好一个"不是同一件事；混在一起会让这次改动的性质变模糊。记进待办 59。
+  ✅ **已做**（§25）。⚠️ 那张清单当时写的是"三处"，实测是 **11 个读数 / 5 个测试方法 /
+  4 个文件** —— 又一张"推出来"的清单。§25.3 还记了另一个判断：新守卫用**下界**不用精确值。
 
 ## 24. 落地记录（二十一）：待办 53 —— 派生字段的 fail-soft，以及"凭证是不是安全边界"这个判据
 
@@ -4275,7 +4277,172 @@ find . -name '*Metric*.java' -o -name '*Counter*.java'             → 零命中
 实现是 MyBatis 查询，库不可用时它照抛。已改成「未授权不抛；查询机制本身失败时抛运行时异常」。
 ⚠️ 这与待办 16 同族：**一句写在契约上、却不可能被任何东西验证的保证。**
 
-## 25. 待办
+## 25. 落地记录（二十二）：待办 59 —— 反射读下标的前置守卫，以及一张又错了的清单
+
+与 §22 / §23 同类：**纯测试加固，生产代码一个字节没动**。所以验收只能靠
+"注入之后失败信息是什么"，不能靠指标 —— 指标也确实一动不动（§25.7）。
+
+### 25.1 缝：一条守卫**存在**，却排在症状后面
+
+`BlogAgentPortTest.runStreamTakesAJdkEventCallbackAndACancellationProbe` 里
+本来就有一条 `assertEquals(4, runStream.getParameterCount(), ...)` —— 判据是有的。
+但它在两个下标读数的**后面**：
+
+```java
+assertEquals(BiConsumer.class, runStream.getParameterTypes()[2], ...);        // ← 先读
+assertEquals(BooleanSupplier.class, runStream.getParameterTypes()[3], ...);
+assertEquals(4, runStream.getParameterCount(), "runStream 是四参形式。...");   // ← 后判
+```
+
+参数表缩短到 3 时，先抛的是 `ArrayIndexOutOfBoundsException: Index 3 out of bounds for
+length 2`，那条写着"runStream 是四参形式"的断言**根本轮不到说**。
+⇒ **判据在，但排在症状后面，等于没有。** 这是 §25.6 里 A5a/A5b 那一对专门测的东西。
+
+其余未守卫的位置是另一种形状：读数前面**什么都没有**。
+
+### 25.2 ⚠️ 实测：清单写的是"三处"，实际是 **11 个读数 / 5 个测试方法 / 4 个文件**
+
+待办 59 原文点名的是"`ContentPlanPortTest` 的 `[1]` / `[2]`、`RecitationQuizPortTest` 的
+`[2]`、`BlogAgentPortTest` 一类"。动手前先数了一遍（这是**连续第三刀**了，见 §23.2 / §22.3）：
+
+```
+grep -rn 'getParameterTypes()\[' --include=*.java **/src/test/**
+⇒ 28 处命中，其中 6 处是注释 / javadoc 里的文字引用 ⇒ 22 处是**代码读数**
+```
+
+| 类别 | 处数 | 说明 |
+|---|---|---|
+| 代码读数 | 22 | `getParameterTypes()[n]` |
+| 其中已守卫 | 13 | `getParameterCount()` 前置断言 **12** 处；`RemoteToolCatalogTest` 用 `getMethod("tools", Long.class)` **按参数表查找**，签名一变 `getMethod` 自己就抛 ⇒ 天然钉住 **1** 处 |
+| **其中未守卫** | **9** | 见下表 |
+
+同一族的 `getParameters()[n]`（读参数名）也数了一遍：10 处代码读数，其中 **2 处未守卫**
+（`BlogAgentPortTest:95` / `:98`，与下面那个测试是**同一个方法**）。
+
+未守卫的 **11 个读数**分布在 **5 个测试方法**里：
+
+| 文件 | 测试方法 | 未守卫读数 |
+|---|---|---|
+| `automation-api/ContentPlanPortTest` | `createTakesAKeyedDraftAndUpdateTakesAnUnkeyedEditSoTheyCannotBeConfused` | `create[1]`、`update[2]` |
+| `recitation-api/RecitationMaterialPortTest` | `theOtherThreeMethodsAreOverloadsSoTheyKeepTheCanonicalName` | `createMaterial[1]`、`searchMaterials[1]`、`countMaterials[1]` |
+| `recitation-api/RecitationQuizPortTest` | `openQuizKeepsTheConversationIdSoGradingCannotBorrowAnotherChatsQuiz` | `openQuiz[2]` |
+| `blogagent-api/BlogAgentPortTest` | `theTwoTaskIdMethodsPutTheCallerIdFirst` | `[0]`、`[1]`、`getParameters()[0]`、`getParameters()[1]` |
+| `blogagent-api/BlogAgentPortTest` | `runStreamTakesAJdkEventCallbackAndACancellationProbe` | `[2]`、`[3]`（**守卫存在但顺序错**） |
+
+⚠️ 这是**连续第三张错清单**（§22.3 的"调用点清单"、§23.2 的"三处 `methodNamed`"）。
+三张的共同成因是同一个：**结论是推出来的，不是数出来的。**
+⇒ 规则已经在 `MEMORY.md` 里写死了：**凡文档里写"某处 / 几处还有 X"，动手前先 `grep` 数一遍。**
+
+### 25.3 判据：守卫要**恰好够宽**，不多不少
+
+新加的守卫写成**下界**（`assertTrue(count > n, ...)`），不是**精确值**（`assertEquals(n, ...)`）。
+
+理由：守卫的职责是**让失败信息指到真正的原因**，而"下标越界"这个症状只在
+**参数表比读数需要的短**时出现 ⇒ 下界就是恰好够宽的那一条。
+
+用精确值会**多出一条主张**："这个方法的参数表恰好是 n 个"。而这条主张在同一个文件里
+**已经有了**（`declaresExactlyTheSixKnownMethodsWithTheseExactSignatures` 一类逐字清单）。
+后果是：一次**有意登记过的**加参改动会让两个测试同时变红，两条消息重叠。
+⚠️ 而且精确值会产生**假阳性**：给 `openQuiz` 末尾追加第 4 个参数，第 3 个仍然是会话 id，
+`openQuizKeepsTheConversationId...` 这条断言的**主张仍然成立**，它却会红。
+
+⇒ 与待办 53 的"单语句 `try`"是同一条原则：**守卫的范围恰好和它要保护的东西一样宽，
+不宽一分。** 多出来的那部分不是更强的守卫，是另一条没人要求的主张。
+
+⚠️ **但 `runStream` 那条保留精确值 `assertEquals(4, ...)`** —— 因为它是**移位**，不是新写。
+它原来就断言 `== 4`（而且 javadoc 解释了"四参形式 vs 三参重载"），
+**顺手把一条既有断言的性质改掉，会让这次改动不再是可证明的纯加固。**
+
+### 25.4 修法
+
+- **6 条新守卫**（下界），覆盖 11 个未守卫读数里的 9 个（循环里的守卫一次覆盖多个）；
+- **1 条移位**：`runStream` 的 `assertEquals(4, ...)` 提到两个读数**之前**，文本逐字保留；
+- 每条守卫的消息都写清三件事：**哪个方法**、**下面读的是第几个参数（那个参数是什么）**、
+  **现在实际有几个**。例如：
+
+```java
+Method create = methodNamed("create");
+assertTrue(create.getParameterCount() > 1,
+        "create 的参数表变了：下面读的是第 2 个参数（幂等键 ContentPlanDraft），"
+                + "现在只有 " + create.getParameterCount() + " 个。");
+assertEquals(ContentPlanDraft.class, create.getParameterTypes()[1]);
+```
+
+⚠️ 顺带把 `methodNamed(name)` 的返回值存进局部变量，而不是连写两次
+`methodNamed("create").getParameterTypes()[1]` —— 后者会让"恰好一个同名方法"那条断言
+**跑两遍**，而且守卫和真正的读数看着像两条不相干的语句。
+
+### 25.5 刻意没做的事
+
+- **没有把"读第 n 个参数"抽成一个 `parameterAt(Method, int)` 帮手。**
+  那会让守卫**结构上无法遗漏**（比"记得写"强），但 `ContractShape` 在每个契约模块的
+  test 作用域里**各有一份**（契约模块不能互相依赖，测试作用域也不行，见 §23.5）⇒
+  帮手要复制 3 份，而且只在 4 个模块里用、另外几个模块仍用裸读法 ⇒ **代码反而更不一致**。
+  要收就该一次收全部，那是独立的一刀（待办 62）。
+- **没有给 `methodNamed` 加"参数个数至少 n"的变体。** 同一个理由：
+  `methodNamed` 不知道下面要读第几个下标，把 n 塞进它的签名等于把两件事混成一件。
+- **没有改 `RecitationQuizPortTest:63` 的 `getGenericParameterTypes()[4]`。**
+  它看着像同一族，但它前面有一条"整张参数表逐字相等"的断言（`:56`），参数表一变那条**先红**
+  ⇒ **它已经有守卫了，只是不是 `getParameterCount()` 这个写法**。照清单去加会变成**多余的**守卫。
+
+### 25.6 注入验证：八个用例，其中一对专门分辨"顺序"
+
+⚠️ 这一刀**没法**用"缩短端口参数表"来注入 —— 端口每个方法都有实现方，删一个参数整个
+反应堆编译不过。所以注入的是**守卫绑定值 / 读下标**，模拟"参数表比断言需要的短"。
+A 组（守卫在）与 B 组（守卫删掉 + 读数下标抬高）成对，才是"反着用一次"。
+
+| # | 注入 | 实测 |
+|---|---|---|
+| A1 | `ContentPlanPortTest`：`create` 守卫 `> 1` → `> 3` | ✅ `Failures: 1`，「create 的参数表变了：…现在只有 2 个。」**无越界** |
+| B1 | 同上**删掉守卫**并把读数改成 `[3]` | ✅ `Errors: 1`，`Index 3 out of bounds for length 2` |
+| A2 | `RecitationMaterialPortTest`：`createMaterial` 守卫抬高 | ✅ 「createMaterial 的参数表变了：…现在只有 2 个。」 |
+| B2 | 同上删守卫 + `[3]` | ✅ `Index 3 out of bounds for length 2` |
+| A3 | `RecitationQuizPortTest`：`openQuiz` 守卫抬高 | ✅ 「openQuiz 的参数表变了：…现在只有 3 个。」 |
+| B3 | 同上删守卫 + `[4]` | ✅ `Index 4 out of bounds for length 3` |
+| A4 | `BlogAgentPortTest`：点位守卫抬高 | ✅ 「findPublishedPost 的参数表变了：…现在只有 2 个。」 |
+| B4 | 同上删守卫 + `[2]` / `[3]` | ✅ `Index 2 out of bounds for length 2` |
+
+**A5 那一对是这一刀唯一"测顺序"的判据，单独说：**
+
+⚠️ 只把 `assertEquals(4, ...)` 抬高一点看它变红，**证明不了顺序** —— 因为
+"守卫通过 ⇒ 读数必然在范围内"是**逻辑蕴含**，任何只改守卫的注入都分不开两者。
+
+所以把 `methodNamed("runStream")` 换成只有两个参数的 `methodNamed("publish")`，
+分别跑两种顺序：
+
+| # | 注入 | 实测 |
+|---|---|---|
+| A5a | 换成 `publish`，**守卫在读数之前**（当前形状） | ✅ `Failures: 1`，「runStream 是四参形式。…」`expected: <4> but was: <2>`，**无越界** |
+| A5b | 换成 `publish`，**守卫挪回读数之后**（改前的形状） | ✅ `Errors: 1`，`ArrayIndexOutOfBoundsException: Index 2 out of bounds for length 2`（`:122`），**守卫那句话一个字都没出现** |
+
+⇒ A5b 才是"判据在、但排在症状后面，等于没有"的**直接证据**。
+
+八次注入的 `before` / `after` blob 逐字相同（`e6aeaa3fd04e` / `0037b5b3f81a` /
+`96688a099b29` / `fea3f6aa76c3`），且与 `git hash-object` 一致。
+⚠️ 脚本踩到一个坑：**从 Python 里调 `bash mvn.sh` 会命中 `System32\bash.exe`（WSL 启动器，
+被安全策略拦），拿到空输出 ⇒ 报"变红"但实际没跑**。改成内联那条 java 命令行（与
+`mvn.sh` 保持同步）。另：Maven 往 Windows 控制台写的字节是 GBK，断言消息从
+`surefire-reports/TEST-*.xml`（UTF-8）里读，别从 stdout 读。
+
+### 25.7 实测收益
+
+| 项 | 改前 | 改后 |
+|---|---|---|
+| 未守卫的反射读数 | 11（5 个测试方法 / 4 个文件） | **0** |
+| 测试方法数 | 36（7 + 10 + 10 + 9） | **36**（不变） |
+| 全反应堆测试 | — | **0 fail**（core-host **1241**） |
+| 26 条门禁 | — | **24 pass / 0 fail / 2 skip** |
+| 六个头条指标 | 17/7/0/0/9/6 | **17/7/0/0/9/6**（不动） |
+
+⚠️ **测试方法数不变是这一刀的性质**：它**不新增测试**，改的是既有断言**失败时说什么**。
+所以"测试全绿"不是验收 —— 验收是 §25.6 的注入表。
+
+### 25.8 为什么没有加 `contract-changes.yaml` 条目
+
+生产代码一个字节没动，也没有任何线上形状变化。这个文件记的是**能力 / 契约的变更**，
+不是"测试说了什么"。理由同 §22 / §23。
+
+## 26. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -4338,10 +4505,11 @@ find . -name '*Metric*.java' -o -name '*Counter*.java'             → 零命中
 | 55 | **⚠️ 注入验证与"判据强度"的边界要说清** —— 注入**能**发现"某个具体位置没人守"，**不能**发现"判据的**形状**够不够" | **本刀澄清**（§19.4 末）。前一条此前被写成"这类缺陷注入验证发现不了"，**过宽了**：注入 D 就发现了一处真的没人守的位置。正确的区分是 —— 前者是**位置**问题，注入落在那里就能看见；后者是**判据**问题（例如只断言参数类型不断言参数名），注入永远看不见，只能**反着用一次**：拿判据去断言它本该拒绝的形状。待办 11 / 46 / 51 都是后者 |
 | 56 | **⚠️ 跨单元实现边归零之后，"= 0"这条不变式没有任何门禁守着** | **已做**（§21，**不是抽取刀**）。修法：`ci_gates.py` 加常量 `EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0` + `deployment-unit-coupling` 第 4 条判据（放在三条形状判据**之后**，双向）。⭐ 实测**直接对照**：注入 D（消费方退回具体类）时，**常量=1 ⇒ 24 pass / 0 fail，而且 detail 仍印着 `1 cross-unit edge(s) left`**；**常量=0 ⇒ 23 pass / 1 fail，唯一红的就是它**。⇒ 形状判据不是漏了，是**结构上看不见**单向边。⚠️ 归零**之前**这个常量写不出来（数字一直在动）⇒ 是 §20 解锁的。⚠️ **待办 16 仍未修**（修它要人工维护的基线文件，代价不同，已问过九次） |
 | 57 | **⚠️ 反射测试"按名字取方法"要断言**恰好一个**同名方法** | **已做**（§23）。⚠️ **原清单是错的**：写着三处，实测是**七处** —— `EmailReminderPortTest` **根本没有这个写法**（多写了），而 `blogagent-api` 两个 / `recitation-api` 两个 / `integration-api/MailPortTest`（收齐了却 `.findFirst()`）**四处没列**（漏了）。⇒ 与待办 54 同族：**清单是推出来的，不是数出来的**，而且漏的四处里有两个别的模块（写清单时只扫了 `automation-api`）。七处统一改成"先数一遍、断言恰好一个、再返回"；`ContentPlanPortTest.indexOf` 顺带从"返回下标"改成"返回 `Method`"。⚠️ 今天**没有任何端口上有重载**（`RecitationQuizPort` 那个两参重载在**服务**上，不在端口上）⇒ 潜在缺陷，不是活缺陷。注入 H1 / H2（两种实现形状；⚠️ 必须**同时**改签名清单，否则清单断言先红会掩盖它）实测 2 fail / 1 fail，报的都是具名断言。⚠️ 另四处是同一段代码、**没有逐处注入** —— 那句判断本身是推的 |
-| 59 | **⚠️ 反射断言读 `getParameterTypes()[n]` 前要先查 `getParameterCount()`** | **未做**（§23.5）。`ContentPlanPortTest` 的 `[1]` / `[2]`、`RecitationQuizPortTest` 的 `[2]`、`BlogAgentPortTest` 一类都没有前置守卫 ⇒ 参数表缩短时症状是 `ArrayIndexOutOfBoundsException`，**报的是"下标越界"而不是"这个方法的参数表变了"**。与待办 45 / 57 同族（失败信息指不到真正的原因）。⚠️ `NotificationPortTest` / `EmailReminderPortTest` / `ContentPlanPortTest` 里"首参必须是调用方 id"那几条**已经**有守卫，可作模板 |
+| 59 | **⚠️ 反射断言读 `getParameterTypes()[n]` 前要先查 `getParameterCount()`** | **已做**（§25，**纯测试加固，生产代码零改动**）。⚠️ **原清单是错的**：写着"三处"，实测是 **11 个读数 / 5 个测试方法 / 4 个文件**（`grep` 命中 28 处，其中 6 处是注释 ⇒ 22 处代码读数，13 处已守卫 ⇒ 9 处未守卫；同族的 `getParameters()[n]` 另有 2 处未守卫）⇒ **连续第三张"推出来"的错清单**（§22.3 / §23.2）。修法：**6 条下界守卫** + **1 条移位**。⭐ 判据用**下界**不用精确值 —— 守卫的职责只是让失败信息指到真正的原因，精确值会多出一条"参数表恰好 n 个"的主张（同一文件里已有逐字清单），还会对"末尾追加参数"产生假阳性（§25.3）。⭐ `runStream` 那条是**移位**：它本来就断言 `== 4`，但排在两个下标读数**之后** ⇒ 参数表缩短时先抛 `ArrayIndexOutOfBoundsException`，**判据在、却轮不到说**。注入 A5a / A5b 用"把 `runStream` 换成两参的 `publish`"这一对直接测顺序（只抬高守卫绑定值测不出来 —— "守卫通过 ⇒ 读数在范围内"是逻辑蕴含，分不开）⇒ 守卫在前得具名消息、守卫在后得 `Index 2 out of bounds for length 2`。八次注入全部按预期，blob 逐字还原 |
+| 62 | **⚠️ "读第 n 个参数"的守卫仍靠"记得写"** —— 可以抽成 `parameterAt(Method, int)` 帮手，让守卫**结构上无法遗漏** | **未做**（§25.5 刻意没做）。`ContractShape` 在每个契约模块的 test 作用域里**各有一份**（契约模块不能互相依赖）⇒ 帮手要复制 3 份，而且只在 4 个模块里用、其余模块仍用裸读法 ⇒ **反而更不一致**。要收就一次收全部模块，是独立的一刀 |
 | 58 | **⚠️ 同一次注入验证里混用了两种哈希算法** —— 注入脚本自己打印一个（原始字节），驱动脚本打印另一个（`git hash-object`，先 CRLF→LF 归一），**两条输出挨着** | **本刀踩到、已修**（§20.7）。`BlogPlanSseService.java` 的 `restore` 行报 `1ae8d38b…`、收尾报 `8df1c761…`，看起来像还原没到位，白查一轮。实测三种算法同一文件三个值：原始字节带 `blob <len>\0` 头 `1ae8d38b…` / `sha1sum` 原始字节 `87578e00…` / `git hash-object` 归一后 `8df1c761…`（本仓 `core.autocrlf=true`）。⚠️ 这是待办 42 的**第三种形态**：42 是"两个**外部工具**给出不同值"，本刀是"**同一个脚本的两条代码路径**各自打印一个"。⇒ 判据已统一：`inj20.py` 的 `blob()` 改成先归一再哈希，与 `git hash-object` 逐字等价，复跑验证通过。⚠️ 通用规则：**"脚本打印了一个陌生的哈希" ≠ "文件被改坏了"**；分辨它们的是 `git diff`（差异是否逐行都是本次意图），不是哈希比对 |
 
-### 24.1 第 1 项的边界（明确不许顺手放宽）
+### 26.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -4352,7 +4520,7 @@ find . -name '*Metric*.java' -o -name '*Counter*.java'             → 零命中
 
 ---
 
-## 26. 一句话记法
+## 27. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

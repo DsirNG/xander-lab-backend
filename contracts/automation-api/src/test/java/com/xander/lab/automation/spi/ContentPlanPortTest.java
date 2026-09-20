@@ -73,10 +73,21 @@ class ContentPlanPortTest {
     void createTakesAKeyedDraftAndUpdateTakesAnUnkeyedEditSoTheyCannotBeConfused() {
         // 两个写入方法的参数类型刻意不同：创建要幂等键，修改不要。同类型的话，
         // "把创建草稿传给 update"会编译通过 —— 而 update 会静默忽略幂等键。
-        assertEquals(ContentPlanDraft.class,
-                methodNamed("create").getParameterTypes()[1]);
-        assertEquals(ContentPlanEdit.class,
-                methodNamed("update").getParameterTypes()[2]);
+        //
+        // ⚠️ 读第 n 个参数之前先查参数个数（待办 59）：参数表缩短时直接读下标抛
+        // ArrayIndexOutOfBoundsException —— 报的是"下标越界"而不是"这个方法的参数表变了"，
+        // 失败信息指不到真正的原因。同族的守卫见 NotificationPortTest / EmailReminderPortTest。
+        Method create = methodNamed("create");
+        assertTrue(create.getParameterCount() > 1,
+                "create 的参数表变了：下面读的是第 2 个参数（幂等键 ContentPlanDraft），"
+                        + "现在只有 " + create.getParameterCount() + " 个。");
+        assertEquals(ContentPlanDraft.class, create.getParameterTypes()[1]);
+
+        Method update = methodNamed("update");
+        assertTrue(update.getParameterCount() > 2,
+                "update 的参数表变了：下面读的是第 3 个参数（ContentPlanEdit），"
+                        + "现在只有 " + update.getParameterCount() + " 个。");
+        assertEquals(ContentPlanEdit.class, update.getParameterTypes()[2]);
     }
 
     /**

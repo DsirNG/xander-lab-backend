@@ -52,12 +52,23 @@ class RecitationMaterialPortTest {
         // createMaterial / searchMaterials / countMaterials 的参数类型与提供方的富方法不同
         // （MaterialDraft vs CreateRecitationMaterialRequest、MaterialFilter vs MaterialQuery），
         // 可以同名重载 ⇒ 不需要加 ForView 后缀。只有 getMaterial 参数完全相同才必须改名。
-        assertEquals(MaterialDraft.class, methodNamed("createMaterial").getParameterTypes()[1],
+        //
+        // ⚠️ 读第 n 个参数之前先查参数个数（待办 59）：参数表缩短时直接读下标抛
+        // ArrayIndexOutOfBoundsException —— 报的是"下标越界"而不是"这个方法的参数表变了"。
+        Method createMaterial = methodNamed("createMaterial");
+        assertTrue(createMaterial.getParameterCount() > 1,
+                "createMaterial 的参数表变了：下面读的是第 2 个参数（MaterialDraft），"
+                        + "现在只有 " + createMaterial.getParameterCount() + " 个。");
+        assertEquals(MaterialDraft.class, createMaterial.getParameterTypes()[1],
                 "createMaterial 的第二个参数必须是 MaterialDraft："
                         + "recitation.api.CreateRecitationMaterialRequest 带 jakarta.validation 注解，"
                         + "契约不许带（ADR-1）。");
         for (String name : List.of("searchMaterials", "countMaterials")) {
-            assertEquals(MaterialFilter.class, methodNamed(name).getParameterTypes()[1],
+            Method method = methodNamed(name);
+            assertTrue(method.getParameterCount() > 1,
+                    name + " 的参数表变了：下面读的是第 2 个参数（MaterialFilter），"
+                            + "现在只有 " + method.getParameterCount() + " 个。");
+            assertEquals(MaterialFilter.class, method.getParameterTypes()[1],
                     name + " 的第二个参数必须是 MaterialFilter。");
         }
     }
