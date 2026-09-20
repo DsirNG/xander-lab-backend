@@ -8,7 +8,6 @@ import com.xander.lab.common.Result;
 import com.xander.lab.auth.core.UserContext;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -31,12 +30,6 @@ public class BlogContentPlanController {
     public Result<List<BlogContentPlanVO>> aiGenerate(
             @Valid @RequestBody BlogContentPlanAiGenerateRequest request) {
         return Result.success(planService.aiGenerate(UserContext.getUserId(), request));
-    }
-
-    @PatchMapping("/{id}")
-    public Result<BlogContentPlanVO> update(@PathVariable Long id,
-                                            @Valid @RequestBody BlogContentPlanUpdateRequest request) {
-        return Result.success(planService.update(UserContext.getUserId(), id, request));
     }
 
     /** Immediate manual test trigger; runs through the same pipeline. */

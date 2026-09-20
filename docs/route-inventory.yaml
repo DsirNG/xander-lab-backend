@@ -936,7 +936,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#aiGenerate"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 30
+    line: 29
   - id: automation-post-blog-plans-topics-generate
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -947,7 +947,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#generateTopics"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 52
+    line: 45
   - id: automation-delete-blog-plans-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -978,9 +978,9 @@ routes:
     path: "/api/blog-plans/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.api.BlogContentPlanController#update"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 36
+    handler: "com.xander.lab.automation.api.BlogPlanUpdateController#update"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogPlanUpdateController.java
+    line: 26
   - id: automation-get-blog-plans-id-next
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -1035,7 +1035,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#trigger"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 43
+    line: 36
   - id: publishing-get-blog-categories
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1068,7 +1068,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogMediaController#uploadImage"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogMediaController.java
-    line: 22
+    line: 29
   - id: publishing-get-blog-media-images-agent
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
