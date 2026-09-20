@@ -307,6 +307,49 @@ def gate_table_ownership_drift() -> None:
     report(gate, True, f"{len(owned_set)} tables, single owner each")
 
 
+OWNER_TRANSITION_STAGES = {
+    "stage-a-integration-write": (True, False, False),
+    "stage-b-agent-write": (False, True, False),
+    "stage-c-integration-revoked": (False, True, True),
+}
+
+
+def gate_owner_transition_contract() -> None:
+    """Keep the MCP table's three-stage handoff declaration consistent.
+
+    This is deliberately a declaration gate: it cannot observe a remote database
+    GRANT, but it prevents a stage label from drifting away from its write/revoke
+    booleans.
+    """
+    gate = "owner-transition-contract"
+    entries = [entry for entry in load("table-ownership.yaml")["tables"]
+               if entry.get("owner_transition") is not None]
+    problems: list[str] = []
+    if len(entries) != 1 or entries[0].get("table") != "agent_mcp_server":
+        problems.append("owner_transition must be declared exactly once on agent_mcp_server")
+    for entry in entries:
+        transition = entry.get("owner_transition")
+        if not isinstance(transition, dict):
+            problems.append(f"{entry['table']}: owner_transition must be a mapping")
+            continue
+        stage = transition.get("stage")
+        expected = OWNER_TRANSITION_STAGES.get(stage)
+        if expected is None:
+            problems.append(f"{entry['table']}: unknown owner_transition stage={stage!r}")
+            continue
+        actual = tuple(transition.get(field) for field in
+                       ("integration_write", "agent_write", "integration_revoke"))
+        if actual != expected:
+            problems.append(
+                f"{entry['table']}: stage={stage!r} expects "
+                f"integration_write/agent_write/integration_revoke={expected}, got {actual}")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    stage = entries[0]["owner_transition"]["stage"]
+    report(gate, True, f"agent_mcp_server declaration is internally consistent ({stage})")
+
+
 def gate_config_ownership_drift() -> None:
     gate = "config-ownership-drift"
     inventory = load("config-inventory.yaml")["config"]
@@ -1964,6 +2007,7 @@ GATES = {
     "scheduler-lock-scope-consistency": gate_scheduler_lock_scope_consistency,
     "scheduled-scan-ref-freshness": gate_scheduled_scan_ref_freshness,
     "table-ownership-drift": gate_table_ownership_drift,
+    "owner-transition-contract": gate_owner_transition_contract,
     "config-ownership-drift": gate_config_ownership_drift,
     "configuration-properties-coverage": gate_configuration_properties_coverage,
     "shared-kernel-reverse-dependency": gate_shared_kernel_reverse_dependency,

@@ -236,7 +236,11 @@ Stage C   数据校验完成 → REVOKE integration WRITE → agent 成为唯一
 - table: agent_mcp_server
   logical_owner: agent
   target_deployment_unit: dinqor-agent
-  owner_transition: stage-a-integration-write
+  owner_transition:
+    stage: stage-a-integration-write
+    integration_write: true
+    agent_write: false
+    integration_revoke: false
 ```
 
 ### 4.1 为什么必须分三阶段
@@ -287,7 +291,7 @@ checksum
 | 入站端点 + 鉴权方式 + Owner | `auth-policy.yaml` 的 `mcp_inbound:` | `auth-policy-coverage` |
 | 入站端点不套业务 JWT | `auth-policy.yaml` 的 `excluded-mcp-transport` | 同上 |
 | 每条路由的真实 handler | `route-inventory.yaml` | `route-inventory-drift` |
-| `agent_mcp_server` 的 Owner 切换阶段 | `table-ownership.yaml` 的 `owner_transition` | `table-ownership-drift` |
+| `agent_mcp_server` 的 Owner 切换阶段 | `table-ownership.yaml` 的 `owner_transition` | `owner-transition-contract` |
 
 ⚠️ 但**出站 MCP 的 Owner 存在一处未解决的口径冲突**：
 `route-inventory.yaml` 把这五个管理接口登记为
@@ -307,7 +311,7 @@ checksum
 | 出站 MCP 的 Owner 口径冲突 | 见 §5 末尾：`route-inventory.yaml` 说管理接口归 `integration`，§76 说出站客户端归 `dinqor-agent`。两种解释都自洽，但没有任何文件区分它们 → Wave 2 切流时不知道这五个路由该发给谁 | **Wave 2 前必须拍板** |
 | `integration/mcp/client` → `agent/tool/mcp` 未迁移 | §76 的迁入动作尚未执行。当前包名与目标归属不一致 | Wave 2 |
 | `probe` 在事务内做 HTTP | 见 §2.5，已移除事务注解，远端往返与单条结果 UPDATE 已分离 | ✅ 已修 |
-| `owner_transition` 无门禁校验阶段合法性 | `table-ownership.yaml` 登记了 `stage-a-integration-write`，但没有门禁校验这个取值合法、也没有门禁校验"Stage C 完成前不得 REVOKE integration WRITE" | Wave 0B |
+| 外部 GRANT 执行动作未被仓库门禁直接观测 | `owner-transition-contract` 校验登记的阶段、写权限与 REVOKE 声明自洽；真实数据库权限仍需在切换 runbook 中执行并复核 | 发布操作 |
 | STDIO transport 的可信边界未定义 | §76 说"仅可信 Sandbox / Worker"，但"可信"如何判定（配置白名单？部署单元？）未定义。STDIO 会启动子进程，边界不清等于命令执行面 | Wave 2 设计 |
 | DNS rebinding 残余风险 | 见 §2.2，已显式接受并记录理由 | 已接受 |
 

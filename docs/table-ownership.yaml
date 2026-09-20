@@ -12,7 +12,7 @@
 #   current_write_owner      Wave 0 现状下的唯一写者
 #   target_deployment_unit   最终承载该表的部署单元（V9 §3 映射）
 #   revoke_from_core_host_at 何时从 core-host REVOKE（V9 §54 五阶段 / §96 十步）
-#   owner_transition         特殊三阶段切换（仅 agent_mcp_server，V9 §77）
+#   owner_transition         特殊三阶段切换（仅 agent_mcp_server，V9 §77），含结构化阶段与写权限声明
 #   notes                    约束与风险备注
 
 generated_from: docs/table-inventory.yaml
@@ -39,7 +39,11 @@ tables:
   - table: agent_mcp_server
     logical_owner: agent
     target_deployment_unit: dinqor-agent
-    owner_transition: stage-a-integration-write
+    owner_transition:
+      stage: stage-a-integration-write
+      integration_write: true
+      agent_write: false
+      integration_revoke: false
     notes: "V9 §77 三阶段切换：Stage A integration 唯一写 / agent 只读；Stage B agent 唯一写；Stage C REVOKE integration WRITE。切换前必须做 row count / updated_at / business key / checksum 校验。"
   - table: agent_memory
     logical_owner: agent
