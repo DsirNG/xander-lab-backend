@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 257
+  total: 254
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -1009,7 +1009,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-post-email-reminders-contentautomationproxycontroller
+  - id: automation-post-email-reminders
     owner: automation
     old:
       method: POST
@@ -1025,23 +1025,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-post-email-reminders-emailremindercontroller
-    owner: automation
-    old:
-      method: POST
-      path: "/api/email-reminders"
-    new:
-      method: POST
-      path: "/api/v2/automations/email-reminders"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: automation-delete-email-reminders-id-contentautomationproxycontroller
+  - id: automation-delete-email-reminders-id
     owner: automation
     old:
       method: DELETE
@@ -1057,39 +1041,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-delete-email-reminders-id-emailremindercontroller
-    owner: automation
-    old:
-      method: DELETE
-      path: "/api/email-reminders/{id}"
-    new:
-      method: DELETE
-      path: "/api/v2/automations/email-reminders/{id}"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: automation-patch-email-reminders-id-status-contentautomationproxycontroller
-    owner: automation
-    old:
-      method: PATCH
-      path: "/api/email-reminders/{id}/status"
-    new:
-      method: PATCH
-      path: "/api/v2/automations/email-reminders/{id}/status"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: automation-patch-email-reminders-id-status-emailremindercontroller
+  - id: automation-patch-email-reminders-id-status
     owner: automation
     old:
       method: PATCH

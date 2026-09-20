@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 262
+  total: 259
   streams: 8
   websocket: 1
   sse: 7
@@ -793,7 +793,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
     file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
-    line: 46
+    line: 45
   - id: blogagent-get-blog-agent-tasks
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -925,7 +925,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
     file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
-    line: 46
+    line: 45
   - id: automation-post-blog-plans-ai-generate
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -1355,7 +1355,7 @@ routes:
     handler: "com.xander.lab.automation.api.EmailReminderReadController#list"
     file: apps/content-automation/src/main/java/com/xander/lab/automation/api/EmailReminderReadController.java
     line: 19
-  - id: automation-post-email-reminders-contentautomationproxycontroller
+  - id: automation-post-email-reminders
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1363,21 +1363,10 @@ routes:
     path: "/api/email-reminders"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxyEmailCreate"
-    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
-    line: 90
-  - id: automation-post-email-reminders-emailremindercontroller
-    logical_owner: automation
-    deployment_unit: dinqor-content-automation
-    kind: controller
-    http_method: POST
-    path: "/api/email-reminders"
-    stream: none
-    last_event_id: false
-    handler: "com.xander.lab.automation.api.EmailReminderController#create"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
+    handler: "com.xander.lab.automation.api.EmailReminderWriteController#create"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/EmailReminderWriteController.java
     line: 23
-  - id: automation-delete-email-reminders-id-contentautomationproxycontroller
+  - id: automation-delete-email-reminders-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1385,21 +1374,10 @@ routes:
     path: "/api/email-reminders/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxyEmailDelete"
-    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
-    line: 102
-  - id: automation-delete-email-reminders-id-emailremindercontroller
-    logical_owner: automation
-    deployment_unit: dinqor-content-automation
-    kind: controller
-    http_method: DELETE
-    path: "/api/email-reminders/{id}"
-    stream: none
-    last_event_id: false
-    handler: "com.xander.lab.automation.api.EmailReminderController#delete"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
-    line: 42
-  - id: automation-patch-email-reminders-id-status-contentautomationproxycontroller
+    handler: "com.xander.lab.automation.api.EmailReminderWriteController#delete"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/EmailReminderWriteController.java
+    line: 39
+  - id: automation-patch-email-reminders-id-status
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1407,20 +1385,9 @@ routes:
     path: "/api/email-reminders/{id}/status"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxyEmailStatus"
-    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
-    line: 96
-  - id: automation-patch-email-reminders-id-status-emailremindercontroller
-    logical_owner: automation
-    deployment_unit: dinqor-content-automation
-    kind: controller
-    http_method: PATCH
-    path: "/api/email-reminders/{id}/status"
-    stream: none
-    last_event_id: false
-    handler: "com.xander.lab.automation.api.EmailReminderController#updateStatus"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
-    line: 29
+    handler: "com.xander.lab.automation.api.EmailReminderWriteController#updateStatus"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/EmailReminderWriteController.java
+    line: 30
   - id: integration-any-export
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2080,7 +2047,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
     file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
-    line: 46
+    line: 45
   - id: automation-get-notifications-events
     logical_owner: automation
     deployment_unit: dinqor-content-automation

@@ -86,6 +86,19 @@ public class EmailReminderReadService {
                 .build();
     }
 
+    public EmailReminderTaskVO findOwned(Long userId, Long taskId) {
+        requireUser(userId);
+        List<EmailReminderTaskVO> records = jdbcTemplate.query(
+                "SELECT id, client_request_id, recipient_email, subject, message, content_type, "
+                        + "template_id, frequency, timezone, send_time, recurrence_day, interval_days, "
+                        + "scheduled_at, status, send_attempts, error_message, sent_at, created_at, updated_at "
+                        + "FROM email_reminder_task WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+                this::mapTask,
+                taskId,
+                userId);
+        return records.isEmpty() ? null : records.get(0);
+    }
+
     private EmailReminderStatsVO buildStats(Long userId) {
         Long total = count(userId, null);
         Long pending = count(userId, "PENDING");

@@ -6,7 +6,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.util.StreamUtils;
@@ -85,24 +84,6 @@ public class ContentAutomationProxyController {
                 streamState.closed();
             }
         }
-    }
-
-    @RequestMapping(path = "/api/email-reminders", method = RequestMethod.POST)
-    public void proxyEmailCreate(HttpServletRequest request,
-                                 HttpServletResponse response) {
-        proxy(request, response);
-    }
-
-    @RequestMapping(path = "/api/email-reminders/{id}/status", method = RequestMethod.PATCH)
-    public void proxyEmailStatus(HttpServletRequest request,
-                                 HttpServletResponse response) {
-        proxy(request, response);
-    }
-
-    @RequestMapping(path = "/api/email-reminders/{id}", method = RequestMethod.DELETE)
-    public void proxyEmailDelete(HttpServletRequest request,
-                                 HttpServletResponse response) {
-        proxy(request, response);
     }
 
     private boolean isStreamRequest(HttpServletRequest request) {
