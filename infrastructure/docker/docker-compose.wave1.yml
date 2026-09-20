@@ -1,0 +1,122 @@
+# V9 §92 — Wave 1 deployment template.
+#
+# This file is intentionally separate from the historical root docker-compose.yml. The
+# latter remains the legacy single-container deployment; this file makes the migration
+# order explicit: migration-runner first, then core-host, Gateway and BlogHTML Preview.
+# It expects an external Nacos, MySQL and Redis; no infrastructure service is bundled here.
+services:
+  migration-runner:
+    image: ${DINQOR_MIGRATION_IMAGE:-dinqor-migration-runner:wave1}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: apps/migration-runner
+        APP_PORT: "0"
+    restart: "no"
+    env_file:
+      - ${BACKEND_ENV_FILE:-../../.env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: ${MIGRATION_SPRING_PROFILES_ACTIVE:-default}
+      SPRING_DATASOURCE_URL: ${MIGRATION_DB_URL:?set MIGRATION_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${MIGRATION_DB_USERNAME:-dinqor_migration}
+      SPRING_DATASOURCE_PASSWORD: ${MIGRATION_DB_PASSWORD:?set MIGRATION_DB_PASSWORD}
+    networks:
+      - dinqor-wave1
+
+  core-host:
+    image: ${DINQOR_CORE_IMAGE:-dinqor-core-host:wave1}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: apps/core-host
+        APP_PORT: "30002"
+    restart: unless-stopped
+    env_file:
+      - ${BACKEND_ENV_FILE:-../../.env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: ${CORE_SPRING_PROFILES_ACTIVE:-nacos}
+      SPRING_DATASOURCE_URL: ${CORE_DB_URL:?set CORE_DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${CORE_DB_USERNAME:-dinqor_core}
+      SPRING_DATASOURCE_PASSWORD: ${CORE_DB_PASSWORD:?set CORE_DB_PASSWORD}
+      NACOS_CONFIG_ENABLED: "true"
+      NACOS_DISCOVERY_ENABLED: "true"
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:?set NACOS_SERVER_ADDR}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:?set NACOS_NAMESPACE}
+    ports:
+      - ${CORE_HOST_PORT:-30002}:30002
+    depends_on:
+      migration-runner:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:30002/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - dinqor-wave1
+
+  gateway:
+    image: ${DINQOR_GATEWAY_IMAGE:-dinqor-gateway:wave1}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: apps/gateway
+        APP_PORT: "30000"
+    restart: unless-stopped
+    env_file:
+      - ${BACKEND_ENV_FILE:-../../.env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: ${GATEWAY_SPRING_PROFILES_ACTIVE:-nacos}
+      NACOS_CONFIG_ENABLED: "true"
+      NACOS_DISCOVERY_ENABLED: "true"
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:?set NACOS_SERVER_ADDR}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:?set NACOS_NAMESPACE}
+    ports:
+      - ${GATEWAY_PORT:-30000}:30000
+    depends_on:
+      core-host:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:30000/actuator/health/readiness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - dinqor-wave1
+
+  bloghtml-preview:
+    image: ${DINQOR_BLOGHTML_IMAGE:-dinqor-bloghtml-preview:wave1}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: apps/bloghtml-preview
+        APP_PORT: "30003"
+    restart: unless-stopped
+    env_file:
+      - ${BACKEND_ENV_FILE:-../../.env.production}
+    environment:
+      SPRING_PROFILES_ACTIVE: ${BLOGHTML_SPRING_PROFILES_ACTIVE:-nacos}
+      NACOS_CONFIG_ENABLED: "true"
+      NACOS_DISCOVERY_ENABLED: "true"
+      NACOS_SERVER_ADDR: ${NACOS_SERVER_ADDR:?set NACOS_SERVER_ADDR}
+      NACOS_NAMESPACE: ${NACOS_NAMESPACE:?set NACOS_NAMESPACE}
+    ports:
+      - ${BLOGHTML_PORT:-30003}:30003
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:30003/actuator/health/readiness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - dinqor-wave1
+
+networks:
+  dinqor-wave1:
+    driver: bridge

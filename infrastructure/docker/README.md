@@ -31,3 +31,28 @@ The image entrypoint remains `java -jar app.jar`; deployment supplies the servic
 environment, `SPRING_PROFILES_ACTIVE=nacos` where Nacos is required, and the database/Redis
 secrets. The migration image is run before business-service rollout and is never used as a
 long-running application container.
+
+## Wave 1 Compose template
+
+`docker-compose.wave1.yml` is the executable deployment template for the four Wave 1 units.
+It assumes Nacos, MySQL and Redis already exist outside this Compose project and keeps the
+historical root `docker-compose.yml` unchanged.
+
+Create a private environment file with separate database credentials, then run from the repo
+root:
+
+```bash
+docker compose --env-file .env.wave1 \
+  -f infrastructure/docker/docker-compose.wave1.yml up -d --build
+```
+
+The required database variables are `MIGRATION_DB_URL`, `MIGRATION_DB_PASSWORD`, `CORE_DB_URL`
+and `CORE_DB_PASSWORD`; usernames default to `dinqor_migration` and `dinqor_core`. The Nacos
+variables `NACOS_SERVER_ADDR` and `NACOS_NAMESPACE` are also required. `BACKEND_ENV_FILE` may
+point at the existing common secret file for Redis, mail, OSS and model credentials, but its
+database username/password are overridden by the two service-specific pairs above.
+
+Compose waits for `migration-runner` to exit successfully before starting `core-host`, then
+waits for core readiness before starting Gateway. BlogHTML Preview is independent apart from
+the shared Redis/Nacos environment. The core readiness probe is `/health/ready`; the other
+two HTTP services use Actuator readiness.

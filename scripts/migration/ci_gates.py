@@ -1504,6 +1504,71 @@ def gate_dockerfile_runtime_target() -> None:
     report(gate, True, "shared Dockerfile supports APP_MODULE and APP_PORT runtime targets")
 
 
+def gate_wave1_compose_contract() -> None:
+    """V9 §92: the Wave 1 Compose template must preserve rollout boundaries."""
+    gate = "wave1-compose-contract"
+    path = REPO / "infrastructure" / "docker" / "docker-compose.wave1.yml"
+    if not path.is_file():
+        report(gate, False, "infrastructure/docker/docker-compose.wave1.yml is missing")
+        return
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        report(gate, False, f"Wave 1 Compose YAML is invalid: {exc}")
+        return
+    services = document.get("services", {})
+    expected = {
+        "migration-runner": ("apps/migration-runner", "0"),
+        "core-host": ("apps/core-host", "30002"),
+        "gateway": ("apps/gateway", "30000"),
+        "bloghtml-preview": ("apps/bloghtml-preview", "30003"),
+    }
+    problems: list[str] = []
+    if not isinstance(services, dict):
+        report(gate, False, "Wave 1 Compose services must be a mapping")
+        return
+    for name, (module, port) in expected.items():
+        service = services.get(name)
+        if not isinstance(service, dict):
+            problems.append(f"{name}: service is missing")
+            continue
+        build = service.get("build", {})
+        args = build.get("args", {}) if isinstance(build, dict) else {}
+        if build.get("context") != "../..":
+            problems.append(f"{name}: build context must be ../..")
+        if args.get("APP_MODULE") != module or str(args.get("APP_PORT")) != port:
+            problems.append(f"{name}: build target must be {module}:{port}")
+        if "env_file" not in service:
+            problems.append(f"{name}: shared secret env_file is missing")
+        environment = service.get("environment", {})
+        if not isinstance(environment, dict):
+            problems.append(f"{name}: environment must be a mapping")
+        elif name != "migration-runner":
+            if environment.get("NACOS_CONFIG_ENABLED") not in (True, "true"):
+                problems.append(f"{name}: Nacos Config must be enabled")
+            if environment.get("NACOS_DISCOVERY_ENABLED") not in (True, "true"):
+                problems.append(f"{name}: Nacos discovery must be enabled")
+        ports = service.get("ports", [])
+        if name != "migration-runner" and not any(str(value).endswith(f":{port}")
+                                                   for value in ports):
+            problems.append(f"{name}: host port mapping must end with :{port}")
+    migration = services.get("migration-runner", {})
+    if migration.get("restart") != "no":
+        problems.append("migration-runner: restart must be no")
+    core_dependencies = services.get("core-host", {}).get("depends_on", {})
+    migration_dependency = core_dependencies.get("migration-runner", {})
+    if migration_dependency.get("condition") != "service_completed_successfully":
+        problems.append("core-host: must wait for migration-runner success")
+    gateway_dependencies = services.get("gateway", {}).get("depends_on", {})
+    core_dependency = gateway_dependencies.get("core-host", {})
+    if core_dependency.get("condition") != "service_healthy":
+        problems.append("gateway: must wait for core-host health")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True, "migration-runner → core-host → gateway rollout contract is explicit")
+
+
 # V9 section 80 bans the global ``classpath*:/mapper/*.xml`` swallow once services
 # are split. It is still *correct* today: there is exactly one application module,
 # so there is nothing else on the classpath for it to swallow. And changing it now
@@ -1880,6 +1945,7 @@ GATES = {
     "xml-authoring-safety": gate_xml_authoring_safety,
     "dockerfile-module-coverage": gate_dockerfile_module_coverage,
     "dockerfile-runtime-target": gate_dockerfile_runtime_target,
+    "wave1-compose-contract": gate_wave1_compose_contract,
     "mybatis-scan-scope": gate_mybatis_scan_scope,
 }
 
