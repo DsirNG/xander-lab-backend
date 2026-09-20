@@ -27,6 +27,12 @@ description: DinQorAI Java 后端（xander-lab-backend）编码规范。Use when
 再 `COPY <顶层目录> ./<顶层目录>` 供构建用 —— 漏了第一行报
 `Child module ... does not exist`）。门禁 `dockerfile-module-coverage` 会拦住 Dockerfile 那两行。
 
+⚠️ **四处里只有 Dockerfile 那一处有门禁；根 POM 那一处靠 maven 自己喊。** 实测（Wave 0B
+第二十六刀，`xander-webmvc-support`）：把 `<module>` 注释掉 ⇒ `mvn -pl apps/core-host -am compile`
+报 `Could not find artifact com.xander:xander-webmvc-support`（**响的**，不是静默的）；
+把 Dockerfile 那行 `COPY` 注释掉 ⇒ **门禁修好之前报 PASS**（见下面"全文子串匹配"那节）。
+⇒ **四处都要逐处注入一次**，不能假设"有门禁"就等于"门禁看得见这一处"。
+
 跨这些根的路径引用要一起更新：`scripts/migration/` 下的门禁允许清单、`docs/*.yaml` 里
 curated 的 `file:`/`source:`/`scan_ref`（`scan_ref` 由扫描器自动刷新，其余要手改）。
 `scripts/migration/scan.py` 用 `java_roots()` 同时扫应用根、所有 `libs/*/src/main/java`
@@ -1938,9 +1944,10 @@ def blob(path):
 ⚠️ **通用规则**：**"脚本打印了一个陌生的哈希" ≠ "文件被改坏了"。**
 分辨它们的是 `git diff` —— 差异是否**逐行都是本次意图**；不是哈希比对。
 
-### ⚠️ 注入脚本从 Python 起 Maven：两个会造假信号的坑
+### ⚠️ 注入脚本从 Python 起 Maven：四个会造假信号的坑
 
-2026-09-20 第二十二刀踩到，两个坑都在"脚本跑完了"和"结果可信"之间：
+2026-09-20 第二十二刀踩到前两个，Wave 0B 第二十六刀（`xander-webmvc-support`）踩到后两个。
+四个坑都在"脚本跑完了"和"结果可信"之间：
 
 1. **别用 `subprocess.run(["bash", "mvn.sh", ...])`。** Windows 上 PATH 查找会先命中
    `C:\Windows\System32\bash.exe`（**WSL 启动器**），它在本机被安全策略拦掉 ⇒
@@ -1950,6 +1957,14 @@ def blob(path):
    用 `encoding="utf-8", errors="replace"` 解出来中文全被抹掉 ⇒
    明明红的用例看起来"变红了但消息不对"。
    ⇒ 断言消息从 `contracts/<m>/target/surefire-reports/TEST-*.xml` 里读（那份是 UTF-8）。
+3. **⚠️ `-pl <module>` 必须配 `-am`，否则依赖解析就失败。** 上游模块只在反应堆里、
+   不在本地仓库（这个仓从来 `install` 过）⇒ `mvn -pl libs/xander-webmvc-support test`
+   报 `Could not resolve dependencies`，**一次测试都没跑**，而脚本把
+   "输出里没有 `Failures: 0`"读成了红。实测：D0–D3 四条全部报"变红: True"，
+   而真相是一条都没跑。⇒ 加 `-am`。
+4. **⚠️ 跑之前先删掉上一轮的 `surefire-reports/TEST-*.xml`。** 不删就会**读到旧 XML**
+   并把上一次通过的用例名当成本次的证据 —— 上面那次假红里，脚本还打印出了
+   "全部 33 条通过"的用例清单，**看起来像证据**。
 
 ```python
 subprocess.run(
@@ -1959,13 +1974,56 @@ subprocess.run(
      "-Dmaven.home=C:/apache-maven-3.9.9",
      "-Dmaven.multiModuleProjectDirectory=D:/blog/xander-lab-backend",
      "org.codehaus.plexus.classworlds.launcher.Launcher",
-     "-pl", module, "test", "-Dtest=" + test_class, "-DfailIfNoTests=false"],
+     "-o", "-pl", module, "-am", "test",
+     "-Dtest=" + test_class, "-DfailIfNoTests=false",
+     "-Dsurefire.failIfNoSpecifiedTests=false"],
     capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=REPO)
 ```
 
-⚠️ 两个坑的**共同形状**：**"红"这个信号本身是假的**（一个是没跑，一个是消息读不出来）。
-⇒ 注入脚本里"变红"**不能**作为唯一判据，必须同时断言**消息里出现了预期的关键词**，
-并且**断言对照组（删掉守卫）退回的是原来那个坏症状**。
+⚠️ 四个坑的**共同形状**：**"红"这个信号本身是假的**（两个是没跑，一个是消息读不出来，
+一个是读了别人的报告）。⇒ 注入脚本里"变红"**不能**作为唯一判据：
+
+```python
+# 1) 先确认这一轮真的跑了（有汇总行），再谈红不红
+ran = re.search(r"Tests run: (\d+), Failures: (\d+), Errors: (\d+)", out)
+# 2) 失败的方法名从**新写的**报告里取；`<failure>` 与 `<error>` 都要算
+failed = re.findall(r'<testcase name="([^"]+)"[^>]*>\s*<(?:failure|error)', out)
+red = bool(failed) and ran and int(ran.group(2)) + int(ran.group(3)) > 0
+```
+
+⚠️ **必须配对照组**（不注入跑一遍，断言"真跑且全绿"）。对照组不成立时，
+后面所有"变红"都没有意义。⚠️ 还要断言**失败的是哪一个方法** ——
+"有东西红了"与"我想测的那条断言红了"是两件事（第二十五刀的 A5a/A5b 就靠这个分辨顺序）。
+
+### ⚠️⭐ 判据做"全文子串匹配"时，**注释掉的那一行也算数** —— 会假绿
+
+Wave 0B 第二十六刀实测：`dockerfile-module-coverage` 的第一条判据是
+
+```python
+if f"{module}/pom.xml" not in docker:      # docker = 整个 Dockerfile 的文本
+```
+
+把新模块那行 `COPY` **注释掉**之后判据仍然 **PASS**（报 "13 module(s) all COPYed"），
+而**"注释掉一行"正是有人要禁用某行时会写的形状**。第二条判据虽然行首锚定
+（`^COPY libs ./libs`），但它查的是**顶层目录**，`libs` 那行还在，所以新模块缺不缺
+COPY 完全没人管。
+
+**修法**：匹配前逐行丢掉注释行，两条判据都用同一份"活行"文本。
+
+```python
+docker = "\n".join(line for line in dockerfile.read_text(encoding="utf-8").splitlines()
+                   if not line.lstrip().startswith("#"))
+```
+
+**通用规则**：凡"某段文本在不在文件里"的判据，动手前先问一句**"注释算不算？"**。
+同族未修的还有两处（ADR 待办 63）：`gate_gateway_stream_proxy_config`
+（读 YAML 的 `token not in text`）与 `stream-ban-boundary-coverage`
+（`"ConnectionRegistry" not in text` 读 Java 文件）。
+
+⚠️ **这一条是"反着用一次"抓到的，不是推出来的** —— 而且它属于"注入验证也发现不了"的
+那一类里最坏的一种：**注入让它变红**（本该如此），只是**修之前它不会红**。
+⇒ 凡是给门禁加/改判据，**必须拿判据去断言它本该拒绝的形状**，不能只看"干净树上 PASS"。
+
 
 ### ⚠️ 多行锚点：除了"唯一"，还要查"它是不是真的相邻"
 

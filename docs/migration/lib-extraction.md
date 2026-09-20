@@ -70,7 +70,7 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 | `xander-model` | **已完成** | `Constants` `Result` `ModelCallResult` `ModelUsage` |
 | `xander-mybatis-support` | **已完成** | `MybatisPlusConfig` `PageData` |
 | `xander-auth-core` | **已完成** | `UserContext`（可信身份模型）`JwtUtil`（Token 校验器） |
-| `xander-webmvc-support` | 未开始 | 目标 `GlobalExceptionHandler` `ResultStatusResponseBodyAdvice` MVC 认证适配器 `WebMvcConfigurer` |
+| `xander-webmvc-support` | **已完成** | `GlobalExceptionHandler` `ResultStatusResponseBodyAdvice` `AuthInterceptor`（§20 的 "MVC 认证适配器"）`WebConfig`。包是 `com.xander.lab.webmvc`，**不是** `identity.security`（§3.4.2） | 见 §3.4 |
 | `xander-observability-core` | 未开始 | 目标 TraceId/requestId + MDC 约定 + 指标命名约定（不含具体 exporter） |
 | `xander-test-support` | 未开始 | — |
 
@@ -99,7 +99,10 @@ Wave 0B 已抽出 **3 个 lib**（`xander-model`、`xander-mybatis-support`、`x
 理由见 §6 与 §10.3：否则把类型搬进契约之后，跨域基线**一点都不会动**，
 这次抽取在唯一的进度指标上完全隐形。
 
-`common` / `config` / `filter` 三个包**当前剩余 11 个类**，全部还在应用模块里：
+`common` / `config` / `filter` 三个包**当前剩余 9 个类**，全部还在应用模块里
+（⚠️ 2026-09-20 实测订正：原文写"11 个类"，那还是把 `config` 里已搬走的 3 个算在内；
+而且列表本身还漏了 `common/security/SecurityPlaneReadiness.java`。9 是 `find` 数出来的，
+不是从这张表加出来的）：
 
 ```text
 common/HealthController.java              ← 运维端点，见 §4
@@ -107,17 +110,18 @@ common/RedisHealthMonitor.java            ← 运维型 Redis，见 §4
 common/RedisHealthProbe.java              ← 运维型 Redis，见 §4
 common/security/ConnectionRegistry.java   ← 连接注册表（§49）
 common/security/SecurityPlaneConfiguration.java
+common/security/SecurityPlaneReadiness.java
 common/security/SecurityStateCache.java
-config/GlobalExceptionHandler.java        ← 目标是 xander-webmvc-support
-config/ResultStatusResponseBodyAdvice.java← 目标是 xander-webmvc-support
 config/ShedLockConfiguration.java
-config/WebConfig.java                     ← 目标是 xander-webmvc-support
 filter/RequestLoggingFilter.java          ← 目标是 xander-observability-core
 ```
 
+`config/GlobalExceptionHandler.java` / `config/ResultStatusResponseBodyAdvice.java` /
+`config/WebConfig.java` 已于本刀搬进 `libs/xander-webmvc-support`（见 §3.4）。
+
 ---
 
-## 3. 三个已抽出的 lib
+## 3. 四个已抽出的 lib
 
 ### 3.1 `xander-model`
 
@@ -148,6 +152,97 @@ filter/RequestLoggingFilter.java          ← 目标是 xander-observability-cor
 ⚠️ **库自己拥有自己的测试**：`UserContextTest` / `JwtUtilTest` 跟着类一起进了
 `libs/xander-auth-core/src/test/java/`，而不是留在应用模块的测试树里。
 理由：测试留在应用模块等于"应用拥有它已经不再拥有的类的测试"，那不叫抽出来了。
+
+### 3.4 `xander-webmvc-support`（ADR §26，Wave 0B 第 4 个共享库）
+
+依赖 `xander-model`（`Result` / `Constants`）+ `xander-auth-core`（`UserContext` / `JwtUtil`）
++ `core-api`（**契约**）+ `spring-boot-starter-web`（`provided`）+ `spring-boot-starter-data-redis`
+（`provided`）+ `lombok`（optional）+ `spring-boot-starter-test`（test）。
+
+搬进来的是 §20 点名的 4 个：`GlobalExceptionHandler` / `ResultStatusResponseBodyAdvice` /
+`AuthInterceptor`（§20 的 "MVC 认证适配器"）/ `WebConfig`；`GlobalExceptionHandlerTest` 与
+`AuthInterceptorTest`（33 个方法）跟着走，另加 2 个新方法（§3.4.3）。留在应用的是
+`config/ShedLockConfiguration`（调度接线，不是 MVC）与 `identity/security/PasswordEncoderConfig`
+（BCrypt bean，identity 域配置；§20 没列它）。
+
+#### 3.4.1 三个必须先说清楚的事实
+
+1. **这 4 个类一个 Java 消费者都没有。** 它们是 Spring 发现的（组件扫描、
+   `@RestControllerAdvice`、`WebMvcConfigurer`），所以搬错了**不会编译失败**：编译通过、
+   测试全绿，而异常映射或拦截器注册在运行时**静默失效**。这一刀因此不能拿"构建绿"当验收。
+2. **`AuthInterceptor` 不是"搬"，是"收窄"。** 它原来注入 `identity.application.AuthService`，
+   只用了两个动作（`validateAccessToken(token)` + `jwtUtil.getSubject(token)`）——
+   合起来正是 `core.api.AccessTokenLookupPort.resolveUserId(String)`，即第十四刀**为这个能力
+   建的**端口。不改成端口就搬不动：库一旦依赖业务域，它就不是"每个 MVC 服务都能用的支撑"，
+   而是 identity 域的一部分（ADR-2：跨域走**消费方拥有的契约**）。
+3. **`GlobalExceptionHandler` 依赖 `core-api`，这是本仓库唯一一个带契约依赖的库。**
+   它把 `FeatureModelNotConfiguredException` 映射成 400，而 §20 是**整类**列的
+   `GlobalExceptionHandler`，所以整类搬走、依赖记在 POM 里。另一条路是拆成两个 advice，
+   那会把 Spring 的"跨 advice 取最具体 handler"排序放到**每一条错误响应**的关键路径上 ——
+   否掉，并在 POM 里写明这是逃生口而不是当前方案。
+
+#### 3.4.2 包名为什么是 `com.xander.lab.webmvc`
+
+`AuthInterceptor` 原来住在 `com.xander.lab.identity.security`。**库不能发一个落在业务域命名空间里的
+包**：`identity` 是扫描器 `BUSINESS_DOMAINS` 的条目，模块会被判成那个域的一部分。先例是
+`xander-auth-core` 把 `UserContext` / `JwtUtil` 从 `identity.security` 挪到 `auth.core`。
+
+⚠️ 顺带**真的修掉了一条共享内核反向依赖**：`WebConfig` 原来是
+`com.xander.lab.config.WebConfig`，第 3 行 `import com.xander.lab.identity.security.AuthInterceptor;`
+—— 那就是 `ci_gates.py` 允许清单里 `("config", "identity")` 这一条的全部内容。
+包一换、import 一没，`shared-kernel-reverse-dependency` 的违规从 2 条降到 1 条，
+允许清单里那一项按判据自己的注释删掉了（判据会主动报"已修复，请从清单移除"）。
+**允许清单没被清空**：`("common", "integration")` 还在，注入验证专门确认了它仍然会红（§3.4.4 C3）。
+
+#### 3.4.3 ⚠️ 一处**行为变化**：subject 非数字时 500 → 401
+
+旧写法 `Long.parseLong(jwtUtil.getSubject(token))` 在 subject 不是数字时抛
+`NumberFormatException` ⇒ **500**；现在由提供方解析，解析不出来返回 `null` ⇒ **401**。
+两种都拒绝请求，但 401 才是这条路径该有的答案，而且不再往日志里丢一条 500 堆栈。
+
+这是这一刀唯一的行为变化，方向是 **fail-closed**，所以**必须**有行为测试守着 ——
+新增两条：`protectedRouteRejectsTokenThePortCannotResolve`（受保护路径 401、且
+`verify(jwtUtil, never()).parseToken(anyString())` 钉住"令牌有效性只走端口"）与
+`publicRouteTreatsUnresolvableTokenAsAnonymous`（公开路径按匿名放行、200、`userId` 为 null）。
+`AuthInterceptorTest` 从 31 个方法变成 33 个。
+
+#### 3.4.4 收益与注入验证
+
+**六个指标一个都没动**：17 / 7 / 0 / 0 / 9 / 6。这一刀不搬跨域边 —— 那 4 个类本来就
+没有 Java 消费者，所以没有任何 import 边可减。**这正是它危险的地方**：
+"指标不变"与"什么都没发生"在这一刀上是同一个数，所以验收必须靠注入。
+
+| 编号 | 注入 | 期望 | 实测 |
+|---|---|---|---|
+| D0 | 不注入（对照） | 真跑且全绿 | `Tests run: 33, Failures: 0, Errors: 0` ✓ |
+| C1 | `scan.py` 去掉 `SHARED_KERNEL` 的 `webmvc` | `shared-kernel-classification` 红 | FAIL，指名 `webmvc (libs/xander-webmvc-support)` ✓ |
+| C2 | 库里的类 `import com.xander.lab.identity.application.AuthService` | `shared-kernel-reverse-dependency` 红 | FAIL，`[('webmvc','identity')]` ✓ |
+| C3 | 允许清单清空 | 同上红 | FAIL，`[('common','integration')]` ✓ |
+| C4 | Dockerfile 注释掉 `COPY libs/xander-webmvc-support/pom.xml` | `dockerfile-module-coverage` 红 | **修复前 PASS（假绿）**，修复后 FAIL ✓ |
+| C0 | 根 POM 不动（对照） | core-host 编译成功 | BUILD SUCCESS ✓ |
+| C5 | 根 POM 注释掉 `<module>` | core-host 编译失败 | FAIL：`Could not find artifact com.xander:xander-webmvc-support` ✓ |
+| D1 | `requireAuth` 改成 fail-open | 新测试红 | `protectedRouteRejectsTokenThePortCannotResolve` 红（"Expecting value to be false but was true"）✓ |
+| D2 | `trySetUserContext` 拿不到身份时抛异常 | 新测试红 | `publicRouteTreatsUnresolvableTokenAsAnonymous` 红（`IllegalStateException`）✓ |
+| D3 | `requireAuth` 多调一次 `jwtUtil.parseToken` | 新测试红 | 同一方法红（Mockito `never()` 消息），另 1 条连带 error ✓ |
+
+⚠️ **C4 是这一刀真正的收获：门禁原来会假绿。** `dockerfile-module-coverage` 的第一条判据是
+`if f"{module}/pom.xml" not in docker` —— **全文子串匹配**，于是把 COPY 行**注释掉**仍然通过，
+而"注释掉一行"正是有人要禁用某行时会写的形状。修法是匹配前逐行丢掉注释行
+（`ci_gates.py` 里那 3 行）。判据自己的 docstring 记了这次实测。
+
+⚠️ **同类形状还有两处未修**（都是"token 在不在全文里"）：
+`gate_gateway_stream_proxy_config`（第 1031 行，读 `infrastructure/gateway` 的 YAML，
+现在 SKIP）与 `stream-ban-boundary-coverage`（第 1176 行，`"ConnectionRegistry" not in text`
+读 Java 文件）。两者都只做子串匹配，注释同样能满足 —— 记为新待办，不在这刀顺手改
+（前者在 Wave 1 才有落点，后者要先想清楚"注释里出现类名算不算注册"）。
+
+#### 3.4.5 文档与允许清单动了哪些，以及为什么不新增契约变更条目
+
+六个指标不动、没有端口形状变化、没有契约字段增删 —— `AuthInterceptor` 换依赖是**收窄**
+（从域服务收窄到已有契约），不是新缝。按判据（"镜像可证纯重构，不进；收窄是新缝，要进"）
+这里**既不是镜像也不是收窄**：端口本来就存在，这一刀只是把一个消费方接到它上面。
+唯一进文档的是 `contract-changes.yaml` 里 `shared-kernel-boundary` 那条的
+`current_violations`：`config/WebConfig` 那一项移进新的 `resolved_violations`。
 
 ---
 
@@ -4172,7 +4267,7 @@ python scripts/migration/ci_gates.py
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| 3 个 lib 未抽 | §91 的 Wave 0B 只完成 3/6（webmvc-support / observability-core / test-support） | Wave 0B 剩余 |
+| 2 个 lib 未抽 | §91 的 Wave 0B 完成 **4/6**（剩余 `observability-core` / `test-support`）。⚠️ 原文写"3 个 lib 未抽 / 3/6"，是搬出 `xander-webmvc-support`（ADR §26）之前的数 | Wave 0B 剩余 |
 | ⚠️ `xander-observability-core` **在本仓库没有内容可抽** | 见 §9.1 —— §20 描述的 TraceId/MDC/指标约定整体不存在，而 Gateway 的依赖清单里有它 | **需要决策** |
 | 2 个 `*-api` 契约未建 | ⚠️ **2026-09-20 订正：本行的数字早已过期**（自第十八刀起没再更新）。**实测当前：跨部署单元实现依赖 `0` 条、边 `0` 条**（第二十刀归零，见 §3trevicies），剩下 17 条 impl 语句**全部同单元**；头条指标 17 / 7 / 0 / 0 / 9 / 6。以下是**当时**记的，留作过程记录：剩余跨部署单元实现依赖 **9** 条（原 103 → 85 → 77 → 71 → 64 → 62 → 54 → 47 → 38 → 33 → 27 → 25 → 21 → 19 → 17 → 15 → 13 → 12 → **9**）。按被依赖目标排序（impl / 跨单元 impl）：`integration` **6/6**、`blogagent` 5/1、`identity` **8**/**0**、`publishing` 4/**0**、`automation` 2/2、`virtualpay` 1/0、`admin` 0/0。**`billing` 已归零**（10/7 → 0/0，见 §3octies）、**`publishing` 已归零**（13/9 → 4/0，见 §3nonies）、**`recitation` 已归零**（6/6 → 0/0，见 §3terdecies + §3quaterdecies）、**`agent` 作为目标域已归零**（5/5 → 0/0，见 §3undecies）、**`agent → blogagent` 已归零**（4/2 → 0/0，见 §3quinquiesdecies + §3sexdecies）、**`agent → identity` 已归零**（2/0 → 0/0，见 §3septdecies）、**`integration → identity` 已归零**（1/0 → 0/0，见 §3octodecies）⇒ **`identity` 作为目标域的跨单元边全部归零**（剩余 8 条 impl 全是同单元边：`virtualpay` 5 / `admin` 2 / `profile` 1）。**`agent → integration` 已归零**（2/0 → 0/0，见 §3novemdecies）⇒ ⭐ **`agent` 作为来源域在实现层与 api 层都一条出边都没有了**。⚠️ 当前最大的跨单元边是 `automation -> integration` **5** 条（卡在 `MailService` 与两个凭证服务，§3quater.5 / §3novemdecies.10） | Wave 0B 剩余 |
 | §21 的 ArchUnit 规则未落地 | 目前是 Python 门禁（`ci_gates.py`）承担同等职责。ArchUnit 需要模块真实存在才有落脚点，且现有规则已能拦住回退 | 观察中 |

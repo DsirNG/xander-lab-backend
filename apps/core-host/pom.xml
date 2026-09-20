@@ -44,6 +44,18 @@
         </dependency>
 
         <!--
+            MVC support: GlobalExceptionHandler + ResultStatusResponseBodyAdvice + WebConfig +
+            AuthInterceptor (V9 §20). V9 §20 says "仅 MVC 服务使用": the WebFlux Gateway must
+            NOT depend on this, which is why spring-boot-starter-web is declared `provided`
+            inside it rather than inherited.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>xander-webmvc-support</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
             Content-domain service-to-service contract: BlogPublisher / PublishCommand /
             PublishResult / PublishingLimits (V9 §18 / §91). Both the content domain and the
             integration domain reach for these types, so they cannot live in either one.

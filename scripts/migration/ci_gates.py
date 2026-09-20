@@ -45,7 +45,6 @@ LEGACY_SUMS = REPO / "migrations" / "legacy" / "SHA256SUMS"
 # The gate fails only when a NEW violation appears, so the baseline cannot rot
 # while the fix is pending. Removing an entry from this list is part of the fix.
 KNOWN_SHARED_KERNEL_VIOLATIONS = {
-    ("config", "identity"),
     ("common", "integration"),
 }
 
@@ -1280,6 +1279,13 @@ def gate_dockerfile_module_coverage() -> None:
     is correct locally and broken only in the artifact that ships. Adding a module means
     editing the Dockerfile twice (its ``pom.xml`` for the cached dependency layer, its
     sources for the build), and both halves are checked here.
+
+    ⚠️ **Comment lines are dropped before matching.** The first criterion used to be a plain
+    substring test over the whole file, so *commenting a COPY line out still passed* -- and
+    commenting a line out is exactly what someone writes when they are disabling it. Found by
+    injection (the webmvc-support cut): the gate reported "13 module(s) all COPYed" with
+    ``# COPY libs/xander-webmvc-support/pom.xml ...`` in the file. A green result that a
+    comment can produce is worse than a red one.
     """
     gate = "dockerfile-module-coverage"
     root_pom = REPO / "pom.xml"
@@ -1294,7 +1300,8 @@ def gate_dockerfile_module_coverage() -> None:
         report(gate, True, "root POM declares no <modules>")
         return
     modules = re.findall(r"<module>\s*([^<\s]+)\s*</module>", block.group(1))
-    docker = dockerfile.read_text(encoding="utf-8")
+    docker = "\n".join(line for line in dockerfile.read_text(encoding="utf-8").splitlines()
+                       if not line.lstrip().startswith("#"))
 
     problems: list[str] = []
     for module in modules:

@@ -259,9 +259,9 @@ capabilities:
     ref: V9 §21
     status: changed
     contract_change_ref: shared-kernel-boundary
-    evidence: "config/WebConfig.java → import identity.security.AuthInterceptor；common/RedisHealthMonitor.java → import integration.mail.MailService"
+    evidence: "common/RedisHealthMonitor.java → import integration.mail.MailService（config/WebConfig.java → import identity.security.AuthInterceptor 已于 Wave 0B 由 xander-webmvc-support 消除）"
     notes: "一旦把 common 抽成共享 jar 被各服务依赖，所有服务都传递依赖 identity + integration，libs/contracts 边界失效。ArchUnit 现有两条规则都不覆盖它（common 不是业务域）→ 必须单独加一条「共享内核不得依赖任何业务域」。"
-    acceptance: "CI 门禁 shared-kernel-reverse-dependency 通过（当前 2 处违规必须清零）"
+    acceptance: "CI 门禁 shared-kernel-reverse-dependency 通过（当前 1 处违规必须清零；原 2 处，config → identity 已消除）"
 
   - id: gateway-stream-proxy-transparent
     since: V9

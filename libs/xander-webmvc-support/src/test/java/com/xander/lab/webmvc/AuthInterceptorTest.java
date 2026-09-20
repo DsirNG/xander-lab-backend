@@ -1,8 +1,8 @@
-package com.xander.lab.identity.security;
+package com.xander.lab.webmvc;
 
 import com.xander.lab.auth.core.JwtUtil;
 import com.xander.lab.auth.core.UserContext;
-import com.xander.lab.identity.application.AuthService;
+import com.xander.lab.core.api.AccessTokenLookupPort;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,20 +11,22 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AuthInterceptorTest {
     private JwtUtil jwtUtil;
-    private AuthService authService;
+    private AccessTokenLookupPort accessTokenLookupPort;
     private AuthInterceptor interceptor;
 
     @BeforeEach
     void setUp() {
         jwtUtil = mock(JwtUtil.class);
-        authService = mock(AuthService.class);
-        interceptor = new AuthInterceptor(jwtUtil, authService);
+        accessTokenLookupPort = mock(AccessTokenLookupPort.class);
+        interceptor = new AuthInterceptor(jwtUtil, accessTokenLookupPort);
     }
 
     @AfterEach
@@ -66,8 +68,7 @@ class AuthInterceptorTest {
         request.addHeader("Authorization", "Bearer access-token");
         request.addHeader("X-Forwarded-For", "203.0.113.8, 10.0.0.1");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        when(authService.validateAccessToken("access-token")).thenReturn(true);
-        when(jwtUtil.getSubject("access-token")).thenReturn("42");
+        when(accessTokenLookupPort.resolveUserId("access-token")).thenReturn(42L);
 
         assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
         assertThat(UserContext.getUserId()).isEqualTo(42L);
@@ -90,12 +91,11 @@ class AuthInterceptorTest {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/blog/posts");
         request.addHeader("Authorization", "Bearer optional-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        when(authService.validateAccessToken("optional-token")).thenReturn(true);
-        when(jwtUtil.getSubject("optional-token")).thenReturn("5");
+        when(accessTokenLookupPort.resolveUserId("optional-token")).thenReturn(5L);
 
         assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
         assertThat(UserContext.getUserId()).isEqualTo(5L);
-        verify(authService).validateAccessToken("optional-token");
+        verify(accessTokenLookupPort).resolveUserId("optional-token");
     }
 
     @Test
@@ -137,8 +137,7 @@ class AuthInterceptorTest {
         MockHttpServletRequest request = new MockHttpServletRequest("PUT", "/api/flow/canvases/9/snapshot");
         request.addHeader("Authorization", "Bearer valid-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        when(authService.validateAccessToken("valid-token")).thenReturn(true);
-        when(jwtUtil.getSubject("valid-token")).thenReturn("42");
+        when(accessTokenLookupPort.resolveUserId("valid-token")).thenReturn(42L);
 
         assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
         assertThat(UserContext.getUserId()).isEqualTo(42L);
@@ -189,8 +188,7 @@ class AuthInterceptorTest {
         assertThat(response.getStatus()).isEqualTo(401);
 
         request.addHeader("Authorization", "Bearer valid-token");
-        when(authService.validateAccessToken("valid-token")).thenReturn(true);
-        when(jwtUtil.getSubject("valid-token")).thenReturn("42");
+        when(accessTokenLookupPort.resolveUserId("valid-token")).thenReturn(42L);
         assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
         assertThat(UserContext.getUserId()).isEqualTo(42L);
     }
@@ -264,8 +262,7 @@ class AuthInterceptorTest {
         request.addHeader("Authorization", "Bearer user-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
         Claims claims = mock(Claims.class);
-        when(authService.validateAccessToken("user-token")).thenReturn(true);
-        when(jwtUtil.getSubject("user-token")).thenReturn("7");
+        when(accessTokenLookupPort.resolveUserId("user-token")).thenReturn(7L);
         when(jwtUtil.parseToken("user-token")).thenReturn(claims);
         when(claims.get("role", String.class)).thenReturn("USER");
 
@@ -279,8 +276,7 @@ class AuthInterceptorTest {
         request.addHeader("Authorization", "Bearer admin-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
         Claims claims = mock(Claims.class);
-        when(authService.validateAccessToken("admin-token")).thenReturn(true);
-        when(jwtUtil.getSubject("admin-token")).thenReturn("1");
+        when(accessTokenLookupPort.resolveUserId("admin-token")).thenReturn(1L);
         when(jwtUtil.parseToken("admin-token")).thenReturn(claims);
         when(claims.get("role", String.class)).thenReturn("ADMIN");
 
@@ -294,8 +290,7 @@ class AuthInterceptorTest {
         MockHttpServletRequest request = new MockHttpServletRequest("DELETE", "/api/admin/model-providers/3");
         request.addHeader("Authorization", "Bearer broken-token");
         MockHttpServletResponse response = new MockHttpServletResponse();
-        when(authService.validateAccessToken("broken-token")).thenReturn(true);
-        when(jwtUtil.getSubject("broken-token")).thenReturn("1");
+        when(accessTokenLookupPort.resolveUserId("broken-token")).thenReturn(1L);
         when(jwtUtil.parseToken("broken-token")).thenThrow(new RuntimeException("expired"));
 
         assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
@@ -311,8 +306,7 @@ class AuthInterceptorTest {
         assertThat(response.getStatus()).isEqualTo(401);
 
         request.addHeader("Authorization", "Bearer valid-token");
-        when(authService.validateAccessToken("valid-token")).thenReturn(true);
-        when(jwtUtil.getSubject("valid-token")).thenReturn("42");
+        when(accessTokenLookupPort.resolveUserId("valid-token")).thenReturn(42L);
         assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
         assertThat(UserContext.getUserId()).isEqualTo(42L);
     }
@@ -400,5 +394,41 @@ class AuthInterceptorTest {
         // 新 admin 路由匿名访问 401。
         assertThat(interceptor.preHandle(adminRequest, response, new Object())).isFalse();
         assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    /**
+     * 本条钉住本类依赖收窄后的**行为变化**（见类注释）：
+     * 旧写法 {@code Long.parseLong(jwtUtil.getSubject(token))} 在 subject 非数字时抛
+     * {@code NumberFormatException} ⇒ 500；现在由端口解析，解析不出来返回 {@code null} ⇒ 401。
+     *
+     * <p>同时钉住"令牌有效性只走端口"这件事：受保护路径上不应再碰 {@code jwtUtil}
+     * （role 断言只服务 {@code /api/admin/**}，不是这里）。</p>
+     */
+    @Test
+    void protectedRouteRejectsTokenThePortCannotResolve() {
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/blog/posts");
+        request.addHeader("Authorization", "Bearer unparseable-subject");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(accessTokenLookupPort.resolveUserId("unparseable-subject")).thenReturn(null);
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(UserContext.getUserId()).isNull();
+        verify(jwtUtil, never()).parseToken(anyString());
+    }
+
+    /**
+     * 公开路径上拿不到身份时按匿名放行，而不是 500 —— {@code trySetUserContext} 的 null 分支。
+     */
+    @Test
+    void publicRouteTreatsUnresolvableTokenAsAnonymous() {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/blog/posts");
+        request.addHeader("Authorization", "Bearer unparseable-subject");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        when(accessTokenLookupPort.resolveUserId("unparseable-subject")).thenReturn(null);
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(UserContext.getUserId()).isNull();
     }
 }

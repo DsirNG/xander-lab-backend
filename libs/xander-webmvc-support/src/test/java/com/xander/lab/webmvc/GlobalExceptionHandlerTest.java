@@ -1,4 +1,4 @@
-package com.xander.lab.config;
+package com.xander.lab.webmvc;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.RedisSystemException;

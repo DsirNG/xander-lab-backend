@@ -35,6 +35,7 @@
         <module>libs/xander-model</module>
         <module>libs/xander-mybatis-support</module>
         <module>libs/xander-auth-core</module>
+        <module>libs/xander-webmvc-support</module>
         <module>contracts/content-api</module>
         <module>contracts/integration-api</module>
         <module>contracts/core-api</module>

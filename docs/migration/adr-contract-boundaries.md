@@ -4442,7 +4442,179 @@ A 组（守卫在）与 B 组（守卫删掉 + 读数下标抬高）成对，才
 生产代码一个字节没动，也没有任何线上形状变化。这个文件记的是**能力 / 契约的变更**，
 不是"测试说了什么"。理由同 §22 / §23。
 
-## 26. 待办
+## 26. 落地记录（二十三）：`xander-webmvc-support` —— 一个**没有 Java 消费方**的库，以及一条**会假绿**的门禁
+
+Wave 0B 的第 4 个共享库（V9 §20 / §91）。看起来只是"把 4 个类搬到 `libs/`"，
+但有三件事必须分开说清，否则这一刀会被误读成"什么都没发生"：
+①**这 4 个类一个 Java 消费者都没有**；②`AuthInterceptor` 不是"搬"而是**收窄**；
+③**六个指标一个都没动** ⇒ 验收不能靠指标，也不能靠"构建绿"。
+
+### 26.1 缝在哪
+
+V9 §20 的 `xander-webmvc-support` 一行点名的 4 个类，全部在应用模块里：
+
+| 类 | 原位置 | 原包 |
+|---|---|---|
+| `GlobalExceptionHandler` | `apps/core-host/.../config/` | `com.xander.lab.config` |
+| `ResultStatusResponseBodyAdvice` | 同上 | `com.xander.lab.config` |
+| `WebConfig` | 同上 | `com.xander.lab.config` |
+| `AuthInterceptor` | `apps/core-host/.../identity/security/` | `com.xander.lab.identity.security` |
+
+两个测试（`GlobalExceptionHandlerTest` / `AuthInterceptorTest`）跟着类走 ——
+理由同 §3.3：**测试留在应用模块，等于应用拥有它已经不再拥有的类的测试**。
+留在应用的是 `config/ShedLockConfiguration`（调度接线，不是 MVC）与
+`identity/security/PasswordEncoderConfig`（BCrypt bean，identity 域配置，§20 没列它）。
+
+### 26.2 三个必须先说清楚的事实
+
+**① 这 4 个类一个 Java 消费者都没有。** 它们是 Spring 发现的（组件扫描、
+`@RestControllerAdvice`、`WebMvcConfigurer`），所以搬错了**不会编译失败**：
+编译通过、`mvn test` 全绿，而异常映射或拦截器注册在**运行时静默失效**。
+⇒ 这一刀不能拿"构建绿"当验收，必须有接线/行为用例 + 注入。
+
+**② `AuthInterceptor` 是收窄，不是搬。** 它原来注入 `identity.application.AuthService`，
+只用了两个动作：`validateAccessToken(token)` 与 `jwtUtil.getSubject(token)` ——
+合起来正是 `core.api.AccessTokenLookupPort.resolveUserId(String)`，即**第十四刀为这个能力建的**
+那个端口（当时给 WebSocket 握手用，注释里还写着"握手路径不在 `/api/**` 下，走不到 `AuthInterceptor`"）。
+
+⚠️ **两份文档里"抽不动"的理由是错的，已实测推翻**：`identity/security/package-info.java` 与
+`libs/xander-auth-core/pom.xml` 都写着它"reads the long-connection security plane (Redis) and
+the account security state table" —— 而 `SecurityState*` / `redisTemplate` / `SecurityPlane`
+在 `AuthInterceptor.java` 里**零命中**。真正的阻塞点是那次 `AuthService` 注入。
+两处措辞都已订正，并写明"不要再复述这条理由"。
+
+**③ `GlobalExceptionHandler` 依赖 `core-api`，这是本仓库唯一一个带契约依赖的库。**
+它把 `core.api.FeatureModelNotConfiguredException` 映射成 400，而 §20 是**整类**列的
+`GlobalExceptionHandler`。另一条路是拆成两个 advice —— 那会把 Spring 的
+"跨 advice 取最具体 handler"排序放到**每一条错误响应**的关键路径上。⇒ 整类搬走，
+依赖写进 POM 并说明这是逃生口而不是当前方案。
+
+⚠️ 顺带发现库还需要 `spring-data-redis`（`@ExceptionHandler` 的**类字面量**里有两个
+Redis 异常类型 ⇒ 运行期必须在 classpath 上）。两个运行时 starter 都声明 `provided`：
+消费方本来就有（`apps/core-host/pom.xml` 里有），而 `compile` 会把 Tomcat / Redis
+拖给任何一个依赖这个库的服务 —— 那正是 §19 拆 super-common.jar 要防的事。
+
+### 26.3 包名为什么是 `com.xander.lab.webmvc`，以及一条被真正修掉的共享内核反向依赖
+
+`AuthInterceptor` 原来住在 `com.xander.lab.identity.security`。**库不能发一个落在业务域命名空间里的
+包**：`identity` 是扫描器 `BUSINESS_DOMAINS` 的条目，模块会被判成那个域的一部分，就不再是
+"每个 MVC 服务都能用的支撑"。先例：`xander-auth-core` 把 `UserContext` / `JwtUtil` 从
+`identity.security` 挪到 `auth.core`。
+
+⭐ **包一换，真的修掉了一条共享内核反向依赖**：`WebConfig` 原来第 3 行是
+`import com.xander.lab.identity.security.AuthInterceptor;` —— 那就是
+`ci_gates.py` 允许清单里 `("config", "identity")` 这一条的全部内容（`git grep` 实测：
+HEAD 上 `config/` 里 import identity 的只有这一个文件、一行）。
+`shared-kernel-reverse-dependency` 的违规 **2 → 1**，允许清单按判据自己的注释
+（"Removing an entry from this list is part of the fix"）删掉了那一项。
+
+⚠️ **允许清单没有被清空**：`("common", "integration")` 还在，而注入 C3 专门确认它**仍然会红** ——
+否则"清单只剩一项"就会掩盖"这一项也是死的"。
+
+### 26.4 ⚠️ 唯一的行为变化：subject 非数字时 **500 → 401**
+
+旧写法 `Long.parseLong(jwtUtil.getSubject(token))` 在 subject 不是数字时抛
+`NumberFormatException` ⇒ **500**；现在由提供方解析，解析不出来返回 `null` ⇒ **401**。
+两种都拒绝请求，但 401 才是这条路径该有的答案，而且不再往日志里丢一条 500 堆栈。
+方向是 **fail-closed**。
+
+**这是这一刀唯一的行为变化 ⇒ 必须由行为用例守着**（"指标不动"在这里等于没有信息）。
+新增两条，`AuthInterceptorTest` 31 → 33 个方法：
+
+- `protectedRouteRejectsTokenThePortCannotResolve` —— 受保护路径 401、`UserContext` 为空，
+  并 `verify(jwtUtil, never()).parseToken(anyString())` 钉住**"令牌有效性只走端口"**这条口径。
+- `publicRouteTreatsUnresolvableTokenAsAnonymous` —— 公开路径按匿名放行、200、`userId` 为 null。
+
+⚠️ **刻意没做的事**：`/api/admin/**` 的 role 断言留在 MVC 侧（`jwtUtil.parseToken(token).get("role", …)`），
+**没有**上端口。理由：契约不能假设自己只被这个拦截器调用，而"取 role"今天只有一个消费方、
+且只在一条路径上；把它塞进 `AccessTokenLookupPort` 会让那个"只有一个方法"的端口多一份
+被当成通用认证接口的空间（`AccessTokenLookupPort` 的类注释正是这么要求的）。
+
+### 26.5 ⚠️⭐ 这一刀真正的收获：`dockerfile-module-coverage` **会假绿**
+
+注入 C4（把 Dockerfile 里新模块那行 `COPY` **注释掉**）期望判据变红 —— 实测 **PASS**。
+
+原因：判据第一条是
+
+```python
+if f"{module}/pom.xml" not in docker:
+```
+
+—— **全文子串匹配**，而**"注释掉一行"正是有人要禁用某行时会写的形状**。
+第二条（`^COPY libs ./libs`）是行首锚定，但它查的是**顶层目录**，`libs` 那一行还在，
+所以新模块缺不缺 COPY 完全没人管。
+
+修法：匹配前逐行丢掉注释行（`ci_gates.py` 里 3 行）。修复后 C4 如实变红并点名
+`libs/xander-webmvc-support: its pom.xml is not COPYed`；干净树上仍 PASS。
+判据自己的 docstring 记了这次实测，包括"修之前报的是 13 module(s) all COPYed"。
+
+⚠️ **同类形状还有两处未修**（都是"token 在不在全文里"，注释同样能满足）：
+`gate_gateway_stream_proxy_config`（读 `infrastructure/gateway` 的 YAML，今天 SKIP）与
+`stream-ban-boundary-coverage`（`"ConnectionRegistry" not in text` 读 Java 文件）。
+⇒ 记为新待办 63，**不在这刀顺手改**：前者 Wave 1 才有落点，后者要先想清楚
+"注释里出现类名算不算注册"。
+
+### 26.6 注入验证（十次）
+
+这一刀的核心危险是"**指标不变 == 什么都没发生**"，所以验收全部落在注入上。
+C 类拆登记四处，D 类拆行为，各配对照组。
+
+| 编号 | 注入 | 期望 | 实测 |
+|---|---|---|---|
+| D0 | 不注入（**对照**） | 真跑且全绿 | `Tests run: 33, Failures: 0, Errors: 0` ✓ |
+| C1 | `scan.py` 去掉 `SHARED_KERNEL` 的 `webmvc` | `shared-kernel-classification` 红 | FAIL，指名 `webmvc (libs/xander-webmvc-support)` ✓ |
+| C2 | 库里的类 `import com.xander.lab.identity.application.AuthService` | `shared-kernel-reverse-dependency` 红 | FAIL，`[('webmvc','identity')]` ✓ |
+| C3 | 允许清单清空 | 同上红 | FAIL，`[('common','integration')]` ✓ |
+| C4 | Dockerfile 注释掉新模块的 `COPY` | `dockerfile-module-coverage` 红 | **修复前 PASS（假绿）** → 修复后 FAIL ✓ |
+| C0 | 根 POM 不动（**对照**） | core-host 编译成功 | BUILD SUCCESS ✓ |
+| C5 | 根 POM 注释掉 `<module>` | core-host 编译失败 | FAIL：`Could not find artifact com.xander:xander-webmvc-support` ✓ |
+| D1 | `requireAuth` 改成 fail-open（`null` 也放行） | 新用例红 | `protectedRouteRejectsTokenThePortCannotResolve`（"Expecting value to be false but was true"）✓ |
+| D2 | `trySetUserContext` 拿不到身份时抛异常 | 新用例红 | `publicRouteTreatsUnresolvableTokenAsAnonymous`（`IllegalStateException`）✓ |
+| D3 | `requireAuth` 多调一次 `jwtUtil.parseToken` | 新用例红 | 同一方法红（Mockito `never()` 消息），另 1 条连带 error ✓ |
+
+五次 gate 注入 + 两次 maven 对照 + 三次行为注入，五个文件的 blob 逐字还原
+（`git hash-object` 口径，脚本收尾无条件复核一遍）。
+
+⚠️ **脚本又踩到两个"假信号"的坑，两个都是这一族的老毛病**：
+1. **假绿**：C4 第一次报"没红"不是脚本错，是**判据真的假绿**（§26.5）——
+   如果这次没有"反着用一次"，这条缺陷会一直躺着。
+2. **假红**：D0–D3 第一版全部报"变红: True"，而**一次测试都没跑**。原因：`mvn -pl <lib> test`
+   没带 `-am`，上游模块（`xander-model` / `xander-auth-core` / `core-api`）不在本地仓库
+   ⇒ 依赖解析就失败 ⇒ 输出里没有 `Failures: 0` ⇒ 脚本把"运行坏了"读成"判据守住了"。
+   修法两条：**带 `-am`**，以及**跑前先删掉上一轮的 `surefire-reports/TEST-*.xml`**
+   （不删就会读到旧 XML 并打印出"全部通过"的用例名，看起来像证据）。
+   判据改成"**先确认真的跑了**（有 `Tests run:`），再从**新写的**报告里取失败方法名"。
+   ⇒ 与待办 33 / 36 / 42 / 48 / 58 同族：**"脚本跑完了" ≠ "注入生效了"**；
+   新增一条：**"脚本说变红了" ≠ "判据红了"**。
+
+### 26.7 实测收益
+
+| 项 | 改前 | 改后 |
+|---|---|---|
+| 共享库 | 3/6 | **4/6**（剩 `observability-core` / `test-support`） |
+| `libs/xander-webmvc-support` 测试 | 0 | **35**（`AuthInterceptorTest` 33 + `GlobalExceptionHandlerTest` 2） |
+| `apps/core-host` 测试 | 1241 | **1208**（−33，两个测试类跟着类走了） |
+| 全反应堆测试 | 1514 | **1516**（+2，新增的两条行为用例） |
+| 共享内核反向依赖违规 | 2 | **1**（`config → identity` 消除，允许清单同步删项） |
+| 六个头条指标 | 17/7/0/0/9/6 | **17/7/0/0/9/6**（**不动**） |
+| 26 条门禁 | 24 pass / 0 fail / 2 skip | **24 pass / 0 fail / 2 skip**（`dockerfile-module-coverage` 判据已加固） |
+
+⚠️ **指标不动是这一刀的必然结果，不是"没干活"**：那 4 个类没有任何 Java 消费者，
+所以没有任何 import 边可减。**"指标不变"与"什么都没发生"在这一刀上是同一个数** ——
+这正是 §26.6 存在的原因。
+
+### 26.8 为什么没有加 `contract-changes.yaml` 条目
+
+没有新增契约、没有契约字段增删、没有端口形状变化。`AuthInterceptor` 换依赖是**把一个消费方
+接到一个已经存在的端口上**（既不是"镜像"，也不是"收窄"）⇒ 不进 `contract-changes.yaml`。
+唯一动到的是 `shared-kernel-boundary` 那条的**状态记录**：`config/WebConfig` 那一项从
+`current_violations` 移进新增的 `resolved_violations`，`capability-baseline.yaml` 里
+`shared-kernel-no-business-dependency` 的 `evidence` / `acceptance`（"2 处"→"1 处"）同步订正。
+**这不是契约变更，是"清单里的事实变了"** —— 两处都是纸面上已经失实的内容。
+
+---
+
+## 27. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -4508,8 +4680,11 @@ A 组（守卫在）与 B 组（守卫删掉 + 读数下标抬高）成对，才
 | 59 | **⚠️ 反射断言读 `getParameterTypes()[n]` 前要先查 `getParameterCount()`** | **已做**（§25，**纯测试加固，生产代码零改动**）。⚠️ **原清单是错的**：写着"三处"，实测是 **11 个读数 / 5 个测试方法 / 4 个文件**（`grep` 命中 28 处，其中 6 处是注释 ⇒ 22 处代码读数，13 处已守卫 ⇒ 9 处未守卫；同族的 `getParameters()[n]` 另有 2 处未守卫）⇒ **连续第三张"推出来"的错清单**（§22.3 / §23.2）。修法：**6 条下界守卫** + **1 条移位**。⭐ 判据用**下界**不用精确值 —— 守卫的职责只是让失败信息指到真正的原因，精确值会多出一条"参数表恰好 n 个"的主张（同一文件里已有逐字清单），还会对"末尾追加参数"产生假阳性（§25.3）。⭐ `runStream` 那条是**移位**：它本来就断言 `== 4`，但排在两个下标读数**之后** ⇒ 参数表缩短时先抛 `ArrayIndexOutOfBoundsException`，**判据在、却轮不到说**。注入 A5a / A5b 用"把 `runStream` 换成两参的 `publish`"这一对直接测顺序（只抬高守卫绑定值测不出来 —— "守卫通过 ⇒ 读数在范围内"是逻辑蕴含，分不开）⇒ 守卫在前得具名消息、守卫在后得 `Index 2 out of bounds for length 2`。八次注入全部按预期，blob 逐字还原 |
 | 62 | **⚠️ "读第 n 个参数"的守卫仍靠"记得写"** —— 可以抽成 `parameterAt(Method, int)` 帮手，让守卫**结构上无法遗漏** | **未做**（§25.5 刻意没做）。`ContractShape` 在每个契约模块的 test 作用域里**各有一份**（契约模块不能互相依赖）⇒ 帮手要复制 3 份，而且只在 4 个模块里用、其余模块仍用裸读法 ⇒ **反而更不一致**。要收就一次收全部模块，是独立的一刀 |
 | 58 | **⚠️ 同一次注入验证里混用了两种哈希算法** —— 注入脚本自己打印一个（原始字节），驱动脚本打印另一个（`git hash-object`，先 CRLF→LF 归一），**两条输出挨着** | **本刀踩到、已修**（§20.7）。`BlogPlanSseService.java` 的 `restore` 行报 `1ae8d38b…`、收尾报 `8df1c761…`，看起来像还原没到位，白查一轮。实测三种算法同一文件三个值：原始字节带 `blob <len>\0` 头 `1ae8d38b…` / `sha1sum` 原始字节 `87578e00…` / `git hash-object` 归一后 `8df1c761…`（本仓 `core.autocrlf=true`）。⚠️ 这是待办 42 的**第三种形态**：42 是"两个**外部工具**给出不同值"，本刀是"**同一个脚本的两条代码路径**各自打印一个"。⇒ 判据已统一：`inj20.py` 的 `blob()` 改成先归一再哈希，与 `git hash-object` 逐字等价，复跑验证通过。⚠️ 通用规则：**"脚本打印了一个陌生的哈希" ≠ "文件被改坏了"**；分辨它们的是 `git diff`（差异是否逐行都是本次意图），不是哈希比对 |
+| 63 | **⚠️ 另外两处门禁也在做"全文子串匹配"，注释同样能满足** —— `gate_gateway_stream_proxy_config`（`token not in text`，读 `infrastructure/gateway` 的 YAML）与 `stream-ban-boundary-coverage`（`"ConnectionRegistry" not in text`，读 Java 文件） | **未修**（§26.5 实测的同一形状）。`dockerfile-module-coverage` 已在第二十三刀修掉（匹配前逐行丢注释）；这两处**刻意没顺手改** —— 前者 Wave 1 才有落点（今天 SKIP，改了也测不了），后者要先拍板"注释里出现类名算不算注册"。⚠️ 通用形状：**凡"某段文本在不在文件里"的判据，都要先问"注释算不算"** |
+| 64 | `xander-webmvc-support` 的 `GlobalExceptionHandler` 把两个 Redis 异常映射成 503 ⇒ 库必须带 `spring-data-redis` | **已处理**（§26.2 ③）：声明成 `provided`。义务是**响的** —— 消费方没有它会在**注册 advice 时**启动失败（`@ExceptionHandler` 里是类字面量），不是请求期静默出错。逃生口是把这个 handler 从 `GlobalExceptionHandler` 拆出去，但 §20 是**整类**列的 ⇒ 拆是**行为可见**的改动，不是重构 |
+| 65 | **⚠️ `xander-webmvc-support` 的 4 个类零 Java 消费方 ⇒ 这一族的改动没有任何编译期信号** | **已记录**（§26.2 ①），`package-info.java` 里写明"这一族的改动需要接线测试，不是绿构建"。今天靠 `AuthInterceptorTest`（33 条，含两条新增行为用例）与 `GlobalExceptionHandlerTest`（2 条）守着；**`WebConfig` 与 `ResultStatusResponseBodyAdvice` 仍然一条测试都没有** —— 前者靠 217 条路由的 `auth-policy-coverage` 间接覆盖，后者没有 |
 
-### 26.1 第 1 项的边界（明确不许顺手放宽）
+### 27.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -4520,7 +4695,7 @@ A 组（守卫在）与 B 组（守卫删掉 + 读数下标抬高）成对，才
 
 ---
 
-## 27. 一句话记法
+## 28. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

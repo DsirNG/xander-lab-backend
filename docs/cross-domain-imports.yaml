@@ -26,6 +26,7 @@ counts:
     - integration.api
     - payment.api
     - recitation.spi
+    - webmvc
   unclassified_sources:
     - DinQorAIApplication.java
 edges:

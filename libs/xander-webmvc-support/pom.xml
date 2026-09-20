@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.xander</groupId>
+        <artifactId>xander-lab-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>xander-webmvc-support</artifactId>
+    <name>xander-webmvc-support</name>
+    <description>
+        Servlet MVC support (V9 §20): the request/response shaping every MVC service needs,
+        and nothing else.
+
+        Contents:
+        - GlobalExceptionHandler          -- maps every exception to the shared Result envelope.
+        - ResultStatusResponseBodyAdvice  -- keeps the HTTP status aligned with Result.code.
+        - AuthInterceptor                 -- the MVC auth adapter (V9 §20 calls it that).
+        - WebConfig                       -- the WebMvcConfigurer: interceptor + CORS registration.
+
+        V9 §20 audience: "仅 MVC 服务使用". The WebFlux Gateway must NOT depend on this
+        module -- it carries spring-webmvc and jakarta.servlet, which is the same accident as
+        putting spring-boot-starter-web on a WebFlux classpath.
+
+        Dependency scope, and why spring-boot-starter-web is `provided`:
+        The consuming service supplies the MVC runtime. Declaring it `compile` would make this
+        module pull Tomcat into anything that depends on it, which is exactly the failure V9
+        §19 split the super-common.jar to prevent. `provided` keeps the compile surface honest
+        and is still on the test classpath, so this module's own tests run against it.
+        spring-boot-starter-data-redis is `provided` for the same reason -- see the note on it
+        below.
+
+        Deliberate non-members, and why:
+        - PasswordEncoderConfig  -> stays on the application. It wires spring-security-crypto's
+          BCrypt bean; V9 §20 does not list it, and it is identity-domain configuration rather
+          than MVC request shaping.
+        - ShedLockConfiguration  -> stays on the application. V9 §20 does not list it either;
+          it is scheduler wiring, not MVC.
+
+        Note on packages: the classes moved here keep no business-domain package. AuthInterceptor
+        used to live in com.xander.lab.identity.security; a library must not ship a package in a
+        business domain's namespace, because that namespace is a domain in the scanner and the
+        library would look like part of that domain. This is the same call xander-auth-core made
+        when UserContext / JwtUtil moved from identity.security to auth.core.
+    </description>
+
+    <dependencies>
+        <!-- Result, Constants. Version managed by the reactor (same ${project.version}). -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>xander-model</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- UserContext (trusted identity) and JwtUtil (token verifier, incl. the role claim). -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>xander-auth-core</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!--
+            AccessTokenLookupPort               resolves a bearer token, so AuthInterceptor no
+                                                longer injects identity's AuthService.
+            FeatureModelNotConfiguredException  GlobalExceptionHandler maps it to HTTP 400.
+
+            A note on the second one: it makes this module depend on a business contract, which
+            no other library does. The alternative was to split GlobalExceptionHandler across two
+            advices, which puts Spring's "most specific handler wins across advices" ordering on
+            the critical path of every error response. V9 §20 lists GlobalExceptionHandler whole,
+            so the whole class moved and the dependency is recorded here rather than left
+            implicit. If a future MVC service must not carry core-api, the split is the escape
+            hatch, and it is a behaviour-visible change, not a refactor.
+        -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>core-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!--
+            The MVC runtime: @RestControllerAdvice, ResponseBodyAdvice, WebMvcConfigurer,
+            HandlerInterceptor, jakarta.servlet. `provided`; see the description above.
+            Version managed by the Spring Boot BOM.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <!--
+            GlobalExceptionHandler maps RedisConnectionFailureException / RedisSystemException
+            (spring-data-redis) and DataAccessException (spring-tx) to HTTP 503. These are
+            *class literals inside @ExceptionHandler*, so the types must be on the runtime
+            classpath, not just the compile one.
+
+            `provided` for the same reason as spring-boot-starter-web: every MVC service in this
+            repo already declares it (apps/core-host/pom.xml does), and making it `compile` would
+            force Redis onto a pure-REST MVC service that has no cache at all. The obligation this
+            transfers is a *loud* one: a consumer without it fails at startup while registering
+            the advice, not silently at request time. If a MVC service ever must run without
+            Redis, the escape hatch is to split this one handler out of GlobalExceptionHandler;
+            V9 §20 lists the class whole, so the class moved whole and the split is recorded as a
+            behaviour-visible change rather than done quietly here.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!--
+            The library owns its own tests. AuthInterceptorTest and GlobalExceptionHandlerTest
+            moved here with their classes: a library whose tests stay in the application module
+            has not really been extracted.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- No spring-boot-maven-plugin: see libs/xander-model/pom.xml for why. -->
+        </plugins>
+    </build>
+
+</project>

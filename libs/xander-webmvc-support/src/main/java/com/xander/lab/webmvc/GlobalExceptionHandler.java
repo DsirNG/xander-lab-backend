@@ -1,4 +1,4 @@
-package com.xander.lab.config;
+package com.xander.lab.webmvc;
 
 import com.xander.lab.common.Result;
 import lombok.extern.slf4j.Slf4j;

@@ -98,4 +98,3 @@ implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 ## Shared kernel reverse dependencies (V9 section 21 gate)
 
 - **VIOLATION** `common` imports integration
-- **VIOLATION** `config` imports identity

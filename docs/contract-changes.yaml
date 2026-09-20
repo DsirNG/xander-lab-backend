@@ -308,12 +308,13 @@ changes:
       forbidden_dependencies:
         - "common / config / util → 任何业务域 implementation"
       current_violations:
-        - source: apps/core-host/src/main/java/com/xander/lab/config/WebConfig.java
-          imports: com.xander.lab.identity.security.AuthInterceptor
         - source: apps/core-host/src/main/java/com/xander/lab/common/RedisHealthMonitor.java
           imports: com.xander.lab.integration.mail.MailService
+      resolved_violations:
+        - source: apps/core-host/src/main/java/com/xander/lab/config/WebConfig.java
+          imports: com.xander.lab.identity.security.AuthInterceptor
+          resolved_by: "Wave 0B xander-webmvc-support：WebConfig 与 AuthInterceptor 一起搬进 libs/xander-webmvc-support（包名 com.xander.lab.webmvc），AuthInterceptor 的依赖从 identity.application.AuthService 收窄到 core.api.AccessTokenLookupPort。config -> identity 这条边随之消失，ci_gates.py 的 KNOWN_SHARED_KERNEL_VIOLATIONS 已删掉 ('config','identity')。"
       remedy:
-        - "config/WebConfig → 把 MVC 认证适配下沉到 xander-webmvc-support（MVC Auth Adapter），WebConfig 只装配接口"
         - "common/RedisHealthMonitor → 依赖 AlertPort 接口，MailService 实现留在 integration；并移出 common 到 operations/redis-health 或 core-host observability worker"
     notes: "一旦 common 抽成共享 jar 被各服务依赖，所有服务都传递依赖 identity + integration，libs/contracts 边界失效。ArchUnit 现有「domain 不依赖 infrastructure」「业务域之间不 import 实现」两条规则都不覆盖它（common 不是业务域）。"
     capability_refs: [shared-kernel-no-business-dependency]

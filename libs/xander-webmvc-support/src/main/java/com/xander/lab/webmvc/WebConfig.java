@@ -1,6 +1,4 @@
-package com.xander.lab.config;
-
-import com.xander.lab.identity.security.AuthInterceptor;
+package com.xander.lab.webmvc;
 
 import java.util.Arrays;
 

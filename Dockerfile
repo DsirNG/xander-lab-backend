@@ -12,6 +12,7 @@ COPY settings.xml .
 COPY libs/xander-model/pom.xml ./libs/xander-model/pom.xml
 COPY libs/xander-mybatis-support/pom.xml ./libs/xander-mybatis-support/pom.xml
 COPY libs/xander-auth-core/pom.xml ./libs/xander-auth-core/pom.xml
+COPY libs/xander-webmvc-support/pom.xml ./libs/xander-webmvc-support/pom.xml
 COPY contracts/content-api/pom.xml ./contracts/content-api/pom.xml
 COPY contracts/integration-api/pom.xml ./contracts/integration-api/pom.xml
 COPY contracts/core-api/pom.xml ./contracts/core-api/pom.xml
