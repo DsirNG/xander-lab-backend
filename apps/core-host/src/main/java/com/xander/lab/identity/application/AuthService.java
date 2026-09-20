@@ -5,6 +5,7 @@ import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.core.api.AccessTokenLookupPort;
 import com.xander.lab.common.Constants;
 import com.xander.lab.common.Result;
+import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
 import com.xander.lab.identity.domain.User;
@@ -56,6 +57,7 @@ public class AuthService implements AccessTokenLookupPort {
     private final WechatMiniAppClient wechatMiniAppClient;
     private final AccountMergeMapper accountMergeMapper;
     private final RefreshTokenService refreshTokenService;
+    private final SecurityStateCache securityStateCache;
 
     /** 保留旧测试与本地构造路径；新协议默认关闭时完全走旧行为。 */
     public AuthService(JwtUtil jwtUtil,
@@ -67,7 +69,21 @@ public class AuthService implements AccessTokenLookupPort {
                        WechatMiniAppClient wechatMiniAppClient,
                        AccountMergeMapper accountMergeMapper) {
         this(jwtUtil, mailPort, userMapper, redisTemplate, passwordEncoder, billingPort,
-                wechatMiniAppClient, accountMergeMapper, null);
+                wechatMiniAppClient, accountMergeMapper, null, null);
+    }
+
+    /** 保留已接入 Refresh 协议的 focused test 构造路径。 */
+    public AuthService(JwtUtil jwtUtil,
+                       MailPort mailPort,
+                       UserMapper userMapper,
+                       StringRedisTemplate redisTemplate,
+                       PasswordEncoder passwordEncoder,
+                       BillingPort billingPort,
+                       WechatMiniAppClient wechatMiniAppClient,
+                       AccountMergeMapper accountMergeMapper,
+                       RefreshTokenService refreshTokenService) {
+        this(jwtUtil, mailPort, userMapper, redisTemplate, passwordEncoder, billingPort,
+                wechatMiniAppClient, accountMergeMapper, refreshTokenService, null);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
@@ -79,7 +95,8 @@ public class AuthService implements AccessTokenLookupPort {
                        BillingPort billingPort,
                        WechatMiniAppClient wechatMiniAppClient,
                        AccountMergeMapper accountMergeMapper,
-                       RefreshTokenService refreshTokenService) {
+                       RefreshTokenService refreshTokenService,
+                       SecurityStateCache securityStateCache) {
         this.jwtUtil = jwtUtil;
         this.mailPort = mailPort;
         this.userMapper = userMapper;
@@ -89,6 +106,7 @@ public class AuthService implements AccessTokenLookupPort {
         this.wechatMiniAppClient = wechatMiniAppClient;
         this.accountMergeMapper = accountMergeMapper;
         this.refreshTokenService = refreshTokenService;
+        this.securityStateCache = securityStateCache;
     }
 
 /**
@@ -649,19 +667,21 @@ public class AuthService implements AccessTokenLookupPort {
             revokeRefreshSessionFromAccessToken(accessToken);
         }
 
-        try {
-            if (jwtUtil.isValid(accessToken)) {
-                String userId = jwtUtil.getSubject(accessToken);
-                // 从用户活跃 token 集合中移除
-                redisTemplate.opsForSet().remove(Constants.REDIS_USER_TOKENS_PREFIX + userId, accessToken);
+        if (!newRefreshProtocolEnabled()) {
+            try {
+                if (jwtUtil.isValid(accessToken)) {
+                    String userId = jwtUtil.getSubject(accessToken);
+                    // 从用户活跃 token 集合中移除
+                    redisTemplate.opsForSet().remove(Constants.REDIS_USER_TOKENS_PREFIX + userId, accessToken);
+                }
+            } catch (Exception e) {
+                // JWT 解析失败也要尝试删除 Redis key；记录原因便于排查
+                log.warn("[Auth] 登出时移除用户活跃 token 失败: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            // JWT 解析失败也要尝试删除 Redis key；记录原因便于排查
-            log.warn("[Auth] 登出时移除用户活跃 token 失败: {}", e.getMessage());
-        }
 
-        // 删除 token 在 Redis 中的记录
-        redisTemplate.delete(Constants.REDIS_TOKEN_PREFIX + accessToken);
+            // 删除 token 在 Redis 中的记录
+            redisTemplate.delete(Constants.REDIS_TOKEN_PREFIX + accessToken);
+        }
         log.info("[Auth] 用户登出，当前设备 Token 已失效");
     }
 
@@ -735,15 +755,17 @@ public class AuthService implements AccessTokenLookupPort {
         }
         String accessToken = jwtUtil.generateAccessToken(userIdStr, claims);
 
-        // 多设备支持：每个 token 独立存储，互不覆盖
-        redisTemplate.opsForValue().set(
-                Constants.REDIS_TOKEN_PREFIX + accessToken,
-                userIdStr,
-                jwtUtil.getAccessTokenExpire(),
-                TimeUnit.MILLISECONDS
-        );
-        // 记录该用户所有活跃 token，方便强制全部下线
-        redisTemplate.opsForSet().add(Constants.REDIS_USER_TOKENS_PREFIX + userIdStr, accessToken);
+        if (!newRefreshProtocolEnabled()) {
+            // 旧模式多设备支持：每个 token 独立存储，互不覆盖。
+            redisTemplate.opsForValue().set(
+                    Constants.REDIS_TOKEN_PREFIX + accessToken,
+                    userIdStr,
+                    jwtUtil.getAccessTokenExpire(),
+                    TimeUnit.MILLISECONDS
+            );
+            // 记录该用户所有活跃 token，方便强制全部下线。
+            redisTemplate.opsForSet().add(Constants.REDIS_USER_TOKENS_PREFIX + userIdStr, accessToken);
+        }
 
         return TokenResponse.builder()
                 .accessToken(accessToken)
@@ -894,11 +916,25 @@ public class AuthService implements AccessTokenLookupPort {
     }
 
     /**
-     * 验证 Access Token 是否有效（JWT 合法 + Redis 中仍存在）
+     * 验证 Access Token。
+     * 旧模式检查 Redis 登记；新 Refresh 模式只做 JWT 验签、类型检查和本地 deny cache 查询，
+     * 不把每个普通 API 请求的可用性绑定到 Redis。
      */
     public boolean validateAccessToken(String token) {
         if (!jwtUtil.isValid(token) || jwtUtil.isRefreshToken(token)) {
             return false;
+        }
+        if (newRefreshProtocolEnabled()) {
+            try {
+                Long accountId = Long.valueOf(jwtUtil.getSubject(token));
+                if (securityStateCache == null) {
+                    log.error("[Auth] 新 Refresh 模式缺少 SecurityStateCache，拒绝 Access Token");
+                    return false;
+                }
+                return !securityStateCache.isDisabled(accountId);
+            } catch (RuntimeException exception) {
+                return false;
+            }
         }
         return Boolean.TRUE.equals(redisTemplate.hasKey(Constants.REDIS_TOKEN_PREFIX + token));
     }
@@ -911,8 +947,8 @@ public class AuthService implements AccessTokenLookupPort {
      * {@link AccessTokenLookupPort} 这一个方法。</p>
      *
      * <p>⚠️ 这里<b>没有</b> {@code @Transactional}，也不该有：本方法纯读，
-     * 而 {@link #validateAccessToken(String)} 只是一次 JWT 校验加一次 Redis
-     * {@code hasKey}，没有任何需要原子性的写。加注解只会白占一个连接。</p>
+     * 而 {@link #validateAccessToken(String)} 只做 JWT / 本地 deny cache 查询（旧模式才查 Redis），
+     * 没有任何需要原子性的写。加注解只会白占一个连接。</p>
      *
      * <p>⚠️ 本方法名由 {@code getUserIdFromAccessToken} 改名而来。改名是因为
      * 跨域位置现在通过端口调用，域内没有必要再留一个别名 —— 唯一的同域调用点

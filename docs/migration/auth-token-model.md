@@ -304,8 +304,9 @@ enabled = false  → 旧的无状态 refresh JWT 行为完全不变（实现与�
 enabled = true   → 新协议生效（切流是 Wave 2 的事，§94）
 ```
 
-当前接入状态：`AuthService` 已把登录签发、`/api/auth/refresh` 轮换和 logout 的
-当前 Session 撤销接到这个开关；默认值仍为 `false`。开启前必须完成客户端错误分类、
+当前接入状态：`AuthService` 已把登录签发、`/api/auth/refresh` 轮换、logout 的
+当前 Session 撤销，以及 Core Host 的“JWT + 本地 deny cache”Access 校验接到这个开关；
+默认值仍为 `false`。开启前必须完成客户端错误分类、
 多标签页协调、Access TTL 与数据库恢复演练，不能把“代码已接入”当成“生产已切流”。
 
 配置类：`RefreshTokenProperties`（`@ConfigurationProperties(prefix = "auth.refresh")`）。

@@ -1,6 +1,7 @@
 package com.xander.lab.identity.application;
 
 import com.xander.lab.common.Constants;
+import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.payment.api.BillingPort;
 import com.xander.lab.identity.api.LoginRequest;
 import com.xander.lab.identity.api.TokenResponse;
@@ -134,8 +135,6 @@ class AuthServiceTest {
         when(userMapper.selectById(7L)).thenReturn(user);
         when(jwtUtil.generateAccessToken(anyString(), any(Map.class))).thenReturn("access-token");
         when(jwtUtil.getAccessTokenExpire()).thenReturn(60_000L);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(redisTemplate.opsForSet()).thenReturn(setOperations);
 
         AuthService enabled = new AuthService(jwtUtil, mailPort, userMapper, redisTemplate,
                 passwordEncoder, billingPort, wechatMiniAppClient, accountMergeMapper,
@@ -149,6 +148,27 @@ class AuthServiceTest {
                 "sid-42".equals(claims.get("sid"))
                         && "access".equals(claims.get("type"))));
         verify(jwtUtil, never()).isValid("opaque-refresh");
+        verify(redisTemplate, never()).opsForValue();
+        verify(redisTemplate, never()).opsForSet();
+    }
+
+    @Test
+    void enabledAccessValidationUsesLocalDenyCacheInsteadOfRedis() {
+        RefreshTokenService rotationService = mock(RefreshTokenService.class);
+        when(rotationService.isEnabled()).thenReturn(true);
+        SecurityStateCache securityCache = new SecurityStateCache();
+        when(jwtUtil.isValid("access")).thenReturn(true);
+        when(jwtUtil.isRefreshToken("access")).thenReturn(false);
+        when(jwtUtil.getSubject("access")).thenReturn("42");
+
+        AuthService enabled = new AuthService(jwtUtil, mailPort, userMapper, redisTemplate,
+                passwordEncoder, billingPort, wechatMiniAppClient, accountMergeMapper,
+                rotationService, securityCache);
+
+        assertThat(enabled.validateAccessToken("access")).isTrue();
+        securityCache.markDisabled(42L, 1L);
+        assertThat(enabled.validateAccessToken("access")).isFalse();
+        verify(redisTemplate, never()).hasKey(anyString());
     }
 
     @Test
