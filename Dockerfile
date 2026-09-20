@@ -11,6 +11,7 @@ COPY pom.xml .
 COPY settings.xml .
 COPY libs/xander-model/pom.xml ./libs/xander-model/pom.xml
 COPY libs/xander-mybatis-support/pom.xml ./libs/xander-mybatis-support/pom.xml
+COPY libs/xander-mcp-support/pom.xml ./libs/xander-mcp-support/pom.xml
 COPY libs/xander-auth-core/pom.xml ./libs/xander-auth-core/pom.xml
 COPY libs/xander-observability-core/pom.xml ./libs/xander-observability-core/pom.xml
 COPY libs/xander-test-support/pom.xml ./libs/xander-test-support/pom.xml
@@ -28,16 +29,16 @@ COPY apps/gateway/pom.xml ./apps/gateway/pom.xml
 COPY apps/core-host/pom.xml ./apps/core-host/pom.xml
 COPY apps/migration-runner/pom.xml ./apps/migration-runner/pom.xml
 
-# Download dependencies using Aliyun mirror
-RUN mvn dependency:go-offline -B -s settings.xml
-
-# Copy source code and build jar
+# Copy source code and build only the selected application plus its reactor dependencies.
+# Running dependency:go-offline here traverses Maven's reporting/site plugin graph and pulls
+# unrelated legacy artifacts; the targeted reactor build is both sufficient and repeatable.
 COPY libs ./libs
 COPY contracts ./contracts
 COPY apps ./apps
 COPY docs ./docs
 COPY migrations ./migrations
-RUN mvn clean package -DskipTests -s settings.xml
+ARG APP_MODULE=apps/core-host
+RUN mvn -pl ${APP_MODULE} -am clean package -DskipTests -s settings.xml
 
 
 # Stage 2: Run the application

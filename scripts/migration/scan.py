@@ -163,7 +163,9 @@ BUSINESS_DOMAINS = [
 # ``common`` / ``config`` / ``filter`` / ``util`` are the in-app shared packages; ``auth``
 # is the package provided by ``libs/xander-auth-core`` (V9 §20); ``content`` / ``core.api``
 # / ``payment.api`` / ``integration.api`` / ``agent.spi`` / ``automation.spi`` are the
-# packages provided by ``contracts/*`` (V9 §18/§91).
+# packages provided by ``contracts/*`` (V9 §18/§91). ``mcp`` is the framework-neutral
+# transport helper provided by ``libs/xander-mcp-support``; it is deliberately not under a
+# business-domain prefix because both inbound integration MCP and outbound Agent MCP use it.
 #
 # Contract packages belong here even though a contract is not a "library". A contract's
 # whole purpose is to be the one legal cross-service dependency, so an import of one must
@@ -181,7 +183,7 @@ BUSINESS_DOMAINS = [
 # package here; the gate fails until you do.
 SHARED_KERNEL = ["agent.spi", "auth", "automation.spi", "blogagent.spi", "common", "config", "content",
                  "core.api", "filter", "integration.api", "observability", "payment.api", "recitation.spi",
-                 "testsupport", "util", "webmvc"]
+                 "mcp", "testsupport", "util", "webmvc"]
 
 # Import prefixes a ``contracts/*`` module is allowed to use (V9 §19 / §21).
 #
@@ -855,6 +857,10 @@ CONFIG_OWNERS = [
     (r"^recitation\.", "knowledge"),
     (r"^knowledge-base\.", "knowledge"),
     (r"^agent\.", "agent"),
+    # Outbound MCP client is part of the Agent tool plane (V9 §94). Inbound MCP
+    # servers remain owned by platform integration, so the more-specific rule
+    # must precede the broad mcp.* fallback.
+    (r"^mcp\.client\.", "agent"),
     (r"^mcp\.", "integration"),
     (r"^auth\.refresh\.", "core"),
     (r"^blog-html\.", "bloghtml-preview"),

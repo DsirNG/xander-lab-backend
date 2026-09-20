@@ -48,6 +48,12 @@
             <artifactId>xander-observability-core</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- Pure MCP transport JSON support shared by inbound servers and the Agent client. -->
+        <dependency>
+            <groupId>com.xander</groupId>
+            <artifactId>xander-mcp-support</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
             MVC 支撑：GlobalExceptionHandler / ResultStatusResponseBodyAdvice / WebConfig /

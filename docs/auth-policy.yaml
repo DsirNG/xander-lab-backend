@@ -396,20 +396,20 @@ protected:
     owner: agent
   - id: agent-mcp-servers-list
     match: {method: GET, path: /api/agent/mcp-servers}
-    owner: integration
-    note: "URL 前缀是 /api/agent，实际属于 integration（AgentMcpServerController 在 integration/mcp/client/api）。Wave 0A 修复：原为 fail-open 公开读。路由必须按真实 Owner 切流。"
+    owner: agent
+    note: "AgentMcpServerController 已迁入 agent/tool/mcp/api，代码 Owner 为 agent（Stage B）；当前仍与 core-host 同进程。Wave 0A 修复：原为 fail-open 公开读。"
   - id: agent-mcp-servers-create
     match: {method: POST, path: /api/agent/mcp-servers}
-    owner: integration
+    owner: agent
   - id: agent-mcp-servers-update
     match: {method: PUT, path_pattern: /api/agent/mcp-servers/*}
-    owner: integration
+    owner: agent
   - id: agent-mcp-servers-delete
     match: {method: DELETE, path_pattern: /api/agent/mcp-servers/*}
-    owner: integration
+    owner: agent
   - id: agent-mcp-servers-probe
     match: {method: POST, path_pattern: /api/agent/mcp-servers/*/probe}
-    owner: integration
+    owner: agent
   - id: juejin-catalog-sync
     match: {method: POST, path: /api/publishing/juejin/catalog/sync}
     owner: integration

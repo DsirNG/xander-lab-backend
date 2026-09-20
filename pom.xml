@@ -33,6 +33,7 @@
         <!-- Built first: the reactor sorts by inter-module dependency. -->
         <module>libs/xander-model</module>
         <module>libs/xander-mybatis-support</module>
+        <module>libs/xander-mcp-support</module>
         <module>libs/xander-auth-core</module>
         <module>libs/xander-observability-core</module>
         <module>libs/xander-test-support</module>

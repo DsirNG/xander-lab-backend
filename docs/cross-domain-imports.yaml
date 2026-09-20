@@ -24,6 +24,7 @@ counts:
     - core.api
     - filter
     - integration.api
+    - mcp
     - observability
     - payment.api
     - recitation.spi

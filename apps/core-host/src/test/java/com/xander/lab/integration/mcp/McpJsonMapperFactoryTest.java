@@ -2,6 +2,7 @@ package com.xander.lab.integration.mcp;
 
 import com.fasterxml.jackson.databind.exc.InvalidDefinitionException;
 import com.xander.lab.common.PageData;
+import com.xander.lab.mcp.McpJsonMapperFactory;
 import com.xander.lab.publishing.api.BlogPostVO;
 import io.modelcontextprotocol.json.McpJsonDefaults;
 import org.junit.jupiter.api.DisplayName;

@@ -40,11 +40,11 @@ tables:
     logical_owner: agent
     target_deployment_unit: dinqor-agent
     owner_transition:
-      stage: stage-a-integration-write
-      integration_write: true
-      agent_write: false
+      stage: stage-b-agent-write
+      integration_write: false
+      agent_write: true
       integration_revoke: false
-    notes: "V9 §77 三阶段切换：Stage A integration 唯一写 / agent 只读；Stage B agent 唯一写；Stage C REVOKE integration WRITE。切换前必须做 row count / updated_at / business key / checksum 校验。"
+    notes: "V9 §77：代码 Owner 已切到 agent（Stage B，agent 唯一写 / integration 只读）；当前仍与 core-host 同进程，真实独立服务切流与 Stage C 的数据库 REVOKE 必须在 Drain 后执行。切换前必须做 row count / updated_at / business key / checksum 校验。"
   - table: agent_memory
     logical_owner: agent
     target_deployment_unit: dinqor-agent

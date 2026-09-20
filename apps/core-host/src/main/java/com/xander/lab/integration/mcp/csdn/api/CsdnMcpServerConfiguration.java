@@ -3,7 +3,7 @@ package com.xander.lab.integration.mcp.csdn.api;
 import com.xander.lab.integration.mcp.csdn.application.CsdnMcpApplicationService;
 import com.xander.lab.integration.mcp.security.McpOAuthRequestContext;
 import com.xander.lab.integration.mcp.security.McpScopeErrors;
-import com.xander.lab.integration.mcp.McpJsonMapperFactory;
+import com.xander.lab.mcp.McpJsonMapperFactory;
 import io.modelcontextprotocol.server.McpServer;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.server.McpSyncServer;

@@ -270,7 +270,7 @@ Redis 没有回滚 —— 若 DB 回滚，被删的旧 token 不会恢复，用�
 
 ---
 
-### 3.10 `integration/mcp/client/application/AgentMcpServerService`
+### 3.10 `agent/tool/mcp/application/AgentMcpServerService`
 
 | 项 | 内容 |
 |---|---|

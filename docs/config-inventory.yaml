@@ -1004,37 +1004,37 @@ config:
     source: apps/core-host/src/main/resources/application.yml
     value: "${MCP_CLIENT_ENABLED:false}"
     leaf: true
-    logical_owner: integration
+    logical_owner: agent
   - key: mcp.client.credential-encryption-key
     source: apps/core-host/src/main/resources/application.yml
     value: "${MCP_CLIENT_CREDENTIAL_ENCRYPTION_KEY:}"
     leaf: true
-    logical_owner: integration
+    logical_owner: agent
   - key: mcp.client.connect-timeout-seconds
     source: apps/core-host/src/main/resources/application.yml
     value: "${MCP_CLIENT_CONNECT_TIMEOUT_SECONDS:10}"
     leaf: true
-    logical_owner: integration
+    logical_owner: agent
   - key: mcp.client.request-timeout-seconds
     source: apps/core-host/src/main/resources/application.yml
     value: "${MCP_CLIENT_REQUEST_TIMEOUT_SECONDS:30}"
     leaf: true
-    logical_owner: integration
+    logical_owner: agent
   - key: mcp.client.max-tools-per-server
     source: apps/core-host/src/main/resources/application.yml
     value: "${MCP_CLIENT_MAX_TOOLS_PER_SERVER:50}"
     leaf: true
-    logical_owner: integration
+    logical_owner: agent
   - key: mcp.client.max-description-length
     source: apps/core-host/src/main/resources/application.yml
     value: "${MCP_CLIENT_MAX_DESCRIPTION_LENGTH:400}"
     leaf: true
-    logical_owner: integration
+    logical_owner: agent
   - key: mcp.client.max-result-length
     source: apps/core-host/src/main/resources/application.yml
     value: "${MCP_CLIENT_MAX_RESULT_LENGTH:8000}"
     leaf: true
-    logical_owner: integration
+    logical_owner: agent
   - key: admin
     source: apps/core-host/src/main/resources/application.yml
     value: ""
@@ -2546,6 +2546,62 @@ config:
     logical_owner: agent
     source_kind: java-configuration-properties
     line: 15
+  - key: mcp.client.connect-timeout-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 26
+  - key: mcp.client.credential-encryption-key
+    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 23
+  - key: mcp.client.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 20
+  - key: mcp.client.max-description-length
+    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 35
+  - key: mcp.client.max-result-length
+    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 43
+  - key: mcp.client.max-tool-name-length
+    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 51
+  - key: mcp.client.max-tools-per-server
+    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 32
+  - key: mcp.client.request-timeout-seconds
+    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 29
   - key: billing.enabled
     source: apps/core-host/src/main/java/com/xander/lab/billing/infrastructure/BillingProperties.java
     value: "<java-default>"
@@ -2861,62 +2917,6 @@ config:
     logical_owner: core
     source_kind: java-configuration-properties
     line: 23
-  - key: mcp.client.connect-timeout-seconds
-    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 26
-  - key: mcp.client.credential-encryption-key
-    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 23
-  - key: mcp.client.enabled
-    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 20
-  - key: mcp.client.max-description-length
-    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 35
-  - key: mcp.client.max-result-length
-    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 43
-  - key: mcp.client.max-tool-name-length
-    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 51
-  - key: mcp.client.max-tools-per-server
-    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 32
-  - key: mcp.client.request-timeout-seconds
-    source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 29
   - key: mcp.csdn.enabled
     source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/CsdnMcpProperties.java
     value: "<java-default>"

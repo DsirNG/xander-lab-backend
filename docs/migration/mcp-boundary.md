@@ -28,13 +28,13 @@
 | 谁是客户端 | 我们（`dinqor-agent`） | 第三方宿主（Claude / Cursor） |
 | 谁鉴权谁 | 我们带凭据去连远端 | 我们验对方的 OAuth token |
 | 凭据形态 | `McpHeaderCipher` 加密的请求头 | OAuth 2.0 + PKCE + Scope |
-| 当前包 | `integration/mcp/client` | `integration/mcp/{blog,csdn,dual,juejin}` + `integration/mcp/security` |
+| 当前包 | `agent/tool/mcp`（出站客户端已迁入） | `integration/mcp/{blog,csdn,dual,juejin}` + `integration/mcp/security` |
 | 目标归属 | `dinqor-agent`（迁入 `agent/tool/mcp`） | `dinqor-platform-integration` |
 | 表 | `agent_mcp_server` | `mcp_oauth_client` / `mcp_oauth_grant` / `mcp_oauth_token` |
 
-⚠️ 注意出站方向的**包名与目标归属不一致**：它现在住在 `integration` 包里，
-但归 `dinqor-agent`。这是 §76 明确要求的迁入动作
-（`integration/mcp/client` → `agent/tool/mcp`），不是命名笔误。
+出站客户端已完成从 `integration/mcp/client` 到 `agent/tool/mcp` 的包迁移，
+并完成 `agent_mcp_server` 的代码 Owner 切换到 Agent（Stage B）；Wave 1 仍与
+core-host 同进程运行，真实独立服务切流和数据库权限收窄仍待 Wave 2 Drain。
 
 ---
 
@@ -46,7 +46,7 @@ DinQor Agent
 → Remote MCP Server
 ```
 
-**Owner：`dinqor-agent`。当前：`integration/mcp/client`。迁入：`agent/tool/mcp`。**
+**Owner：`dinqor-agent`。当前包：`agent/tool/mcp`；Wave 1 仍与 core-host 同进程运行。**
 
 ### 2.1 Transport 优先级（§76）
 
@@ -93,28 +93,28 @@ HTTP 请求。`McpEndpointGuard` 的类注释把这条写得很直接：
 远端 MCP 的请求头凭据（如 `Authorization`）加密后存进 `agent_mcp_server`。
 与 `WechatCredentialCipher`、`CsdnPlatformCredential` 同一模式：**每用户加密凭据**。
 
-### 2.4 ⚠️ 路径前缀与真实 Owner 不一致（Wave 0A 已修）
+### 2.4 路径前缀与领域 Owner 不一致（Wave 0A 已修）
 
-`AgentMcpServerController` 在 `integration/mcp/client/api`，
+`AgentMcpServerController` 在 `agent/tool/mcp/api`，
 但它的路由前缀是 `/api/agent/mcp-servers`：
 
 | 路由 | handler 所在包 |
 |---|---|
-| `/api/agent/mcp-servers`（GET/POST） | `integration/mcp/client/api` |
-| `/api/agent/mcp-servers/{id}`（PUT/DELETE） | `integration/mcp/client/api` |
-| `/api/agent/mcp-servers/{id}/probe`（POST） | `integration/mcp/client/api` |
+| `/api/agent/mcp-servers`（GET/POST） | `agent/tool/mcp/api` |
+| `/api/agent/mcp-servers/{id}`（PUT/DELETE） | `agent/tool/mcp/api` |
+| `/api/agent/mcp-servers/{id}/probe`（POST） | `agent/tool/mcp/api` |
 
 `docs/auth-policy.yaml` 已显式登记这条错配：
 
-> URL 前缀是 `/api/agent`，实际属于 integration（AgentMcpServerController 在
-> integration/mcp/client/api）。**Wave 0A 修复：原为 fail-open 公开读。**
+> URL 前缀是 `/api/agent`，领域 Owner 是 agent（AgentMcpServerController 在
+> agent/tool/mcp/api；当前仍在 core-host 过渡运行）。**Wave 0A 修复：原为 fail-open 公开读。**
 > 路由必须按真实 Owner 切流。
 
 ⚠️ 两点后果：
 
 1. **Wave 2 切流时不能按前缀切**。若 Gateway 按 `/api/agent/**` 转发到
-   `dinqor-agent`，这五个端点会被打到错误的服务 —— 而它们归 integration。
-   路由必须按 handler 的真实 Owner 切。
+   `dinqor-agent`，这五个端点会被打到正确的领域服务；当前仍需等待独立 Agent
+   服务上线后再切流。路由必须按 handler 的真实 Owner 切。
 2. **"原为 fail-open 公开读"** 是一个已经修掉的安全缺陷。
    它同时说明：`auth-policy.yaml` 的覆盖率门禁
    （`auth-policy-coverage`）不是形式主义 —— 没有它，这类
@@ -237,9 +237,9 @@ Stage C   数据校验完成 → REVOKE integration WRITE → agent 成为唯一
   logical_owner: agent
   target_deployment_unit: dinqor-agent
   owner_transition:
-    stage: stage-a-integration-write
-    integration_write: true
-    agent_write: false
+    stage: stage-b-agent-write
+    integration_write: false
+    agent_write: true
     integration_revoke: false
 ```
 
@@ -248,11 +248,11 @@ Stage C   数据校验完成 → REVOKE integration WRITE → agent 成为唯一
 因为**迁移期间两侧都要读这张表**：
 
 - 出站 MCP 归 `dinqor-agent`（§76），它需要读自己配置的远端服务器列表；
-- 而这张表的写入当前在 `integration` 侧（管理员配置接口在
-  `integration/mcp/client/api/AdminMcpServerController`）。
+- 这张表的代码读写当前都在 `agent/tool/mcp` 侧（管理员配置接口在
+  `agent/tool/mcp/api/AdminMcpServerController`）；integration 不再写表。
 
-若一步切完 Owner，会出现"agent 已开始写、integration 还在写"的窗口 ——
-这正是 §2.2 双 Owner 禁令要排除的状态。
+当前已完成 Stage B 的代码切换；仍不能把它当作 Stage C，数据库权限 REVOKE 必须
+等独立 Agent 服务完成发布、Drain 和校验后执行。
 
 ### 4.2 Stage C 的四项校验（§77）
 
@@ -293,14 +293,8 @@ checksum
 | 每条路由的真实 handler | `route-inventory.yaml` | `route-inventory-drift` |
 | `agent_mcp_server` 的 Owner 切换阶段 | `table-ownership.yaml` 的 `owner_transition` | `owner-transition-contract` |
 
-⚠️ 但**出站 MCP 的 Owner 存在一处未解决的口径冲突**：
-`route-inventory.yaml` 把这五个管理接口登记为
-`logical_owner: integration` / `deployment_unit: dinqor-platform-integration`，
-而 §76 说出站 MCP 客户端归 `dinqor-agent`。
-
-两者可以同时成立（**管理接口留在 integration、客户端运行时搬到 agent**），
-但也可以理解为路由登记需要跟着改。**当前没有任何文件把这两种解释区分开** ——
-这是 Wave 2 切流前必须拍板的一处，见 §6。
+出站 MCP 的运行时、管理接口和代码写 Owner 已统一为 `agent`；当前差异只剩
+部署形态：代码仍在 core-host，独立 Agent 服务和数据库权限切换尚未执行。
 
 ---
 
@@ -308,8 +302,8 @@ checksum
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| 出站 MCP 的 Owner 口径冲突 | 见 §5 末尾：`route-inventory.yaml` 说管理接口归 `integration`，§76 说出站客户端归 `dinqor-agent`。两种解释都自洽，但没有任何文件区分它们 → Wave 2 切流时不知道这五个路由该发给谁 | **Wave 2 前必须拍板** |
-| `integration/mcp/client` → `agent/tool/mcp` 未迁移 | §76 的迁入动作尚未执行。当前包名与目标归属不一致 | Wave 2 |
+| 出站 MCP 的 Owner 口径冲突 | 出站运行时、管理接口与代码写 Owner 已统一到 `agent`；当前仍与 core-host 同进程，独立服务切流和数据库权限收窄待 Wave 2 | **Wave 2** |
+| `integration/mcp/client` → `agent/tool/mcp` 未迁移 | 已完成包迁移与 Stage B 代码 Owner 切换；尚未完成独立服务与 Stage C REVOKE | ✅ Stage B |
 | `probe` 在事务内做 HTTP | 见 §2.5，已移除事务注解，远端往返与单条结果 UPDATE 已分离 | ✅ 已修 |
 | 外部 GRANT 执行动作未被仓库门禁直接观测 | `owner-transition-contract` 校验登记的阶段、写权限与 REVOKE 声明自洽；真实数据库权限仍需在切换 runbook 中执行并复核 | 发布操作 |
 | STDIO transport 的可信边界未定义 | §76 说"仅可信 Sandbox / Worker"，但"可信"如何判定（配置白名单？部署单元？）未定义。STDIO 会启动子进程，边界不清等于命令执行面 | Wave 2 设计 |
@@ -326,11 +320,11 @@ python scripts/migration/ci_gates.py
 # 人工：确认 mcp_inbound 段的五个端点仍与代码一致
 grep -n -A 6 "mcp_inbound:" docs/auth-policy.yaml
 
-# 人工：确认 /api/agent/mcp-servers 的 handler 仍在 integration 包内
+# 人工：确认 /api/agent/mcp-servers 的 handler 在 agent/tool/mcp 包内，Owner 与 Stage B 登记一致
 grep -n "agent/mcp-servers" -A 5 docs/route-inventory.yaml
 ```
 
-⚠️ 本文 §2.4 的错配（前缀 `/api/agent` 但归 integration）是
+⚠️ 本文 §2.4 的路径前缀与领域名不同是
 **Wave 2 切流的直接输入**：Gateway 路由表不能按前缀批量生成，
 必须先读 `route-inventory.yaml` 的 `handler` 字段确认真实 Owner。
 这一点在 `mcp-boundary.md` 之外没有第二处记录，所以不要在 Wave 2 时

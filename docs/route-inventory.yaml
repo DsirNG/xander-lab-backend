@@ -90,60 +90,60 @@ routes:
     handler: "com.xander.lab.admin.api.AdminFeatureModelConfigController#update"
     file: apps/core-host/src/main/java/com/xander/lab/admin/api/AdminFeatureModelConfigController.java
     line: 32
-  - id: integration-get-admin-mcp-servers
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-get-admin-mcp-servers
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: GET
     path: "/api/admin/mcp-servers"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#list"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#list"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 32
-  - id: integration-post-admin-mcp-servers
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-post-admin-mcp-servers
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: POST
     path: "/api/admin/mcp-servers"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#create"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#create"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 37
-  - id: integration-delete-admin-mcp-servers-id
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-delete-admin-mcp-servers-id
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: DELETE
     path: "/api/admin/mcp-servers/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#delete"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#delete"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 48
-  - id: integration-put-admin-mcp-servers-id
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-put-admin-mcp-servers-id
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: PUT
     path: "/api/admin/mcp-servers/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#update"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#update"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 42
-  - id: integration-post-admin-mcp-servers-id-probe
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-post-admin-mcp-servers-id-probe
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: POST
     path: "/api/admin/mcp-servers/{id}/probe"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AdminMcpServerController#probe"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AdminMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#probe"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 54
   - id: admin-get-admin-model-providers
     logical_owner: admin
@@ -475,60 +475,60 @@ routes:
     handler: "com.xander.lab.agent.api.AgentConversationController#enableShare"
     file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 146
-  - id: integration-get-agent-mcp-servers
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-get-agent-mcp-servers
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: GET
     path: "/api/agent/mcp-servers"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#list"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#list"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 31
-  - id: integration-post-agent-mcp-servers
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-post-agent-mcp-servers
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: POST
     path: "/api/agent/mcp-servers"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#create"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#create"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 36
-  - id: integration-delete-agent-mcp-servers-id
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-delete-agent-mcp-servers-id
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: DELETE
     path: "/api/agent/mcp-servers/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#delete"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#delete"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 47
-  - id: integration-put-agent-mcp-servers-id
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-put-agent-mcp-servers-id
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: PUT
     path: "/api/agent/mcp-servers/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#update"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#update"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 41
-  - id: integration-post-agent-mcp-servers-id-probe
-    logical_owner: integration
-    deployment_unit: dinqor-platform-integration
+  - id: agent-post-agent-mcp-servers-id-probe
+    logical_owner: agent
+    deployment_unit: dinqor-agent
     kind: controller
     http_method: POST
     path: "/api/agent/mcp-servers/{id}/probe"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.integration.mcp.client.api.AgentMcpServerController#probe"
-    file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/client/api/AgentMcpServerController.java
+    handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#probe"
+    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 54
   - id: agent-get-agent-skills
     logical_owner: agent
@@ -782,7 +782,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#list"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 105
+    line: 107
   - id: blogagent-post-blog-agent-tasks
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -793,7 +793,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#create"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 95
+    line: 97
   - id: blogagent-get-blog-agent-tasks-id
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -804,7 +804,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#get"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 100
+    line: 102
   - id: blogagent-get-blog-agent-tasks-id-events
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -815,7 +815,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#subscribe"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 153
+    line: 155
   - id: blogagent-post-blog-agent-tasks-id-messages-stream
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -826,7 +826,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#reviseStream"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 136
+    line: 138
   - id: blogagent-post-blog-agent-tasks-id-publish
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -837,7 +837,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#publish"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 115
+    line: 117
   - id: blogagent-post-blog-agent-tasks-id-run
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -848,7 +848,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#run"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 110
+    line: 112
   - id: blogagent-post-blog-agent-tasks-id-run-stream
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -859,7 +859,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#runStream"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 122
+    line: 124
   - id: bloghtml-post-blog-html-previews
     logical_owner: bloghtml
     deployment_unit: dinqor-bloghtml-preview

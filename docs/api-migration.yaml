@@ -256,6 +256,86 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: agent-get-admin-mcp-servers
+    owner: agent
+    old:
+      method: GET
+      path: "/api/admin/mcp-servers"
+    new:
+      method: GET
+      path: "/api/v2/admin/mcp-servers"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-admin-mcp-servers
+    owner: agent
+    old:
+      method: POST
+      path: "/api/admin/mcp-servers"
+    new:
+      method: POST
+      path: "/api/v2/admin/mcp-servers"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-delete-admin-mcp-servers-id
+    owner: agent
+    old:
+      method: DELETE
+      path: "/api/admin/mcp-servers/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/admin/mcp-servers/{id}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-put-admin-mcp-servers-id
+    owner: agent
+    old:
+      method: PUT
+      path: "/api/admin/mcp-servers/{id}"
+    new:
+      method: PUT
+      path: "/api/v2/admin/mcp-servers/{id}"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-admin-mcp-servers-id-probe
+    owner: agent
+    old:
+      method: POST
+      path: "/api/admin/mcp-servers/{id}/probe"
+    new:
+      method: POST
+      path: "/api/v2/admin/mcp-servers/{id}/probe"
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: pending
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: agent-get-agent-conversations
     owner: agent
     old:
@@ -520,6 +600,86 @@ entries:
     new:
       method: POST
       path: "/api/v2/agents/conversations/{id}/share"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-get-agent-mcp-servers
+    owner: agent
+    old:
+      method: GET
+      path: "/api/agent/mcp-servers"
+    new:
+      method: GET
+      path: "/api/v2/agents/mcp-servers"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-mcp-servers
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/mcp-servers"
+    new:
+      method: POST
+      path: "/api/v2/agents/mcp-servers"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-delete-agent-mcp-servers-id
+    owner: agent
+    old:
+      method: DELETE
+      path: "/api/agent/mcp-servers/{id}"
+    new:
+      method: DELETE
+      path: "/api/v2/agents/mcp-servers/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-put-agent-mcp-servers-id
+    owner: agent
+    old:
+      method: PUT
+      path: "/api/agent/mcp-servers/{id}"
+    new:
+      method: PUT
+      path: "/api/v2/agents/mcp-servers/{id}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-mcp-servers-id-probe
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/mcp-servers/{id}/probe"
+    new:
+      method: POST
+      path: "/api/v2/agents/mcp-servers/{id}/probe"
     clients:
       web: pending
       miniprogram: pending
@@ -1624,166 +1784,6 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
-  - id: integration-get-admin-mcp-servers
-    owner: integration
-    old:
-      method: GET
-      path: "/api/admin/mcp-servers"
-    new:
-      method: GET
-      path: "/api/v2/admin/mcp-servers"
-    clients:
-      web: not_applicable
-      miniprogram: not_applicable
-      admin: pending
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-post-admin-mcp-servers
-    owner: integration
-    old:
-      method: POST
-      path: "/api/admin/mcp-servers"
-    new:
-      method: POST
-      path: "/api/v2/admin/mcp-servers"
-    clients:
-      web: not_applicable
-      miniprogram: not_applicable
-      admin: pending
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-delete-admin-mcp-servers-id
-    owner: integration
-    old:
-      method: DELETE
-      path: "/api/admin/mcp-servers/{id}"
-    new:
-      method: DELETE
-      path: "/api/v2/admin/mcp-servers/{id}"
-    clients:
-      web: not_applicable
-      miniprogram: not_applicable
-      admin: pending
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-put-admin-mcp-servers-id
-    owner: integration
-    old:
-      method: PUT
-      path: "/api/admin/mcp-servers/{id}"
-    new:
-      method: PUT
-      path: "/api/v2/admin/mcp-servers/{id}"
-    clients:
-      web: not_applicable
-      miniprogram: not_applicable
-      admin: pending
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-post-admin-mcp-servers-id-probe
-    owner: integration
-    old:
-      method: POST
-      path: "/api/admin/mcp-servers/{id}/probe"
-    new:
-      method: POST
-      path: "/api/v2/admin/mcp-servers/{id}/probe"
-    clients:
-      web: not_applicable
-      miniprogram: not_applicable
-      admin: pending
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-get-agent-mcp-servers
-    owner: integration
-    old:
-      method: GET
-      path: "/api/agent/mcp-servers"
-    new:
-      method: GET
-      path: "/api/v2/agents/mcp-servers"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-post-agent-mcp-servers
-    owner: integration
-    old:
-      method: POST
-      path: "/api/agent/mcp-servers"
-    new:
-      method: POST
-      path: "/api/v2/agents/mcp-servers"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-delete-agent-mcp-servers-id
-    owner: integration
-    old:
-      method: DELETE
-      path: "/api/agent/mcp-servers/{id}"
-    new:
-      method: DELETE
-      path: "/api/v2/agents/mcp-servers/{id}"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-put-agent-mcp-servers-id
-    owner: integration
-    old:
-      method: PUT
-      path: "/api/agent/mcp-servers/{id}"
-    new:
-      method: PUT
-      path: "/api/v2/agents/mcp-servers/{id}"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: integration-post-agent-mcp-servers-id-probe
-    owner: integration
-    old:
-      method: POST
-      path: "/api/agent/mcp-servers/{id}/probe"
-    new:
-      method: POST
-      path: "/api/v2/agents/mcp-servers/{id}/probe"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
   - id: integration-post-blog-posts-postid-sync-csdn
     owner: integration
     old:
