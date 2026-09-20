@@ -32,11 +32,14 @@ public class ContentAutomationProxyController {
 
     private final RestClient restClient;
     private final ContentAutomationProperties properties;
+    private final ContentAutomationStreamState streamState;
 
     public ContentAutomationProxyController(RestClient.Builder restClientBuilder,
-                                            ContentAutomationProperties properties) {
+                                            ContentAutomationProperties properties,
+                                            ContentAutomationStreamState streamState) {
         this.restClient = restClientBuilder.build();
         this.properties = properties;
+        this.streamState = streamState;
     }
 
     @RequestMapping({
@@ -47,6 +50,15 @@ public class ContentAutomationProxyController {
     })
     public void proxy(HttpServletRequest request,
                       HttpServletResponse response) {
+        boolean stream = isStreamRequest(request);
+        if (stream && properties.isStreamDrainEnabled()) {
+            response.setStatus(503);
+            response.setHeader("Retry-After", "1");
+            return;
+        }
+        if (stream) {
+            streamState.opened();
+        }
         try {
             byte[] requestBody = StreamUtils.copyToByteArray(request.getInputStream());
             RestClient.RequestBodySpec spec = restClient
@@ -68,7 +80,16 @@ public class ContentAutomationProxyController {
                     BAD_GATEWAY,
                     "内容自动化服务暂时无法连接 Core 兼容边界",
                     exception);
+        } finally {
+            if (stream) {
+                streamState.closed();
+            }
         }
+    }
+
+    private boolean isStreamRequest(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        return path.endsWith("/events") || path.endsWith("/stream");
     }
 
     private URI targetUri(HttpServletRequest request) {

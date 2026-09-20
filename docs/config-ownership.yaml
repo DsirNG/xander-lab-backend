@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 558
-  service_private: 488
+  total: 560
+  service_private: 490
   secret: 58
   shared: 12
 config:
@@ -705,6 +705,16 @@ config:
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: content-automation.core-base-url
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.stream-drain-enabled
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.stream.drain-enabled
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION

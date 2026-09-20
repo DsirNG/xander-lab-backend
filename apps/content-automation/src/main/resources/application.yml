@@ -19,6 +19,8 @@ spring:
 
 content-automation:
   core-base-url: ${CONTENT_AUTOMATION_CORE_BASE_URL:http://localhost:30002}
+  stream:
+    drain-enabled: ${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}
 
 management:
   endpoints:

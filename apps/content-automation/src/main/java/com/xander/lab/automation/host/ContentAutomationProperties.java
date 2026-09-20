@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ContentAutomationProperties {
 
     private String coreBaseUrl = "http://localhost:30002";
+    private boolean streamDrainEnabled;
 
     public String getCoreBaseUrl() {
         return coreBaseUrl;
@@ -14,5 +15,13 @@ public class ContentAutomationProperties {
 
     public void setCoreBaseUrl(String coreBaseUrl) {
         this.coreBaseUrl = coreBaseUrl;
+    }
+
+    public boolean isStreamDrainEnabled() {
+        return streamDrainEnabled;
+    }
+
+    public void setStreamDrainEnabled(boolean streamDrainEnabled) {
+        this.streamDrainEnabled = streamDrainEnabled;
     }
 }
