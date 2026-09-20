@@ -4,6 +4,7 @@ import com.xander.lab.core.api.AccessTokenLookupPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -24,6 +25,7 @@ public class AgentAccessTokenHttpAdapter implements AccessTokenLookupPort {
     private final RestClient restClient;
     private final String internalToken;
 
+    @Autowired
     public AgentAccessTokenHttpAdapter(RestClient.Builder builder,
                                        AgentCoreClientProperties properties) {
         this(builder.baseUrl(normalizeBaseUrl(properties.getBaseUrl())).build(), properties);
