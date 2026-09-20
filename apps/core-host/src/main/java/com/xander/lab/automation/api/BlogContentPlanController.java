@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.time.Instant;
 import java.util.List;
 
 @RestController
@@ -80,13 +79,6 @@ public class BlogContentPlanController {
         BlogPlanRun run = planService.trigger(userId, id);
         dispatcher.dispatchManual(run, userId);
         return Result.success(runService.toRunVO(run));
-    }
-
-    /** Preview of the next Nth trigger time (used to show the next fire date). */
-    @GetMapping("/{id}/next")
-    public Result<Instant> nextRun(@PathVariable Long id,
-                                   @RequestParam(defaultValue = "1") long count) {
-        return Result.success(planService.nextRunAfter(UserContext.getUserId(), id, count));
     }
 
     /** Asks the agent to refine a seed topic into a multi-day topic series. */

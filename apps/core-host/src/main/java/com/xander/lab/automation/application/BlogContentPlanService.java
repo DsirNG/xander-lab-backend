@@ -614,17 +614,6 @@ public class BlogContentPlanService implements ContentPlanPort {
                 request.getCount(), excludeTitles);
     }
 
-    @Transactional(readOnly = true)
-    public Instant nextRunAfter(Long userId, Long planId, long count) {
-        requireUser(userId);
-        BlogContentPlan plan = requireOwnedPlan(planId, userId);
-        Instant cursor = Instant.now();
-        for (long i = 0; i < Math.max(1, count); i++) {
-            cursor = BlogContentPlanScheduleCalculator.nextRun(plan, cursor);
-        }
-        return cursor;
-    }
-
     private LambdaQueryWrapper<BlogContentPlan> ownedWrapper(Long userId) {
         return new LambdaQueryWrapper<BlogContentPlan>()
                 .eq(BlogContentPlan::getUserId, userId)
