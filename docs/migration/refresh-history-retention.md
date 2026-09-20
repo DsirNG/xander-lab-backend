@@ -128,7 +128,23 @@
 
 ---
 
-## 7. 已知缺口
+## 7. Refresh 表行数观测（§87）
+
+`RefreshStorageMetrics` 每 60 秒只读统计 `auth_refresh_session` 与
+`auth_refresh_token_history`，暴露：
+
+```text
+refresh_session_rows
+refresh_history_rows
+```
+
+统计不放在 Micrometer 的 scrape 回调中，避免监控抓取直接占用数据库连接；每个
+core-host 实例独立保留最近一次成功值，观测 SQL 失败时保留旧值并等待下一轮，
+不会把监控故障变成 Refresh 故障。
+
+---
+
+## 8. 已知缺口
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
@@ -140,7 +156,7 @@
 
 ---
 
-## 8. 怎么验证
+## 9. 怎么验证
 
 ```bash
 # 批次循环语义（排空 / 批数上界 / 整轮时间边界一致 / 中断恢复 / 慢批退让 / 失败不抛出）

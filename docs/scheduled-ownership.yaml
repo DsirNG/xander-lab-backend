@@ -13,14 +13,15 @@
 
 generated_from: docs/scheduled-inventory.yaml
 
-# Wave 0A 扫描结果（14 项）+ Wave 1 Gateway denylist reconciler + legacy Redis 盘点，共 16 项。
+# Wave 0A 扫描结果（14 项）+ Wave 1 Gateway denylist reconciler + legacy Redis 盘点
+# + Refresh 表行数观测，共 17 项。
 # 注意 `scanned` 必须等于 docs/scheduled-inventory.yaml 的 counts.total，
 # 由门禁 `inventory-integrity` 校验。
 # 两个 auth 清理任务在上一轮以 status: planned 登记；本轮实现后改为 active（不是新增条目）。
 counts:
-  scanned: 16
+  scanned: 17
   planned: 0
-  total: 16
+  total: 17
 
 scheduled:
   # ===================== Wave 0A 实际扫描到的 9 项 =====================
@@ -153,6 +154,16 @@ scheduled:
     status: active
     scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/LegacyRedisMetrics.java:61
     notes: "V9 §58/§59。每个 core-host 实例低频 SCAN 自己连接的 Redis，盘点 login:token:* 与 login:user_tokens:* 的存量；属于观测本地连接视图的 per_instance 任务，禁止全局 ShedLock。"
+
+  - id: refresh-storage-metrics
+    logical_owner: identity
+    current_deployment_owner: dinqor-core-host
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: active
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshStorageMetrics.java:38
+    notes: "V9 §87。每个 core-host 实例低频只读统计 Refresh Session / History 行数并保留最近一次成功值；SQL 不放在 Micrometer scrape 回调中，禁止全局 ShedLock。"
 
   - id: auth-refresh-ciphertext-cleanup
     logical_owner: identity
