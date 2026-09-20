@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 816
-  leaves: 579
+  total: 818
+  leaves: 581
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -853,6 +853,11 @@ config:
   - key: content-automation.core-base-url
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_CORE_BASE_URL:http://localhost:30002}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.core-internal-token
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_CORE_INTERNAL_TOKEN:}"
     leaf: true
     logical_owner: content-automation
   - key: content-automation.platform-integration-base-url
@@ -3568,20 +3573,27 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 9
-  - key: content-automation.platform-integration-base-url
+  - key: content-automation.core-internal-token
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 10
+  - key: content-automation.platform-integration-base-url
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 11
   - key: content-automation.stream-drain-enabled
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default:none>"
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
-    line: 11
+    line: 12
   - key: admin.model-gateway.enabled
     source: apps/core-host/src/main/java/com/xander/lab/admin/infrastructure/ModelGatewayProperties.java
     value: "<java-default>"

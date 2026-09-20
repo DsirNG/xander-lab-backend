@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 579
+  total: 581
   service_private: 507
-  secret: 60
+  secret: 62
   shared: 12
 config:
   - key: agent.conversation.compaction-enabled
@@ -716,6 +716,16 @@ config:
   - key: content-automation.core-base-url
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.core-internal-token
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: secret
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.core-internal-token
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: secret
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: content-automation.platform-integration-base-url

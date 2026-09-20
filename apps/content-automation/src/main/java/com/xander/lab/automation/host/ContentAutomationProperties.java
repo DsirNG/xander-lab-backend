@@ -7,6 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class ContentAutomationProperties {
 
     private String coreBaseUrl = "http://localhost:30002";
+    private String coreInternalToken = "";
     private String platformIntegrationBaseUrl = "http://localhost:30005";
     private boolean streamDrainEnabled;
 
@@ -16,6 +17,14 @@ public class ContentAutomationProperties {
 
     public void setCoreBaseUrl(String coreBaseUrl) {
         this.coreBaseUrl = coreBaseUrl;
+    }
+
+    public String getCoreInternalToken() {
+        return coreInternalToken;
+    }
+
+    public void setCoreInternalToken(String coreInternalToken) {
+        this.coreInternalToken = coreInternalToken;
     }
 
     public String getPlatformIntegrationBaseUrl() {
