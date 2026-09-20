@@ -66,12 +66,6 @@ public class BlogContentPlanController {
         return Result.success(planService.updateStatusForView(UserContext.getUserId(), id, request.getAction()));
     }
 
-    @DeleteMapping("/{id}")
-    public Result<Void> delete(@PathVariable Long id) {
-        planService.delete(UserContext.getUserId(), id);
-        return Result.success();
-    }
-
     /** Immediate manual test trigger; runs through the same pipeline. */
     @PostMapping("/{id}/trigger")
     public Result<BlogPlanRunVO> trigger(@PathVariable Long id) {
