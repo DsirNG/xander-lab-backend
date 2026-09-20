@@ -9,6 +9,7 @@
 #   1) 每一条 stream != none 的路由都必须在 hosts 里被覆盖；
 #   2) 每条 host 的 boundary_files 必须真实存在；
 #   3) 每个 boundary_files 必须引用 ConnectionRegistry（即真的登记了连接）。
+#   4) 每条 host 至少登记一个真实存在的回归测试文件。
 # 新增流端点时若不登记，门禁失败 —— 这就是阻止"补了又丢"的机制。
 #
 # routes 里填的是 route-inventory.yaml 的 id，而 id 由路径推导（含路径变量名）。

@@ -317,6 +317,7 @@ python scripts/migration/ci_gates.py
 `Img2ThreeControllerTest` 固定连接注册、正常摘除和封禁后的发送边界，
 仍需在 Wave 2 Staging 验证无业务事件时的真实断开时延。
 
-`stream-hosts.yaml` 的 `unregistered_routes` 当前为空，表示 8 条流全部已登记。
+`stream-hosts.yaml` 的 `unregistered_routes` 当前为空，表示 8 条流全部已登记；
+`stream-ban-boundary-coverage` 同时校验每个宿主的 `tests` 路径真实存在。
 **这个字段必须保持显式存在**：删掉它会让门禁无法区分"没有未登记的流"
 和"这份清单还没写完"。

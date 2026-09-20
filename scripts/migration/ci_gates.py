@@ -1431,12 +1431,13 @@ def gate_stream_ban_boundary_coverage() -> None:
 
     这是 §12「补了又丢」的机器化防线。机器能回答"哪些路由是流"
     （route-inventory.yaml 的 stream 字段），但"边界实现在哪个文件里"是语义信息，
-    登记在 stream-hosts.yaml。本门禁同时校验三件事：
+    登记在 stream-hosts.yaml。本门禁同时校验四件事：
 
     1. 每条 ``stream != none`` 的路由都被 stream-hosts.yaml 覆盖（或显式列进
        ``unregistered_routes`` 并给出理由）；
     2. 登记的 boundary_files 真实存在；
-    3. 每个 boundary_files 确实引用了 ``ConnectionRegistry``。
+    3. 每个 boundary_files 确实引用了 ``ConnectionRegistry``；
+    4. 每个宿主至少登记一个真实存在的回归测试文件。
 
     第 3 条是关键：它防止"文件在、但里面没真的登记连接"这种空壳登记。
     """
@@ -1481,6 +1482,14 @@ def gate_stream_ban_boundary_coverage() -> None:
                 problems.append(
                     f"{host_id}: {rel} does not reference ConnectionRegistry "
                     "(connection is never registered)")
+
+        tests = host.get("tests") or []
+        if not tests:
+            problems.append(f"{host_id}: no tests declared")
+        for rel in tests:
+            candidates = (REPO / rel, REPO / "apps" / "core-host" / rel)
+            if not any(path.exists() for path in candidates):
+                problems.append(f"{host_id}: test file missing: {rel}")
 
     missing = sorted(set(stream_routes) - covered - unregistered)
     if missing:
