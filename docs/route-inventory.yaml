@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 228
+  total: 247
   streams: 8
   websocket: 1
   sse: 7
@@ -2477,6 +2477,215 @@ routes:
     handler: "com.xander.lab.identity.api.AgentBillingController#transferBalance"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentBillingController.java
     line: 84
+  - id: identity-post-internal-agent-content-count-managed
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/count-managed"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentContentPostController#countManaged"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
+    line: 66
+  - id: identity-post-internal-agent-content-create
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/create"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentContentPostController#create"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
+    line: 74
+  - id: identity-post-internal-agent-content-find-owned
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/find-owned"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentContentPostController#findOwned"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
+    line: 59
+  - id: identity-post-internal-agent-content-list-all-my-posts
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/list-all-my-posts"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentContentPostController#listAllMyPosts"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
+    line: 50
+  - id: identity-post-internal-agent-content-list-my-posts
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/list-my-posts"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentContentPostController#listMyPosts"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
+    line: 43
+  - id: identity-post-internal-agent-content-move-to-trash
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/move-to-trash"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentContentPostController#moveToTrash"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
+    line: 88
+  - id: identity-post-internal-agent-content-update
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/update"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentContentPostController#update"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
+    line: 81
+  - id: identity-post-internal-agent-media-find-owned
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/media/find-owned"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentMediaAssetController#findOwned"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentMediaAssetController.java
+    line: 65
+  - id: identity-post-internal-agent-media-find-reusable-generated
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/media/find-reusable-generated"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentMediaAssetController#findReusableGenerated"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentMediaAssetController.java
+    line: 79
+  - id: identity-post-internal-agent-media-list-by-task
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/media/list-by-task"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentMediaAssetController#listByTask"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentMediaAssetController.java
+    line: 72
+  - id: identity-post-internal-agent-media-record-generated
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/media/record-generated"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentMediaAssetController#recordGenerated"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentMediaAssetController.java
+    line: 48
+  - id: identity-post-internal-agent-media-record-stored
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/media/record-stored"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentMediaAssetController#recordStored"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentMediaAssetController.java
+    line: 41
+  - id: identity-post-internal-agent-media-upload-image
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/media/upload-image"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentMediaAssetController#uploadImage"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentMediaAssetController.java
+    line: 57
+  - id: identity-post-internal-agent-recitation-material-count
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/recitation/material/count"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentRecitationController#countMaterials"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentRecitationController.java
+    line: 65
+  - id: identity-post-internal-agent-recitation-material-create
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/recitation/material/create"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentRecitationController#createMaterial"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentRecitationController.java
+    line: 49
+  - id: identity-post-internal-agent-recitation-material-get
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/recitation/material/get"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentRecitationController#getMaterial"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentRecitationController.java
+    line: 73
+  - id: identity-post-internal-agent-recitation-material-search
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/recitation/material/search"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentRecitationController#searchMaterials"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentRecitationController.java
+    line: 57
+  - id: identity-post-internal-agent-recitation-quiz-open
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/recitation/quiz/open"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentRecitationController#openQuiz"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentRecitationController.java
+    line: 81
+  - id: identity-post-internal-agent-recitation-quiz-record
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/recitation/quiz/record"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentRecitationController#recordQuiz"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentRecitationController.java
+    line: 89
   - id: identity-get-internal-security-state-changes
     logical_owner: identity
     deployment_unit: dinqor-core-host
