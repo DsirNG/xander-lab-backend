@@ -129,4 +129,15 @@ public class RefreshTokenProperties {
 
     /** 安全事件发件箱单轮投递条数。 */
     private int securityOutboxPublishBatchSize = 200;
+
+    /**
+     * 是否启用安全事件 Redis Pub/Sub 快路径。
+     *
+     * <p>默认关闭以保持单实例/本地开发行为不变。多实例部署时必须在所有
+     * core-host 实例上同时开启；关闭时发件箱仍直接应用到本实例。</p>
+     */
+    private boolean securityPubsubEnabled = false;
+
+    /** 多实例安全事件广播频道。频道名必须在同一部署单元内保持一致。 */
+    private String securityPubsubChannel = "dinqor:security-events";
 }

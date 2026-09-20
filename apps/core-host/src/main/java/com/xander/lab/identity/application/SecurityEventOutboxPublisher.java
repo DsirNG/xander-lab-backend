@@ -5,9 +5,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.identity.domain.SecurityEventOutboxEntry;
 import com.xander.lab.identity.infrastructure.SecurityEventOutboxMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -33,17 +34,16 @@ import java.util.List;
  * 所以执行体只能有一个 —— 否则 N 个实例会各自领取同一批行、各自标记，
  * 而"已投递"变成了 N 份互相矛盾的判断。</p>
  *
- * <p>跨实例传播因此<b>不是调度器的事，而是投递目标的事</b>：当前的投递目标就是
- * 本实例的安全平面（{@link SecurityStateApplier}）。多实例部署时把它换成 Redis PubSub 广播，
- * 届时本类只换投递那一行，领取/标记/退避的生命周期不变。</p>
+ * <p>跨实例传播因此<b>不是调度器的事，而是投递目标的事</b>：默认投递目标是本实例的
+ * 安全平面（{@link SecurityStateApplier}）；开启 {@code auth.refresh.security-pubsub-enabled}
+ * 后则投递到 Redis Pub/Sub，由每个实例的订阅者应用到本地安全平面。领取/标记/退避的
+ * 生命周期不变。</p>
  *
  * <h3>⚠️ 当前单实例部署的能力边界（不得误报）</h3>
- * <p>因为投递目标是"本实例"，所以<b>快路径目前只对抢到锁的那个实例生效</b>，
- * 其余实例仍然只靠各自的 {@link SecurityStateReconciler} 在 1.5 秒内收敛 ——
- * 这仍在 5 秒预算内，所以<b>SLO 没有被违反</b>，但"快路径"这个词在多实例下
- * 暂时名不副实。真正意义上的多实例快路径要等 Redis PubSub 广播落地。
- * 本类当前还承担另一个不可省略的职责：<b>让 {@code security_event_outbox} 有界</b>
- * （没有消费者时它会无界增长）。</p>
+ * <p>关闭 Pub/Sub 时快路径只对抢到锁的那个实例生效，其余实例靠各自的
+ * {@link SecurityStateReconciler} 在 1.5 秒内收敛；开启 Pub/Sub 后所有订阅实例都会收到
+ * 同一事件。无论哪种模式，本类都承担另一个不可省略的职责：<b>让
+ * {@code security_event_outbox} 有界</b>（没有消费者时它会无界增长）。</p>
  *
  * <h3>⚠️ 本类刻意不推进 reconciler 的游标</h3>
  * <p>看起来"投递成功就把游标推到该事件的 changeSeq"很自然，但那会制造一个永久漏封禁：
@@ -66,7 +66,6 @@ import java.util.List;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class SecurityEventOutboxPublisher {
 
     /**
@@ -90,6 +89,28 @@ public class SecurityEventOutboxPublisher {
     private final SecurityStateApplier securityStateApplier;
     private final RefreshTokenProperties properties;
     private final ObjectMapper objectMapper;
+    private final ObjectProvider<SecurityEventBroadcaster> broadcasterProvider;
+
+    /** 保留无广播器构造路径，保证本地单元测试与单实例模式不依赖 Redis Pub/Sub。 */
+    public SecurityEventOutboxPublisher(SecurityEventOutboxMapper outboxMapper,
+                                        SecurityStateApplier securityStateApplier,
+                                        RefreshTokenProperties properties,
+                                        ObjectMapper objectMapper) {
+        this(outboxMapper, securityStateApplier, properties, objectMapper, null);
+    }
+
+    @Autowired
+    public SecurityEventOutboxPublisher(SecurityEventOutboxMapper outboxMapper,
+                                        SecurityStateApplier securityStateApplier,
+                                        RefreshTokenProperties properties,
+                                        ObjectMapper objectMapper,
+                                        ObjectProvider<SecurityEventBroadcaster> broadcasterProvider) {
+        this.outboxMapper = outboxMapper;
+        this.securityStateApplier = securityStateApplier;
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+        this.broadcasterProvider = broadcasterProvider;
+    }
 
     /**
      * 领取到期的安全事件并投递。
@@ -139,6 +160,21 @@ public class SecurityEventOutboxPublisher {
      * @throws RuntimeException 负载畸形、事件类型未知、或应用失败；由调用方记入退避
      */
     private void deliver(SecurityEventOutboxEntry entry) {
+        SecurityEventBroadcaster broadcaster = broadcasterProvider == null
+                ? null : broadcasterProvider.getIfAvailable();
+        if (broadcaster != null) {
+            broadcaster.publish(entry);
+            return;
+        }
+        deliverLocally(entry);
+    }
+
+    /**
+     * 应用到当前实例，不再转发到 Pub/Sub。
+     *
+     * <p>Redis 订阅者必须走这条路径，否则订阅者收到消息后会再次广播，形成回环。</p>
+     */
+    void deliverLocally(SecurityEventOutboxEntry entry) {
         String eventType = entry.getEventType();
         if (SecurityEventOutboxEntry.TYPE_ACCOUNT_DISABLED.equals(eventType)) {
             applyAccountState(entry, true);

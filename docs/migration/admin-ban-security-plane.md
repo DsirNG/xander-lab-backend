@@ -125,16 +125,17 @@
 领取/标记状态是所有实例共用的，所以执行体只能有一个。否则 N 个实例各自领取同一批行、
 各自标记，「已投递」变成 N 份互相矛盾的判断。
 
-跨实例传播因此**不是调度器的事，而是投递目标的事**：Wave 0A 的投递目标是本实例的
-安全平面，Wave 1 换成 Redis PubSub 广播，届时只换投递那一行，
-领取/标记/退避的生命周期不变。
+跨实例传播因此**不是调度器的事，而是投递目标的事**：默认投递目标是本实例的
+安全平面；开启 `auth.refresh.security-pubsub-enabled` 后，投递目标切换为 Redis
+Pub/Sub 广播，由每个实例的订阅者应用到本地安全平面。领取/标记/退避的生命周期不变。
 
-### ⚠️ Wave 0A 的能力边界（不得误报）
+### 多实例快路径的开关与边界
 
-因为投递目标是「本实例」，所以**快路径目前只对抢到锁的那个实例生效**，
-其余实例仍只靠各自的 reconciler 在 1.5 秒内收敛。这仍在 5 秒预算内，
-**SLO 没有被违反**，但「快路径」这个词在多实例下暂时名不副实 ——
-真正的多实例快路径要等 Wave 1 的 Redis PubSub。
+`auth.refresh.security-pubsub-enabled` 默认 `false`，保持单实例和本地开发的行为不变。
+多实例部署时必须在**所有** `core-host` 实例上开启，并保持
+`auth.refresh.security-pubsub-channel` 一致。发件箱仍由 `global_once` 领取，Redis
+Pub/Sub 由每个实例订阅；订阅丢失或 Redis 短暂不可用时，`SecurityStateReconciler`
+仍按数据库 SOT 兜底收敛。因此 Pub/Sub 是快路径，不是正确性的唯一来源。
 
 本任务当前还承担另一个不可省略的职责：**让 `security_event_outbox` 有界**。
 没有消费者时该表会无界增长。
@@ -329,7 +330,7 @@ WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| **快路径只对抢到锁的实例生效** | Wave 0A 的投递目标是本实例，其余实例靠 reconciler 兜底（延迟 1.5 秒，未超 5 秒预算）。多实例快路径要等 Wave 1 的 Redis PubSub | 已知，Wave 1 |
+| **多实例部署未开启 Redis Pub/Sub** | 开关关闭时只有抢到 ShedLock 的实例走发件箱本地快路径，其余实例靠 reconciler 兜底（延迟 1.5 秒，未超 5 秒预算） | 部署配置项；必须在多实例切流前开启 |
 | **外部平台尚未接入就绪探针** | §27.1 第 9 步要求「READY 才进负载均衡」；仓库内的 Wave 1 Compose 已将 core-host healthcheck 指向 `GET /health/ready`，外部 Kubernetes/云编排仍需复用该端点 | 部署接入 |
 | **V11 §27.0 `security_event` 表不存在** | V11 修订说明声称新增该表作为 Bootstrap/reconcile 的取数源，但正文无此节、仓库无此表。当前把 §27.1 的 "eventId" 映射为 `account_security_state.change_seq`（SOT 上的全局单调变更序号），语义等价且不需要新表；若将来真引入独立事件日志，需复核这个映射 | 已记录，映射成立 |
 | **迟到且版本更低的封禁事件** | `SecurityStateApplier` 的版本闸门只在缓存里**已有**该账号时才生效。若账号已被解封（缓存里不存在），一条迟到的旧封禁事件无法被拒绝，账号会被重新封禁。修它需要为「已解封账号」也保留版本号（内存随历史账号数增长），代价与收益不成比例 | 已知，低风险，需独立改动 |

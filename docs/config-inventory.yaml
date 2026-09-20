@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 571
-  leaves: 425
+  total: 577
+  leaves: 429
 config:
   - key: server
     source: apps/bloghtml-preview/src/main/resources/application.yml
@@ -778,6 +778,26 @@ config:
   - key: jwt.refresh-token-expire
     source: apps/core-host/src/main/resources/application.yml
     value: "2592000000"
+    leaf: true
+    logical_owner: core
+  - key: auth
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: auth.refresh
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: auth.refresh.security-pubsub-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${AUTH_REFRESH_SECURITY_PUBSUB_ENABLED:false}"
+    leaf: true
+    logical_owner: core
+  - key: auth.refresh.security-pubsub-channel
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${AUTH_REFRESH_SECURITY_PUBSUB_CHANNEL:dinqor:security-events}"
     leaf: true
     logical_owner: core
   - key: mcp
@@ -2591,6 +2611,20 @@ config:
     logical_owner: core
     source_kind: java-configuration-properties
     line: 128
+  - key: auth.refresh.security-pubsub-channel
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: core
+    source_kind: java-configuration-properties
+    line: 142
+  - key: auth.refresh.security-pubsub-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: core
+    source_kind: java-configuration-properties
+    line: 139
   - key: auth.refresh.security-reconcile-batch-size
     source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
     value: "<java-default>"

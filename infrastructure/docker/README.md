@@ -58,3 +58,7 @@ Compose waits for `migration-runner` to exit successfully before starting `core-
 waits for core readiness before starting Gateway. BlogHTML Preview is independent apart from
 the shared Redis/Nacos environment. The core readiness probe is `/health/ready`; the other
 two HTTP services use Actuator readiness.
+
+For a multi-instance core deployment, set `AUTH_REFRESH_SECURITY_PUBSUB_ENABLED=true` for every
+core-host instance and keep `AUTH_REFRESH_SECURITY_PUBSUB_CHANNEL` identical across them. Redis
+Pub/Sub is the fast path; the database security reconciler remains enabled as the durable fallback.

@@ -219,7 +219,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java:99
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java:120
     notes: >-
       V9 §27 的快路径：消费 security_event_outbox 并投递。
       **为什么是 global_once 而不是 per_instance**：本任务领取的是共享的发件箱行，

@@ -6,6 +6,7 @@ import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.identity.domain.SecurityEventOutboxEntry;
 import com.xander.lab.identity.infrastructure.SecurityEventOutboxMapper;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -42,6 +44,9 @@ class SecurityEventOutboxPublisherTest {
 
     @Mock
     private SecurityEventOutboxMapper outboxMapper;
+
+    @Mock
+    private ObjectProvider<SecurityEventBroadcaster> broadcasterProvider;
 
     private SecurityStateCache cache;
     private ConnectionRegistry registry;
@@ -98,6 +103,27 @@ class SecurityEventOutboxPublisherTest {
         publisher.publishDueEvents();
 
         verify(outboxMapper).claimDue(BATCH);
+    }
+
+    @Test
+    void usesConfiguredBroadcasterInsteadOfApplyingTheEventLocally() {
+        SecurityEventBroadcaster broadcaster = mock(SecurityEventBroadcaster.class);
+        when(broadcasterProvider.getIfAvailable()).thenReturn(broadcaster);
+        SecurityEventOutboxPublisher pubSubPublisher = new SecurityEventOutboxPublisher(
+                outboxMapper,
+                new SecurityStateApplier(cache, registry),
+                properties,
+                new ObjectMapper(),
+                broadcasterProvider);
+        SecurityEventOutboxEntry entry = event(8L,
+                SecurityEventOutboxEntry.TYPE_ACCOUNT_DISABLED, ACCOUNT, 0);
+        when(outboxMapper.claimDue(BATCH)).thenReturn(List.of(entry));
+
+        pubSubPublisher.publishDueEvents();
+
+        verify(broadcaster).publish(entry);
+        verify(outboxMapper).markPublished(8L);
+        assertThat(cache.isDisabled(ACCOUNT)).as("广播模式不得在 publisher 内重复本地应用").isFalse();
     }
 
     /**

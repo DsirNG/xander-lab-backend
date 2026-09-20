@@ -144,6 +144,12 @@ jwt:
   access-token-expire: 604800000
   refresh-token-expire: 2592000000
 
+# 多实例安全事件快路径：默认关闭；所有 core-host 实例必须一起开启。
+auth:
+  refresh:
+    security-pubsub-enabled: ${AUTH_REFRESH_SECURITY_PUBSUB_ENABLED:false}
+    security-pubsub-channel: ${AUTH_REFRESH_SECURITY_PUBSUB_CHANNEL:dinqor:security-events}
+
 # Disabled by default. Use a Base64-encoded 32-byte key, and keep the server token out of source control.
 mcp:
   oauth:

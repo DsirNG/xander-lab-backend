@@ -57,7 +57,7 @@ scheduled:
     trigger: "fixedDelayString = \"${auth.refresh.security-outbox-publish-interval-ms:1000}\""
     logical_owner: identity
     file: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java
-    line: 99
+    line: 120
   - id: security-state-reconciler-reconcile
     class: com.xander.lab.identity.application.SecurityStateReconciler
     method: reconcile
