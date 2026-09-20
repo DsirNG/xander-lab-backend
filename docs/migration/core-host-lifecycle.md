@@ -104,7 +104,7 @@ Wave 2 允许 2 实例，意味着会出现**滚动发布**：新实例起来、
 | 前置 | 载体 | 状态 |
 |---|---|---|
 | 实例自己能说出"我还没准备好" | `SecurityStateBootstrap` + `SecurityPlaneReadiness`，`GET /health/ready` 在 READY 之前返回 503 | **已实现** |
-| 部署侧真的去问那个端点 | 编排文件里的 readinessProbe 指向 `/health/ready` | **未接线**（见下） |
+| 部署侧真的去问那个端点 | `infrastructure/docker/docker-compose.wave1.yml` 的 core-host healthcheck 指向 `/health/ready` | **Wave 1 Compose 已接线；外部编排仍需复用同一端点** |
 
 ⚠️ 端口监听 ≠ 可以接流量：内嵌 Servlet 容器在 Spring 容器 refresh 期间就开始监听，
 而 `SecurityStateBootstrap` 是 `ApplicationRunner`，在 refresh 之后才跑。

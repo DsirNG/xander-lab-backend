@@ -1108,6 +1108,31 @@ def gate_gateway_stream_proxy_config() -> None:
     report(gate, True, "Nacos gateway DataId preserves streaming and fallback semantics")
 
 
+def gate_bloghtml_nginx_config() -> None:
+    """V9 §78 / §79: public BlogHTML origins must reach the preview service directly."""
+    gate = "bloghtml-nginx-config"
+    path = REPO / "infrastructure" / "nginx" / "bloghtml-preview.conf"
+    if not path.is_file():
+        report(gate, False, "infrastructure/nginx/bloghtml-preview.conf is missing")
+        return
+    # Nginx comments must not satisfy a delivery contract. Keep the check small and
+    # syntax-aware enough for this fixed template without pretending to be an Nginx parser.
+    text = "\n".join(line.split("#", 1)[0].strip()
+                      for line in path.read_text(encoding="utf-8").splitlines())
+    required = [
+        "server 127.0.0.1:30003;",
+        r"server_name ~^(?<preview_id>[0-9a-f]{16})\.blogHTML\.dinqor\.cn$;",
+        "location = /raw {",
+        "proxy_pass http://dinqor_bloghtml_preview/blog-html/$preview_id/raw;",
+        "proxy_buffering off;",
+    ]
+    missing = [token for token in required if token not in text]
+    if missing:
+        report(gate, False, f"BlogHTML Nginx delivery config missing: {missing}")
+        return
+    report(gate, True, "public BlogHTML origin maps /raw to port 30003 without buffering")
+
+
 def gate_nacos_config_profile() -> None:
     """V9 §16 / §17: runtime services must wire the stable Nacos DataIds.
 
@@ -1947,6 +1972,7 @@ GATES = {
     "legacy-redis-reference-check": gate_legacy_redis_reference_check,
     "gateway-forbidden-dependency-check": gate_gateway_forbidden_dependency,
     "gateway-stream-proxy-config-check": gate_gateway_stream_proxy_config,
+    "bloghtml-nginx-config": gate_bloghtml_nginx_config,
     "nacos-config-profile": gate_nacos_config_profile,
     "flyway-validation": gate_flyway_validation,
     "business-flyway-disabled": gate_business_flyway_disabled,

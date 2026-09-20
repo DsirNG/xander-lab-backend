@@ -175,7 +175,7 @@ Wave 2：core-host 允许 2 实例（滚动发布需要）
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | 映射未进入机器门禁 | 本文是 §3 的人工转写。三份清单各自有门禁，但**没有门禁校验"清单里的部署单元名是否都在 §3 的集合里"** —— 写错一个单元名（如 `dinqor-content` 写成 `dinqor-contents`）不会失败 | Wave 0B |
-| `bloghtml` 的 Wave 1 进程拆分 | 已落地 `apps/bloghtml-preview`，保留 Redis TTL/限流/CSP；它不持有 SSE，表归属仍由 `table-ownership.yaml` 管理 | ✅ 代码已完成；部署切换待执行 |
+| `bloghtml` 的 Wave 1 进程拆分 | 已落地 `apps/bloghtml-preview`，保留 Redis TTL/限流/CSP；它不持有 SSE，表归属仍由 `table-ownership.yaml` 管理 | ✅ 代码与 Wave 1 Compose/Nginx 模板已完成；生产 DNS/流量切换待执行 |
 | 空目录已清理（不可提交） | 见 §2 的六个空包。Git 不跟踪空目录，所以仓库里本就没有它们，清理只影响本地工作区 | 已处理 |
 | `components` 前缀嵌套 | 见 §3，Gateway 路由 `order` 需要在 Wave 1 实际配置时验证 | Wave 1 |
 
