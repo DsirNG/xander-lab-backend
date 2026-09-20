@@ -46,10 +46,10 @@ hosts:
       - agent-get-agent-conversations-id-events
       - agent-post-agent-conversations-id-messages-stream
     boundary_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+      - apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     heartbeat: "SseEmitter 心跳 15s，走同一出口校验"
     tests:
-      - src/test/java/com/xander/lab/agent/api/AgentConversationControllerTest.java
+      - apps/agent/src/test/java/com/xander/lab/agent/api/AgentConversationControllerTest.java
     notes: "SseConnectionHandle 以 completeWithError(403) 结束流；封禁后不再发 payload 与心跳。"
 
   - id: blogagent-task-sse
@@ -100,10 +100,10 @@ hosts:
     routes:
       - agent-get-ws-agent
     boundary_files:
-      - apps/core-host/src/main/java/com/xander/lab/agent/api/AgentStreamWebSocketHandler.java
+      - apps/agent/src/main/java/com/xander/lab/agent/api/AgentStreamWebSocketHandler.java
     heartbeat: "WS 心跳 20s，走同一出口校验"
     tests:
-      - src/test/java/com/xander/lab/agent/api/AgentStreamWebSocketHandlerTest.java
+      - apps/agent/src/test/java/com/xander/lab/agent/api/AgentStreamWebSocketHandlerTest.java
     notes: >-
       以 close(4403, ACCOUNT_DISABLED) 关闭；入口侧同时拒绝封禁账号建立新订阅，
       且封禁后不再回客户端 ping 的 pong（否则客户端会误判链路健康并继续重连）。

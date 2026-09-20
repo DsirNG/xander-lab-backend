@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 667
-  leaves: 486
+  total: 699
+  leaves: 512
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -250,6 +250,166 @@ config:
     value: "${spring.application.name}"
     leaf: true
     logical_owner: unassigned
+  - key: agent
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: agent.event-bus
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: agent
+  - key: agent.event-bus.pubsub-enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_EVENT_BUS_PUBSUB_ENABLED:false}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.event-bus.pubsub-channel
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_EVENT_BUS_PUBSUB_CHANNEL:dinqor:agent-events}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: agent
+  - key: agent.conversation.max-steps
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_MAX_STEPS:20}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation.max-tool-failures
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_MAX_TOOL_FAILURES:2}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation.stale-conversation-minutes
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_STALE_MINUTES:30}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation.context-message-limit
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_CONTEXT_MESSAGE_LIMIT:120}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation.compaction-enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_COMPACTION_ENABLED:true}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation.context-window-tokens
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_CONTEXT_WINDOW_TOKENS:128000}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation.compaction-threshold-ratio
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_COMPACTION_THRESHOLD_RATIO:0.8}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation.compaction-retain-ratio
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_COMPACTION_RETAIN_RATIO:0.16}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.conversation.max-parallel-tools
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CONVERSATION_MAX_PARALLEL_TOOLS:4}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.model
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: agent
+  - key: agent.model.base-url
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_MODEL_BASE_URL:https://api.openai.com/v1}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.model.api-key
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_MODEL_API_KEY:}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.model.model
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_MODEL:}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.model.web-search-enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_MODEL_WEB_SEARCH_ENABLED:true}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.model.reasoning-effort
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_MODEL_REASONING_EFFORT:low}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.model.connect-timeout-millis
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_MODEL_CONNECT_TIMEOUT_MILLIS:15000}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.model.read-timeout-millis
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_MODEL_READ_TIMEOUT_MILLIS:60000}"
+    leaf: true
+    logical_owner: agent
+  - key: mcp
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: mcp.client
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: integration
+  - key: mcp.client.enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${MCP_CLIENT_ENABLED:false}"
+    leaf: true
+    logical_owner: agent
+  - key: mcp.client.credential-encryption-key
+    source: apps/agent/src/main/resources/application.yml
+    value: "${MCP_CLIENT_CREDENTIAL_ENCRYPTION_KEY:}"
+    leaf: true
+    logical_owner: agent
+  - key: mcp.client.connect-timeout-seconds
+    source: apps/agent/src/main/resources/application.yml
+    value: "${MCP_CLIENT_CONNECT_TIMEOUT_SECONDS:10}"
+    leaf: true
+    logical_owner: agent
+  - key: mcp.client.request-timeout-seconds
+    source: apps/agent/src/main/resources/application.yml
+    value: "${MCP_CLIENT_REQUEST_TIMEOUT_SECONDS:30}"
+    leaf: true
+    logical_owner: agent
+  - key: mcp.client.max-tools-per-server
+    source: apps/agent/src/main/resources/application.yml
+    value: "${MCP_CLIENT_MAX_TOOLS_PER_SERVER:50}"
+    leaf: true
+    logical_owner: agent
+  - key: mcp.client.max-description-length
+    source: apps/agent/src/main/resources/application.yml
+    value: "${MCP_CLIENT_MAX_DESCRIPTION_LENGTH:400}"
+    leaf: true
+    logical_owner: agent
+  - key: mcp.client.max-result-length
+    source: apps/agent/src/main/resources/application.yml
+    value: "${MCP_CLIENT_MAX_RESULT_LENGTH:8000}"
+    leaf: true
+    logical_owner: agent
+  - key: mcp.client.max-tool-name-length
+    source: apps/agent/src/main/resources/application.yml
+    value: "${MCP_CLIENT_MAX_TOOL_NAME_LENGTH:64}"
+    leaf: true
+    logical_owner: agent
   - key: server
     source: apps/bloghtml-preview/src/main/resources/application.yml
     value: ""
@@ -2590,6 +2750,202 @@ config:
     value: "${SERVER_PORT:0}"
     leaf: true
     logical_owner: shared
+  - key: agent.conversation.compaction-enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 29
+  - key: agent.conversation.compaction-retain-ratio
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 40
+  - key: agent.conversation.compaction-threshold-ratio
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 38
+  - key: agent.conversation.context-message-limit
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 27
+  - key: agent.conversation.context-window-tokens
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 36
+  - key: agent.conversation.max-parallel-tools
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 63
+  - key: agent.conversation.max-reflections
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 47
+  - key: agent.conversation.max-steps
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 13
+  - key: agent.conversation.max-sub-agent-steps
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 54
+  - key: agent.conversation.max-tool-failures
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 15
+  - key: agent.conversation.stale-conversation-minutes
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 17
+  - key: agent.event-bus.pubsub-channel
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 17
+  - key: agent.event-bus.pubsub-enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 14
+  - key: agent.model.api-key
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 13
+  - key: agent.model.base-url
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 12
+  - key: agent.model.connect-timeout-millis
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 19
+  - key: agent.model.model
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 14
+  - key: agent.model.read-timeout-millis
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 29
+  - key: agent.model.reasoning-effort
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 17
+  - key: agent.model.web-search-enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 15
+  - key: mcp.client.connect-timeout-seconds
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 26
+  - key: mcp.client.credential-encryption-key
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 23
+  - key: mcp.client.enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 20
+  - key: mcp.client.max-description-length
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 35
+  - key: mcp.client.max-result-length
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 43
+  - key: mcp.client.max-tool-name-length
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 51
+  - key: mcp.client.max-tools-per-server
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 32
+  - key: mcp.client.request-timeout-seconds
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 29
   - key: blog-html.preview.frame-ancestors
     source: apps/bloghtml-preview/src/main/java/com/xander/lab/bloghtml/infrastructure/BlogHtmlPreviewProperties.java
     value: "<java-default>"
@@ -2646,202 +3002,6 @@ config:
     logical_owner: core
     source_kind: java-configuration-properties
     line: 17
-  - key: agent.conversation.compaction-enabled
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 29
-  - key: agent.conversation.compaction-retain-ratio
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 40
-  - key: agent.conversation.compaction-threshold-ratio
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 38
-  - key: agent.conversation.context-message-limit
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 27
-  - key: agent.conversation.context-window-tokens
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 36
-  - key: agent.conversation.max-parallel-tools
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 63
-  - key: agent.conversation.max-reflections
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 47
-  - key: agent.conversation.max-steps
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 13
-  - key: agent.conversation.max-sub-agent-steps
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 54
-  - key: agent.conversation.max-tool-failures
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 15
-  - key: agent.conversation.stale-conversation-minutes
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 17
-  - key: agent.event-bus.pubsub-channel
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 17
-  - key: agent.event-bus.pubsub-enabled
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 14
-  - key: agent.model.api-key
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
-    value: "<java-default:none>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 13
-  - key: agent.model.base-url
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 12
-  - key: agent.model.connect-timeout-millis
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 19
-  - key: agent.model.model
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
-    value: "<java-default:none>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 14
-  - key: agent.model.read-timeout-millis
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 29
-  - key: agent.model.reasoning-effort
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 17
-  - key: agent.model.web-search-enabled
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 15
-  - key: mcp.client.connect-timeout-seconds
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 26
-  - key: mcp.client.credential-encryption-key
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 23
-  - key: mcp.client.enabled
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 20
-  - key: mcp.client.max-description-length
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 35
-  - key: mcp.client.max-result-length
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 43
-  - key: mcp.client.max-tool-name-length
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 51
-  - key: mcp.client.max-tools-per-server
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 32
-  - key: mcp.client.request-timeout-seconds
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: agent
-    source_kind: java-configuration-properties
-    line: 29
   - key: billing.enabled
     source: apps/core-host/src/main/java/com/xander/lab/billing/infrastructure/BillingProperties.java
     value: "<java-default>"

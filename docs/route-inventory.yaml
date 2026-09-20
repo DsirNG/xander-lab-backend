@@ -99,7 +99,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#list"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 32
   - id: agent-post-admin-mcp-servers
     logical_owner: agent
@@ -110,7 +110,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#create"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 37
   - id: agent-delete-admin-mcp-servers-id
     logical_owner: agent
@@ -121,7 +121,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#delete"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 48
   - id: agent-put-admin-mcp-servers-id
     logical_owner: agent
@@ -132,7 +132,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#update"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 42
   - id: agent-post-admin-mcp-servers-id-probe
     logical_owner: agent
@@ -143,7 +143,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AdminMcpServerController#probe"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AdminMcpServerController.java
     line: 54
   - id: admin-get-admin-model-providers
     logical_owner: admin
@@ -297,7 +297,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#list"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 121
   - id: agent-post-agent-conversations
     logical_owner: agent
@@ -308,7 +308,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#create"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 106
   - id: agent-post-agent-conversations-attachments
     logical_owner: agent
@@ -319,7 +319,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#uploadAttachment"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 115
   - id: agent-get-agent-conversations-shared-sharetoken
     logical_owner: agent
@@ -330,7 +330,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#getShared"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 136
   - id: agent-get-agent-conversations-id
     logical_owner: agent
@@ -341,7 +341,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#get"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 126
   - id: agent-get-agent-conversations-id-approvals
     logical_owner: agent
@@ -352,7 +352,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#approvals"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 164
   - id: agent-post-agent-conversations-id-approvals-approvalid-decision
     logical_owner: agent
@@ -363,7 +363,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#decideApproval"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 170
   - id: agent-post-agent-conversations-id-cancel
     logical_owner: agent
@@ -374,7 +374,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#cancel"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 158
   - id: agent-get-agent-conversations-id-events
     logical_owner: agent
@@ -385,7 +385,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#subscribe"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 270
   - id: agent-get-agent-conversations-id-messages
     logical_owner: agent
@@ -396,7 +396,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#listMessages"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 131
   - id: agent-post-agent-conversations-id-messages
     logical_owner: agent
@@ -407,7 +407,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#triggerMessage"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 243
   - id: agent-post-agent-conversations-id-messages-stream
     logical_owner: agent
@@ -418,7 +418,7 @@ routes:
     stream: sse
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#sendMessage"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 194
   - id: agent-delete-agent-conversations-id-pin
     logical_owner: agent
@@ -429,7 +429,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#unpin"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 189
   - id: agent-post-agent-conversations-id-pin
     logical_owner: agent
@@ -440,7 +440,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#pin"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 184
   - id: agent-post-agent-conversations-id-read
     logical_owner: agent
@@ -451,7 +451,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#markRead"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 179
   - id: agent-delete-agent-conversations-id-share
     logical_owner: agent
@@ -462,7 +462,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#disableShare"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 152
   - id: agent-post-agent-conversations-id-share
     logical_owner: agent
@@ -473,7 +473,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentConversationController#enableShare"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentConversationController.java
     line: 146
   - id: agent-get-agent-mcp-servers
     logical_owner: agent
@@ -484,7 +484,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#list"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 31
   - id: agent-post-agent-mcp-servers
     logical_owner: agent
@@ -495,7 +495,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#create"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 36
   - id: agent-delete-agent-mcp-servers-id
     logical_owner: agent
@@ -506,7 +506,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#delete"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 47
   - id: agent-put-agent-mcp-servers-id
     logical_owner: agent
@@ -517,7 +517,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#update"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 41
   - id: agent-post-agent-mcp-servers-id-probe
     logical_owner: agent
@@ -528,7 +528,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.tool.mcp.api.AgentMcpServerController#probe"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/api/AgentMcpServerController.java
     line: 54
   - id: agent-get-agent-skills
     logical_owner: agent
@@ -539,7 +539,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentSkillController#list"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 24
   - id: agent-post-agent-skills
     logical_owner: agent
@@ -550,7 +550,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentSkillController#create"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 27
   - id: agent-get-agent-skills-tools
     logical_owner: agent
@@ -561,7 +561,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentSkillController#listTools"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 26
   - id: agent-delete-agent-skills-id
     logical_owner: agent
@@ -572,7 +572,7 @@ routes:
     stream: none
     last_event_id: false
     handler: "com.xander.lab.agent.api.AgentSkillController#archive"
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentSkillController.java
     line: 28
   - id: identity-get-auth-code
     logical_owner: identity
@@ -2431,5 +2431,5 @@ routes:
     stream: ws
     last_event_id: false
     handler: WebSocketHandler
-    file: apps/core-host/src/main/java/com/xander/lab/agent/api/AgentWebSocketConfig.java
+    file: apps/agent/src/main/java/com/xander/lab/agent/api/AgentWebSocketConfig.java
     line: 65

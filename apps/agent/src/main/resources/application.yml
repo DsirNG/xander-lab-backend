@@ -49,3 +49,37 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+agent:
+  event-bus:
+    pubsub-enabled: ${AGENT_EVENT_BUS_PUBSUB_ENABLED:false}
+    pubsub-channel: ${AGENT_EVENT_BUS_PUBSUB_CHANNEL:dinqor:agent-events}
+  conversation:
+    max-steps: ${AGENT_CONVERSATION_MAX_STEPS:20}
+    max-tool-failures: ${AGENT_CONVERSATION_MAX_TOOL_FAILURES:2}
+    stale-conversation-minutes: ${AGENT_CONVERSATION_STALE_MINUTES:30}
+    context-message-limit: ${AGENT_CONVERSATION_CONTEXT_MESSAGE_LIMIT:120}
+    compaction-enabled: ${AGENT_CONVERSATION_COMPACTION_ENABLED:true}
+    context-window-tokens: ${AGENT_CONVERSATION_CONTEXT_WINDOW_TOKENS:128000}
+    compaction-threshold-ratio: ${AGENT_CONVERSATION_COMPACTION_THRESHOLD_RATIO:0.8}
+    compaction-retain-ratio: ${AGENT_CONVERSATION_COMPACTION_RETAIN_RATIO:0.16}
+    max-parallel-tools: ${AGENT_CONVERSATION_MAX_PARALLEL_TOOLS:4}
+  model:
+    base-url: ${AGENT_MODEL_BASE_URL:https://api.openai.com/v1}
+    api-key: ${AGENT_MODEL_API_KEY:}
+    model: ${AGENT_MODEL:}
+    web-search-enabled: ${AGENT_MODEL_WEB_SEARCH_ENABLED:true}
+    reasoning-effort: ${AGENT_MODEL_REASONING_EFFORT:low}
+    connect-timeout-millis: ${AGENT_MODEL_CONNECT_TIMEOUT_MILLIS:15000}
+    read-timeout-millis: ${AGENT_MODEL_READ_TIMEOUT_MILLIS:60000}
+
+mcp:
+  client:
+    enabled: ${MCP_CLIENT_ENABLED:false}
+    credential-encryption-key: ${MCP_CLIENT_CREDENTIAL_ENCRYPTION_KEY:}
+    connect-timeout-seconds: ${MCP_CLIENT_CONNECT_TIMEOUT_SECONDS:10}
+    request-timeout-seconds: ${MCP_CLIENT_REQUEST_TIMEOUT_SECONDS:30}
+    max-tools-per-server: ${MCP_CLIENT_MAX_TOOLS_PER_SERVER:50}
+    max-description-length: ${MCP_CLIENT_MAX_DESCRIPTION_LENGTH:400}
+    max-result-length: ${MCP_CLIENT_MAX_RESULT_LENGTH:8000}
+    max-tool-name-length: ${MCP_CLIENT_MAX_TOOL_NAME_LENGTH:64}

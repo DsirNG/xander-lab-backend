@@ -38,7 +38,7 @@
                         -> application / operations, not a shared lib (V9 §19: "运维型 Redis
                            health check does not go into the general libs").
         - common/security/*
-                        -> application (long-connection security plane, V9 §49-§51).
+                        -> xander-auth-core (long-connection security plane, V9 §49-§51).
     </description>
 
     <dependencies>

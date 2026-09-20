@@ -13,18 +13,28 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 486
-  service_private: 422
-  secret: 54
+  total: 512
+  service_private: 446
+  secret: 56
   shared: 10
 config:
   - key: agent.conversation.compaction-enabled
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.compaction-enabled
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.compaction-enabled
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.compaction-retain-ratio
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -34,7 +44,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.compaction-retain-ratio
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.compaction-threshold-ratio
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -44,7 +59,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.compaction-threshold-ratio
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.context-message-limit
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -54,7 +74,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.context-message-limit
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.context-window-tokens
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -64,7 +89,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.context-window-tokens
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-parallel-tools
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -74,12 +104,17 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.max-parallel-tools
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.max-reflections
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-steps
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -89,12 +124,17 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.max-steps
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.max-sub-agent-steps
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.max-tool-failures
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -104,7 +144,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.max-tool-failures
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.conversation.stale-conversation-minutes
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -114,7 +159,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.conversation.stale-conversation-minutes
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.event-bus.pubsub-channel
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -124,7 +174,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.event-bus.pubsub-channel
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.event-bus.pubsub-enabled
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -134,8 +189,13 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.event-bus.pubsub-enabled
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
     classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.api-key
+    source: apps/agent/src/main/resources/application.yml
+    classification: secret
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.api-key
@@ -144,8 +204,13 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.api-key
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
     classification: secret
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.base-url
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.base-url
@@ -154,7 +219,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.base-url
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.connect-timeout-millis
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -164,7 +234,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.connect-timeout-millis
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.model
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -174,7 +249,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.model
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.read-timeout-millis
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -184,7 +264,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.read-timeout-millis
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.reasoning-effort
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -194,7 +279,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.reasoning-effort
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.model.web-search-enabled
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -204,7 +294,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.model.web-search-enabled
-    source: apps/core-host/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: mcp.client.connect-timeout-seconds
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -214,8 +309,13 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.connect-timeout-seconds
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
     classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: mcp.client.credential-encryption-key
+    source: apps/agent/src/main/resources/application.yml
+    classification: secret
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.credential-encryption-key
@@ -224,8 +324,13 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.credential-encryption-key
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
     classification: secret
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: mcp.client.enabled
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.enabled
@@ -234,7 +339,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.enabled
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: mcp.client.max-description-length
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -244,7 +354,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.max-description-length
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: mcp.client.max-result-length
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -254,12 +369,22 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.max-result-length
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.max-tool-name-length
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: mcp.client.max-tool-name-length
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: mcp.client.max-tools-per-server
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -269,7 +394,12 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.max-tools-per-server
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: mcp.client.request-timeout-seconds
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
@@ -279,7 +409,7 @@ config:
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: mcp.client.request-timeout-seconds
-    source: apps/core-host/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
+    source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
     classification: service_private
     owner: agent
     nacos_group: DINQOR-AGENT
