@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 707
-  leaves: 519
+  total: 712
+  leaves: 522
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -724,6 +724,16 @@ config:
     source: apps/core-host/src/main/resources/application.yml
     value: ""
     leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.health-indicator-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_HEALTH_INDICATOR_ENABLED:false}"
+    leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.config.import-check
     source: apps/core-host/src/main/resources/application.yml
@@ -1583,6 +1593,21 @@ config:
   - key: management.endpoint.health.show-details
     source: apps/core-host/src/main/resources/application.yml
     value: never
+    leaf: true
+    logical_owner: unassigned
+  - key: management.health
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.health.mail
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.health.mail.enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${MANAGEMENT_HEALTH_MAIL_ENABLED:false}"
     leaf: true
     logical_owner: unassigned
   - key: management.metrics

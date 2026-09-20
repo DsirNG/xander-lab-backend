@@ -14,6 +14,8 @@ spring:
       config:
         # The default profile is local and does not import Nacos. The nacos profile
         # supplies the actual required nacos: locations.
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+        health-indicator-enabled: ${NACOS_CONFIG_HEALTH_INDICATOR_ENABLED:false}
         import-check:
           enabled: ${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}
       discovery:
@@ -246,6 +248,9 @@ management:
       probes:
         enabled: true
       show-details: never
+  health:
+    mail:
+      enabled: ${MANAGEMENT_HEALTH_MAIL_ENABLED:false}
   metrics:
     tags:
       application: ${spring.application.name}

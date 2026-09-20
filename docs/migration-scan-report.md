@@ -73,8 +73,8 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
 ## Config keys
 
-- total keys: **707** (leaf: 519)
-- unassigned leaves: **48**
+- total keys: **712** (leaf: 522)
+- unassigned leaves: **49**
 
   - `management.endpoints.web.exposure.include` (apps/agent/src/main/resources/application.yml)
   - `management.endpoint.health.probes.enabled` (apps/agent/src/main/resources/application.yml)
@@ -90,6 +90,7 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
   - `management.endpoints.web.exposure.include` (apps/core-host/src/main/resources/application.yml)
   - `management.endpoint.health.probes.enabled` (apps/core-host/src/main/resources/application.yml)
   - `management.endpoint.health.show-details` (apps/core-host/src/main/resources/application.yml)
+  - `management.health.mail.enabled` (apps/core-host/src/main/resources/application.yml)
   - `management.metrics.tags.application` (apps/core-host/src/main/resources/application.yml)
   - `management.metrics.connect-timeout-millis` (apps/core-host/src/main/resources/application.yml)
   - `management.metrics.read-timeout-millis` (apps/core-host/src/main/resources/application.yml)
