@@ -24,6 +24,7 @@ spring:
   cloud:
     nacos:
       config:
+        enabled: ${NACOS_CONFIG_ENABLED:false}
         import-check:
           enabled: ${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}
       discovery:
