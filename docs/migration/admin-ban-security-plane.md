@@ -228,11 +228,13 @@ JWT 就能被放行，直到 reconciler 在 1.5 秒后第一次收敛。这 1.5 
 | `GET /health` | **存活**。语义与状态码不变（Redis 可达即 200），只多报一个 `securityPlane` 字段 | 200 / 503（Redis 不可达） |
 | `GET /health/ready` | **就绪**。安全平面 `READY` **且** Redis 可达才 200 | 200 / 503 |
 
-两个探针刻意分开：`docker-compose.yml` 的 healthcheck 用的是 `/health`，
-若把它改成就绪语义，一次正常启动会被判为不健康并触发重启。
+两个探针刻意分开：历史 `docker-compose.yml` 的 healthcheck 用的是 `/health`，
+若把它改成就绪语义，一次正常启动会被判为不健康并触发重启；Wave 1 Compose
+模板则把 core-host 的 healthcheck 指向 `/health/ready`。
 
-⚠️ **部署侧尚未接线**：仓库里没有任何编排文件把就绪探针指向 `/health/ready`。
-在那之前，第 9 步靠 bootstrap 的 fail-fast 兜底（见下）。这是待办项。
+外部编排仍应复用 `/health/ready`，而不是把安全平面状态塞回存活探针。Wave 1
+模板已经完成仓库内的接线；在实际平台接入前，第 9 步仍靠 bootstrap 的 fail-fast
+兜底（见下）。
 
 ### ⚠️ 失败即拒绝启动（fail-fast）
 
@@ -328,7 +330,7 @@ WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | **快路径只对抢到锁的实例生效** | Wave 0A 的投递目标是本实例，其余实例靠 reconciler 兜底（延迟 1.5 秒，未超 5 秒预算）。多实例快路径要等 Wave 1 的 Redis PubSub | 已知，Wave 1 |
-| **就绪探针未接线** | §27.1 第 9 步要求「READY 才进负载均衡」，但仓库里没有任何编排文件把探针指向 `GET /health/ready`。在接线之前，第 9 步靠 bootstrap 的 fail-fast 兜底（读不到快照就拒绝启动），所以「先接流量再填 cache」不会发生，但**「启动慢」会表现为容器重启循环** | 待办（部署侧） |
+| **外部平台尚未接入就绪探针** | §27.1 第 9 步要求「READY 才进负载均衡」；仓库内的 Wave 1 Compose 已将 core-host healthcheck 指向 `GET /health/ready`，外部 Kubernetes/云编排仍需复用该端点 | 部署接入 |
 | **V11 §27.0 `security_event` 表不存在** | V11 修订说明声称新增该表作为 Bootstrap/reconcile 的取数源，但正文无此节、仓库无此表。当前把 §27.1 的 "eventId" 映射为 `account_security_state.change_seq`（SOT 上的全局单调变更序号），语义等价且不需要新表；若将来真引入独立事件日志，需复核这个映射 | 已记录，映射成立 |
 | **迟到且版本更低的封禁事件** | `SecurityStateApplier` 的版本闸门只在缓存里**已有**该账号时才生效。若账号已被解封（缓存里不存在），一条迟到的旧封禁事件无法被拒绝，账号会被重新封禁。修它需要为「已解封账号」也保留版本号（内存随历史账号数增长），代价与收益不成比例 | 已知，低风险，需独立改动 |
 | **bootstrap 的水位偏小** | `E0` 取快照行的最大 `change_seq`，历史上被封禁过又解封的账号（`disabled = 0` 的行）不计入，所以启动时会多扫一遍 `account_security_state`。这是刻意选的安全方向（偏小只多扫，偏大才漏封禁） | 设计取舍 |
