@@ -993,8 +993,9 @@ def gate_legacy_redis_reference_check() -> None:
     """No NEW production code may depend on the legacy Redis key families.
 
     Wave 0A cannot remove them yet (they are the current session model), so the
-    gate pins the set of files allowed to reference them: adding a fourth call
-    site fails. Retirement (V9 §57 T3) must shrink this set down to Constants.java
+    gate pins the set of files allowed to reference them: adding a fifth call
+    site fails. The fourth site is the migration-only read-only SCAN observer.
+    Retirement (V9 §57 T3) must shrink this set down to Constants.java
     and then delete the constants -- see docs/migration/legacy-redis-retirement.md §9.
 
     Two details that matter after the Wave 0B library extraction:
@@ -1014,6 +1015,7 @@ def gate_legacy_redis_reference_check() -> None:
         "libs/xander-model/src/main/java/com/xander/lab/common/Constants.java",
         "apps/core-host/src/main/java/com/xander/lab/identity/application/AuthService.java",
         "apps/core-host/src/main/java/com/xander/lab/identity/application/UserAdminService.java",
+        "apps/core-host/src/main/java/com/xander/lab/identity/application/LegacyRedisMetrics.java",
     }
     missing = sorted(rel for rel in allowed if not (REPO / rel).exists())
     if missing:

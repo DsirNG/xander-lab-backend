@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 15
+  total: 16
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -51,6 +51,13 @@ scheduled:
     logical_owner: identity
     file: apps/core-host/src/main/java/com/xander/lab/identity/application/AuthRefreshHistoryCleanup.java
     line: 74
+  - id: legacy-redis-metrics
+    class: com.xander.lab.identity.application.LegacyRedisMetrics
+    method: reconcile
+    trigger: "initialDelay = 60_000L, fixedDelay = 3_600_000L"
+    logical_owner: identity
+    file: apps/core-host/src/main/java/com/xander/lab/identity/application/LegacyRedisMetrics.java
+    line: 49
   - id: security-event-outbox-publisher
     class: com.xander.lab.identity.application.SecurityEventOutboxPublisher
     method: publishDueEvents

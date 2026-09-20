@@ -317,10 +317,12 @@ allowed = {
     "libs/xander-model/src/main/java/com/xander/lab/common/Constants.java",
     "apps/core-host/src/main/java/com/xander/lab/identity/application/AuthService.java",
     "apps/core-host/src/main/java/com/xander/lab/identity/application/UserAdminService.java",
+    "apps/core-host/src/main/java/com/xander/lab/identity/application/LegacyRedisMetrics.java",
 }
 ```
 
-**只允许这三个文件引用旧键族**，其它任何文件出现
+前三个是兼容鉴权/撤销路径，第四个 `LegacyRedisMetrics` 只做迁移期低频
+`SCAN` 盘点，不得写入、删除或参与鉴权决策。**只允许这四个文件引用旧键族**，其它任何文件出现
 `REDIS_TOKEN_PREFIX` / `REDIS_USER_TOKENS_PREFIX` 即失败。
 
 ⚠️ Wave 0B 起 `Constants.java` 在 `libs/xander-model/`（V9 §19 共享库抽取），
@@ -350,7 +352,7 @@ allowed = {
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| 五个指标全部未接入 | §3 的缺陷目前**无法被观测** —— 只能靠代码审查发现。`legacy_revoke_duration` 是封禁 SLO 的输入 | Wave 2 |
+| 五个指标 | `LegacyRedisMetrics` 已接入低频 SCAN 盘点四个存量指标；`UserAdminService.revokeSessions` 已记录 `legacy_revoke_duration` | ✅ 基础观测已完成；T1/T2/T3 仍待切流 |
 | 计数器 `identity:legacy_access_*` 未实现 | §6.1 的两个计数器不存在，退场判据无法量化 | T1 之前 |
 | T3 的清理脚本未写 | §57 要求显式删除两个键族，脚本尚未编写（Wave 0A 不删是对的） | T3 |
 | `allowed` 集合未随 T1/T3 收缩 | 见 §9 末尾 | T1 / T3 |
@@ -372,7 +374,8 @@ grep -rn "REDIS_USER_TOKENS_PREFIX" apps/core-host/src/main/java/ libs/*/src/mai
 ```
 
 ⚠️ 本文档描述的 T1/T2/T3 **尚未开始**（Wave 0A 不改部署，也不改鉴权路径）。
-当前唯一已落地的是 §9 的门禁。
+当前已落地的是 §9 的门禁与 §59 的五项基础观测；它们只帮助证明退场条件，
+不会提前删除仍在使用的遗留键族。
 
 **验证 §3 的缺陷是否仍然存在**（应当在 T1 之前一直存在）：
 

@@ -9,8 +9,8 @@ import com.xander.lab.identity.api.UserAdminView;
 import com.xander.lab.identity.domain.AccountSecurityState;
 import com.xander.lab.identity.domain.User;
 import com.xander.lab.identity.infrastructure.UserMapper;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -49,7 +49,6 @@ import java.util.Set;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class UserAdminService {
 
     private static final int MAX_PAGE_SIZE = 100;
@@ -58,6 +57,24 @@ public class UserAdminService {
     private final UserMapper userMapper;
     private final StringRedisTemplate redisTemplate;
     private final AccountSecurityStateService accountSecurityStateService;
+    private final LegacyRedisMetrics legacyRedisMetrics;
+
+    public UserAdminService(UserMapper userMapper,
+                            StringRedisTemplate redisTemplate,
+                            AccountSecurityStateService accountSecurityStateService) {
+        this(userMapper, redisTemplate, accountSecurityStateService, null);
+    }
+
+    @Autowired
+    public UserAdminService(UserMapper userMapper,
+                            StringRedisTemplate redisTemplate,
+                            AccountSecurityStateService accountSecurityStateService,
+                            LegacyRedisMetrics legacyRedisMetrics) {
+        this.userMapper = userMapper;
+        this.redisTemplate = redisTemplate;
+        this.accountSecurityStateService = accountSecurityStateService;
+        this.legacyRedisMetrics = legacyRedisMetrics;
+    }
 
     /**
      * 分页查询用户（可按用户名/昵称/邮箱模糊过滤），按创建时间倒序。
@@ -158,21 +175,28 @@ public class UserAdminService {
      * 返回撤销的 token 数量；删集合键在最后执行，避免并发写回残留。
      */
     private int revokeSessions(Long userId) {
+        long startedAt = System.nanoTime();
         String setKey = Constants.REDIS_USER_TOKENS_PREFIX + userId;
-        Set<String> tokens = redisTemplate.opsForSet().members(setKey);
-        if (tokens == null || tokens.isEmpty()) {
+        try {
+            Set<String> tokens = redisTemplate.opsForSet().members(setKey);
+            if (tokens == null || tokens.isEmpty()) {
+                redisTemplate.delete(setKey);
+                return 0;
+            }
+            for (String token : tokens) {
+                try {
+                    redisTemplate.delete(Constants.REDIS_TOKEN_PREFIX + token);
+                } catch (Exception e) {
+                    log.warn("[Admin] 撤销 token 失败 userId={}: {}", userId, e.getMessage());
+                }
+            }
             redisTemplate.delete(setKey);
-            return 0;
-        }
-        for (String token : tokens) {
-            try {
-                redisTemplate.delete(Constants.REDIS_TOKEN_PREFIX + token);
-            } catch (Exception e) {
-                log.warn("[Admin] 撤销 token 失败 userId={}: {}", userId, e.getMessage());
+            return tokens.size();
+        } finally {
+            if (legacyRedisMetrics != null) {
+                legacyRedisMetrics.recordRevokeDuration(System.nanoTime() - startedAt);
             }
         }
-        redisTemplate.delete(setKey);
-        return tokens.size();
     }
 
     private UserAdminView toView(User user) {
