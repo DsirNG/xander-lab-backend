@@ -25,13 +25,16 @@ public class GatewayAuthenticationFilter implements GlobalFilter, Ordered {
     private final GatewayAccessPolicy accessPolicy;
     private final JwtUtil jwtUtil;
     private final GatewaySecurityStateCache securityStateCache;
+    private final GatewaySecurityPlaneReadiness securityPlaneReadiness;
 
     public GatewayAuthenticationFilter(GatewayAccessPolicy accessPolicy,
                                        JwtUtil jwtUtil,
-                                       GatewaySecurityStateCache securityStateCache) {
+                                       GatewaySecurityStateCache securityStateCache,
+                                       GatewaySecurityPlaneReadiness securityPlaneReadiness) {
         this.accessPolicy = accessPolicy;
         this.jwtUtil = jwtUtil;
         this.securityStateCache = securityStateCache;
+        this.securityPlaneReadiness = securityPlaneReadiness;
     }
 
     @Override
@@ -40,6 +43,9 @@ public class GatewayAuthenticationFilter implements GlobalFilter, Ordered {
                 exchange.getRequest().getMethod(), exchange.getRequest().getPath().value());
         if (!decision.requiresToken()) {
             return chain.filter(exchange);
+        }
+        if (!securityPlaneReadiness.isReady()) {
+            return reject(exchange, HttpStatus.SERVICE_UNAVAILABLE, "安全平面尚未就绪");
         }
 
         String token = token(exchange, decision.tokenLocation());

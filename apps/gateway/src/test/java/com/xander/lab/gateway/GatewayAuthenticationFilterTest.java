@@ -32,7 +32,8 @@ class GatewayAuthenticationFilterTest {
                         .header("Authorization", "Bearer access-token")
                         .build());
 
-        new GatewayAuthenticationFilter(new GatewayAccessPolicy(), jwtUtil, cache)
+        new GatewayAuthenticationFilter(new GatewayAccessPolicy(), jwtUtil, cache,
+                new GatewaySecurityPlaneReadiness(new GatewaySecurityStateProperties()))
                 .filter(exchange, chain).block();
 
         assertThat(exchange.getResponse().getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);

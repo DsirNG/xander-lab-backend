@@ -84,6 +84,10 @@ public interface AccountSecurityStateMapper extends BaseMapper<AccountSecuritySt
     List<AccountSecurityState> pullChangesAfter(@Param("cursor") long cursor,
                                                 @Param("limit") int limit);
 
+    /** Gateway 启动快照与低频全量对账使用，保留已解封账号的版本闸门。 */
+    @Select("SELECT * FROM account_security_state")
+    List<AccountSecurityState> listAll();
+
     /**
      * 全量对账兜底。
      *

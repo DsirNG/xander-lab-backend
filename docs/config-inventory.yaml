@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 596
-  leaves: 443
+  total: 619
+  leaves: 462
 config:
   - key: server
     source: apps/bloghtml-preview/src/main/resources/application.yml
@@ -805,6 +805,26 @@ config:
     value: "${AUTH_REFRESH_SECURITY_PUBSUB_CHANNEL:dinqor:security-events}"
     leaf: true
     logical_owner: core
+  - key: security
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: security.state-sync
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: security.state-sync.internal-api-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}"
+    leaf: true
+    logical_owner: unassigned
+  - key: security.state-sync.internal-token
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: unassigned
   - key: mcp
     source: apps/core-host/src/main/resources/application.yml
     value: ""
@@ -2155,6 +2175,21 @@ config:
     value: never
     leaf: true
     logical_owner: unassigned
+  - key: management.endpoint.health.group
+    source: apps/gateway/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.group.readiness
+    source: apps/gateway/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.group.readiness.include
+    source: apps/gateway/src/main/resources/application.yml
+    value: "readinessState,gatewaySecurity"
+    leaf: true
+    logical_owner: unassigned
   - key: management.metrics
     source: apps/gateway/src/main/resources/application.yml
     value: ""
@@ -2188,6 +2223,41 @@ config:
   - key: gateway.security-state.pubsub-channel
     source: apps/gateway/src/main/resources/application.yml
     value: "${GATEWAY_SECURITY_STATE_PUBSUB_CHANNEL:dinqor:security-events}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.security-state.reconcile-enabled
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_SECURITY_STATE_RECONCILE_ENABLED:false}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.security-state.core-host-base-url
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_SECURITY_STATE_CORE_HOST_BASE_URL:http://localhost:30002}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.security-state.internal-token
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.security-state.reconcile-interval-ms
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_SECURITY_STATE_RECONCILE_INTERVAL_MS:1500}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.security-state.full-reconcile-interval-ms
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_SECURITY_STATE_FULL_RECONCILE_INTERVAL_MS:300000}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.security-state.reconcile-batch-size
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_SECURITY_STATE_RECONCILE_BATCH_SIZE:500}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.security-state.request-timeout-ms
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_SECURITY_STATE_REQUEST_TIMEOUT_MS:2000}"
     leaf: true
     logical_owner: unassigned
   - key: spring
@@ -2735,6 +2805,20 @@ config:
     logical_owner: core
     source_kind: java-configuration-properties
     line: 33
+  - key: security.state-sync.internal-api-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateSyncProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 11
+  - key: security.state-sync.internal-token
+    source: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateSyncProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 12
   - key: wechat.credential.encryption-key
     source: apps/core-host/src/main/java/com/xander/lab/identity/infrastructure/wechat/WechatCredentialProperties.java
     value: "<java-default>"
@@ -3260,6 +3344,27 @@ config:
     logical_owner: core
     source_kind: java-configuration-properties
     line: 15
+  - key: gateway.security-state.core-host-base-url
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 14
+  - key: gateway.security-state.full-reconcile-interval-ms
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 17
+  - key: gateway.security-state.internal-token
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 15
   - key: gateway.security-state.pubsub-channel
     source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
     value: "<java-default>"
@@ -3274,3 +3379,31 @@ config:
     logical_owner: unassigned
     source_kind: java-configuration-properties
     line: 11
+  - key: gateway.security-state.reconcile-batch-size
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 18
+  - key: gateway.security-state.reconcile-enabled
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 13
+  - key: gateway.security-state.reconcile-interval-ms
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 16
+  - key: gateway.security-state.request-timeout-ms
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 19

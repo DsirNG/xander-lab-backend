@@ -18,8 +18,8 @@ generated_from: docs/scheduled-inventory.yaml
 # 由门禁 `inventory-integrity` 校验。
 # 两个 auth 清理任务在上一轮以 status: planned 登记；本轮实现后改为 active（不是新增条目）。
 counts:
-  scanned: 14
-  planned: 1
+  scanned: 15
+  planned: 0
   total: 15
 
 scheduled:
@@ -170,8 +170,9 @@ scheduled:
     execution_mode: scheduled
     execution_scope: per_instance
     singleton_strategy: none
-    status: planned
-    notes: "V9 §69 / §70。每个 Gateway 实例维护自己的 deniedAccountIds 与自己的 cursor。reconcile interval = 1~2 秒（与 §27 / §28 的 5 秒预算一致）。禁止全局 ShedLock。"
+    status: active
+    scan_ref: apps/gateway/src/main/java/com/xander/lab/gateway/SecurityDenylistReconcilerGateway.java:63
+    notes: "V9 §69 / §70。每个 Gateway 实例通过 core-host 内部同步 API 维护自己的 deny cache 与 cursor；启动快照 + watermark 后重放，运行期 1.5 秒增量对账并低频全量校准。禁止全局 ShedLock。"
 
   - id: security-state-reconciler-reconcile
     logical_owner: identity

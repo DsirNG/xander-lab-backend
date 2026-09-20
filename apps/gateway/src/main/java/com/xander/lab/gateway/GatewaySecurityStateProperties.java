@@ -10,6 +10,13 @@ public class GatewaySecurityStateProperties {
 
     private boolean pubsubEnabled = false;
     private String pubsubChannel = "dinqor:security-events";
+    private boolean reconcileEnabled = false;
+    private String coreHostBaseUrl = "http://localhost:30002";
+    private String internalToken = "";
+    private long reconcileIntervalMs = 1500L;
+    private long fullReconcileIntervalMs = 300000L;
+    private int reconcileBatchSize = 500;
+    private long requestTimeoutMs = 2000L;
 
     public boolean isPubsubEnabled() {
         return pubsubEnabled;
@@ -25,5 +32,61 @@ public class GatewaySecurityStateProperties {
 
     public void setPubsubChannel(String pubsubChannel) {
         this.pubsubChannel = pubsubChannel;
+    }
+
+    public boolean isReconcileEnabled() {
+        return reconcileEnabled;
+    }
+
+    public void setReconcileEnabled(boolean reconcileEnabled) {
+        this.reconcileEnabled = reconcileEnabled;
+    }
+
+    public String getCoreHostBaseUrl() {
+        return coreHostBaseUrl;
+    }
+
+    public void setCoreHostBaseUrl(String coreHostBaseUrl) {
+        this.coreHostBaseUrl = coreHostBaseUrl;
+    }
+
+    public String getInternalToken() {
+        return internalToken;
+    }
+
+    public void setInternalToken(String internalToken) {
+        this.internalToken = internalToken;
+    }
+
+    public long getReconcileIntervalMs() {
+        return reconcileIntervalMs;
+    }
+
+    public void setReconcileIntervalMs(long reconcileIntervalMs) {
+        this.reconcileIntervalMs = reconcileIntervalMs;
+    }
+
+    public long getFullReconcileIntervalMs() {
+        return fullReconcileIntervalMs;
+    }
+
+    public void setFullReconcileIntervalMs(long fullReconcileIntervalMs) {
+        this.fullReconcileIntervalMs = fullReconcileIntervalMs;
+    }
+
+    public int getReconcileBatchSize() {
+        return reconcileBatchSize;
+    }
+
+    public void setReconcileBatchSize(int reconcileBatchSize) {
+        this.reconcileBatchSize = reconcileBatchSize;
+    }
+
+    public long getRequestTimeoutMs() {
+        return requestTimeoutMs;
+    }
+
+    public void setRequestTimeoutMs(long requestTimeoutMs) {
+        this.requestTimeoutMs = requestTimeoutMs;
     }
 }

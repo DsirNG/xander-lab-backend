@@ -97,6 +97,14 @@ excluded:
     access: excluded
     identity_mode: none
     token_location: n/a
+  - id: excluded-security-state-sync
+    match:
+      method: ANY
+      path_prefix: /internal/security-state/
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "Gateway 不套业务 JWT；core-host 内网 API 另用 X-DinQor-Internal-Token 且默认关闭。"
 
 # ===================== 3. 管理后台 =====================
 # 必须在公开 GET 分支之前判断。

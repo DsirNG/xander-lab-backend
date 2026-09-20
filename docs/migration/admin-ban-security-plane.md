@@ -139,9 +139,9 @@ Pub/Sub 由每个实例订阅；订阅丢失或 Redis 短暂不可用时，`Secu
 
 Gateway 也可以设置 `GATEWAY_SECURITY_STATE_PUBSUB_ENABLED=true`，订阅同一频道，
 把 `ACCOUNT_DISABLED` / `ACCOUNT_ENABLED` 事件应用到本实例的 JWT deny cache，
-在新请求到达下游前做 O(1) 快速拒绝。Gateway 当前只把 Pub/Sub 当作传播优化：
-启动快照、断线重放和增量对账仍未接入，缓存为空不能被解释为已完成同步；对应的
-`security-denylist-reconciler-gateway` 仍是后续 Wave 2 工作。
+在新请求到达下游前做 O(1) 快速拒绝。Gateway 当前只把 Pub/Sub 当作传播优化；
+启动快照、断线重放和增量对账由 `SecurityDenylistReconcilerGateway` 负责，
+core-host 仍是 `account_security_state` 的 SOT。
 
 本任务当前还承担另一个不可省略的职责：**让 `security_event_outbox` 有界**。
 没有消费者时该表会无界增长。
@@ -337,7 +337,6 @@ WS_CLOSE_CODE_ACCOUNT_DISABLED = 4403
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | **多实例部署未开启 Redis Pub/Sub** | 开关关闭时只有抢到 ShedLock 的实例走发件箱本地快路径，其余实例靠 reconciler 兜底（延迟 1.5 秒，未超 5 秒预算） | 部署配置项；必须在多实例切流前开启 |
-| **Gateway 尚无启动快照与增量对账** | Gateway 的 Redis Pub/Sub deny cache 只承担新请求的传播快路径；重启、断线或丢消息后的最终一致性仍由下游 core-host 保证 | Wave 2；`security-denylist-reconciler-gateway` |
 | **外部平台尚未接入就绪探针** | §27.1 第 9 步要求「READY 才进负载均衡」；仓库内的 Wave 1 Compose 已将 core-host healthcheck 指向 `GET /health/ready`，外部 Kubernetes/云编排仍需复用该端点 | 部署接入 |
 | **V11 §27.0 `security_event` 表不存在** | V11 修订说明声称新增该表作为 Bootstrap/reconcile 的取数源，但正文无此节、仓库无此表。当前把 §27.1 的 "eventId" 映射为 `account_security_state.change_seq`（SOT 上的全局单调变更序号），语义等价且不需要新表；若将来真引入独立事件日志，需复核这个映射 | 已记录，映射成立 |
 | **迟到且版本更低的封禁事件** | `SecurityStateApplier` 的版本闸门只在缓存里**已有**该账号时才生效。若账号已被解封（缓存里不存在），一条迟到的旧封禁事件无法被拒绝，账号会被重新封禁。修它需要为「已解封账号」也保留版本号（内存随历史账号数增长），代价与收益不成比例 | 已知，低风险，需独立改动 |

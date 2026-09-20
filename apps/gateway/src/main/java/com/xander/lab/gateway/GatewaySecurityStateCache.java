@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GatewaySecurityStateCache {
 
     private final Map<Long, State> states = new ConcurrentHashMap<>();
+    private volatile long lastSeenSeq;
 
     public boolean isDisabled(long accountId) {
         State state = states.get(accountId);
@@ -22,13 +23,30 @@ public class GatewaySecurityStateCache {
     }
 
     /** 版本单调地应用封禁/解封事件，重复或迟到事件无副作用。 */
-    public void apply(long accountId, boolean disabled, long securityVersion) {
+    public synchronized void apply(long accountId, boolean disabled, long securityVersion) {
         states.compute(accountId, (ignored, current) -> {
             if (current != null && current.securityVersion() >= securityVersion) {
                 return current;
             }
             return new State(disabled, securityVersion);
         });
+    }
+
+    /** 用 core-host 的完整快照替换本实例状态，包含已解封账号以保留版本闸门。 */
+    public synchronized void replaceAll(Map<Long, State> snapshot, long cursor) {
+        states.clear();
+        states.putAll(snapshot);
+        lastSeenSeq = cursor;
+    }
+
+    public long lastSeenSeq() {
+        return lastSeenSeq;
+    }
+
+    public synchronized void advanceCursor(long cursor) {
+        if (cursor > lastSeenSeq) {
+            lastSeenSeq = cursor;
+        }
     }
 
     public int disabledCount() {

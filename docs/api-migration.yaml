@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 213
+  total: 215
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -1546,6 +1546,40 @@ entries:
       path: "/api/auth/wechat-skip"
     new:
       method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-get-internal-security-state-changes
+    owner: identity
+    old:
+      method: GET
+      path: "/internal/security-state/changes"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-get-internal-security-state-snapshot
+    owner: identity
+    old:
+      method: GET
+      path: "/internal/security-state/snapshot"
+    new:
+      method: GET
       path: ""
     clients:
       web: not_applicable

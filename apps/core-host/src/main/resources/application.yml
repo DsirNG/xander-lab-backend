@@ -152,6 +152,12 @@ auth:
     security-pubsub-enabled: ${AUTH_REFRESH_SECURITY_PUBSUB_ENABLED:false}
     security-pubsub-channel: ${AUTH_REFRESH_SECURITY_PUBSUB_CHANNEL:dinqor:security-events}
 
+# Gateway 安全状态快照/增量同步 API：默认关闭，开启时必须注入共享内部令牌。
+security:
+  state-sync:
+    internal-api-enabled: ${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}
+    internal-token: ${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}
+
 # Disabled by default. Use a Base64-encoded 32-byte key, and keep the server token out of source control.
 mcp:
   oauth:

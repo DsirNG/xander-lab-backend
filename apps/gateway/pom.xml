@@ -48,6 +48,11 @@
         </dependency>
         <dependency>
             <groupId>com.xander</groupId>
+            <artifactId>core-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.xander</groupId>
             <artifactId>xander-model</artifactId>
             <version>${project.version}</version>
         </dependency>

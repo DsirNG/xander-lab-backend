@@ -30,3 +30,13 @@ gateway:
     preserve-request-header: Last-Event-ID
     websocket-upgrade: true
     response-timeout: disabled
+  security-state:
+    pubsub-enabled: ${GATEWAY_SECURITY_STATE_PUBSUB_ENABLED:false}
+    pubsub-channel: ${GATEWAY_SECURITY_STATE_PUBSUB_CHANNEL:dinqor:security-events}
+    reconcile-enabled: ${GATEWAY_SECURITY_STATE_RECONCILE_ENABLED:false}
+    core-host-base-url: ${GATEWAY_SECURITY_STATE_CORE_HOST_BASE_URL:http://core-host:30002}
+    internal-token: ${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}
+    reconcile-interval-ms: ${GATEWAY_SECURITY_STATE_RECONCILE_INTERVAL_MS:1500}
+    full-reconcile-interval-ms: ${GATEWAY_SECURITY_STATE_FULL_RECONCILE_INTERVAL_MS:300000}
+    reconcile-batch-size: ${GATEWAY_SECURITY_STATE_RECONCILE_BATCH_SIZE:500}
+    request-timeout-ms: ${GATEWAY_SECURITY_STATE_REQUEST_TIMEOUT_MS:2000}

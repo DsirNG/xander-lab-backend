@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 14
+  total: 15
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -30,6 +30,13 @@ scheduled:
     logical_owner: automation
     file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java
     line: 62
+  - id: security-denylist-reconciler-gateway
+    class: com.xander.lab.gateway.SecurityDenylistReconcilerGateway
+    method: reconcile
+    trigger: "fixedDelayString = \"${gateway.security-state.reconcile-interval-ms:1500}\""
+    logical_owner: gateway
+    file: apps/gateway/src/main/java/com/xander/lab/gateway/SecurityDenylistReconcilerGateway.java
+    line: 63
   - id: auth-refresh-ciphertext-cleanup
     class: com.xander.lab.identity.application.AuthRefreshCiphertextCleanup
     method: clearExpiredCiphertext

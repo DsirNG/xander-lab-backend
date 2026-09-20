@@ -17,3 +17,8 @@ mybatis-plus:
   # Production service-private config must not swallow mapper XML from another jar.
   mapper-locations: classpath:/mapper/*.xml
   type-aliases-package: com.xander.lab.automation.domain,com.xander.lab.studio.domain,com.xander.lab.billing.domain
+
+security:
+  state-sync:
+    internal-api-enabled: ${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}
+    internal-token: ${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}
