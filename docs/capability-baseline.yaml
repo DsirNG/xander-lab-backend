@@ -18,8 +18,8 @@
 
 counts:
   total: 28
-  planned: 14
-  active: 12
+  planned: 13
+  active: 13
   changed: 2
   retired: 0
 
@@ -262,7 +262,8 @@ capabilities:
   - id: scheduler-per-instance-not-globally-locked
     since: V9
     ref: V9 §67 / §69 / §72
-    status: planned
+    status: active
+    evidence: "scheduled-ownership.yaml 中 15/15 调度任务已声明 execution_scope；全部 per_instance 项为 singleton_strategy: none，ci_gates.py 的 execution-scope-validation 与 scheduler-lock-scope-consistency 通过。"
     notes: "per_instance 任务禁止使用全局 ShedLock。原因：全局锁会让 N-1 个实例的本地缓存永不刷新，而验收指标（「不重复执行」）仍然通过 —— 这是一个不会失败的失败。"
     acceptance: "scheduled-ownership.yaml 中 per_instance 项的 singleton_strategy 全部为 none / local_only"
 
