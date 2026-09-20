@@ -278,9 +278,10 @@ admin_ban_stream_disconnect_latency
 `service_security_cache_size`、`security_state_age`、`active_sse` 与 `active_ws` 等基础
 安全平面指标已接入各宿主的 Actuator/Micrometer。`admin_ban_new_request_block_latency`、
 `admin_ban_stream_disconnect_latency` 与 `admin_ban_propagation_latency` 现在也以
-“最近一次带来源时间的观测值”接入；来源时间来自 `account_security_state.disabled_at`
-及 outbox/PubSub 事件的 `occurredAt`。当前仍是 Gauge，不是可直接计算 P95/P99 的
-Histogram，因此本文给出的预算分解暂不是这些 SLO 的统计实测结果。
+Timer 接入并发布 P95/P99 与 Histogram；来源时间来自 `account_security_state.disabled_at`
+及 outbox/PubSub 事件的 `occurredAt`。为保留现场诊断，最近一次观测值另以
+`*_last` Gauge 暴露。Timer 样本只在本实例真正接受封禁传播、以及实际关闭已建立连接时记录，
+不会把重复投递或迟到事件重复计入。
 
 ---
 
@@ -288,7 +289,6 @@ Histogram，因此本文给出的预算分解暂不是这些 SLO 的统计实测
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| 封禁延迟尚未形成 P95/P99 分布 | 三个 `admin_ban_*_latency` 已有最近一次观测值，但仍需 Histogram/事件关联才能直接计算 §53 要求的 P95/P99 | Wave 2 可观测性 |
 | 多实例部署未开启 Redis Pub/Sub | 开关关闭时只有抢到 ShedLock 的实例走发件箱本地快路径，其余实例靠各自 reconciler 在 1.5 秒内收敛；多实例切流前必须开启 `auth.refresh.security-pubsub-enabled` | 部署配置项 |
 | `SecurityStateCache` 无持久化 | 实例启动先由 Bootstrap 做快照 + replay，再开放流量；运行期仍靠 reconciler 增量/全量对账，缓存不持久化是有意取舍 | 设计取舍 |
 | `Img2ThreeController` 无心跳 | 见 §6，该流在无业务事件时完全依赖手段 A | 已知 |

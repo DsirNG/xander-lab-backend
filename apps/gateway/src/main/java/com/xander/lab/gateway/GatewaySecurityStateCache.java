@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongConsumer;
 
 /**
  * Gateway 每实例的账号封禁缓存。
@@ -15,11 +16,14 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class GatewaySecurityStateCache {
 
+    private static final LongConsumer NOOP_LATENCY_OBSERVER = ignored -> { };
+
     private final Map<Long, State> states = new ConcurrentHashMap<>();
     private final AtomicLong lastSeenSeq = new AtomicLong();
     private final AtomicLong sourceWatermark = new AtomicLong();
     private final AtomicLong lastSuccessfulSyncAt = new AtomicLong();
     private final AtomicLong lastPropagationLatencyMillis = new AtomicLong();
+    private volatile LongConsumer propagationLatencyObserver = NOOP_LATENCY_OBSERVER;
 
     public boolean isDisabled(long accountId) {
         State state = states.get(accountId);
@@ -40,9 +44,15 @@ public class GatewaySecurityStateCache {
         }
         states.put(accountId, new State(disabled, securityVersion));
         if (disabled && sourceEpochMillis > 0L) {
-            lastPropagationLatencyMillis.set(Math.max(0L,
-                    System.currentTimeMillis() - sourceEpochMillis));
+            long elapsedMillis = Math.max(0L, System.currentTimeMillis() - sourceEpochMillis);
+            lastPropagationLatencyMillis.set(elapsedMillis);
+            propagationLatencyObserver.accept(elapsedMillis);
         }
+    }
+
+    public void setPropagationLatencyObserver(LongConsumer propagationLatencyObserver) {
+        this.propagationLatencyObserver = propagationLatencyObserver == null
+                ? NOOP_LATENCY_OBSERVER : propagationLatencyObserver;
     }
 
     /** 用 core-host 的完整快照替换本实例状态，包含已解封账号以保留版本闸门。 */

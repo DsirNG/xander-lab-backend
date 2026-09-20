@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.LongConsumer;
 
 /**
  * 每实例的本地安全状态缓存。
@@ -28,6 +29,8 @@ import java.util.function.Consumer;
  */
 public class SecurityStateCache {
 
+    private static final LongConsumer NOOP_LATENCY_OBSERVER = ignored -> { };
+
     /** accountId → securityVersion。只在 disabled 时存在。 */
     private final Map<Long, Long> disabledAccounts = new ConcurrentHashMap<>();
 
@@ -45,6 +48,10 @@ public class SecurityStateCache {
 
     /** 最近一次实际关闭已建立流的封禁延迟。 */
     private final AtomicLong lastStreamDisconnectLatencyMillis = new AtomicLong(0L);
+
+    /** Micrometer 由宿主注入；共享内核只暴露 JDK 回调，不依赖观测实现。 */
+    private volatile LongConsumer propagationLatencyObserver = NOOP_LATENCY_OBSERVER;
+    private volatile LongConsumer streamDisconnectLatencyObserver = NOOP_LATENCY_OBSERVER;
 
     /** 账号是否已被封禁。这是热路径，必须无锁且无 IO。 */
     public boolean isDisabled(Long accountId) {
@@ -127,14 +134,26 @@ public class SecurityStateCache {
 
     public void recordPropagationLatency(long sourceEpochMillis) {
         if (sourceEpochMillis > 0L) {
-            lastPropagationLatencyMillis.set(elapsedMillis(sourceEpochMillis));
+            long elapsedMillis = elapsedMillis(sourceEpochMillis);
+            lastPropagationLatencyMillis.set(elapsedMillis);
+            propagationLatencyObserver.accept(elapsedMillis);
         }
     }
 
     public void recordStreamDisconnectLatency(long sourceEpochMillis) {
         if (sourceEpochMillis > 0L) {
-            lastStreamDisconnectLatencyMillis.set(elapsedMillis(sourceEpochMillis));
+            long elapsedMillis = elapsedMillis(sourceEpochMillis);
+            lastStreamDisconnectLatencyMillis.set(elapsedMillis);
+            streamDisconnectLatencyObserver.accept(elapsedMillis);
         }
+    }
+
+    public void setLatencyObservers(LongConsumer propagationLatencyObserver,
+                                    LongConsumer streamDisconnectLatencyObserver) {
+        this.propagationLatencyObserver = propagationLatencyObserver == null
+                ? NOOP_LATENCY_OBSERVER : propagationLatencyObserver;
+        this.streamDisconnectLatencyObserver = streamDisconnectLatencyObserver == null
+                ? NOOP_LATENCY_OBSERVER : streamDisconnectLatencyObserver;
     }
 
     public long lastPropagationLatencyMillis() {
