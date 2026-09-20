@@ -39,7 +39,7 @@ COPY apps ./apps
 COPY docs ./docs
 COPY migrations ./migrations
 ARG APP_MODULE=apps/core-host
-RUN mvn -pl ${APP_MODULE} -am clean package -DskipTests -s settings.xml
+RUN mvn -pl ${APP_MODULE} -am clean package -Dmaven.test.skip=true -s settings.xml
 
 
 # Stage 2: Run the application
