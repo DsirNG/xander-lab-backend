@@ -50,7 +50,7 @@ class BlogAgentImagePortTest {
                 ContractShape.declaredSignatures(BlogAgentImagePort.class),
                 "端口的方法表变了。加方法就是变宽 —— 它会让每个实现方（包括未来的服务）多一份"
                         + "必须实现的义务，而没有任何一道防线会报。真要有意加，就把预期清单一起改，"
-                        + "并在 ADR 里记下为什么。");
+                        + "并在设计文档里记下为什么。");
     }
 
     @Test
@@ -104,7 +104,7 @@ class BlogAgentImagePortTest {
         Method generate = methodNamed("generate");
         assertEquals(1, generate.getParameterCount(), "generate 只收 prompt 一个参数。");
         assertEquals(String.class, generate.getParameterTypes()[0],
-                "prompt 必须是 String：风格前缀由调用方自己拼（见 §2.6：端口不带渲染方的策略常量）。");
+                "prompt 必须是 String：风格前缀由调用方自己拼 —— 端口不带渲染方的策略常量。");
         assertEquals("prompt", generate.getParameters()[0].getName(),
                 "参数名必须是 prompt —— 反射读的是名字，改名会让这条断言变红。");
         assertEquals(BlogAgentImage.class, generate.getReturnType(),

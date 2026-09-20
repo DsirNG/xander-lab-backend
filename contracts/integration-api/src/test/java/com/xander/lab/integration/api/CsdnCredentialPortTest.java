@@ -33,7 +33,7 @@ class CsdnCredentialPortTest {
         assertEquals(EXPECTED_SIGNATURES.stream().sorted().toList(),
                 ContractShape.declaredSignatures(CsdnCredentialPort.class),
                 "端口宽度或签名变了。加方法前先问：这是 integration 域的凭证存储能力，"
-                        + "还是调用方自己该做的事？有意加就一起改预期清单，并在 ADR 里记下为什么。");
+                        + "还是调用方自己该做的事？有意加就一起改预期清单，并在设计文档里记下为什么。");
     }
 
     @Test
@@ -45,7 +45,7 @@ class CsdnCredentialPortTest {
     void isAnInterfaceInTheContractPackageAndExtendsNothing() {
         assertTrue(CsdnCredentialPort.class.isInterface(), "端口必须是接口。");
         assertEquals("com.xander.lab.integration.api", CsdnCredentialPort.class.getPackageName(),
-                "包名必须是 integration.api —— V9 §18 定死了模块名 integration-api。");
+                "包名必须是 integration.api —— 模块名 integration-api 决定了它。");
         assertEquals(0, CsdnCredentialPort.class.getInterfaces().length,
                 "端口不许 extends 别的接口：契约不能依赖契约，继承会把别的契约的方法并进来。");
     }

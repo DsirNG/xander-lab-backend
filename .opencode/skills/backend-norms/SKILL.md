@@ -68,6 +68,32 @@ description: DinQorAI Java 后端（xander-lab-backend）编码规范。Use when
 **⑤ 清洗范围要留白。** 本次只清 `libs/` + `contracts/`，`apps/` 单独一刀 ——
 85 个文件的注释重写混进功能提交里，diff 就没法读了。
 
+**⑥ ⭐ 注释债有两个面：注释 + 字符串字面量。第二把扫描器是必须的**（2026-09-20 清 `apps/` 时发现）。
+日志文案、`@DisplayName`、JUnit `.as(...)` 描述里藏着**和注释一模一样的过程叙述**
+（`"安全平面 Bootstrap 完成（V11 §27.1）："`），而**注释扫描器结构上就看不见它们**。
+`apps/` 实测：注释 373 处，字符串另加 **30 处 / 14 文件** —— 前三刀全漏。
+⇒ 扫描器成对使用：块注释状态扫描 + 字符串扫描
+（`re.compile(r'"((?:[^"\\]|\\.)*)"')`，**跳过注释行**，否则会把注释里的引号当字面量）。
+
+⚠️ **测试断言里的文档编号比注释里的更该改。** `SecurityStateBootstrapTest` 原本写
+`.hasMessageContaining("§27.1")` —— 把**文档编号本身**钉进了测试，编号一改测试就失去意义。
+改成 `.hasMessageContaining("不得进入负载均衡")`，钉**行为主张**。这是**加强**，不是清理。
+
+**⑦ ⭐ 纯注释改动也会打红门禁。** 删掉一行 javadoc 就可能让 `@Scheduled` 行号移位、
+使 `docs/scheduled-inventory.yaml` 过期（详见下面 `@Scheduled` 那节）。
+⇒ **"只改了注释"不是"不用跑门禁"的理由**；顺序永远是
+「改源码 → `python scripts/migration/scan.py` → `python scripts/ci_gates.py`」。
+
+**⑧ 逐行改写脚本的形状。** `rule(path, ln, old, new)`（`new=None` = 整行删），
+**片段必须在该行恰好命中一次**，0 次或 >1 次都记错误并跳过 —— 这一条在落盘前抓到了
+2 条转录错的规则。匹配要**引号无关**（源码用弯引号 `“ ”`，规则里敲的是 ASCII `"`）：
+把 `["\u201c\u201d]` 归成一类，且替换时**保留实际匹配到的那个引号字符**，
+否则会把闭引号改写成开引号。
+⚠️ **机械遍会连"理由"一起吃掉**（本次约 8 行，如 ADR-1 的正文
+「契约必须与序列化框架无关」被连引用一起删掉），所以必须留一遍**逐行改写**把理由搬回正文。
+`apps/` 的 `§` 引用多数**不是出处标签而是规则本身**（实测 `§` 238 处），
+**不能照搬 `libs/`+`contracts/` 的规则表**。
+
 **物理布局（V9 §18 起）**：应用源码在 `apps/core-host/src/`，抽出的共享库在
 `libs/<name>/src/`，跨服务的契约模块在 `contracts/<name>/src/`，
 根 `pom.xml` 是聚合器 + 父 POM（`packaging=pom`，`artifactId=xander-lab-parent`）。
@@ -1628,7 +1654,7 @@ python scripts/migration/ci_gates.py
 `dockerfile-module-coverage` 覆盖的失败都是"反应堆在编译任何类之前整体失败"，
 跑一次门禁几秒钟就能拿到精确到行号的报错，而 `mvn` 要先走完一轮启动。
 
-### ⚠️ 在 `@Scheduled` 方法**上方**加行，会让清单失效
+### ⚠️ 在 `@Scheduled` 方法**上方**动行数（加**或删**），都会让清单失效
 
 `docs/scheduled-inventory.yaml` 记录每个 `@Scheduled` 的**行号**。2026-09-17：
 在 `Img2ThreeService.create` 里加了约 16 行 ⇒ `@Scheduled` 从第 90 行挪到 106 行 ⇒
@@ -1638,10 +1664,17 @@ python scripts/migration/ci_gates.py
 stale scheduled-inventory.yaml for ['img2three-service'] -- re-run scripts/migration/scan.py
 ```
 
+⚠️ **2026-09-20 补充：删行同样会红，而且"只改注释"也躲不掉。**
+`SecurityStateReconciler.java` 只是**删掉一行 javadoc**，文件里两个 `@Scheduled`
+就从 96 / 147 变成 95 / 146，门禁照红。⇒ **不要以为"没动代码"就不用重生成清单。**
+
 修法：`python scripts/migration/scan.py`（同时刷新 `scheduled-ownership.yaml` 里的
 `scan_ref` 指针）。**注意它会一并重写 `docs/cross-domain-imports.yaml`** ——
 那个文件同时是**基线**，所以扫描完**必须看 diff**，别当成纯噪声提交。
 反过来也有用：这一条 FAIL 恰好证明门禁在守，不是恒真。
+
+⇒ 通用规则：**凡是仓库里存在"按行号索引生成物"的清单，改完源文件就要重生成**，
+然后**重跑门禁**再宣布完成。顺序是「改源码 → `scan.py` → `ci_gates.py`」。
 
 ### ⚠️ 不要用 `**/target/surefire-reports` 数测试
 

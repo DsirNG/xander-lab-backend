@@ -76,7 +76,7 @@ class ContentPostInputTest {
 
         assertEquals(expected, actual,
                 "组件名即 JSON 键：MCP 客户端按名字构造入参，改名会让参数名对不上");
-        assertEquals(6, actual.size(), "字段增减属于 V9 §11 契约变更，必须显式改这里");
+        assertEquals(6, actual.size(), "字段增减属于契约变更，必须显式改这里");
     }
 
     /**

@@ -76,7 +76,7 @@ class ContentPostQueryTest {
         assertEquals(expected, actual,
                 "分量顺序必须与被替换的位置参数一致（status, search, juejinSynced, csdnSynced）；"
                         + "组件名即 JSON 键，改名会改掉 MCP 工具的入参名");
-        assertEquals(4, actual.size(), "字段增减属于 V9 §11 契约变更，必须显式改这里");
+        assertEquals(4, actual.size(), "字段增减属于契约变更，必须显式改这里");
     }
 
     /**

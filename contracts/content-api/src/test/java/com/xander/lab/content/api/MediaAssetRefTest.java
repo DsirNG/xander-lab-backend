@@ -105,7 +105,7 @@ class MediaAssetRefTest {
 
         assertEquals(expected, actual,
                 "组件名即 JSON 键，改名会静默改掉 BlogAgentTaskVO.illustrations 的响应形状");
-        assertEquals(13, actual.size(), "字段增减属于 V9 §11 契约变更，必须显式改这里");
+        assertEquals(13, actual.size(), "字段增减属于契约变更，必须显式改这里");
     }
 
     /**

@@ -290,7 +290,7 @@ class RecordShapeTest {
         for (Annotation annotation : annotations) {
             String name = annotation.annotationType().getName();
             assertFalse(name.startsWith("com.fasterxml.jackson"),
-                    where + " 上有 Jackson 注解 " + name + "。ADR-1 要求契约与序列化框架无关："
+                    where + " 上有 Jackson 注解 " + name + "。契约必须与序列化框架无关："
                             + "注解会把 Jackson 拖进每个依赖方，包括必须保持无 spring-webmvc 的网关。");
             assertFalse(name.startsWith("jakarta.validation"),
                     where + " 上有校验注解 " + name + "。那是 HTTP 边界的东西（靠控制器的 @Valid 生效），"

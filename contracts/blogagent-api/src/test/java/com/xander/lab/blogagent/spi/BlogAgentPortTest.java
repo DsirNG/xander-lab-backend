@@ -52,7 +52,7 @@ class BlogAgentPortTest {
                 ContractShape.declaredSignatures(BlogAgentPort.class),
                 "端口的方法表变了。加方法就是变宽 —— 它会让每个实现方（包括未来的服务）多一份"
                         + "必须实现的义务，而没有任何一道防线会报。真要有意加，就把预期清单一起改，"
-                        + "并在 ADR 里记下为什么。");
+                        + "并在设计文档里记下为什么。");
     }
 
     @Test
@@ -151,7 +151,7 @@ class BlogAgentPortTest {
         assertEquals(2, create.getParameterCount());
         assertEquals(BlogAgentTaskDraft.class, create.getParameterTypes()[1],
                 "第二个参数必须是 BlogAgentTaskDraft。域侧的 BlogAgentTaskCreateRequest 带 "
-                        + "jakarta.validation 注解，按 ADR-1 不能进契约。");
+                        + "jakarta.validation 注解，不能进契约（契约与框架无关）。");
         assertFalse(create.getParameterTypes()[1].getName().startsWith("com.xander.lab.blogagent.api."),
                 "契约不许收 blogagent.api.* —— 那是前端 HTTP 层。");
     }

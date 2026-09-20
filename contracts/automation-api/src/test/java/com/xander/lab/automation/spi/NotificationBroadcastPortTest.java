@@ -62,7 +62,7 @@ class NotificationBroadcastPortTest {
             assertFalse(parameter.getName().equals("planId") || parameter.getName().equals("runId"),
                     "端口上又出现了 " + parameter.getName() + "：它是 blog-plan 域的概念，"
                             + "而 admin 的诊断广播没有这个上下文。被迫传一个自己永远不用的参数"
-                            + "正是 §16.2 的反面判据。要真的支持带上下文的广播，"
+                            + "正是端口该拒绝的形状。要真的支持带上下文的广播，"
                             + "先确认有第二个消费方需要它。");
         }
     }

@@ -75,7 +75,7 @@ class ContentPostPageTest {
 
         assertEquals(expected, actual,
                 "组件名即 JSON 键，必须与 PageData 的字段名一致：改名会静默改掉前端分页组件的输入");
-        assertEquals(6, actual.size(), "字段增减属于 V9 §11 契约变更，必须显式改这里");
+        assertEquals(6, actual.size(), "字段增减属于契约变更，必须显式改这里");
     }
 
     /**

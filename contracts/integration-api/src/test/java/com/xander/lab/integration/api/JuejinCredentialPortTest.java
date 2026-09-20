@@ -26,7 +26,7 @@ class JuejinCredentialPortTest {
         assertEquals(EXPECTED_SIGNATURES.stream().sorted().toList(),
                 ContractShape.declaredSignatures(JuejinCredentialPort.class),
                 "端口宽度或签名变了。加方法前先问：这是 integration 域的凭证存储能力，"
-                        + "还是调用方自己该做的事？有意加就一起改预期清单，并在 ADR 里记下为什么。");
+                        + "还是调用方自己该做的事？有意加就一起改预期清单，并在设计文档里记下为什么。");
     }
 
     @Test
@@ -66,6 +66,6 @@ class JuejinCredentialPortTest {
         Method isAuthorized = JuejinCredentialPort.class.getMethod("isAuthorized", Long.class);
         assertEquals(boolean.class, isAuthorized.getReturnType(),
                 "isAuthorized 必须返回原语 boolean：装箱类型为 null 时调用方会在自动拆箱处 NPE；"
-                        + "返回 JuejinClient.Credential 则是把域类型端出去（ADR-2 禁止）。");
+                        + "返回 JuejinClient.Credential 则是把域类型端出去（域实体不许跨边界）。");
     }
 }

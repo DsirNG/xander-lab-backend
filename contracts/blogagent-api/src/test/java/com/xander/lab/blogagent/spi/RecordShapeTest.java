@@ -164,8 +164,8 @@ class RecordShapeTest {
             String name = annotation.annotationType().getName();
             if (name.startsWith("java.lang.") || name.startsWith("kotlin.")) continue;
             throw new AssertionError(where + " 上带了框架注解 " + name
-                    + "：契约模块必须与序列化 / 校验框架无关（ADR-1）。"
-                    + "注解带来的依赖会传给每一个依赖方，包括 V9 §19 要求保持 spring-webmvc-free 的网关。");
+                    + "：契约模块必须与序列化 / 校验框架无关。"
+                    + "注解带来的依赖会传给每一个依赖方，包括必须保持 spring-webmvc-free 的网关。");
         }
     }
 }

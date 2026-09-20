@@ -48,7 +48,7 @@ class BlogSyncResultTest {
                 .toList();
 
         assertEquals(List.of("platform", "externalId", "url"), names,
-                "分量名或顺序变了。它们就是 HTTP 响应体的字段名，按 §11 属于契约改动。");
+                "分量名或顺序变了。它们就是 HTTP 响应体的字段名，属于契约改动。");
     }
 
     /**

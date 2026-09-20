@@ -62,7 +62,7 @@ class RecitationMaterialPortTest {
         assertEquals(MaterialDraft.class, createMaterial.getParameterTypes()[1],
                 "createMaterial 的第二个参数必须是 MaterialDraft："
                         + "recitation.api.CreateRecitationMaterialRequest 带 jakarta.validation 注解，"
-                        + "契约不许带（ADR-1）。");
+                        + "契约不许带框架类型。");
         for (String name : List.of("searchMaterials", "countMaterials")) {
             Method method = methodNamed(name);
             assertTrue(method.getParameterCount() > 1,

@@ -135,7 +135,7 @@ class ContentPostTest {
         assertEquals(expected, actual,
                 "组件名即 JSON 键：改名会静默改掉前端与 MCP 客户端看到的字段名，"
                         + "而且与 BlogPostVO 的镜像关系会断掉");
-        assertEquals(17, actual.size(), "字段增减属于 V9 §11 契约变更，必须显式改这里");
+        assertEquals(17, actual.size(), "字段增减属于契约变更，必须显式改这里");
     }
 
     /**
@@ -163,7 +163,7 @@ class ContentPostTest {
                 .toList();
         assertEquals(names.stream().sorted().toList(), fieldNames,
                 "实例字段必须与分量一一对应：字段名与分量名不一致时，"
-                        + "不同序列化框架挑哪一个就变成框架相关行为（ADR-1 要的是框架无关）");
+                        + "不同序列化框架挑哪一个就变成框架相关行为（契约要的是框架无关）");
     }
 
     /**
