@@ -13,10 +13,10 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 541
-  service_private: 472
+  total: 558
+  service_private: 488
   secret: 58
-  shared: 11
+  shared: 12
 config:
   - key: agent.conversation.compaction-enabled
     source: apps/agent/src/main/resources/application.yml
@@ -698,6 +698,16 @@ config:
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.core-base-url
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.core-base-url
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: email-reminder.batch-size
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
@@ -1218,6 +1228,11 @@ config:
     classification: service_private
     owner: core
     nacos_group: DINQOR-CORE
+  - key: gateway.content-automation-uri
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: gateway
+    nacos_group: DINQOR-GATEWAY
   - key: gateway.platform-integration-uri
     source: apps/gateway/src/main/resources/application.yml
     classification: service_private
@@ -1779,6 +1794,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: server.port
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: server.port
     source: apps/core-host/src/main/resources/application.yml
     classification: shared
     owner: shared
@@ -1805,6 +1825,11 @@ config:
     nacos_group: COMMON
   - key: spring.application.name
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.application.name
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -1869,6 +1894,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.config.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.config.enabled
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1894,6 +1924,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.config.import-check.enabled
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1919,6 +1954,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.enabled
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1944,6 +1984,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.group
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.group
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1969,6 +2014,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.namespace
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.namespace
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1994,6 +2044,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.server-addr
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.server-addr
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -2015,6 +2070,11 @@ config:
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.service
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.service
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -2549,6 +2609,11 @@ config:
     owner: unassigned
     nacos_group: COMMON
   - key: management.endpoint.health.group.readiness.include
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.endpoint.health.group.readiness.include
     source: apps/gateway/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
@@ -2569,6 +2634,11 @@ config:
     owner: unassigned
     nacos_group: COMMON
   - key: management.endpoint.health.probes.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.endpoint.health.probes.enabled
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
@@ -2594,6 +2664,11 @@ config:
     owner: unassigned
     nacos_group: COMMON
   - key: management.endpoint.health.show-details
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.endpoint.health.show-details
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
@@ -2615,6 +2690,11 @@ config:
     nacos_group: COMMON
   - key: management.endpoints.web.exposure.include
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.endpoints.web.exposure.include
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
     nacos_group: COMMON
@@ -2660,6 +2740,11 @@ config:
     nacos_group: COMMON
   - key: management.metrics.tags.application
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.metrics.tags.application
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
     nacos_group: COMMON

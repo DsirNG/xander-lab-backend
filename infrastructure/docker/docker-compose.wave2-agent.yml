@@ -63,6 +63,32 @@ services:
     networks:
       - dinqor-wave2
 
+  content-automation:
+    image: ${DINQOR_CONTENT_AUTOMATION_IMAGE:-dinqor-content-automation:wave2}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: apps/content-automation
+        APP_PORT: "30006"
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: 30006
+      CONTENT_AUTOMATION_CORE_BASE_URL: ${CONTENT_AUTOMATION_CORE_BASE_URL:-http://core-host:30002}
+      NACOS_CONFIG_ENABLED: ${CONTENT_AUTOMATION_NACOS_CONFIG_ENABLED:-false}
+      NACOS_CONFIG_IMPORT_CHECK_ENABLED: ${CONTENT_AUTOMATION_NACOS_CONFIG_IMPORT_CHECK_ENABLED:-false}
+      NACOS_DISCOVERY_ENABLED: ${CONTENT_AUTOMATION_NACOS_DISCOVERY_ENABLED:-false}
+    ports:
+      - ${CONTENT_AUTOMATION_PORT:-30006}:30006
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:30006/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - dinqor-wave2
+
 networks:
   dinqor-wave2:
     name: ${DINQOR_WAVE2_NETWORK:-dinqor-wave2}

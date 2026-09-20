@@ -48,6 +48,7 @@
         <module>contracts/blogagent-api</module>
         <module>apps/agent</module>
         <module>apps/platform-integration</module>
+        <module>apps/content-automation</module>
         <module>apps/bloghtml-preview</module>
         <module>apps/gateway</module>
         <module>apps/core-host</module>

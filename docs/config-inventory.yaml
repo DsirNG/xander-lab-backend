@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 752
-  leaves: 541
+  total: 789
+  leaves: 558
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -672,6 +672,181 @@ config:
     logical_owner: unassigned
   - key: management.metrics.tags.application
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    value: "${spring.application.name}"
+    leaf: true
+    logical_owner: unassigned
+  - key: server
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: server.port
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SERVER_PORT:30006}"
+    leaf: true
+    logical_owner: shared
+  - key: spring
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: spring.application
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.application.name
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_APPLICATION_NAME:dinqor-content-automation}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${NACOS_DISCOVERY_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.server-addr
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${NACOS_SERVER_ADDR:127.0.0.1:8848}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.namespace
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${NACOS_NAMESPACE:}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.group
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${NACOS_GROUP:DINQOR-CONTENT-AUTOMATION}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.service
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${NACOS_SERVICE_NAME:${spring.application.name}}"
+    leaf: true
+    logical_owner: shared
+  - key: content-automation
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: content-automation.core-base-url
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_CORE_BASE_URL:http://localhost:30002}"
+    leaf: true
+    logical_owner: content-automation
+  - key: management
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web.exposure
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web.exposure.include
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "health,info,prometheus"
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.probes
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.probes.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "true"
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint.health.show-details
+    source: apps/content-automation/src/main/resources/application.yml
+    value: never
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint.health.group
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.group.readiness
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.group.readiness.include
+    source: apps/content-automation/src/main/resources/application.yml
+    value: readinessState
+    leaf: true
+    logical_owner: unassigned
+  - key: management.metrics
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.metrics.tags
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.metrics.tags.application
+    source: apps/content-automation/src/main/resources/application.yml
     value: "${spring.application.name}"
     leaf: true
     logical_owner: unassigned
@@ -2675,6 +2850,11 @@ config:
     value: "${GATEWAY_PLATFORM_INTEGRATION_URI:lb://dinqor-platform-integration}"
     leaf: true
     logical_owner: gateway
+  - key: gateway.content-automation-uri
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_CONTENT_AUTOMATION_URI:lb://dinqor-content-automation}"
+    leaf: true
+    logical_owner: gateway
   - key: gateway.security-state
     source: apps/gateway/src/main/resources/application.yml
     value: ""
@@ -3256,6 +3436,13 @@ config:
     logical_owner: bloghtml-preview
     source_kind: java-configuration-properties
     line: 32
+  - key: content-automation.core-base-url
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 9
   - key: admin.model-gateway.enabled
     source: apps/core-host/src/main/java/com/xander/lab/admin/infrastructure/ModelGatewayProperties.java
     value: "<java-default>"

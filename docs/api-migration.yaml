@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 251
+  total: 255
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -769,6 +769,22 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: automation-any-blog-agent
+    owner: automation
+    old:
+      method: ANY
+      path: "/api/blog-agent/**"
+    new:
+      method: ANY
+      path: "/api/v2/content/blog-agent/**"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: automation-get-blog-plans
     owner: automation
     old:
@@ -793,6 +809,22 @@ entries:
     new:
       method: POST
       path: "/api/v2/automations/plans"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-any-blog-plans
+    owner: automation
+    old:
+      method: ANY
+      path: "/api/blog-plans/**"
+    new:
+      method: ANY
+      path: "/api/v2/automations/plans/**"
     clients:
       web: pending
       miniprogram: pending
@@ -993,6 +1025,22 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: automation-any-email-reminders
+    owner: automation
+    old:
+      method: ANY
+      path: "/api/email-reminders/**"
+    new:
+      method: ANY
+      path: "/api/v2/automations/email-reminders/**"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: automation-delete-email-reminders-id
     owner: automation
     old:
@@ -1033,6 +1081,22 @@ entries:
     new:
       method: GET
       path: "/api/v2/automations/notifications"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-any-notifications
+    owner: automation
+    old:
+      method: ANY
+      path: "/api/notifications/**"
+    new:
+      method: ANY
+      path: "/api/v2/automations/notifications/**"
     clients:
       web: pending
       miniprogram: pending

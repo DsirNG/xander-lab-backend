@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 256
+  total: 260
   streams: 8
   websocket: 1
   sse: 7
@@ -783,6 +783,17 @@ routes:
     handler: "com.xander.lab.identity.api.AuthController#wechatSkip"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AuthController.java
     line: 160
+  - id: automation-any-blog-agent
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/blog-agent/**"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 42
   - id: blogagent-get-blog-agent-tasks
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -904,6 +915,17 @@ routes:
     handler: "com.xander.lab.automation.api.BlogContentPlanController#create"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
     line: 33
+  - id: automation-any-blog-plans
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/blog-plans/**"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 42
   - id: automation-post-blog-plans-ai-generate
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -1344,6 +1366,17 @@ routes:
     handler: "com.xander.lab.automation.api.EmailReminderController#create"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/EmailReminderController.java
     line: 40
+  - id: automation-any-email-reminders
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/email-reminders/**"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 42
   - id: automation-delete-email-reminders-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -2015,6 +2048,17 @@ routes:
     handler: "com.xander.lab.automation.api.BlogNotificationController#list"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     line: 33
+  - id: automation-any-notifications
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: ANY
+    path: "/api/notifications/**"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
+    line: 42
   - id: automation-get-notifications-events
     logical_owner: automation
     deployment_unit: dinqor-content-automation

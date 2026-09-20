@@ -1,0 +1,38 @@
+server:
+  port: ${SERVER_PORT:30006}
+
+spring:
+  application:
+    name: ${SPRING_APPLICATION_NAME:dinqor-content-automation}
+  cloud:
+    nacos:
+      config:
+        enabled: ${NACOS_CONFIG_ENABLED:false}
+        import-check:
+          enabled: ${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}
+      discovery:
+        enabled: ${NACOS_DISCOVERY_ENABLED:false}
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DINQOR-CONTENT-AUTOMATION}
+        service: ${NACOS_SERVICE_NAME:${spring.application.name}}
+
+content-automation:
+  core-base-url: ${CONTENT_AUTOMATION_CORE_BASE_URL:http://localhost:30002}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+      group:
+        readiness:
+          include: readinessState
+  metrics:
+    tags:
+      application: ${spring.application.name}
