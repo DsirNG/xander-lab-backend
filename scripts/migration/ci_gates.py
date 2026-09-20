@@ -1280,12 +1280,9 @@ def gate_dockerfile_module_coverage() -> None:
     editing the Dockerfile twice (its ``pom.xml`` for the cached dependency layer, its
     sources for the build), and both halves are checked here.
 
-    ⚠️ **Comment lines are dropped before matching.** The first criterion used to be a plain
-    substring test over the whole file, so *commenting a COPY line out still passed* -- and
-    commenting a line out is exactly what someone writes when they are disabling it. Found by
-    injection (the webmvc-support cut): the gate reported "13 module(s) all COPYed" with
-    ``# COPY libs/xander-webmvc-support/pom.xml ...`` in the file. A green result that a
-    comment can produce is worse than a red one.
+    Comment lines are dropped before matching, so a ``# COPY ...`` line does not count as a
+    COPY. A whole-file substring test would be satisfied by a commented-out line, which is
+    exactly what someone writes when disabling one.
     """
     gate = "dockerfile-module-coverage"
     root_pom = REPO / "pom.xml"

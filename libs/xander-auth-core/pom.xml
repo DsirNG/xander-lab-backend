@@ -29,14 +29,6 @@
         - AuthInterceptor
                         -> xander-webmvc-support. It is a HandlerInterceptor, which V9 §20
                            forbids here by name.
-                           This entry used to add "and it is not extractable yet: it reads the
-                           long-connection security plane (Redis) and the account security state
-                           table". That was measured and is false -- SecurityState*, redisTemplate
-                           and SecurityPlane have zero occurrences in the class. The real blocker
-                           was its injection of identity.application.AuthService, a business-domain
-                           service; it was removed by narrowing the interceptor to the
-                           core.api.AccessTokenLookupPort contract. Do not restate the "security
-                           plane" reason.
         - PasswordEncoderConfig
                         -> stays on the application. It is a @Configuration wiring
                            spring-security-crypto's BCrypt bean, i.e. MVC-side infrastructure,

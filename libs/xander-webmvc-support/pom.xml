@@ -13,39 +13,20 @@
     <artifactId>xander-webmvc-support</artifactId>
     <name>xander-webmvc-support</name>
     <description>
-        Servlet MVC support (V9 §20): the request/response shaping every MVC service needs,
-        and nothing else.
+        Servlet MVC 支撑（V9 §20）：每个 MVC 服务都需要的请求/响应整形，仅此而已。
 
-        Contents:
-        - GlobalExceptionHandler          -- maps every exception to the shared Result envelope.
-        - ResultStatusResponseBodyAdvice  -- keeps the HTTP status aligned with Result.code.
-        - AuthInterceptor                 -- the MVC auth adapter (V9 §20 calls it that).
-        - WebConfig                       -- the WebMvcConfigurer: interceptor + CORS registration.
+        内容：
+        - GlobalExceptionHandler          把异常映射成统一的 Result 信封。
+        - ResultStatusResponseBodyAdvice  让 HTTP 状态与 Result.code 保持一致。
+        - AuthInterceptor                 MVC 认证拦截器。
+        - WebConfig                       WebMvcConfigurer：拦截器注册与 CORS。
 
-        V9 §20 audience: "仅 MVC 服务使用". The WebFlux Gateway must NOT depend on this
-        module -- it carries spring-webmvc and jakarta.servlet, which is the same accident as
-        putting spring-boot-starter-web on a WebFlux classpath.
+        仅 MVC 服务使用。WebFlux 服务（Gateway）不得依赖本模块：它带 spring-webmvc 与
+        jakarta.servlet。两个运行时 starter 声明为 provided，消费方自备，不会被传递依赖带过去
+        （provided 仍在 test classpath 上，本模块自己的测试可用）。
 
-        Dependency scope, and why spring-boot-starter-web is `provided`:
-        The consuming service supplies the MVC runtime. Declaring it `compile` would make this
-        module pull Tomcat into anything that depends on it, which is exactly the failure V9
-        §19 split the super-common.jar to prevent. `provided` keeps the compile surface honest
-        and is still on the test classpath, so this module's own tests run against it.
-        spring-boot-starter-data-redis is `provided` for the same reason -- see the note on it
-        below.
-
-        Deliberate non-members, and why:
-        - PasswordEncoderConfig  -> stays on the application. It wires spring-security-crypto's
-          BCrypt bean; V9 §20 does not list it, and it is identity-domain configuration rather
-          than MVC request shaping.
-        - ShedLockConfiguration  -> stays on the application. V9 §20 does not list it either;
-          it is scheduler wiring, not MVC.
-
-        Note on packages: the classes moved here keep no business-domain package. AuthInterceptor
-        used to live in com.xander.lab.identity.security; a library must not ship a package in a
-        business domain's namespace, because that namespace is a domain in the scanner and the
-        library would look like part of that domain. This is the same call xander-auth-core made
-        when UserContext / JwtUtil moved from identity.security to auth.core.
+        不属于本模块：PasswordEncoderConfig（BCrypt bean，identity 域配置）、
+        ShedLockConfiguration（调度接线），两者都留在应用模块。
     </description>
 
     <dependencies>
@@ -62,17 +43,10 @@
             <version>${project.version}</version>
         </dependency>
         <!--
-            AccessTokenLookupPort               resolves a bearer token, so AuthInterceptor no
-                                                longer injects identity's AuthService.
-            FeatureModelNotConfiguredException  GlobalExceptionHandler maps it to HTTP 400.
+            AccessTokenLookupPort               AuthInterceptor 用它判定令牌有效性。
+            FeatureModelNotConfiguredException  GlobalExceptionHandler 映射成 HTTP 400。
 
-            A note on the second one: it makes this module depend on a business contract, which
-            no other library does. The alternative was to split GlobalExceptionHandler across two
-            advices, which puts Spring's "most specific handler wins across advices" ordering on
-            the critical path of every error response. V9 §20 lists GlobalExceptionHandler whole,
-            so the whole class moved and the dependency is recorded here rather than left
-            implicit. If a future MVC service must not carry core-api, the split is the escape
-            hatch, and it is a behaviour-visible change, not a refactor.
+            这是本仓库唯一依赖业务契约的库：GlobalExceptionHandler 是整类搬过来的。
         -->
         <dependency>
             <groupId>com.xander</groupId>
@@ -80,9 +54,8 @@
             <version>${project.version}</version>
         </dependency>
         <!--
-            The MVC runtime: @RestControllerAdvice, ResponseBodyAdvice, WebMvcConfigurer,
-            HandlerInterceptor, jakarta.servlet. `provided`; see the description above.
-            Version managed by the Spring Boot BOM.
+            MVC 运行时：@RestControllerAdvice、ResponseBodyAdvice、WebMvcConfigurer、
+            HandlerInterceptor、jakarta.servlet。provided（见上）。版本由 Spring Boot BOM 管。
         -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -90,19 +63,12 @@
             <scope>provided</scope>
         </dependency>
         <!--
-            GlobalExceptionHandler maps RedisConnectionFailureException / RedisSystemException
-            (spring-data-redis) and DataAccessException (spring-tx) to HTTP 503. These are
-            *class literals inside @ExceptionHandler*, so the types must be on the runtime
-            classpath, not just the compile one.
+            GlobalExceptionHandler 把 RedisConnectionFailureException / RedisSystemException
+            （spring-data-redis）与 DataAccessException（spring-tx）映射成 HTTP 503。
+            这些是 @ExceptionHandler 里的**类字面量**，所以运行期必须在 classpath 上，不只是编译期。
 
-            `provided` for the same reason as spring-boot-starter-web: every MVC service in this
-            repo already declares it (apps/core-host/pom.xml does), and making it `compile` would
-            force Redis onto a pure-REST MVC service that has no cache at all. The obligation this
-            transfers is a *loud* one: a consumer without it fails at startup while registering
-            the advice, not silently at request time. If a MVC service ever must run without
-            Redis, the escape hatch is to split this one handler out of GlobalExceptionHandler;
-            V9 §20 lists the class whole, so the class moved whole and the split is recorded as a
-            behaviour-visible change rather than done quietly here.
+            provided：消费方自备（apps/core-host 已声明）。缺了它会在**注册 advice 时**启动失败，
+            不是请求期静默出错。若将来有 MVC 服务不能带 Redis，就得把这一段 handler 拆出去。
         -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -115,11 +81,7 @@
             <optional>true</optional>
         </dependency>
 
-        <!--
-            The library owns its own tests. AuthInterceptorTest and GlobalExceptionHandlerTest
-            moved here with their classes: a library whose tests stay in the application module
-            has not really been extracted.
-        -->
+        <!-- 本模块自己的测试（AuthInterceptorTest / GlobalExceptionHandlerTest）。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

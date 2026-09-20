@@ -397,12 +397,7 @@ class AuthInterceptorTest {
     }
 
     /**
-     * 本条钉住本类依赖收窄后的**行为变化**（见类注释）：
-     * 旧写法 {@code Long.parseLong(jwtUtil.getSubject(token))} 在 subject 非数字时抛
-     * {@code NumberFormatException} ⇒ 500；现在由端口解析，解析不出来返回 {@code null} ⇒ 401。
-     *
-     * <p>同时钉住"令牌有效性只走端口"这件事：受保护路径上不应再碰 {@code jwtUtil}
-     * （role 断言只服务 {@code /api/admin/**}，不是这里）。</p>
+     * 受保护路径上，端口答不出身份时必须 401（fail-closed），且不再触碰 {@code jwtUtil}。
      */
     @Test
     void protectedRouteRejectsTokenThePortCannotResolve() {
@@ -418,7 +413,7 @@ class AuthInterceptorTest {
     }
 
     /**
-     * 公开路径上拿不到身份时按匿名放行，而不是 500 —— {@code trySetUserContext} 的 null 分支。
+     * 公开路径上拿不到身份时按匿名放行，不阻断请求。
      */
     @Test
     void publicRouteTreatsUnresolvableTokenAsAnonymous() {

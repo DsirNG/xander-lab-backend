@@ -14,37 +14,20 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.util.List;
 
 /**
- * MVC 认证适配器（V9 §20 的 "MVC Auth Adapter"）。
+ * MVC 认证拦截器。
  *
- * <p>验证请求头中的 access token，并把用户 id 放进 {@link UserContext}；同时把客户端 IP
- * 也放进去。三条出口：公开路径放行、受保护路径 401、{@code /api/admin/**} 非 ADMIN 角色 403。</p>
+ * <p>验证请求头中的 access token，并把用户 id 与客户端 IP 放进 {@link UserContext}。
+ * 三条出口：公开路径放行、受保护路径 401、{@code /api/admin/**} 非 ADMIN 角色 403。</p>
  *
- * <h2>为什么它依赖 {@link AccessTokenLookupPort} 而不是 {@code identity.application.AuthService}</h2>
- *
- * <p>这个类原来注入 identity 域的 {@code AuthService}，只用了它的两个动作：
- * {@code validateAccessToken(token)} 与 {@code jwtUtil.getSubject(token)}。这两步合起来
- * 就是 {@link AccessTokenLookupPort#resolveUserId(String)} —— 而那个端口是第十四刀**专门为
- * 这个能力**建的（当时给 WebSocket 握手用，注释里还写着"握手路径不在 {@code /api/**} 下，
- * 走不到 AuthInterceptor"）。</p>
- *
- * <p>不这么改就没法搬进库：库不能依赖业务域，否则它就不是"每个 MVC 服务都能用的支撑"，
- * 而是"identity 域的一部分"。判据不是"看起来像契约"，是 ADR-2：跨域走**消费方拥有的契约**。</p>
- *
- * <p>⚠️ **一处行为变化，方向是 fail-closed**：token 的 subject 不是数字时，旧写法
- * {@code Long.parseLong(jwtUtil.getSubject(token))} 抛 {@code NumberFormatException} ⇒ 500；
- * 现在由提供方解析，解析失败返回 {@code null} ⇒ 401。两种都是拒绝请求，但 401 才是这条路径
- * 该有的答案（且不再向日志里丢一条 500 堆栈）。</p>
- *
- * <p>⚠️ 另一处口径变化：{@code AuthService} 是 identity 域里**唯一**的令牌真相源，现在改成
- * 端口。所以"access token 怎么算有效"这件事从"本类调用了一个域服务"变成"本类依赖一个契约"，
- * 该契约的实现仍在 identity 域内（{@code AuthService.resolveUserId}）。</p>
+ * <p>令牌有效性由 {@link AccessTokenLookupPort} 判定（签名、过期、是否访问令牌、是否已登出）；
+ * {@link JwtUtil} 只用于 {@code /api/admin/**} 的 role 断言。拿不到身份时按未登录处理。</p>
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class AuthInterceptor implements HandlerInterceptor {
 
-    /** 只用于 {@code /api/admin/**} 的 role 断言；令牌有效性判定已经全部走端口。 */
+    /** 只用于 {@code /api/admin/**} 的 role 断言。 */
     private final JwtUtil jwtUtil;
     private final AccessTokenLookupPort accessTokenLookupPort;
 
@@ -269,8 +252,7 @@ public class AuthInterceptor implements HandlerInterceptor {
     }
 
     /**
-     * 尝试解析请求中的 token 并设置用户上下文。
-     * 不抛异常：拿不到身份就按匿名处理。
+     * 尝试解析请求中的 token 并设置用户上下文。不阻断请求：拿不到身份就按匿名处理。
      */
     private void trySetUserContext(HttpServletRequest request) {
         String authHeader = request.getHeader(Constants.AUTHORIZATION_HEADER);
@@ -280,7 +262,7 @@ public class AuthInterceptor implements HandlerInterceptor {
         String token = authHeader.substring(Constants.TOKEN_PREFIX.length());
         Long userId = accessTokenLookupPort.resolveUserId(token);
         if (userId == null) {
-            // 令牌缺失 / 过期 / 已登出 / subject 解析不了 —— 一律按匿名，不阻断公开请求。
+            // 缺失 / 过期 / 已登出 / 主体解析不了 —— 一律按匿名。
             log.debug("[Auth] access token 未通过校验，按匿名处理");
             return;
         }

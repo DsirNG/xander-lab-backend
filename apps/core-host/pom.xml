@@ -44,10 +44,8 @@
         </dependency>
 
         <!--
-            MVC support: GlobalExceptionHandler + ResultStatusResponseBodyAdvice + WebConfig +
-            AuthInterceptor (V9 §20). V9 §20 says "仅 MVC 服务使用": the WebFlux Gateway must
-            NOT depend on this, which is why spring-boot-starter-web is declared `provided`
-            inside it rather than inherited.
+            MVC 支撑：GlobalExceptionHandler / ResultStatusResponseBodyAdvice / WebConfig /
+            AuthInterceptor。仅 MVC 服务使用，WebFlux 服务不得依赖它。
         -->
         <dependency>
             <groupId>com.xander</groupId>
