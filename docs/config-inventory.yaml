@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 822
-  leaves: 583
+  total: 824
+  leaves: 585
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -863,6 +863,11 @@ config:
   - key: content-automation.platform-integration-base-url
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_BASE_URL:http://localhost:30005}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.model-timeout-millis
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_MODEL_TIMEOUT_MILLIS:30000}"
     leaf: true
     logical_owner: content-automation
   - key: content-automation.stream
@@ -3595,6 +3600,13 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 10
+  - key: content-automation.model-timeout-millis
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 12
   - key: content-automation.platform-integration-base-url
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default>"
@@ -3608,7 +3620,7 @@ config:
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
-    line: 12
+    line: 13
   - key: blog.agent.stale-task-minutes
     source: apps/content-automation/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentReadProperties.java
     value: "<java-default>"

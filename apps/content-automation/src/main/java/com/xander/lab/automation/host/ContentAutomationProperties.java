@@ -9,6 +9,7 @@ public class ContentAutomationProperties {
     private String coreBaseUrl = "http://localhost:30002";
     private String coreInternalToken = "";
     private String platformIntegrationBaseUrl = "http://localhost:30005";
+    private int modelTimeoutMillis = 30_000;
     private boolean streamDrainEnabled;
 
     public String getCoreBaseUrl() {
@@ -33,6 +34,14 @@ public class ContentAutomationProperties {
 
     public void setPlatformIntegrationBaseUrl(String platformIntegrationBaseUrl) {
         this.platformIntegrationBaseUrl = platformIntegrationBaseUrl;
+    }
+
+    public int getModelTimeoutMillis() {
+        return modelTimeoutMillis;
+    }
+
+    public void setModelTimeoutMillis(int modelTimeoutMillis) {
+        this.modelTimeoutMillis = modelTimeoutMillis;
     }
 
     public boolean isStreamDrainEnabled() {

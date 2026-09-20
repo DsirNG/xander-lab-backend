@@ -107,15 +107,29 @@ public class BlogAgentTaskReadService {
         return result;
     }
 
-    private BlogAgentTask requireOwnedTask(long userId, long taskId) {
+    BlogAgentTask findOwnedTask(long userId, long taskId) {
         List<BlogAgentTask> tasks = jdbcTemplate.query(
                 TASK_COLUMNS + " WHERE id = ? AND user_id = ?",
                 this::mapTask,
                 taskId, userId);
-        if (tasks.isEmpty()) {
+        return tasks.isEmpty() ? null : tasks.get(0);
+    }
+
+    BlogAgentTask findByClientRequestId(long userId, String clientRequestId) {
+        if (clientRequestId == null) return null;
+        List<BlogAgentTask> tasks = jdbcTemplate.query(
+                TASK_COLUMNS + " WHERE user_id = ? AND client_request_id = ? LIMIT 1",
+                this::mapTask,
+                userId, clientRequestId);
+        return tasks.isEmpty() ? null : tasks.get(0);
+    }
+
+    private BlogAgentTask requireOwnedTask(long userId, long taskId) {
+        BlogAgentTask task = findOwnedTask(userId, taskId);
+        if (task == null) {
             throw new ResponseStatusException(NOT_FOUND, "博客生成助手任务不存在");
         }
-        return tasks.get(0);
+        return task;
     }
 
     private BlogAgentTask resolveStaleTask(BlogAgentTask task, long userId) {

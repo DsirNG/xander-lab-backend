@@ -4,12 +4,10 @@ import com.xander.lab.common.Result;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.auth.core.UserContext;
-import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.api.BlogAgentMessageRequest;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.blogagent.domain.BlogAgentEvent;
-import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.blogagent.application.BlogAgentEventService;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -91,23 +89,6 @@ public class BlogAgentController {
                         TaskScheduler blogAgentHeartbeatScheduler) {
         this(service, eventService, blogAgentTaskExecutor, blogAgentSseExecutor,
                 blogAgentHeartbeatScheduler, new SecurityStateCache(), new ConnectionRegistry());
-    }
-
-    @PostMapping
-    public Result<BlogAgentTask> create(@Valid @RequestBody BlogAgentTaskCreateRequest request) {
-        return Result.success(service.create(UserContext.getUserId(), request));
-    }
-
-    @PostMapping("/{id}/run")
-    public Result<BlogAgentTaskVO> run(@PathVariable Long id) {
-        return Result.success(service.run(id, UserContext.getUserId()));
-    }
-
-    @PostMapping("/{id}/publish")
-    public Result<BlogPostVO> publish(@PathVariable Long id) {
-        // ⚠️ 必须点名 publishForView：四参以外的 publish(Long, Long) 现在是端口方法，
-        // 参数是 (userId, taskId)。写回 publish(id, userId) 会编译通过但静默换位。
-        return Result.success(service.publishForView(id, UserContext.getUserId()));
     }
 
     @PostMapping(value = "/{id}/run/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

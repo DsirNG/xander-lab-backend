@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 583
-  service_private: 509
+  total: 585
+  service_private: 511
   secret: 62
   shared: 12
 config:
@@ -736,6 +736,16 @@ config:
   - key: content-automation.core-internal-token
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     classification: secret
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.model-timeout-millis
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.model-timeout-millis
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: content-automation.platform-integration-base-url

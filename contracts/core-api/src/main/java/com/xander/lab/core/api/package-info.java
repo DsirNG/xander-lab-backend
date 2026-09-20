@@ -4,12 +4,14 @@
  * <h2>这里放什么</h2>
  *
  * 放"实现跨部署单元"的类型：一个类型属于这里，判据不是"看起来像契约"，
- * 而是**它的实现跨部署单元**。{@link com.xander.lab.core.api.ModelGateway}
+ * 而是**它的实现跨部署单元**。{@link com.xander.lab.core.api.ModelGateway} 与
+ * {@link com.xander.lab.core.api.BlogAgentModelContract}
  * 正是如此 —— 实现（{@code ModelGatewayService}，读 {@code model_provider} /
  * {@code model_feature_config} 两张表）留在 dinqor-core-host 的 admin 域，
  * 而调用方分散在三个部署单元：dinqor-agent、dinqor-content-automation、
  * dinqor-core-host。接口由提供方持有、却被跨服务边界依赖，拆分之后方向就反了，
- * 所以端口搬到双方都能依赖的模块。
+ * 所以端口搬到双方都能依赖的模块。BlogAgentModelContract 以字符串 JSON 描述临时的无状态
+ * 模型阶段边界，同样不把 Jackson 或 core-host 的实现类带进 content-automation。
  *
  * <h2>与 {@code integration-api} 的差别：这次是"搬"，不是"抽端口"</h2>
  *

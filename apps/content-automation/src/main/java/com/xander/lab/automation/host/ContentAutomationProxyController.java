@@ -43,12 +43,8 @@ public class ContentAutomationProxyController {
     }
 
     @RequestMapping({
-            "/api/blog-agent/tasks",
-            "/api/blog-agent/tasks/{id}",
             "/api/blog-agent/tasks/{id}/events",
             "/api/blog-agent/tasks/{id}/messages/stream",
-            "/api/blog-agent/tasks/{id}/publish",
-            "/api/blog-agent/tasks/{id}/run",
             "/api/blog-agent/tasks/{id}/run/stream",
             "/api/blog-plans/**",
             "/api/notifications/events"
