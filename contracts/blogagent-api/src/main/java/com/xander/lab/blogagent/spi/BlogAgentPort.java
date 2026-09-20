@@ -6,23 +6,6 @@ import java.util.function.BooleanSupplier;
 /**
  * 博客生成智能体对外的跨域能力面。
  *
- * <h2>这一刀拆掉了什么</h2>
- * <p>三个工具里有两个走 {@code blogagent.application.BlogAgentService}：</p>
- * <table>
- *   <caption>消费方与其原来 import 的类型</caption>
- *   <tr><th>文件</th><th>原来 import</th></tr>
- *   <tr><td>{@code BlogGenerationTool}</td>
- *       <td>{@code blogagent.application.BlogAgentService}、
- *           {@code blogagent.api.BlogAgentTaskCreateRequest}、
- *           {@code blogagent.api.BlogAgentTaskVO}、{@code blogagent.domain.BlogAgentTask}</td></tr>
- *   <tr><td>{@code PublishPostTool}</td>
- *       <td>{@code blogagent.application.BlogAgentService}、{@code publishing.api.BlogPostVO}</td></tr>
- * </table>
- * <p>全部跨 {@code dinqor-agent} / {@code dinqor-content-automation} 部署单元边界。
- * 改完之后依赖方向是 {@code agent -&gt; blogagent-api &lt;- blogagent}，
- * 并且 {@code agent -&gt; publishing} 那条（{@code PublishPostTool} 是 {@code BlogPostVO}
- * 唯一的跨域读者）整条消失。</p>
- *
  * <h2>⚠️ 参数顺序：端口一律 userId 在首位，提供方适配器显式换位</h2>
  * <p>提供方这四个方法的声明顺序是**反的**：{@code publish(taskId, userId)}、
  * {@code findPublishedPost(taskId, userId)}、{@code runStream(taskId, userId, ...)}。
@@ -38,7 +21,7 @@ import java.util.function.BooleanSupplier;
  *       （javac 开了 {@code -parameters}，名字会进 class 文件）。</li>
  *   <li>消费方的心智模型是"我（userId）对某个资源（taskId）做事"，而不是反过来。</li>
  * </ol>
- * <p>代价是提供方要多写一次显式换位（每个适配器一行）。**换位是这一刀最容易静默出错的地方**，
+ * <p>代价是提供方要多写一次显式换位（每个适配器一行）。**换位是最容易静默出错的地方**，
  * 所以它由 {@code BlogAgentPortMappingTest} 用互不相同的字面量（{@code 42} = userId、
  * {@code 9} = taskId）钉住 —— 写反会让 {@code 42} 当成 taskId 去查，落到"任务不存在"，
  * 是响亮的失败而不是静默的错数据；但即使响亮，也不该靠运气。</p>

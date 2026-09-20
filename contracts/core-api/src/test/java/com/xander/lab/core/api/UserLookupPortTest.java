@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>签名本身也钉住：返回值或参数类型变了，调用点是会编译报错，但
  * {@code String} → {@code Object} 这种放宽不一定 —— 而契约是跨服务的，
- * 形状必须稳定（§11）。</p>
+ * 形状必须稳定。</p>
  */
 class UserLookupPortTest {
 
@@ -39,7 +39,7 @@ class UserLookupPortTest {
         // ⚠️ 按名字取，不按下标：getDeclaredMethods() 的顺序 JVM 并不保证。
         // 上面那条断言虽然钉了"只有一个方法"，但两条断言是**独立**的 ——
         // 一旦有人加了方法，这条会在检查一个完全不同的方法，却可能照样通过。
-        // （在 automation-api 的注入验证里实测到过：加一个方法后下标 0 就换了对象。）
+        // （实测过：加一个方法后下标 0 就换了对象。）
         Method displayName = null;
         for (Method method : UserLookupPort.class.getDeclaredMethods()) {
             if (method.getName().equals("displayName")) displayName = method;

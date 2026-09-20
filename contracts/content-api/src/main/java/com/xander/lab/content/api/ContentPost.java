@@ -4,21 +4,21 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * 一篇文章的服务间读模型（V9 §11 / §18 / §91）。
+ * 一篇文章的服务间读模型。
  *
  * <h2>为什么是 {@code publishing.api.BlogPostVO} 的镜像，而不是收窄</h2>
  * <p>本记录逐个字段镜像 {@code BlogPostVO} 的<b>可序列化</b>表面：同名、同类型、同顺序，
- * 只少了 {@code tagsRaw}。这样做的唯一目的是让这次抽取<b>可以被证明是纯重构</b> ——
- * 调用方从 {@code BlogPostVO} 换到本类型时，线上 JSON 不变。</p>
+ * 只少了 {@code tagsRaw}。这样做的目的是让调用方从 {@code BlogPostVO} 换到本类型时
+ * 线上 JSON 不变 —— 换类型这件事因此可以被 diff 证明是安全的。</p>
  *
- * <p>“收窄到前端真正读的字段”<b>也能做</b>，但那是独立的 §11 契约变更（要进
- * {@code docs/contract-changes.yaml}），不能夹在一次重构里顺手做掉。
+ * <p>“收窄到前端真正读的字段”<b>也能做</b>，但那会改前端拿到的响应形状，
+ * 应当单独一次做，不能夹在别的工作里顺手做掉。
  * 先例是 {@code BlogAgentTaskVO.illustrations}：那次也选了镜像，
  * 理由与这里一样。</p>
  *
  * <h2>为什么没有 {@code tagsRaw}</h2>
  * <p>{@code BlogPostVO.tagsRaw} 是 {@code BlogPostMapper} 的 {@code GROUP_CONCAT} 承接字段，
- * 靠 {@code @JsonIgnore} 挡在线上 JSON 之外。契约不能带 Jackson 注解（ADR-1），
+ * 靠 {@code @JsonIgnore} 挡在线上 JSON 之外。契约不能带 Jackson 注解，
  * 所以这里<b>根本没有这个字段</b> —— 这是镜像能成立的前提：漏掉一个被忽略的字段，
  * 等于把它加回线上形状。填充 {@code tags} 的责任在实现方（内容域），
  * 调用方拿到的就是最终列表。</p>

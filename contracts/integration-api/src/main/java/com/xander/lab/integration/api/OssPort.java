@@ -10,12 +10,12 @@ package com.xander.lab.integration.api;
  * 还是由同进程的 bean 实现，都只是装配问题，调用方代码不用改。</p>
  *
  * <p><b>为什么参数是 {@code byte[]} 而不是 Spring 的 {@code MultipartFile}。</b>
- * 契约被每个服务依赖，包括 V9 §19 那个不能沾 spring-webmvc 的 WebFlux Gateway；
+ * 契约被每个服务依赖，包括 不能沾 spring-webmvc 的 WebFlux Gateway；
  * 把 {@code MultipartFile} 放进来会让 spring-web 出现在所有服务（含 Gateway）的
  * classpath 上，而且它本来就不是服务间调用的形状 —— 跨进程时没有 MultipartFile 可传。
  * 调用方手上是 {@code MultipartFile} 的，在调用点取字节转换。</p>
  *
- * <p><b>实现约定（属于契约的一部分，V9 §11）：</b></p>
+ * <p><b>实现约定（属于契约的一部分）：</b></p>
  * <ul>
  *   <li>{@link #upload} 失败时**抛异常**，不返回"失败的结果对象"——
  *       {@link UploadResponse} 里没有表达失败的字段，所以"没抛"就等于"成功了"。

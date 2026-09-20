@@ -1,7 +1,7 @@
 package com.xander.lab.content.api;
 
 /**
- * 内容域对外公开的“发布与查证”端口（V9 §11 / §18 / §91）。
+ * 内容域对外公开的“发布与查证”端口。
  *
  * <h2>为什么这个接口必须住在中立模块</h2>
  * <p>它由 {@code publishing.application.PublicationService} 实现，调用方是 integration 域的

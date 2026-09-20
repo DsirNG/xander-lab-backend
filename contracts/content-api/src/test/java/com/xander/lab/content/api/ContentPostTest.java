@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <ol>
  *   <li><b>组件名就是 JSON 键。</b>本类型是 {@code publishing.api.BlogPostVO} 的镜像，
- *       换类型后线上 JSON 必须逐字节不变（这就是"本次抽取可证明是纯重构"的全部依据）。
+ *       换类型后线上 JSON 必须逐字节不变（这是"换类型不改对外行为"的全部依据）。
  *       组件名一改，前端与 MCP 客户端拿到的键就变了，而<b>不会有任何编译错误</b> ——
  *       仓库内部调用方都走访问器，会一起改。</li>
  *   <li><b>顺序是位置契约。</b>这里有四组相邻同类型分量：
@@ -31,7 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       重排不会有编译错误，只会静默换字段 —— 例如 {@code csdnSynced} 与
  *       {@code juejinSynced} 对调后，"哪些还没同步到掘金"会变成"哪些还没同步到 CSDN"，
  *       两条 SQL 都返回非空结果，不专门覆盖就发现不了。</li>
- *   <li><b>字段数。</b>新增/删除分量会改线上形状，属于 V9 §11 契约变更。
+ *   <li><b>字段数。</b>新增/删除分量会改线上形状，属于契约变更。
  *       数量断言让"顺手加个字段"至少要先改一次测试。</li>
  * </ol>
  *
@@ -142,7 +142,7 @@ class ContentPostTest {
      * {@code tagsRaw} 必须<b>根本不存在</b>。
      *
      * <p>它是 {@code BlogPostVO} 的 {@code GROUP_CONCAT} 承接字段，靠 {@code @JsonIgnore}
-     * 挡在线上 JSON 之外。契约不能带 Jackson 注解（ADR-1），所以这里选择不声明它 ——
+     * 挡在线上 JSON 之外。契约不能带 Jackson 注解，所以这里选择不声明它 ——
      * 这是镜像能成立的前提：漏掉一个被忽略的字段，等于把它加回线上形状。
      * 一旦有人"顺手补全"这个字段，它就会以 {@code tagsRaw} 的名字出现在前端响应里。</p>
      */

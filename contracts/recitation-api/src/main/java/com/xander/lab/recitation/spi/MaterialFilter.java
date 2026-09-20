@@ -13,7 +13,6 @@ package com.xander.lab.recitation.spi;
  * <p><b>为什么不直接搬 {@code MaterialQuery}</b>。搬它就等于把 {@code ArchiveFilter}
  * 一起搬进契约，而那是提供方自己的词表；而且提供方还需要保留带归档维度的版本给自己的
  * 控制器（回收视图要用），所以只能是一份收窄的副本。见
- * {@code docs/migration/adr-contract-boundaries.md} §2.6。</p>
  *
  * <p><b>为什么叫 Filter 而不是 Query</b>。提供方的 {@code MaterialQuery} 是
  * {@code RecitationService} 的嵌套类型，实现类里两个类型会同时在作用域内。同名不同包会让人

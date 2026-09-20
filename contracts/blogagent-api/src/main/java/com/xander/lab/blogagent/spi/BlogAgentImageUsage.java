@@ -11,7 +11,7 @@ package com.xander.lab.blogagent.spi;
  * <b>只许 import JDK 与自己的包</b>（门禁 {@code contract-dependency-boundary}），
  * 所以契约根本 import 不到它。</p>
  *
- * <p>这不是"门禁太死"，而是 ADR-1：<b>契约模块必须与序列化框架无关，Jackson 属于出入站适配器</b>。
+ * <p>这不是"门禁太死"，而是 <b>契约模块必须与序列化框架无关，Jackson 属于出入站适配器</b>。
  * 让契约依赖一个带 Jackson 的库，下一步就是它开始依赖带 MyBatis 的库。</p>
  *
  * <p>⚠️ 于是它和 {@code payment.api.TokenUsage} <b>形状完全相同</b>。这是刻意的重复：

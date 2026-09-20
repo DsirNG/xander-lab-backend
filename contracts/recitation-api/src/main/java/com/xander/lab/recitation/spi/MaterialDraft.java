@@ -6,7 +6,7 @@ package com.xander.lab.recitation.spi;
  * <p><b>为什么不是直接收 {@code recitation.api.CreateRecitationMaterialRequest}</b>。
  * 那个 record 带 {@code @NotBlank} / {@code @Size}，属于 HTTP 边界的东西：它们生效是因为
  * {@code RecitationController} 在参数上标了 {@code @Valid}。契约模块不许带注解
- * （ADR-1：契约必须与框架无关，{@code CONTRACT_ALLOWED_IMPORT_PREFIXES} 只有 {@code java.}），
+ * （契约必须与框架无关，{@code CONTRACT_ALLOWED_IMPORT_PREFIXES} 只有 {@code java.}），
  * 而且这条缝上的调用方**本来就没有那层校验**——工具从 JSON 取值、自己手工校验后才调进来。
  * 所以本类型是同一个四字段、去掉注解的一份；域侧那个 request 类型原样保留，
  * 继续做 HTTP 调用方的校验入口。</p>

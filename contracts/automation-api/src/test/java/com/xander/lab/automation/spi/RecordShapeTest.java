@@ -137,7 +137,7 @@ class RecordShapeTest {
     }
 
     /**
-     * ADR-1：契约模块必须与序列化框架无关。
+     * 契约模块必须与序列化框架无关。
      *
      * <p>唯一豁免是遗留的 {@code @JsonIgnoreProperties(ignoreUnknown = true)} —— 它改变线上
      * 反序列化行为，为历史兼容而留。本模块是全新的，一条都不该有。</p>

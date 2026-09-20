@@ -12,13 +12,12 @@ package com.xander.lab.integration.api;
  *       {@code integration.oss} 里。</li>
  * </ul>
  *
- * <p><b>为什么手写而不用 Lombok。</b>契约模块被每个服务依赖（包括 V9 §19 那个
- * 不能沾 spring-webmvc 的 WebFlux Gateway），所以它的依赖清单必须保持"只有 JDK"，
+ * <p><b>为什么手写而不用 Lombok。</b>契约模块被每个服务依赖（包括不能沾 spring-webmvc 的 WebFlux Gateway），所以它的依赖清单必须保持"只有 JDK"，
  * 而 {@code contract-dependency-boundary} 门禁把这条规则做成了一条不许商量的判据。
  * 手写还带来一个真实好处：这是**上线形状**，字段名与顺序应当不需要了解 Lombok 的
  * 默认行为就能读懂。</p>
  *
- * <p>⚠️ <b>字段顺序就是构造器参数顺序，改动它等于改动契约</b>（V9 §11）。相邻的
+ * <p>⚠️ <b>字段顺序就是构造器参数顺序，改动它等于改动契约</b>。相邻的
  * {@code url} / {@code originalName} / {@code storedName} 都是 String，重排不会产生
  * 任何编译错误，所以由 {@code UploadResponseTest} 钉住。</p>
  */

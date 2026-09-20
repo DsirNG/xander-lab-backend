@@ -68,7 +68,7 @@ class CsdnBlogSyncPortTest {
     /**
      * 返回类型必须是契约记录，不能是内容域的 {@code PublishResult}、也不能是域侧实体。
      *
-     * <p>契约不许依赖契约（ADR-2），所以本端口<b>不能</b>直接返回
+     * <p>契约不许依赖契约，所以本端口<b>不能</b>直接返回
      * {@code com.xander.lab.content.api.PublishResult} —— 那会把 {@code content-api}
      * 写进本模块的 POM。换算落在实现边界。</p>
      */

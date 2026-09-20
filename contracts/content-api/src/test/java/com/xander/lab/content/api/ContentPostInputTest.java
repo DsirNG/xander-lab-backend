@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 钉住 {@link ContentPostInput} 的字段名与顺序。
  *
  * <p>这个 DTO 存在的<b>唯一理由</b>就是消灭五个相邻的 {@code String} ——
- * 改造前 {@code BlogService.updateBlog(Long, String, String, String, String, String, List)}
+ * {@code BlogService.updateBlog(Long, String, String, String, String, String, List)}
  * 里 {@code summary} 与 {@code content} 写反不会编译报错，只会让摘要列拿到整篇正文。
  * 所以本测试的核心断言是"五个字面量两两可区分"，其余是配套：</p>
  *
@@ -54,7 +54,7 @@ class ContentPostInputTest {
     /**
      * 五个相邻 {@code String} 必须两两不同。这是本类型存在的理由：
      * 只要有一个字面量重复，把对应两个分量对调后本测试仍然全绿，
-     * 而那正是改造前"摘要列拿到整篇正文"的事故形态。
+     * 而那正是"摘要列拿到整篇正文"的事故形态。
      */
     @Test
     void theFiveAdjacentStringsAreMutuallyDistinguishable() {

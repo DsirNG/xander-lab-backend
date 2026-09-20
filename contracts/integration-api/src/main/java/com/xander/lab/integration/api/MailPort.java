@@ -12,7 +12,7 @@ package com.xander.lab.integration.api;
  * ——依赖方向是反的。</p>
  *
  * <h2>⭐ 端口只带"发什么"，不带"怎么渲染"</h2>
- * <p>改造前 {@code MailService} 上有一个
+ * <p>{@code MailService} 上有一个
  * {@code sendReminderMail(to, subject, userMessage, scheduledAt, contentType, templateId)}，
  * 六个参数里有四个（{@code scheduledAt} / {@code contentType} / {@code templateId}，
  * 以及隐含的时区）<b>只服务于渲染</b>：归一化内容类型、按显示时区格式化时间、

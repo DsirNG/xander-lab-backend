@@ -6,7 +6,7 @@ package com.xander.lab.integration.api;
  * <p><b>为什么这里又有一个 {@code PublishResult}。</b>内容域的
  * {@code com.xander.lab.content.api.PublishResult} 字段与它逐字相同
  * （{@code platform} / {@code externalId} / {@code url}），却<b>不能</b>被本模块复用：
- * 按 ADR-2，<b>契约不许依赖契约</b> —— {@code integration-api} 一旦把 {@code content-api}
+ * <b>契约不许依赖契约</b> —— {@code integration-api} 一旦把 {@code content-api}
  * 写进 POM，两个契约就绑成了一个，将来任一方的服务要独立升级都得连带另一方。
  * 所以契约各自带一份等价 DTO，<b>换算落在实现边界</b>（{@code CsdnBlogSyncService} /
  * {@code JuejinBlogSyncService} 里那三行）。这是本仓库第二次这么做
@@ -20,7 +20,7 @@ package com.xander.lab.integration.api;
  * 调用方需要的是中断而不是继续。{@code externalId} 为空（{@code null} 或空串）会被
  * 当作"没有成功过"，实现不要返回空串 —— 内容域据此做幂等。</p>
  *
- * <p>字段改动属于契约改动（V9 §11）：{@code platform} / {@code externalId} / {@code url}
+ * <p>字段改动属于契约改动：{@code platform} / {@code externalId} / {@code url}
  * 会出现在 HTTP 响应体里，改字段名就是改前端拿到的 JSON。</p>
  */
 public record BlogSyncResult(String platform, String externalId, String url) {}

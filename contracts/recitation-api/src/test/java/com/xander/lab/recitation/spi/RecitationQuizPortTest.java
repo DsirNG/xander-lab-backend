@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 钉住 {@link RecitationQuizPort} 的形状。
  *
  * <p>为什么这件事只能在这里做：端口变宽（加方法、加 {@code default}、放宽参数）编译得过、
- * 耦合指标一动不动、26 条门禁全绿。见 {@code docs/migration/adr-contract-boundaries.md} §2.6
+ * 耦合指标一动不动、26 条门禁全绿。
  * 与 {@code .opencode/skills/backend-norms} 里的"端口变宽没人守"。</p>
  */
 class RecitationQuizPortTest {
@@ -36,7 +36,7 @@ class RecitationQuizPortTest {
         // ⚠️ 与 RecitationMaterialPort 的关键差异：那边 getMaterial 有一个同域富方法
         // （控制器在用 RecitationMaterialView 的版本），所以端口占规范名、富方法加 ForView 后缀。
         // 这两条方法的返回类型**没有同域调用方**（只有这两个工具和服务自己的测试），
-        // 所以按 ADR §7.5 直接换返回类型、删掉域侧 record，不保留富方法。
+        // 所以直接换返回类型、删掉域侧 record，不保留富方法。
         //
         // 这条断言守的是"端口占的是规范名"：如果哪天有人给提供方加回一个
         // QuizSession openQuiz(...) 并把端口方法改名成 openQuizForAgent，名字就漂了。
@@ -133,7 +133,7 @@ class RecitationQuizPortTest {
         // 三参版本是端口唯一的形式：两参重载（没有生产调用方）用传 null 覆盖同一语义。
         // 保留会话这一维是因为提供方用它做归属校验 —— "评分只能落到这次真实出题上"。
         //
-        // ⚠️ 读第 n 个参数之前先查参数个数（待办 59）：参数表缩短时直接读下标抛
+        // ⚠️ 读第 n 个参数之前先查参数个数：参数表缩短时直接读下标抛
         // ArrayIndexOutOfBoundsException —— 报的是"下标越界"而不是"这个方法的参数表变了"。
         Method openQuiz = methodNamed("openQuiz");
         assertTrue(openQuiz.getParameterCount() > 2,

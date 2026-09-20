@@ -3,7 +3,7 @@ package com.xander.lab.automation.spi;
 import java.util.List;
 
 /**
- * 修改一条定时发文计划时要提交的字段（V9 §11 / §18 / §91）。
+ * 修改一条定时发文计划时要提交的字段。
  *
  * <p>与 {@link ContentPlanDraft} 分开是刻意的：创建时要幂等键，修改时不要；
  * 修改可以只改一部分字段（未提交的字段保持原值），所以"哪些字段可以改"本身是一条信息。

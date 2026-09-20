@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * 一条定时发文计划的服务间读模型（V9 §11 / §18 / §91）。
+ * 一条定时发文计划的服务间读模型。
  *
  * <h2>为什么是收窄，不是 {@code BlogContentPlanVO} 的镜像</h2>
  * <p>理由与 {@link EmailReminderView} 相同，但这里的差距更大：{@code BlogContentPlanVO}
@@ -12,7 +12,7 @@ import java.util.List;
  * 镜像它意味着照抄一个位置顺序风险很大的 24 分量记录，去保留一个<b>不存在</b>的序列化表面 ——
  * {@code BlogContentPlanVO} 继续留在 {@code automation.api}，继续由
  * {@code BlogContentPlanController} 发给前端，本类型前端看不到。
- * 详见 {@code docs/migration/adr-contract-boundaries.md}。</p>
+ * </p>
  *
  * <p>被有意留在外面的字段：{@code topics} / {@code nextTopicIndex} / {@code audience} /
  * {@code tone} / {@code scheduleType} / {@code scheduledDate} / {@code aiOption} /

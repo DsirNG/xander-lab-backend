@@ -5,10 +5,10 @@ package com.xander.lab.agent.spi;
  *
  * <p>这不是 {@code com.xander.lab.agent.application.AgentTool}，而且<b>不能</b>是它。
  * 那一个有两个特点让它当不了契约类型：它的 {@code parametersSchema()} 返回
- * {@code com.fasterxml.jackson.databind.JsonNode}，而 ADR-1 规定契约模块必须与序列化
+ * {@code com.fasterxml.jackson.databind.JsonNode}，契约模块必须与序列化
  * 框架无关；它还有 6 个 {@code default} 成员和一个 5 方法的嵌套监听器，搬过来等于把
  * agent 的整套工具词汇表塞进每个依赖方。它有 50 个实现、41 个覆写
- * {@code parametersSchema()}，所以"搬 AgentTool"这一刀要改 50 个文件。</p>
+ * {@code parametersSchema()}，所以"把 AgentTool 搬进契约"要改 50 个文件。</p>
  *
  * <p>本接口是那个问题的另一条出路：<b>只回答消费方真正要问的问题</b>，把 JSON 当作
  * 文本搬运，于是 50 个实现一个都不用动，Jackson 的切口被限制在端口这一层加两侧各一个
@@ -27,7 +27,7 @@ package com.xander.lab.agent.spi;
  * 它们的同名工具只能靠前缀区分。</p>
  *
  * <h2>JSON 走文本</h2>
- * <p>schema、参数、返回值三处都是 {@code String}，内容都是 JSON 文本。这是 ADR-1 的直接
+ * <p>schema、参数、返回值三处都是 {@code String}，内容都是 JSON 文本。这是「契约只许 JDK」的直接
  * 后果，不是风格选择。代价是调用侧多一次解析（适配器里缓存）、提供方多一次
  * {@code toString}；对照的是一次真实网络往返，可以忽略。</p>
  */

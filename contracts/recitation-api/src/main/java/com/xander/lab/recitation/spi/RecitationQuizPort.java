@@ -25,7 +25,7 @@ import java.util.List;
  *       <td>实现细节，本来就不该跨边界。</td></tr>
  * </table>
  *
- * <p>⚠️ 按 ADR §7.5 的做法，**这里没有保留同域的富方法**。那两个方法原来的调用方只有
+ * <p>⚠️ **这里没有保留同域的富方法**。那两个方法的调用方只有
  * 这两个工具（跨域）与服务自己的测试，没有控制器在用它们的返回类型，
  * 所以直接换返回类型、删掉域侧那两个 record 即可 —— 与
  * {@code EmailReminderService.listAll} / {@code findByClientRequestId} / {@code delete}

@@ -1,7 +1,7 @@
 package com.xander.lab.automation.spi;
 
 /**
- * 写一条<b>持久化</b>用户通知的能力（V11 Wave 0B 第十刀）。
+ * 写一条<b>持久化</b>用户通知的能力。
  *
  * <p>唯一消费方是 {@code knowledgebase}：{@code KnowledgeIngestionService} 在大部头文档
  * 不自动生成结构图时，发一条「阅读某一章时会为该章单独生成」的通知。通知表
@@ -12,7 +12,7 @@ package com.xander.lab.automation.spi;
  * <p>这条缝两端的类型都不满足「搬进契约」的条件：</p>
  * <ul>
  *   <li>{@code automation.domain.BlogNotification} 带 {@code @TableName("blog_notification")}
- *       —— 是<b>域实体</b>。按 ADR-2，域实体不许跨有界上下文边界；把它放进契约等于把
+ *       —— 是<b>域实体</b>。域实体不许跨有界上下文边界；把它放进契约等于把
  *       MyBatis 注解拖进每个依赖方的 classpath。</li>
  *   <li>{@code automation.application.BlogNotificationService} 是 {@code @Service}，
  *       是<b>具体实现</b>，按抽取判据第二种情况处理：抽端口，实现留在原地。</li>
@@ -47,8 +47,8 @@ package com.xander.lab.automation.spi;
  *   <li><b>读侧</b>：{@code list} / {@code unreadCount} / {@code markRead} / {@code markAllRead}
  *       —— 它们服务的是前端 Navbar 铃铛（{@code automation.api} 的控制器），不是跨域消费方。</li>
  *   <li><s><b>SSE 广播</b>：{@code BlogPlanSseService} 要的是 {@code SseEmitter}（框架类型），
- *       形状完全不同，且消费方是 {@code admin}，单独一刀。</s>
- *       ✅ <b>第二十刀已做</b>：{@link NotificationBroadcastPort}。
+ *       形状完全不同，且消费方是 {@code admin}。</s>
+ *       ✅ <b>已实现</b>：{@link NotificationBroadcastPort}。
  *       ⚠️ 当时这句话对<b>类</b>成立、对<b>边</b>不成立：{@code subscribe} 返回
  *       {@code SseEmitter} 从来没跨过边界，{@code admin} 只调 {@code broadcast}
  *       （三个 {@code String} 进、一个 {@code int} 出）。教训记在

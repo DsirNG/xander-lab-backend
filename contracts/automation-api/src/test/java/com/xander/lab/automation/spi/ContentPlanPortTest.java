@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 端口变宽编译得过、指标不动、门禁不报，只有这里会红。
  *
  * <p>这个端口尤其值得钉：实现方 {@code BlogContentPlanService} 对<b>自己的控制器</b>公开了
- * 15 个方法，而端口只要 6 个。"顺手把 controller 在用的方法也加进端口"是这次重构里最可能
+ * 15 个方法，而端口只要 6 个。"顺手把 controller 在用的方法也加进端口"是最可能
  * 发生的走偏，而它不会有任何症状 —— 所以下面那条断言把 15 个里的 9 个明确挡在门外。</p>
  */
 class ContentPlanPortTest {
@@ -74,7 +74,7 @@ class ContentPlanPortTest {
         // 两个写入方法的参数类型刻意不同：创建要幂等键，修改不要。同类型的话，
         // "把创建草稿传给 update"会编译通过 —— 而 update 会静默忽略幂等键。
         //
-        // ⚠️ 读第 n 个参数之前先查参数个数（待办 59）：参数表缩短时直接读下标抛
+        // ⚠️ 读第 n 个参数之前先查参数个数：参数表缩短时直接读下标抛
         // ArrayIndexOutOfBoundsException —— 报的是"下标越界"而不是"这个方法的参数表变了"，
         // 失败信息指不到真正的原因。同族的守卫见 NotificationPortTest / EmailReminderPortTest。
         Method create = methodNamed("create");
@@ -93,7 +93,7 @@ class ContentPlanPortTest {
     /**
      * 按名字取方法，并且断言**恰好一个**同名方法。
      *
-     * <p>⚠️ 原来的写法是"遍历取第一个"（还把它换算成下标再 {@code getDeclaredMethods()[i]}）。
+     * <p>⚠️ 不要"遍历取第一个"（还把它换算成下标再 {@code getDeclaredMethods()[i]}）。
      * 端口上出现**重载**时，它会**按 JVM 的方法顺序**挑一个，下面几条断言就开始检查另一个
      * 方法 —— 而它们仍然"通过"。**没有失败信息，因为根本没有失败。**</p>
      */

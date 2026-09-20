@@ -3,7 +3,7 @@ package com.xander.lab.automation.spi;
 import java.util.List;
 
 /**
- * 定时发文计划能力的服务间端口（V9 §18 / §91，ADR-2）。
+ * 定时发文计划能力的服务间端口。
  *
  * <p>由 <b>automation</b> 域实现（{@code BlogContentPlanService}），由 <b>agent</b> 域消费
  * （{@code QueryPlansTool} / {@code SchedulePlanTool} / {@code UpdatePlanTool}）。</p>
@@ -13,7 +13,7 @@ import java.util.List;
  * {@code createOneShotPlans} / {@code list} / {@code detail} / {@code trigger} /
  * {@code listRuns} / {@code runDetail} / {@code generateTopics} / {@code nextRunAfter} …），
  * 端口只要其中六个。这不是"少写几个无所谓"：端口上每一个方法都是永久暴露面，
- * 而<b>端口变宽没有任何门禁在守</b>（{@code RemoteTool} 那一刀的实测结论：
+ * 而<b>端口变宽没有任何门禁在守</b>（实测结论：
  * 给端口加一个 {@code default} 方法后编译通过、指标不动、26 条门禁全绿，
  * 只有反射测试会红）。所以反射测试钉住<b>完整签名</b>，而不只是方法个数。</p>
  *
@@ -26,7 +26,7 @@ import java.util.List;
  * <h2>⚠️ 已知残留：异常类型仍然是框架类型</h2>
  * <p>与 {@link EmailReminderPort} 同一处：实现方用 {@code ResponseStatusException}
  * 表达"未登录 / 不存在 / 状态冲突"，那是前端 HTTP 状态码的来源，不能顺手改。
- * 跨进程时这一层要重新设计。见 {@code docs/migration/lib-extraction.md}。</p>
+ * 跨进程时这一层要重新设计。</p>
  */
 public interface ContentPlanPort {
 

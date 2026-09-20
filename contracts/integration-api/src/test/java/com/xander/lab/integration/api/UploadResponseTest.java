@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 那时它看起来像"前端拿错了字段"，不像后端改错了顺序。</p>
  *
  * <p>所以这里用**互不相同**的字面量逐个断言，任何两个字段被调换都会立刻失败。
- * 按 V9 §2.3，重构不得静默降低既有能力；按 §11，字段改动属于契约改动。</p>
+ * 重构不得静默降低既有能力；字段改动属于契约改动。</p>
  */
 class UploadResponseTest {
 

@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
  * <p><b>收窄而非镜像</b>。{@code recitation.api.RecitationMaterialView} 原地不动，仍然由
  * {@code recitation.api.RecitationController} 原样返回给前端；本类型是**新缝上的新类型**，
  * 前端永远看不到它，所以只带跨域消费方真正读的分量。见
- * {@code docs/migration/adr-contract-boundaries.md} §2.5 与 §2.6。</p>
+ * </p>
  *
  * <h2>九个分量是怎么推出来的</h2>
  * <p>字段集不是"看着像"挑的，是从**消费方读取点**机械反推再与视图对账得到的。

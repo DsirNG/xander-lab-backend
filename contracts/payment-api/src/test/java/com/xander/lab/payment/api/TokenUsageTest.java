@@ -136,7 +136,7 @@ class TokenUsageTest {
      *
      * <p>一旦有人把它挪到某个业务域（或挪回 {@code libs/xander-model}），
      * 端口就又 import 不到了，于是"顺手放宽门禁"的压力立刻出现 ——
-     * 而放宽的那一刻 ADR-1 就没了。所以钉住包名。</p>
+     * 而放宽的那一刻这条边界就没了。所以钉住包名。</p>
      */
     @Test
     void itStaysInTheContractPackage() {

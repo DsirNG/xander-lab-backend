@@ -3,14 +3,14 @@ package com.xander.lab.automation.spi;
 import java.util.List;
 
 /**
- * 定时邮件提醒能力的服务间端口（V9 §18 / §91，ADR-2）。
+ * 定时邮件提醒能力的服务间端口。
  *
  * <p>由 <b>automation</b> 域实现（{@code EmailReminderService}），由 <b>agent</b> 域消费
  * （{@code EmailReminderTool} / {@code QueryEmailRemindersTool} /
  * {@code UpdateEmailReminderTool}）。</p>
  *
  * <h2>为什么在这里，而不在 agent 侧</h2>
- * <p>消费方是 agent，但契约按<b>能力</b>命名（§91），不按"谁先需要"命名：
+ * <p>消费方是 agent，但契约按<b>能力</b>命名，不按"谁先需要"命名：
  * {@code automation-api} 装的是 automation 这个能力对外提供的一切。
  * 这与 {@code content-api} 装 {@code publishing} 的能力、{@code payment-api} 装
  * {@code billing} 的能力是同一个道理。后面 knowledgebase 与 admin 要的两个端口也归这里，
@@ -28,7 +28,7 @@ import java.util.List;
  * 因为三个工具都不分页：{@code listAll} 的存在意义就是"一次调用拿全量"，
  * 这是它当初为智能体加进去的原因（见该方法的注释）。
  * 端口收的是<b>调用方真正用到的</b>那些，多一个都会成为无人使用的暴露面 ——
- * 而端口变宽是没有任何门禁在守的（{@code RemoteTool} 那一刀的实测结论：
+ * 而端口变宽是没有任何门禁在守的（实测结论：
  * 加一个 {@code default} 方法后 26 条门禁全绿，只有反射测试会红）。</p>
  *
  * <h2>⚠️ 已知残留：异常类型仍然是框架类型</h2>
@@ -37,8 +37,7 @@ import java.util.List;
  * 而且<b>不能顺手改</b>：那是 HTTP 状态码的来源，换类型会同时改掉前端的响应码
  * （{@code 400} / {@code 401} / {@code 404} / {@code 409} / {@code 429}）。
  * 但端口签名无法表达它，跨进程时更没有 HTTP 状态码可传。
- * 拆服务时这一层要重新设计（把失败表达成契约里的结果类型，而不是异常），
- * 现在只记录，不在这次重构里动。见 {@code docs/migration/lib-extraction.md}。</p>
+ * 拆服务时这一层要重新设计（把失败表达成契约里的结果类型，而不是异常）。</p>
  */
 public interface EmailReminderPort {
 

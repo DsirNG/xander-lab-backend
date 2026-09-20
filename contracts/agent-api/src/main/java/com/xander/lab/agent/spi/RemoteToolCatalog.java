@@ -6,7 +6,7 @@ import java.util.List;
  * 一个"运行期才知道有哪些工具"的来源。agent 是消费方，integration 是提供方。
  *
  * <h2>为什么这个接口住在 agent 这一侧</h2>
- * <p>ADR-2：跨域必须走<b>消费方拥有的契约</b>。这里的消费方是 agent——是它需要"这个用户
+ * <p>跨域必须走<b>消费方拥有的契约</b>。这里的消费方是 agent——是它需要"这个用户
  * 能看到哪些远端工具"，也是它定下工具长什么样；提供方是 integration 的 MCP 客户端。
  * 所以端口随消费方走，和 {@code content.api.BlogPublisher} 完全同形：内容域定义"把这段
  * 内容推到那个平台"，integration 域实现它。</p>
@@ -23,8 +23,8 @@ import java.util.List;
  * 整轮对话失败。（消费方也会兜住异常，但那不该是提供方偷懒的理由。）</p>
  *
  * <h2>为什么有 {@link #catalogVersion()} 而不是一个 {@code invalidate()} 回调</h2>
- * <p>原来的形状是提供方在配置变更后反过来调消费方的
- * {@code AgentToolRegistry#invalidate()}。那正是这一刀要拆掉的依赖：integration 在调 agent
+ * <p>如果让提供方在配置变更后反过来调消费方
+ * {@code AgentToolRegistry#invalidate()}。这条反向依赖必须去掉：integration 不该调 agent
  * 的实现类。改成消费方读提供方的版本号之后，控制流只剩一个方向——消费方问，提供方答，
  * 提供方永远不需要知道消费方是谁。这和 {@code version}/{@code etag} 是同一个套路：把
  * "我变了"的通知换成"你问我变没变"的轮询，代价是每次多读一个 {@code long}。</p>

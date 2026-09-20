@@ -1,7 +1,7 @@
 package com.xander.lab.content.api;
 
 /**
- * 文章状态词表（V9 §11 / §18 / §91）。
+ * 文章状态词表。
  *
  * <h2>为什么进契约</h2>
  * <p>三个值原本是 {@code publishing.application.BlogService} 上的常量。跨部署单元的两个调用方

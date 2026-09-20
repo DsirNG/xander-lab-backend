@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * ——null 归一与防御性拷贝——<b>是契约的一部分</b>，而它们最容易在"清理代码"时被当成
  * 冗余删掉：record 语法本身看起来已经足够，构造器里的那行像多余的。删掉之后
  * 编译通过、绝大多数测试仍然绿，只有平台适配器在收到 null 标签时 NPE。
- * 所以 V9 §2.3 的"重构不得静默降低既有能力"需要一条会响的断言，这就是它。</p>
+ * 所以"重构不得静默降低既有能力"需要一条会响的断言，这就是它。</p>
  */
 class PublishCommandTest {
 

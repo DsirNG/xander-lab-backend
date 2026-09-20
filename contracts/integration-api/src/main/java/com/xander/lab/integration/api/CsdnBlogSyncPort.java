@@ -13,7 +13,7 @@ package com.xander.lab.integration.api;
  * <h2>为什么在 {@code integration-api} 而不是 {@code agent-api}</h2>
  * <p>因为它不是 agent 的能力面。同一个能力有<b>两个</b>跨域消费方：{@code agent} 与
  * {@code automation}（{@code BlogPlanRunService}，走 {@link JuejinBlogSyncPort}）。
- * 按 §91 契约按<b>能力</b>命名、按<b>提供方</b>归位，不按第一个调用方归位 ——
+ * 契约按<b>能力</b>命名、按<b>提供方</b>归位，不按第一个调用方归位 ——
  * 否则第二个消费方接入时要么依赖 agent 的契约、要么再抄一份。
  * 这与 {@code core-api} 的 {@code UserLookupPort} 是同一条判据
  * （消费方是 publishing / components，端口仍在 {@code core-api}）。</p>
@@ -24,7 +24,7 @@ package com.xander.lab.integration.api;
  *   <li><b>参数表不同，合并就要么造假要么变宽。</b>{@link JuejinBlogSyncPort#sync} 多收
  *       {@code juejinCategoryId} / {@code juejinTagIds} —— 掘金要求自己的分类与标签 id，
  *       而 CSDN 没有这两个概念。合并成一个端口，CSDN 那条路就必须收下两个它永远不用的参数
- *       （端口变宽），或者端口只带交集、把掘金的能力砍掉（能力静默降级，§2.3 禁止）。</li>
+ *       （端口变宽），或者端口只带交集、把掘金的能力砍掉（能力静默降级）。</li>
  *   <li><b>域自己就是这么分的。</b>{@code integration} 域为两个平台各有一套
  *       {@code *CredentialService} / {@code *BlogSyncService} / {@code *BlogSyncController} /
  *       {@code *McpApplicationService}，两套凭证存储、两套限流、两套 MCP 应用服务。
@@ -33,8 +33,7 @@ package com.xander.lab.integration.api;
  *       实现类加一句 {@code implements} 就够了 —— 不需要新增一个按平台字符串分派的
  *       中间类，也就没有"分派写错只在运行时才炸"的新缝。</li>
  * </ol>
- * <p>代价是两个几乎同形的接口，共享同一个 {@link BlogSyncResult}。
- * 这份权衡记在 {@code docs/migration/adr-contract-boundaries.md}。</p>
+ * <p>代价是两个几乎同形的接口，共享同一个 {@link BlogSyncResult}。</p>
  *
  * <h2>⚠️ {@link #findSucceeded(Long, Long)} 与掘金那个<b>签名逐字相同</b></h2>
  * <p>所以同时持有两个端口的调用方里，{@code csdnPort.findSucceeded(u, p)} 写成

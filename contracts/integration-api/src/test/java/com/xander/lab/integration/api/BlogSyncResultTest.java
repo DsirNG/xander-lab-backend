@@ -39,7 +39,7 @@ class BlogSyncResultTest {
     }
 
     /**
-     * 分量名与顺序即契约。改这里就是改前端拿到的 JSON 字段名（V9 §11）。
+     * 分量名与顺序即契约。改这里就是改前端拿到的 JSON 字段名。
      */
     @Test
     void theComponentsAreNamedAndOrderedExactlyLikeThis() {

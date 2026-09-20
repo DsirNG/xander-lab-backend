@@ -27,7 +27,7 @@ package com.xander.lab.blogagent.spi;
  *
  * <p>提供方向模型请求的尺寸（如 {@code 1536x1024}）。提供方不解析返回图片的真实像素，
  * 所以这里记的是"请求了什么"，不是"得到了什么"。想要实测尺寸得解图片头，
- * 那是另一件事，不在这一刀里。</p>
+ * 那是另一件事。</p>
  *
  * <h2>⚠️ 分量顺序：前五个与提供方的 {@code GeneratedImage} 逐位对齐，{@code size} 追加在末尾</h2>
  *
@@ -43,8 +43,8 @@ package com.xander.lab.blogagent.spi;
  * <h2>为什么 {@code bytes} 是 {@code byte[]} 而不是别的</h2>
  *
  * <p>提供方本来就是 {@code byte[]}（{@code MediaAssetPort.recordGenerated} 也收
- * {@code byte[]}，先例已存在）。跨进程传 {@code byte[]} 是这一刀唯一需要留意的成本：
- * Wave 2 之后它要走网络，体积上限由提供方守（10MB），消费方不需要知道这个数字。</p>
+ * {@code byte[]}，先例已存在）。跨进程传 {@code byte[]} 是唯一需要留意的成本：
+ * 跨进程之后它要走网络，体积上限由提供方守（10MB），消费方不需要知道这个数字。</p>
  *
  * @param bytes       图片字节，非空
  * @param contentType MIME 类型，如 {@code image/png}

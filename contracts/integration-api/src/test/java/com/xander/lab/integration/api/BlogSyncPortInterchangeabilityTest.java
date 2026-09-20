@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
  * {@code com.xander.lab.agent.application.PublishPostTool}，它的两条不对称桩用例在
  * {@code PublishPostToolTest}。</p>
  *
- * <p>⭐ 这个类被写出来时（ADR 待办 54）纸面上的说法是"今天没有调用点会写反，只是巧合"。
+ * <p>⭐ 本类出现之前，纸面上的说法是"今天没有调用点会写反，只是巧合"。
  * 把 {@code DualSyncPortConsumerTest} 一跑，它立刻点名 {@code PublishPostTool} ——
  * 那个类<b>早就</b>同时持有两个端口，而且 {@code reconcile} 里两行 {@code findSucceeded}
  * 相邻、参数表逐字相同。写反的机会一直存在，只是从来没有东西会报错。
@@ -74,7 +74,7 @@ class BlogSyncPortInterchangeabilityTest {
      * <p>这条断言的是"这个坑确实存在"。它的价值在于<b>名字与失败信息</b>：
      * 一个将来要同时接入两个端口的调用方，读到这里就知道该给哪个方法配不对称桩。</p>
      *
-     * <p>不对称桩的具体形状（第十九刀的两个凭证端口已经交过学费）：两个桩必须取
+     * <p>不对称桩的具体形状（凭证端口那类不对称桩已经交过学费）：两个桩必须取
      * <b>不同的值</b>，例如 CSDN 桩返回一个结果、掘金桩返回 {@code null}（或反过来）。
      * 两个桩取同一个值时，接收者写反<b>照样绿</b> —— 那不是"断言写少了"，
      * 是"断言选的值分不开两个被测对象"。</p>

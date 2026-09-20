@@ -3,10 +3,10 @@ package com.xander.lab.automation.spi;
 import java.time.Instant;
 
 /**
- * 一条定时邮件提醒的服务间读模型（V9 §11 / §18 / §91）。
+ * 一条定时邮件提醒的服务间读模型。
  *
  * <h2>为什么是收窄，不是 {@code EmailReminderTaskVO} 的镜像</h2>
- * <p>镜像规则（{@code docs/migration/adr-contract-boundaries.md} §2.5）适用于一个类型
+ * <p>镜像规则适用于一个类型
  * <b>替换</b>了前端可见类型的情形 —— 那时"序列化逐字节不变"是一个可以证明的命题，
  * 它让这次改动被证明是纯重构。本类型不替换任何东西：
  * {@code automation.api.EmailReminderTaskVO} 留在原地，

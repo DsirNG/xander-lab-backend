@@ -23,10 +23,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 合起来就是边界消失。</p>
  *
  * <p>这条断言让加方法必须<b>显式改一次测试</b>，把无意识扩张变成有意识决策。
- * 与 {@code MediaAssetPortTest} 同一手法（见 {@code docs/migration/adr-contract-boundaries.md}
- * §3.6 与 §4.7）。</p>
+ * 与 {@code MediaAssetPortTest} 同一手法
+ * 。</p>
  *
- * <p><b>注入验证（2026-09-17 实测）</b>：给端口加一个
+ * <p>给端口加一个
  * {@code default String debugBilling()} 之后，反应堆编译<b>仍然通过</b>、
  * {@code BillingBizTest} 6/6 与 {@code TokenUsageTest} 9/9 全绿，
  * <b>只有本类红 3 条</b>（方法数 7→8、签名表比对、{@code default} 检查）。

@@ -12,7 +12,7 @@ package com.xander.lab.blogagent.spi;
  * {@code @ConfigurationProperties}（{@code BlogAgentProperties}）。</p>
  *
  * <p>按抽取判据，{@code @Component} 的具体实现 ⇒ <b>抽端口</b>，实现留在原地；
- * {@code @ConfigurationProperties} 是框架类型 ⇒ <b>搬不动</b>。所以消费方原来读到的
+ * {@code @ConfigurationProperties} 是框架类型 ⇒ <b>搬不动</b>。所以消费方读到的
  * 两样东西（客户端 + 配置）里，只有"能力"该过界，"配置"不该 —— 配置项改名、缺省、
  * 整个不存在（网关路径）都是提供方的自由，而契约不许有这种自由。</p>
  *

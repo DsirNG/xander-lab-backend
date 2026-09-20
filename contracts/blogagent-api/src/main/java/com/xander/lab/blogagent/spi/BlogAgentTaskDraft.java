@@ -5,7 +5,7 @@ package com.xander.lab.blogagent.spi;
  *
  * <p>域侧的 {@code blogagent.api.BlogAgentTaskCreateRequest} 是 {@code @Data} 可变类，
  * 带 {@code @NotBlank} / {@code @Size}，那些注解只在 {@code BlogAgentController} 标了
- * {@code @Valid} 时才生效。按 ADR-1 契约不许带框架类型，所以这里是一份**无注解的等价物** ——
+ * {@code @Valid} 时才生效。契约不许带框架类型，所以这里是一份**无注解的等价物** ——
  * 两个分量逐字段同名同序，转换是一次直接映射，没有任何取舍。</p>
  *
  * <p>⚠️ 两个分量都是 {@code String}，而且是相邻的。记录靠位置构造，写反不会有编译错误：

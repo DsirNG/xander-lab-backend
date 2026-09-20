@@ -15,7 +15,7 @@ import java.util.List;
  *
  * <p>收窄型契约的判据是"每个字段都有具名消费方"，不是"字段数必须比域侧少"。
  * 反推结果是全读 ⇒ 全带。真正被砍掉的是**域侧那个 record 本身**：它的调用方
- * 只有这两个工具和服务自己的测试，所以按 ADR §7.5 的做法直接换返回类型，
+ * 只有这两个工具和服务自己的测试，所以直接换返回类型，
  * 不保留一个同域富方法（见 {@link RecitationQuizPort}）。</p>
  *
  * <h2>⚠️ 位置契约的风险点</h2>
@@ -31,7 +31,7 @@ import java.util.List;
  *
  * <h2>为什么要另写一份而不是搬</h2>
  * <p>域侧那个 record 内嵌 {@code List<recitation.api.KnowledgeQuizAttemptView>} ——
- * 一个**前端 HTTP 层**的类型。搬进契约会让契约依赖应用模块（ADR-1 与"契约只允许 JDK"
+ * 一个**前端 HTTP 层**的类型。搬进契约会让契约依赖应用模块（"契约只允许 JDK"
  * 两条都违反），所以这里换成 {@link QuizAttemptView}。</p>
  *
  * @param contentTruncated 正文被截断时为 true，智能体出题时应避开未见部分

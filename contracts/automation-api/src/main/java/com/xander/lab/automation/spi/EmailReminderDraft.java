@@ -3,7 +3,7 @@ package com.xander.lab.automation.spi;
 import java.time.OffsetDateTime;
 
 /**
- * 创建一条定时邮件提醒时要提交的字段（V9 §11 / §18 / §91）。
+ * 创建一条定时邮件提醒时要提交的字段。
  *
  * <p>字段集是 {@code EmailReminderTool} 实际会填的那些，一个不多：
  * 该工具从模型给它的 JSON 里读 {@code recipientEmail} / {@code subject} / {@code message} /
@@ -15,7 +15,7 @@ import java.time.OffsetDateTime;
  * <p>域侧的 {@code EmailReminderCreateRequest} 带 {@code @NotBlank} / {@code @Email} /
  * {@code @Pattern} / {@code @Size} / {@code @Min} / {@code @Max}。那些是 <b>HTTP 边界</b>的事：
  * 它们生效是因为控制器把参数标了 {@code @Valid}。契约也不允许带它们（会引入依赖，
- * ADR-1 要求本模块与框架无关）。智能体这条路径上什么都没丢 —— 它本来就没有这些校验：
+ * 契约必须与框架无关）。智能体这条路径上什么都没丢 —— 它本来就没有这些校验：
  * 工具从 JSON 取参数、自己手写必填检查，再调用端口。</p>
  *
  * <h2>⚠️ 分量顺序是位置契约</h2>

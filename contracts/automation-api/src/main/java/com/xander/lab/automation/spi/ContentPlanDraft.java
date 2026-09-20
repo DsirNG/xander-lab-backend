@@ -3,7 +3,7 @@ package com.xander.lab.automation.spi;
 import java.util.List;
 
 /**
- * 创建一条定时发文计划时要提交的字段（V9 §11 / §18 / §91）。
+ * 创建一条定时发文计划时要提交的字段。
  *
  * <p>字段集是 {@code SchedulePlanTool} 实际会填的那些。域侧的
  * {@code BlogContentPlanCreateRequest} 还有 {@code scheduleType} / {@code scheduledDate} /

@@ -103,7 +103,7 @@
         <!--
             No compile or runtime dependency by design. junit-jupiter is test-scoped: a contract
             that silently loses its normalisation behaviour is exactly the kind of capability
-            regression V9 §2.3 forbids, so the behaviour is pinned by a test.
+            regression the refactoring rules forbid, so the behaviour is pinned by a test.
         -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>

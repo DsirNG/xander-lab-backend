@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>本测试还多钉一件事：两个常量的<b>字面量</b>。它们落库（{@code blog_notification.type} /
  * {@code .resource_type}），前端也按这两个字符串分流 —— 改字面量不是重构，是数据迁移。
  * 常量原本声明在 {@code BlogNotification} 实体上，这次跟着端口搬了过来，所以两边必须对得上：
- * 实体上那两处已删除，值只此一份。</p>
+ * 值只此一份，不在实体上重复声明。</p>
  */
 class NotificationPortTest {
 
@@ -38,7 +38,7 @@ class NotificationPortTest {
         // 实现侧就得改名 —— 那是与这条缝无关的改动。
         //
         // ⚠️ 按名字取，不按下标：getDeclaredMethods() 的顺序 JVM 并不保证。
-        // 注入验证时往端口加了一个方法，下标 0 就变成了新方法 —— 断言还在"通过"，
+        // 往端口加一个方法时，下标 0 就变成了新方法 —— 断言还在"通过"，
         // 只是检查的对象悄悄换了。
         assertEquals(Long.class, methodNamed("notifyResource").getReturnType(),
                 "返回值改成 void 会让实现侧必须改名（同名同参只差返回值编译不过）。"
@@ -117,7 +117,7 @@ class NotificationPortTest {
         for (var method : NotificationPort.class.getDeclaredMethods()) {
             // ⚠️ 先查参数个数：无参方法直接读 getParameterTypes()[0] 会抛
             // ArrayIndexOutOfBounds，报出来的是"下标越界"而不是"这个端口方法没收调用方 id"。
-            // 注入验证时踩到过 —— 断言失败的信息必须指向真正的问题。
+            // 踩到过 —— 断言失败的信息必须指向真正的问题。
             assertTrue(method.getParameterCount() > 0,
                     method.getName() + " 没有参数：端口方法必须显式收调用方 id。"
                             + "同进程里可以从 ThreadLocal 取，跨进程没有 ThreadLocal 可传。");

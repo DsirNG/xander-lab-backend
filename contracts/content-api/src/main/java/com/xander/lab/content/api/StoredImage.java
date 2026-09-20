@@ -20,7 +20,7 @@ package com.xander.lab.content.api;
  * 只允许 JDK 与自身包，所以 {@code content-api} 不能 import {@code integration.api.UploadResponse}。
  * 调用方在边界上做一次字段搬运，代价是 5 行，换来的是两个契约可以独立演化。</p>
  *
- * <p><b>契约字段改动 = 契约变更（V9 §11）。</b>{@code url} / {@code originalName} /
+ * <p><b>契约字段改动 = 契约变更。</b>{@code url} / {@code originalName} /
  * {@code storedName} 三个相邻 {@code String} 重排不报错，由 {@code StoredImageTest} 钉住。</p>
  *
  * @param url          对外可访问地址

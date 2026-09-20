@@ -22,9 +22,9 @@ package com.xander.lab.payment.api;
  * 声明了 {@code jackson-databind}；契约只许 import JDK（门禁
  * {@code contract-dependency-boundary}），所以契约 import 不到它。</p>
  *
- * <p>这不是"门禁太死"，而是 V9 的 <b>ADR-1：契约模块必须与序列化框架无关</b>。
+ * <p>这不是"门禁太死"，而是<b>契约模块必须与序列化框架无关</b>。
  * 让契约依赖一个带 Jackson 的库，下一步就是它依赖一个带 MyBatis 的库，再下一步
- * 就是"超级 common.jar"换个名字回来（§19）。代价是调用方在边界上做一次三字段换算 ——
+ * 就是"超级 common.jar"换个名字回来。代价是调用方在边界上做一次三字段换算 ——
  * 这个代价是明写的，不是漏掉的，见 {@link TokenUsage}。</p>
  *
  * <h2>端口语义（实现必须满足，且与实现是否启用无关）</h2>

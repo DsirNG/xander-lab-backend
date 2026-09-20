@@ -90,7 +90,7 @@ class BlogAgentPortTest {
     void theTwoTaskIdMethodsPutTheCallerIdFirst() {
         for (String name : List.of("findPublishedPost", "publish")) {
             Method method = methodNamed(name);
-            // ⚠️ 读第 n 个参数之前先查参数个数（待办 59）：参数表缩短时直接读下标抛
+            // ⚠️ 读第 n 个参数之前先查参数个数：参数表缩短时直接读下标抛
             // ArrayIndexOutOfBoundsException —— 报的是"下标越界"而不是"这个方法的参数表变了"。
             // 这一条守卫覆盖下面四个读数（类型 [0]/[1] 与参数名 [0]/[1]）。
             assertTrue(method.getParameterCount() > 1,
@@ -111,13 +111,13 @@ class BlogAgentPortTest {
      *
      * <p>载荷是 {@code String} 而不是某个结构化类型：stage 事件的载荷形如
      * {@code "write|正在撰写文章"}，是提供方推过来的**文本**。把它拆成结构化类型等于让契约
-     * 假装知道渲染格式，而 stage 的翻译是**调用方的策略**（见 §2.6：端口不带渲染方的策略常量）。</p>
+     * 假装知道渲染格式，而 stage 的翻译是**调用方的策略**（端口不带渲染方的策略常量）。</p>
      */
     @Test
     void runStreamTakesAJdkEventCallbackAndACancellationProbe() {
         Method runStream = methodNamed("runStream");
-        // ⚠️ 这条参数个数断言必须**排在两个下标读数之前**（待办 59）：它原来在最后一行，
-        // 于是参数表缩短时先抛的是 ArrayIndexOutOfBoundsException，这条消息根本轮不到说 ——
+        // ⚠️ 这条参数个数断言必须**排在两个下标读数之前**：
+        // 否则参数表缩短时先抛的是 ArrayIndexOutOfBoundsException，这条消息根本轮不到说 ——
         // 判据在、但排在症状后面，等于没有。
         assertEquals(4, runStream.getParameterCount(),
                 "runStream 是四参形式。三参的 Consumer<String> 重载只服务同域的前端 HTTP 层，"
@@ -128,7 +128,7 @@ class BlogAgentPortTest {
                 "第四个参数必须是 BooleanSupplier（协作式取消查询）。");
     }
 
-    /** 端口的返回类型必须是契约记录，不能是域侧实体（那会把 MyBatis 拖过边界，ADR-2）。 */
+    /** 端口的返回类型必须是契约记录，不能是域侧实体（那会把 MyBatis 拖过边界）。 */
     @Test
     void returnsContractRecordsNotDomainEntities() {
         assertEquals(BlogAgentTaskView.class, methodNamed("create").getReturnType());
@@ -143,7 +143,7 @@ class BlogAgentPortTest {
      * {@code create} 收的是 {@link BlogAgentTaskDraft}，不是域侧的
      * {@code blogagent.api.BlogAgentTaskCreateRequest}。
      *
-     * <p>后者带 {@code @NotBlank} / {@code @Size} —— 按 ADR-1，带框架注解的类型不许进契约。</p>
+     * <p>后者带 {@code @NotBlank} / {@code @Size} —— 带框架注解的类型不许进契约。</p>
      */
     @Test
     void createTakesTheContractDraftNotTheValidatedRequest() {

@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>于是"媒体库端口"会慢慢长成所有人绕过内容域边界的新入口 —— 每一次增加单独看都合理，
  * 合起来就是边界消失。这条断言让加方法必须<b>显式改一次测试</b>，把无意识扩张变成有意识决策。</p>
  *
- * <p>注入验证（2026-09-17 实测）：给端口加一个 {@code default String debug()} 之后，
+ * <p>给端口加一个 {@code default String debug()} 之后，
  * 反应堆<b>编译仍然通过</b>，其余测试全绿，<b>只有这一条红</b>。这正是它存在的理由。</p>
  */
 class MediaAssetPortTest {

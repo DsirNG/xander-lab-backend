@@ -13,11 +13,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code feature_key} / {@code primary_api_style} / {@code fallback_api_style} 列。
  * 改名**不会编译报错**，只会让库里已有的行静默失配：网关开着、配置也在，
  * 但按新键查不到，于是每个模型调用都抛
- * {@link FeatureModelNotConfiguredException}。这属于 V9 §2.3 说的"静默降低既有能力"，
- * 而按 §11，常量取值属于契约改动。</p>
+ * {@link FeatureModelNotConfiguredException}。这属于"静默降低既有能力"，
+ * 而常量取值属于契约改动。</p>
  *
  * <p>所以这里逐个断言字面量。任何一次"顺手统一命名"都会在这里失败，
- * 逼着改动者去看 {@code docs/contract-changes.yaml} 和迁移脚本。</p>
+ * 逼着改动者去确认数据怎么迁移。</p>
  */
 class ModelGatewayTest {
 

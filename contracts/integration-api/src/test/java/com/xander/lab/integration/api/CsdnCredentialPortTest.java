@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 这里是 {@code automation → integration} 那条跨部署单元边的边界，变宽的后果是
  * {@code integration} 的凭证存储被逐个搬进 {@code automation}。</p>
  *
- * <p>⚠️ 这一刀刻意只搬了实现类六个公开方法里的<b>一个</b>。另外五个
+ * <p>⚠️ 这里刻意只放了实现类六个公开方法里的<b>一个</b>。另外五个
  * （{@code isExpired} / {@code markExpired} / {@code requireCookie} / {@code save} /
  * {@code delete}）的调用点全在 {@code integration} 域内 —— 把它们一起端出去，
  * 等于让消费方的适配器被迫实现四个它从不调用的成员。<b>一半的价值来自没搬的东西。</b></p>

@@ -17,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 编译过、耦合指标一动不动、26 条门禁全绿、消费方的 Mockito 桩一个都不用改
  * （所以消费方测试也全绿）。只有反射能守。</p>
  *
- * <p>本类额外钉一条这一刀特有的性质：端口上<b>一个渲染参数都没有</b>。
- * 改造前 {@code MailService.sendReminderMail} 收了 {@code scheduledAt} / {@code contentType} /
+ * <p>本类额外钉一条性质：端口上<b>一个渲染参数都没有</b>。
+ * {@code MailService.sendReminderMail} 收了 {@code scheduledAt} / {@code contentType} /
  * {@code templateId} 三个只服务于渲染的参数，而渲染需要业务域的模板类与别人家的配置键
  * ——那正是 {@code integration → automation} 反向边的来源。</p>
  */
@@ -97,7 +97,7 @@ class MailPortTest {
     /**
      * 按名字取方法，并且断言**恰好一个**同名方法。
      *
-     * <p>⚠️ 原来收齐了同名方法却用 {@code findFirst()} 取第一个 —— 端口上出现**重载**时
+     * <p>⚠️ 收齐了同名方法却用 {@code findFirst()} 取第一个 —— 端口上出现**重载**时
      * 它会**按 JVM 的方法顺序**挑一个，上面的断言就开始检查另一个方法 ——
      * 而它们仍然"通过"。**没有失败信息，因为根本没有失败。**</p>
      */

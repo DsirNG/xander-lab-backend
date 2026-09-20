@@ -3,7 +3,7 @@ package com.xander.lab.content.api;
 import java.util.List;
 
 /**
- * 写入一篇文章时要提交的字段（V9 §11 / §18 / §91）。
+ * 写入一篇文章时要提交的字段。
  *
  * <p>同一个类型同时服务 {@link ContentPostPort#create} 与 {@link ContentPostPort#update}，
  * 语义差别在方法上而不在类型上：</p>
@@ -12,12 +12,12 @@ import java.util.List;
  *       其余可空。</li>
  *   <li><b>update</b>：<b>为 {@code null} 的分量表示“不改这一项”</b>；
  *       {@code tags} 非 {@code null} 时<b>整体替换</b>该文章的全部标签
- *       （与改造前 {@code BlogService.updateBlog} 的规则一致）。全部分量为 {@code null}
+ *       （与 {@code BlogService.updateBlog} 的规则一致）。全部分量为 {@code null}
  *       时实现方抛 {@link IllegalArgumentException}。</li>
  * </ul>
  *
  * <h2>为什么抽成 DTO 而不是继续传位置参数</h2>
- * <p>改造前的 {@code BlogService.updateBlog(Long, String, String, String, String, String, List)}
+ * <p>{@code BlogService.updateBlog(Long, String, String, String, String, String, List)}
  * 有<b>五个相邻的 {@code String}</b>（title / summary / content / categoryId / coverImage）。
  * 把 {@code summary} 与 {@code content} 写反不会有任何编译错误 ——
  * 摘要列会拿到整篇正文，而“摘要”本身只影响列表页的一行字，很难在测试里被发现。

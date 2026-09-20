@@ -1,7 +1,7 @@
 package com.xander.lab.core.api;
 
 /**
- * 访问令牌身份查询端口（V9 §18 / §91）。
+ * 访问令牌身份查询端口。
  *
  * <h2>为什么需要它</h2>
  *
@@ -19,7 +19,7 @@ package com.xander.lab.core.api;
  *
  * <h2>为什么在 core-api 而不是 agent-api</h2>
  *
- * <p>§18 固定了 8 个契约名，里面<b>没有 identity</b>；而 {@code core-api} 是
+ * <p>{@code core-api} 是
  * dinqor-core-host 这个部署单元的契约，identity 正好住在那里 ——
  * 与 {@link ModelGateway}、{@link UserLookupPort} 是同一个判据：
  * <b>一个类型属于这里，判据不是"看起来像契约"，而是它的实现跨部署单元。</b></p>
@@ -62,7 +62,7 @@ package com.xander.lab.core.api;
  *
  * <p>不用 {@code Optional} 是为了与 {@link UserLookupPort} 保持同一种形状 ——
  * 两个端口都是"查不到就是 null"，调用方读起来只有一种约定。
- * 契约形状一旦定下就是跨服务的（§11），两种风格混用会让每个消费方都要先查文档。</p>
+ * 契约形状一旦定下就是跨服务的，两种风格混用会让每个消费方都要先查文档。</p>
  *
  * <h2>⚠️ 这个端口<b>产出</b> userId，所以它<b>不许</b>收 userId</h2>
  *

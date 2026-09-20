@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>这个端口只有两个方法，所以"变宽"看起来不像个风险——但它正是整刀的关键：多一个
  * {@code invalidate()} 或 {@code enabled()} 之类的成员，就等于把控制流又打开了一个反向
- * 口子，而这一刀的全部意义就是让控制流只剩"消费方问、提供方答"一个方向。</p>
+ * 口子，而本契约的意义就是让控制流只剩"消费方问、提供方答"一个方向。</p>
  */
 class RemoteToolCatalogTest {
 

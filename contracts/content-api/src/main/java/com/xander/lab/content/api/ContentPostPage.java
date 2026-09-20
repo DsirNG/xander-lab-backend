@@ -3,7 +3,7 @@ package com.xander.lab.content.api;
 import java.util.List;
 
 /**
- * 分页的文章列表（V9 §11 / §18 / §91）。
+ * 分页的文章列表。
  *
  * <h2>为什么不用 {@code com.xander.lab.common.PageData}</h2>
  * <p>两个原因，任一都足以否决：</p>
@@ -13,7 +13,7 @@ import java.util.List;
  *       门禁 {@code contract-dependency-boundary} 会拦。</li>
  *   <li><b>它自己也跨不了进程。</b>{@code PageData} 的存在理由是“简化 MyBatis-Plus 的
  *       {@code IPage}，只保留前端需要的字段”——那是<b>前端</b>分页返回体，
- *       与服务间分页是两件事。V9 §19 的教训就是别让一个类型同时服务两个受众。</li>
+ *       与服务间分页是两件事。教训就是别让一个类型同时服务两个受众。</li>
  * </ol>
  *
  * <p>本记录逐个字段镜像 {@code PageData} 的序列化表面（{@code records} / {@code total} /

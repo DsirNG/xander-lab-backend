@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 钉住 {@link ContentPostQuery} 的字段名与顺序。
  *
  * <p>这个 DTO 存在的<b>唯一理由</b>是消灭两个相邻的 {@code Boolean} ——
- * 改造前 {@code BlogService.listMyPosts(Integer, String, Boolean, Boolean, Integer)}
+ * {@code BlogService.listMyPosts(Integer, String, Boolean, Boolean, Integer)}
  * 的第三、四个参数是 {@code juejinSynced} 与 {@code csdnSynced}。写反不会编译报错：
  * "哪些文章还没同步到掘金"会静默变成"哪些还没同步到 CSDN"，而两条 SQL
  * <b>都返回非空结果</b>，不专门覆盖就发现不了。</p>
@@ -62,7 +62,7 @@ class ContentPostQueryTest {
 
     /**
      * {@code juejinSynced} 必须排在 {@code csdnSynced} <b>前面</b>：
-     * 与改造前的 {@code listMyPosts(status, search, juejinSynced, csdnSynced, limit)}
+     * 与{@code listMyPosts(status, search, juejinSynced, csdnSynced, limit)}
      * 参数顺序一致，这样实现侧的替换才是纯粹的"位置参数 → 具名分量"。
      */
     @Test

@@ -172,7 +172,7 @@ class RecordShapeTest {
     @Test
     void quizAttemptViewItemsIsTextBecauseTheDomainFieldHasNoShape() {
         // 域侧 KnowledgeQuizAttemptView.items 的类型是 Object（items_json 列反序列化而来），
-        // 一个没有形状的字段。契约不许带 JsonNode（ADR-1），所以它走文本 ——
+        // 一个没有形状的字段。契约不许带 JsonNode，所以它走文本 ——
         // 与 agent-api 的 RemoteTool 同一个做法。
         assertEquals("itemsJson:String",
                 ContractShape.recordComponents(QuizAttemptView.class).stream()
@@ -245,12 +245,12 @@ class RecordShapeTest {
     }
 
     /**
-     * ADR-1：契约模块必须与序列化框架无关。
+     * 契约模块必须与序列化框架无关。
      *
      * <p>唯一豁免是遗留的 {@code @JsonIgnoreProperties(ignoreUnknown = true)} —— 它改变线上
      * 反序列化行为，为历史兼容而留。本模块是全新的，一条都不该有。
      * {@code MaterialDraft} 尤其容易踩：它对应域侧的 {@code CreateRecitationMaterialRequest}，
-     * 那个类型带 {@code jakarta.validation} 注解，搬过来的时候顺手带上就违反 ADR-1。</p>
+     * 那个类型带 {@code jakarta.validation} 注解，搬过来的时候顺手带上就违反「契约只许 JDK」。</p>
      */
     @Test
     void noRecordOrComponentCarriesAJacksonOrValidationAnnotation() {

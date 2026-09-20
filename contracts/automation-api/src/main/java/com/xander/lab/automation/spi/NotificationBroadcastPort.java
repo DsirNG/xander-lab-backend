@@ -2,7 +2,7 @@ package com.xander.lab.automation.spi;
 
 /**
  * 向<b>所有当前在线</b>的连接广播一条<b>瞬时</b>消息，并返回接收到的连接数
- * （V11 Wave 0B 第二十刀）。
+ * 
  *
  * <p>唯一消费方是 {@code admin}：{@code AdminNotificationController#testBroadcast}
  * 向在线客户端推一条诊断广播，用来验证实时通道是通的。</p>
@@ -32,7 +32,7 @@ package com.xander.lab.automation.spi;
  *
  * <p>⚠️ <b>这里刻意没有沿用 {@link NotificationPort} 那条"与实现同形"的先例，两者情形不同：</b>
  * 那边的富余是<b>返回值</b>（消费方忽略它，不写任何东西），这边的富余是<b>参数</b>
- * —— 消费方被迫写一个自己永远不用的 {@code null}。这正是 §16.2 的反面判据
+ * —— 消费方被迫写一个自己永远不用的 {@code null}。这正是反面判据
  * （"合并要么让一条路收下它永远不用的参数，要么砍掉另一条路的能力"）。
  * 一个接口要求调用方每次都撒谎，不是"惰性富余"，是<b>描述错了</b>。</p>
  *

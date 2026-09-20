@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>这些断言存在的唯一理由是：<b>端口变宽没有任何别的防线</b>。加一个方法、加一个
  * {@code default}、把参数换成框架类型，三件事都能编译通过、都不改跨域耦合指标、都不触发
- * 任何一条门禁。{@code RemoteTool} 那一刀的实测结论就是给端口加一个 {@code default} 方法后
+ * 任何一条门禁。实测结论就是给端口加一个 {@code default} 方法后
  * 26 条门禁<b>全绿</b>，只有这类反射测试会红。所以这里钉的是<b>完整签名</b>，
  * 不只是方法个数 —— 三个相邻的 {@code Long} 或 {@code String} 换位同样不报错，只静默错账。</p>
  */

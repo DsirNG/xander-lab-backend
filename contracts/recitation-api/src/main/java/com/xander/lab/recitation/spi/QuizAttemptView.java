@@ -27,16 +27,15 @@ import java.time.LocalDateTime;
  * （{@code objectMapper.valueToTree(...)}）。也就是说消费方要的是"这段 JSON 本身"，
  * 而不是"若干道题"。</p>
  *
- * <p>契约不能出现 {@code JsonNode}（ADR-1），而这里恰好有一条现成的答案：
+ * <p>契约不能出现 {@code JsonNode}，而这里恰好有一条现成的答案：
  * <b>JSON 以文本出入端口</b>，与 {@code agent-api} 的 {@code RemoteTool} 同一个做法。
  * 好处不只是合规：</p>
  * <ul>
  *   <li>提供方**不再解析**。它把 {@code items_json} 列的值原样交出来，
  *       于是"历史行里存的是旧形状"这件事对契约完全不可见 —— 契约不假装知道形状。</li>
- *   <li>**解析的容错归调用方**。域侧原来在反序列化失败时吞掉异常、留 {@code null}，
+ *   <li>**解析的容错归调用方**。域侧在反序列化失败时吞掉异常、留 {@code null}，
  *       消费方再把它变成空数组。按"端口只回答数据问题，兜底留调用方"，
- *       这个兜底本来就该在消费方那一侧。搬过去之后行为逐字不变
- *       （非法 JSON 与空列都仍然产出空数组）。</li>
+ *       这个兜底本来就该在消费方那一侧（非法 JSON 与空列都仍然产出空数组）。</li>
  *   <li>消费方本来就持有 {@code ObjectMapper}（它是 agent 的适配器层，Jackson 归它管）。</li>
  * </ul>
  *

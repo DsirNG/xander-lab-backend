@@ -3,7 +3,7 @@ package com.xander.lab.content.api;
 import java.util.List;
 
 /**
- * 内容域对外公开的“读写我的文章”端口（V9 §11 / §18 / §91）。
+ * 内容域对外公开的“读写我的文章”端口。
  *
  * <h2>为什么这个接口必须住在中立模块</h2>
  * <p>它由 {@code publishing.application.BlogService} 实现，而调用方分散在<b>三个部署单元</b>：
@@ -17,10 +17,10 @@ import java.util.List;
  * 注入了四个 MyBatis mapper（{@code BlogPostMapper} / {@code BlogCategoryMapper} /
  * {@code BlogTagMapper} / {@code BlogPostViewMapper}）、{@code UserLookupPort} 与
  * {@code StringRedisTemplate}。搬进契约等于把 MyBatis 与 Redis 拖进每个消费者，
- * V9 §19 第一个就否。所以只在契约里描述接口，实现留在内容域。</p>
+ * 那会把它拖进 spring-webmvc，启动就失败。所以只在契约里描述接口，实现留在内容域。</p>
  *
  * <h2>⚠️ 为什么每个方法都要显式收 {@code userId}</h2>
- * <p>改造前 {@code BlogService} 有 7 个方法内部读 {@code auth.core.UserContext}
+ * <p>{@code BlogService} 有 7 个方法内部读 {@code auth.core.UserContext}
  * （一个 {@code ThreadLocal}），由调用方在调用前 {@code setUserId} 来传递身份。
  * 同进程里这能工作，但<b>跨进程根本没有 ThreadLocal 可传</b> —— 端口必须把身份变成参数，
  * 否则这个端口只是在描述一个无法跨进程的调用。</p>
@@ -33,7 +33,7 @@ import java.util.List;
  * <h2>失败语义（跨进程后仍然成立，实现必须遵守）</h2>
  * <ul>
  *   <li>{@code userId} 为 {@code null} → 抛 {@link IllegalArgumentException}（“未登录或登录已过期”）。
- *       改造前这里抛的就是它，不是 {@code IllegalStateException} —— 换异常类型会改 HTTP 状态码。</li>
+ *       这里抛的就是它，不是 {@code IllegalStateException} —— 换异常类型会改 HTTP 状态码。</li>
  *   <li>{@link #findOwned} 查不到、<b>或存在但不属于该用户</b>时返回 {@code null}，不抛异常。
  *       调用方拿它做“存在性判断”，抛异常会把正常流程变成异常路径。</li>
  *   <li>{@link #listMyPosts} 只认 {@code status} / {@code search}；若 {@code query} 里带了
@@ -79,7 +79,7 @@ public interface ContentPostPort {
      * 见 {@link ContentPostQuery} 里“分页读取只认 status 与 search”。</p>
      *
      * @param page 页码，从 1 开始；小于 1 时按 1 处理
-     * @param size 每页大小；小于 1 时按 10 处理，上限 50（改造前就有的夹取规则）
+     * @param size 每页大小；小于 1 时按 10 处理，上限 50（夹取规则）
      */
     ContentPostPage listMyPosts(Long userId, ContentPostQuery query, int page, int size);
 
@@ -138,8 +138,8 @@ public interface ContentPostPort {
      * <p><b>⚠️ 名字刻意叫 {@code moveToTrash} 而不是 {@code delete}。</b>
      * 跨部署单元的调用方是 MCP 的 {@code delete_post} 工具，它的 description 写的是
      * “Permanently deletes a blog post” —— 而它实际调的就是这个软删。
-     * 这是改造前就存在的<b>文档与行为不一致</b>（工具描述骗了 AI 客户端），
-     * 本次重构<b>只把行为照实写进名字</b>，没有改行为、也没有改那句 description。
+     * 这是<b>文档与行为不一致</b>（工具描述骗了 AI 客户端），
+     * 只把行为照实写进名字，没有改行为、也没有改那句 description。
      * 要修就得单独修，并想清楚 {@code permanentlyDeleteBlog} 要求前态必须是回收站这一点。</p>
      */
     void moveToTrash(Long userId, Long postId);

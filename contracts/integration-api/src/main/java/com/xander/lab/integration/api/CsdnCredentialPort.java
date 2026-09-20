@@ -17,7 +17,7 @@ package com.xander.lab.integration.api;
  * 授权回调、发布器、定时校验各自用它们。把六个一起端出去，等于让
  * {@code automation} 的适配器被迫实现四个它从不调用的成员，并让"凭证怎么存"变成跨域契约。</p>
  *
- * <p><b>端口宽度 = 调用方适配器被迫实现的成员集。</b>这一刀刻意只搬一个方法，
+ * <p><b>端口宽度 = 调用方适配器被迫实现的成员集。</b>这里刻意只放一个方法，
  * 一半的价值来自<b>没搬</b>的那五个。宽度由 {@code CsdnCredentialPortTest} 用反射钉住。</p>
  *
  * <h2>为什么 CSDN 与掘金是<b>两个</b>端口，而不是一个带 {@code platform} 参数的端口</h2>
@@ -56,7 +56,7 @@ package com.xander.lab.integration.api;
  *   <li>纯查询：<b>不联系外部平台</b>、不消耗平台限流额度、不修改任何行。</li>
  *   <li>⚠️ <b>"不抛"说的是"未授权"，不是"永远不会抛"。</b>查询机制本身失败
  *       （库不可用；拆服务后提供方不可达）仍然抛运行时异常 —— 契约不点名具体类型，
- *       因为契约不许依赖框架类型（ADR-1）。<b>调用方按它在<b>这条路径里的语义角色</b>
+ *       因为契约不许依赖框架类型。<b>调用方按它在<b>这条路径里的语义角色</b>
  *       决定怎么办：</b>只拿它做展示补充的（{@code BlogContentPlanVO} 的
  *       {@code csdnAuthorized}）应当降级为 {@code false} 并留下可观测信号，
  *       而不是让整个请求失败（{@code BlogContentPlanService#credentialAuthorizedOrFalse}）；

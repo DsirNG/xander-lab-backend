@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>理由与 {@link CsdnBlogSyncPortTest} 相同。这里额外钉住的是<b>那四个参数</b>：
  * 掘金的同步比 CSDN 多收分类 id 与标签 id，而这两个参数正是"CSDN 与掘金为什么是两个端口"
  * 的全部理由 —— 它们一旦被"没人用"为理由砍掉，指定掘金分类/标签这项能力就在拆服务时
- * 静默消失了（V9 §2.3 禁止静默降级）。</p>
+ * 静默消失了（禁止静默降级）。</p>
  *
  * <p>⚠️ 跨域的两个消费方（{@code agent} 的 {@code PublishPostTool} 与 {@code automation} 的
  * {@code BlogPlanRunService}）目前一律传 {@code (null, null)}，但同域的前端 HTTP 层

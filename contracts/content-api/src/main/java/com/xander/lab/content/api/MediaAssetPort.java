@@ -3,7 +3,7 @@ package com.xander.lab.content.api;
 import java.util.List;
 
 /**
- * 内容域对外公开的媒体库端口（V9 §11 / §18 / §91）。
+ * 内容域对外公开的媒体库端口。
  *
  * <h2>为什么这个接口必须住在中立模块</h2>
  * <p>它由 {@code publishing.application.BlogMediaService} 实现，而调用方分散在
@@ -14,7 +14,7 @@ import java.util.List;
  *
  * <h2>为什么签名里是 {@code byte[]} 而不是 {@code MultipartFile}</h2>
  * <p>{@code MultipartFile} 是 spring-web 类型。放进契约会让 spring-web 出现在<b>每个</b>依赖契约的
- * 服务（含 V9 §19 那个 WebFlux Gateway）的 classpath 上；而且<b>跨进程时根本没有
+ * 服务（含 WebFlux Gateway）的 classpath 上；而且<b>跨进程时根本没有
  * {@code MultipartFile} 可传</b>。所以端口只收字节 + 元信息，调用方在调用点转换。
  * 实现类保留了 {@code uploadImage(Long, MultipartFile)} 作为<b>本域内便捷重载</b>，
  * 只服务同域的 {@code BlogMediaController}。先例：{@code integration.api.OssPort}。</p>

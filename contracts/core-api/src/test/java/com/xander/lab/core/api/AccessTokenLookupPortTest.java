@@ -76,7 +76,7 @@ class AccessTokenLookupPortTest {
      * 「校验这个令牌属不属于这个人」，那是<b>另一个能力</b>（且会诱使实现者
      * 把归属校验和令牌校验混成一步）。</p>
      *
-     * <p>注入验证：往签名里加一个 {@code Long userId} 参数，这条必须变红。</p>
+     * <p>往签名里加一个 {@code Long userId} 参数，这条必须变红。</p>
      */
     @Test
     void takesNoUserIdBecauseItProducesOne() {
@@ -107,7 +107,7 @@ class AccessTokenLookupPortTest {
 
     @Test
     void everySignatureIsFreeOfFrameworkTypes() {
-        // 契约必须与序列化框架无关（ADR-1），且不能被拖进任何 Web 框架。
+        // 契约必须与序列化框架无关，且不能被拖进任何 Web 框架。
         for (Method method : AccessTokenLookupPort.class.getDeclaredMethods()) {
             assertTrue(isJdkOnly(method.getReturnType()),
                     method.getName() + " 的返回类型 " + method.getReturnType().getName()

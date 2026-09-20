@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 钉住 {@link RecitationMaterialPort} 的形状。
  *
  * <p>为什么这件事只能在这里做：端口变宽（加方法、加 {@code default}、放宽参数）编译得过、
- * 耦合指标一动不动、26 条门禁全绿。见 {@code docs/migration/adr-contract-boundaries.md} §2.6
+ * 耦合指标一动不动、26 条门禁全绿。
  * 与 {@code .opencode/skills/backend-norms} 里的"端口变宽没人守"。</p>
  */
 class RecitationMaterialPortTest {
@@ -53,7 +53,7 @@ class RecitationMaterialPortTest {
         // （MaterialDraft vs CreateRecitationMaterialRequest、MaterialFilter vs MaterialQuery），
         // 可以同名重载 ⇒ 不需要加 ForView 后缀。只有 getMaterial 参数完全相同才必须改名。
         //
-        // ⚠️ 读第 n 个参数之前先查参数个数（待办 59）：参数表缩短时直接读下标抛
+        // ⚠️ 读第 n 个参数之前先查参数个数：参数表缩短时直接读下标抛
         // ArrayIndexOutOfBoundsException —— 报的是"下标越界"而不是"这个方法的参数表变了"。
         Method createMaterial = methodNamed("createMaterial");
         assertTrue(createMaterial.getParameterCount() > 1,
@@ -117,7 +117,7 @@ class RecitationMaterialPortTest {
         for (var method : RecitationMaterialPort.class.getDeclaredMethods()) {
             // ⚠️ 先查参数个数：无参方法直接读 getParameterTypes()[0] 会抛
             // ArrayIndexOutOfBounds，报出来的是"下标越界"而不是"这个端口方法没收调用方 id"。
-            // 注入验证时踩到过 —— 断言失败的信息必须指向真正的问题。
+            // 踩到过 —— 断言失败的信息必须指向真正的问题。
             assertTrue(method.getParameterCount() > 0,
                     method.getName() + " 没有参数：端口方法必须显式收调用方 id。"
                             + "同进程里可以从 ThreadLocal 取，跨进程没有 ThreadLocal 可传。");

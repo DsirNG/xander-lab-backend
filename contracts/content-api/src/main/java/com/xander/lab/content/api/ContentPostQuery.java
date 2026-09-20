@@ -1,10 +1,10 @@
 package com.xander.lab.content.api;
 
 /**
- * 查询自己文章时的筛选条件（V9 §11 / §18 / §91）。
+ * 查询自己文章时的筛选条件。
  *
  * <h2>为什么抽成 DTO 而不是继续传位置参数</h2>
- * <p>改造前的 {@code BlogService.listMyPosts(Integer, String, Boolean, Boolean, Integer)}
+ * <p>{@code BlogService.listMyPosts(Integer, String, Boolean, Boolean, Integer)}
  * 中间有两个相邻的 {@code Boolean}：{@code juejinSynced} 与 {@code csdnSynced}。
  * 写反不会有任何编译错误 —— “哪些文章还没同步到掘金”会静默变成“哪些还没同步到 CSDN”，
  * 而两条 SQL 都返回非空结果，测试不专门覆盖就发现不了。具名分量让写错名字编译期就红。</p>
@@ -15,7 +15,7 @@ package com.xander.lab.content.api;
  * <h2>⚠️ 分页读取只认 {@code status} 与 {@code search}</h2>
  * <p>{@link ContentPostPort#listMyPosts} 走的是分页 SQL
  * （{@code BlogPostMapper.selectMyPostList}），它<b>只</b>支持状态与关键词过滤。
- * 这是改造前 {@code BlogService.getMyBlogs} 就有的行为，不是新引入的限制 ——
+ * 这是{@code BlogService.getMyBlogs} 就有的行为，不是新引入的限制 ——
  * 但旧签名根本不接受同步状态参数，所以“传了不生效”这件事没法表达；
  * 现在 {@code query} 能表达，于是 {@link ContentPostPort#listMyPosts} 选择
  * <b>直接拒绝</b>而不是静默忽略。全量读取 {@link ContentPostPort#listAllMyPosts}

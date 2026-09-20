@@ -18,7 +18,7 @@ package com.xander.lab.content.api;
  * {@code FAILED} / {@code PUBLISH_FAILED} 后重新抛出。实现必须遵守 —— 返回一个"看起来成功"的
  * 空结果会让调用方写进一条 SUCCEEDED 记录，而外部平台其实什么都没收到。</p>
  *
- * <p><b>⚠️ 未决问题（Wave 2 之前必须决定，见 docs/migration/lib-extraction.md）。</b>
+ * <p><b>⚠️ 未决问题（拆服务之前必须决定）。</b>
  * 现在是单体，Spring 能把两个域的实现 bean 一起注入进内容域的 Service；拆成两个进程之后这不可能成立。
  * 两个方向：① 发布适配器跟着端口走、并入内容域；② 发布改成对外的 HTTP / 事件调用。无论选哪个都
  * 不改变本接口的形状，所以先把接口抽出来是安全的。</p>
