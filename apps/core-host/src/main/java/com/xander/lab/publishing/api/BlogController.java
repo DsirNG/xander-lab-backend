@@ -130,15 +130,6 @@ public class BlogController {
         }
     }
 
-    @GetMapping("/posts/{id}")
-    public Result<BlogPostVO> getPostById(@PathVariable Long id) {
-        BlogPostVO vo = blogService.getBlogById(id);
-        if (vo == null) {
-            return Result.notFound("文章不存在");
-        }
-        return Result.success(vo);
-    }
-
     @PostMapping("/posts/{id}/view")
     public Result<ViewResult> recordView(
             @PathVariable Long id,

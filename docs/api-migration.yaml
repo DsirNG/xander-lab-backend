@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 256
+  total: 255
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -3573,23 +3573,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: publishing-get-blog-posts-id-blogpubliccontroller
-    owner: publishing
-    old:
-      method: GET
-      path: "/api/blog/posts/{id}"
-    new:
-      method: GET
-      path: "/api/v2/content/blog/posts/{id}"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: publishing-get-blog-posts-id-blogcontroller
+  - id: publishing-get-blog-posts-id
     owner: publishing
     old:
       method: GET

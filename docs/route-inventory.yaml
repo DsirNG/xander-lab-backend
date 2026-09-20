@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 261
+  total: 260
   streams: 8
   websocket: 1
   sse: 7
@@ -1046,7 +1046,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getCategories"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 156
+    line: 147
   - id: publishing-get-blog-media-images
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1190,7 +1190,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogController#softDeletePost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
     line: 113
-  - id: publishing-get-blog-posts-id-blogpubliccontroller
+  - id: publishing-get-blog-posts-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -1201,17 +1201,6 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogPublicController#find"
     file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPublicController.java
     line: 41
-  - id: publishing-get-blog-posts-id-blogcontroller
-    logical_owner: publishing
-    deployment_unit: dinqor-content-automation
-    kind: controller
-    http_method: GET
-    path: "/api/blog/posts/{id}"
-    stream: none
-    last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#getPostById"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 133
   - id: publishing-put-blog-posts-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1255,7 +1244,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#recordView"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 142
+    line: 133
   - id: integration-post-blog-posts-postid-sync-csdn
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -1288,7 +1277,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getAllTags"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 161
+    line: 152
   - id: publishing-get-blog-tags-popular
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1299,7 +1288,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#getPopularTags"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 166
+    line: 157
   - id: components-get-components-menu
     logical_owner: components
     deployment_unit: dinqor-core-host
