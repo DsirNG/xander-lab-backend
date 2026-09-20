@@ -303,6 +303,7 @@ Timer 接入并发布 P95/P99 与 Histogram；来源时间来自 `account_securi
 java ... -Dtest=AgentConversationControllerTest test
 java ... -Dtest=BlogAgentControllerTest test
 java ... -Dtest=BlogPlanSseServiceTest test
+java ... -Dtest=Img2ThreeControllerTest test
 java ... -Dtest=AgentStreamWebSocketHandlerTest test
 
 # 本地安全平面（标记 + 断连的组合顺序与幂等性）
