@@ -6,7 +6,7 @@ import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** Gateway route for the Wave 2 content-automation compatibility boundary. */
+/** Gateway routes for the Wave 2 content-automation deployment boundary. */
 @Configuration
 public class ContentAutomationRouteConfiguration {
 
@@ -16,6 +16,11 @@ public class ContentAutomationRouteConfiguration {
             @Value("${gateway.content-automation-uri:lb://dinqor-content-automation}")
             String contentAutomationUri) {
         return builder.routes()
+                .route("content-publishing-public-reads", route -> route
+                        .path("/api/blog/posts", "/api/blog/posts/recent")
+                        .and()
+                        .method(org.springframework.http.HttpMethod.GET)
+                        .uri(contentAutomationUri))
                 .route("content-automation-cutover", route -> route
                         .path("/api/blog-agent/**", "/api/blog-plans/**", "/api/email-reminders/**",
                                 "/api/notifications/**")

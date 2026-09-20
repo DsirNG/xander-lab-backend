@@ -130,25 +130,6 @@ public class BlogController {
         }
     }
 
-    /**
-     * 获取文章列表
-     */
-    @GetMapping("/posts")
-    public Result<PageData<BlogPostVO>> getPosts(
-            @RequestParam(required = false, defaultValue = "") String search,
-            @RequestParam(required = false, defaultValue = "") String category,
-            @RequestParam(required = false, defaultValue = "") String tag,
-            @RequestParam(required = false, defaultValue = "1") int page,
-            @RequestParam(required = false, defaultValue = "10") int size) {
-        return Result.success(blogService.getBlogs(search, category, tag, page, size));
-    }
-
-    @GetMapping("/posts/recent")
-    public Result<List<BlogPostVO>> getRecentPosts(
-            @RequestParam(required = false, defaultValue = "5") int limit) {
-        return Result.success(blogService.getRecentBlogs(limit));
-    }
-
     @GetMapping("/posts/{id}")
     public Result<BlogPostVO> getPostById(@PathVariable Long id) {
         BlogPostVO vo = blogService.getBlogById(id);

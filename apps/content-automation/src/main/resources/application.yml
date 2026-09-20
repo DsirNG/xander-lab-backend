@@ -4,6 +4,16 @@ server:
 spring:
   application:
     name: ${SPRING_APPLICATION_NAME:dinqor-content-automation}
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&connectionTimeZone=Asia%2FShanghai&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true}
+    username: ${SPRING_DATASOURCE_USERNAME:dinqor_content_automation}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      connection-timeout: 30000
+      validation-timeout: 5000
+      max-lifetime: 600000
+      keepalive-time: 300000
   cloud:
     nacos:
       config:

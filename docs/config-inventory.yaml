@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 792
-  leaves: 560
+  total: 802
+  leaves: 568
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -698,6 +698,56 @@ config:
   - key: spring.application.name
     source: apps/content-automation/src/main/resources/application.yml
     value: "${SPRING_APPLICATION_NAME:dinqor-content-automation}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.datasource.url
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&connectionTimeZone=Asia%2FShanghai&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.username
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_DATASOURCE_USERNAME:dinqor_content_automation}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.password
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_DATASOURCE_PASSWORD:}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.driver-class-name
+    source: apps/content-automation/src/main/resources/application.yml
+    value: com.mysql.cj.jdbc.Driver
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.hikari
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.datasource.hikari.connection-timeout
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "30000"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.hikari.validation-timeout
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "5000"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.hikari.max-lifetime
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "600000"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.hikari.keepalive-time
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "300000"
     leaf: true
     logical_owner: shared
   - key: spring.cloud

@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 560
-  service_private: 490
-  secret: 58
+  total: 568
+  service_private: 497
+  secret: 59
   shared: 12
 config:
   - key: agent.conversation.compaction-enabled
@@ -2229,6 +2229,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.datasource.driver-class-name
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.driver-class-name
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -2239,7 +2244,17 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.datasource.hikari.connection-timeout
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.hikari.connection-timeout
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.hikari.keepalive-time
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -2249,7 +2264,17 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.datasource.hikari.max-lifetime
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.hikari.max-lifetime
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.hikari.validation-timeout
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -2260,6 +2285,11 @@ config:
     nacos_group: COMMON
   - key: spring.datasource.password
     source: apps/agent/src/main/resources/application.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.password
+    source: apps/content-automation/src/main/resources/application.yml
     classification: secret
     owner: shared
     nacos_group: COMMON
@@ -2280,6 +2310,11 @@ config:
     nacos_group: COMMON
   - key: spring.datasource.url
     source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.url
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -2300,6 +2335,11 @@ config:
     nacos_group: COMMON
   - key: spring.datasource.username
     source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.username
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
