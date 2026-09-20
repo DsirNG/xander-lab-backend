@@ -4,6 +4,13 @@ server:
 spring:
   application:
     name: ${SPRING_APPLICATION_NAME:dinqor-gateway}
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      password: ${SPRING_REDIS_PASSWORD:}
+      database: ${SPRING_REDIS_DATABASE:0}
+      timeout: 5000ms
   cloud:
     nacos:
       config:
@@ -48,3 +55,9 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+# Fast path only. Durable Gateway bootstrap/reconcile is a separate Wave 2 step.
+gateway:
+  security-state:
+    pubsub-enabled: ${GATEWAY_SECURITY_STATE_PUBSUB_ENABLED:false}
+    pubsub-channel: ${GATEWAY_SECURITY_STATE_PUBSUB_CHANNEL:dinqor:security-events}

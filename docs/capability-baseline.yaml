@@ -29,10 +29,14 @@ capabilities:
     since: V7
     ref: V9 §26 / §28.1 / §48
     status: active
-    evidence: "identity/application/UserAdminService.setUserStatus → revokeSessions(targetId)"
+    evidence: >-
+      identity/application/UserAdminService.setUserStatus → revokeSessions(targetId)；
+      Core Host 的 JWT + 本地 deny cache 已接入；GatewayAuthenticationFilter 在
+      GATEWAY_SECURITY_STATE_PUBSUB_ENABLED=true 时通过本地 deny cache 做新请求快拒绝。
     notes: >-
       现状：Redis 正常时近实时撤销全部 Access（删除 login:token:<jwt> + 集合键）。
-      新架构必须保持秒级：Gateway 每请求 JWT 验签后查本地 deniedAccountIds。
+      新架构必须保持秒级：Gateway 每请求 JWT 验签后查本地 deniedAccountIds；Gateway
+      的 Pub/Sub 目前只是快路径，启动快照/增量对账仍由后续 Wave 2 负责。
       禁止退化为等待 Access Token 30 分钟自然过期。
     acceptance: "P95 <= 1s / P99 <= 2s / hard bound <= 5s（新请求）"
 

@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 583
-  leaves: 434
+  total: 596
+  leaves: 443
 config:
   - key: server
     source: apps/bloghtml-preview/src/main/resources/application.yml
@@ -1955,6 +1955,41 @@ config:
     value: "${SPRING_APPLICATION_NAME:dinqor-gateway}"
     leaf: true
     logical_owner: shared
+  - key: spring.data
+    source: apps/gateway/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.data.redis
+    source: apps/gateway/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.data.redis.host
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${SPRING_REDIS_HOST:localhost}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.port
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${SPRING_REDIS_PORT:6379}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.password
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${SPRING_REDIS_PASSWORD:}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.database
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${SPRING_REDIS_DATABASE:0}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.timeout
+    source: apps/gateway/src/main/resources/application.yml
+    value: "5000ms"
+    leaf: true
+    logical_owner: shared
   - key: spring.cloud
     source: apps/gateway/src/main/resources/application.yml
     value: ""
@@ -2133,6 +2168,26 @@ config:
   - key: management.metrics.tags.application
     source: apps/gateway/src/main/resources/application.yml
     value: "${spring.application.name}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway
+    source: apps/gateway/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: gateway.security-state
+    source: apps/gateway/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: gateway.security-state.pubsub-enabled
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_SECURITY_STATE_PUBSUB_ENABLED:false}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.security-state.pubsub-channel
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_SECURITY_STATE_PUBSUB_CHANNEL:dinqor:security-events}"
     leaf: true
     logical_owner: unassigned
   - key: spring
@@ -3205,3 +3260,17 @@ config:
     logical_owner: core
     source_kind: java-configuration-properties
     line: 15
+  - key: gateway.security-state.pubsub-channel
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 12
+  - key: gateway.security-state.pubsub-enabled
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 11

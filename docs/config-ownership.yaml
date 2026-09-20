@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 434
-  service_private: 378
-  secret: 47
+  total: 443
+  service_private: 386
+  secret: 48
   shared: 9
 config:
   - key: agent.conversation.compaction-enabled
@@ -1763,6 +1763,11 @@ config:
     classification: service_private
     owner: shared
     nacos_group: COMMON
+  - key: spring.data.redis.database
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
   - key: spring.data.redis.host
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
@@ -1778,6 +1783,11 @@ config:
     classification: service_private
     owner: shared
     nacos_group: COMMON
+  - key: spring.data.redis.host
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
   - key: spring.data.redis.password
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: secret
@@ -1785,6 +1795,11 @@ config:
     nacos_group: COMMON
   - key: spring.data.redis.password
     source: apps/core-host/src/main/resources/application.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.password
+    source: apps/gateway/src/main/resources/application.yml
     classification: secret
     owner: shared
     nacos_group: COMMON
@@ -1803,6 +1818,11 @@ config:
     classification: service_private
     owner: shared
     nacos_group: COMMON
+  - key: spring.data.redis.port
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
   - key: spring.data.redis.timeout
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
@@ -1810,6 +1830,11 @@ config:
     nacos_group: COMMON
   - key: spring.data.redis.timeout
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.timeout
+    source: apps/gateway/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -2088,6 +2113,26 @@ config:
     classification: service_private
     owner: studio
     nacos_group: DINQOR-CORE
+  - key: gateway.security-state.pubsub-channel
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: gateway.security-state.pubsub-channel
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: gateway.security-state.pubsub-enabled
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: gateway.security-state.pubsub-enabled
+    source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
   - key: management.endpoint.health.probes.enabled
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private

@@ -24,10 +24,14 @@ public class GatewayAuthenticationFilter implements GlobalFilter, Ordered {
 
     private final GatewayAccessPolicy accessPolicy;
     private final JwtUtil jwtUtil;
+    private final GatewaySecurityStateCache securityStateCache;
 
-    public GatewayAuthenticationFilter(GatewayAccessPolicy accessPolicy, JwtUtil jwtUtil) {
+    public GatewayAuthenticationFilter(GatewayAccessPolicy accessPolicy,
+                                       JwtUtil jwtUtil,
+                                       GatewaySecurityStateCache securityStateCache) {
         this.accessPolicy = accessPolicy;
         this.jwtUtil = jwtUtil;
+        this.securityStateCache = securityStateCache;
     }
 
     @Override
@@ -48,6 +52,15 @@ public class GatewayAuthenticationFilter implements GlobalFilter, Ordered {
             claims = jwtUtil.parseToken(token);
         } catch (RuntimeException ex) {
             return reject(exchange, HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        long accountId;
+        try {
+            accountId = Long.parseLong(claims.getSubject());
+        } catch (RuntimeException ex) {
+            return reject(exchange, HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
+        }
+        if (securityStateCache.isDisabled(accountId)) {
+            return reject(exchange, HttpStatus.FORBIDDEN, "账号已被禁用");
         }
         if (decision.access() == GatewayAccessPolicy.Access.ADMIN
                 && !"ADMIN".equals(claims.get("role", String.class))) {

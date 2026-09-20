@@ -70,8 +70,8 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
 ## Config keys
 
-- total keys: **583** (leaf: 434)
-- unassigned leaves: **20**
+- total keys: **596** (leaf: 443)
+- unassigned leaves: **24**
 
   - `management.endpoints.web.exposure.include` (apps/bloghtml-preview/src/main/resources/application.yml)
   - `management.endpoint.health.probes.enabled` (apps/bloghtml-preview/src/main/resources/application.yml)
@@ -93,6 +93,10 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
   - `management.endpoint.health.probes.enabled` (apps/gateway/src/main/resources/application.yml)
   - `management.endpoint.health.show-details` (apps/gateway/src/main/resources/application.yml)
   - `management.metrics.tags.application` (apps/gateway/src/main/resources/application.yml)
+  - `gateway.security-state.pubsub-enabled` (apps/gateway/src/main/resources/application.yml)
+  - `gateway.security-state.pubsub-channel` (apps/gateway/src/main/resources/application.yml)
+  - `gateway.security-state.pubsub-channel` (apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java)
+  - `gateway.security-state.pubsub-enabled` (apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java)
 
 ## Cross-domain implementation imports (V9 section 81)
 

@@ -29,6 +29,11 @@
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
             <version>${spring-cloud-loadbalancer.version}</version>
         </dependency>
+        <!-- Security event Pub/Sub fast path for the Gateway-local deny cache. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <!-- Discovery is opt-in locally and supplies lb://dinqor-core-host in production. -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
