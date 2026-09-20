@@ -46,8 +46,13 @@ package com.xander.lab.automation.spi;
  * <ul>
  *   <li><b>读侧</b>：{@code list} / {@code unreadCount} / {@code markRead} / {@code markAllRead}
  *       —— 它们服务的是前端 Navbar 铃铛（{@code automation.api} 的控制器），不是跨域消费方。</li>
- *   <li><b>SSE 广播</b>：{@code BlogPlanSseService} 要的是 {@code SseEmitter}（框架类型），
- *       形状完全不同，且消费方是 {@code admin}，单独一刀。</li>
+ *   <li><s><b>SSE 广播</b>：{@code BlogPlanSseService} 要的是 {@code SseEmitter}（框架类型），
+ *       形状完全不同，且消费方是 {@code admin}，单独一刀。</s>
+ *       ✅ <b>第二十刀已做</b>：{@link NotificationBroadcastPort}。
+ *       ⚠️ 当时这句话对<b>类</b>成立、对<b>边</b>不成立：{@code subscribe} 返回
+ *       {@code SseEmitter} 从来没跨过边界，{@code admin} 只调 {@code broadcast}
+ *       （三个 {@code String} 进、一个 {@code int} 出）。教训记在
+ *       {@code NotificationBroadcastPort} 的类注释里。</li>
  * </ul>
  *
  * <p>⚠️ 本端口<b>不承诺</b>事务语义。实现是 {@code REQUIRES_NEW}（通知只是旁路提醒，

@@ -3576,7 +3576,232 @@ SSE / WebSocket 契约的改动；消费方注入的类型换了，但同进程�
 `deployment-unit-coupling` 三条判据将只剩"不许变坏"的含义 ——
 那时要重新想 `MUTUAL_UNIT_PAIRS` / `WAVE2_UNITS` 的关系（§18.9 已经把互依对清空）。
 
-## 20. 待办
+## 20. 落地记录（十七）：`NotificationBroadcastPort` —— 跨单元实现边**归零**
+
+### 20.1 目标边：`admin → automation`（1），最后一条
+
+`AdminNotificationController` 注入 `automation.infrastructure.BlogPlanSseService`，
+只为调一个方法：
+
+```java
+int recipients = sseService.broadcast(
+        "SSE_TEST_BROADCAST", "SSE 广播测试", "管理员发起的实时通知测试", null, null);
+```
+
+这条边在 §19.9 被记成"形状要先设计"，而且 ADR 与 `automation.spi/package-info` 里
+**两处**都写着同一个理由：
+
+> SSE 广播端口（`admin` 要）。它要的是 `SseEmitter`（框架类型），形状与本模块三个端口完全不同，单独一刀。
+
+⚠️ **那句话对"整个类"成立，对"这条边"不成立。** `BlogPlanSseService` 的
+`subscribe(Long userId)` 确实返回 `SseEmitter` —— 但 `admin` 从来没碰过它。
+这条边只经过 `broadcast`，而它**收三个 `String`、返回 `int`**，本来就不带框架类型。
+
+⇒ 这是一次**因为"整个类搬不动"而差点把"其中一条方法可以抽"一起否掉**的误判。
+抽取判据第三种情况说的正是"签名带框架类型 ⇒ 连碰都不要碰，另立**窄端口**把框架类型
+挡在外面" —— **窄端口本来就是给这种类准备的**，而这里连"挡"都不用做：
+要露出来的那条方法本来就在门外。
+
+### 20.2 形状：窄端口只带 `broadcast`，而且**不收** `planId` / `runId`
+
+```java
+public interface NotificationBroadcastPort {
+    int broadcast(String type, String title, String message);
+}
+```
+
+留在实现里的：`subscribe`（返回 `SseEmitter`）、`push`（收 blog-plan 域的
+`planId` / `runId`）、连接注册表、封禁校验、心跳线程。
+
+⚠️ **为什么是三个参数，而不是与实现同形的五个。** 实现原来的签名是
+`broadcast(type, title, message, planId, runId)`，那两个 `Long` 是 blog-plan 域的概念，
+而唯一的调用方永远传 `null`。
+
+⚠️ **这里刻意没有沿用 §8 那条"与实现同形"的先例，两者情形不同：**
+
+| | `NotificationPort`（§8） | `NotificationBroadcastPort`（本刀） |
+|---|---|---|
+| 富余的是什么 | **返回值** `Long` | **参数** `planId` / `runId` |
+| 消费方要做什么 | 忽略它（不写任何东西） | 每次都写一个 `null` |
+| 保留的代价 | 契约上多一个没人读的返回值 | **契约上多两个要求调用方撒谎的参数** |
+| 收窄的代价 | Java 不允许同名同参只差返回值 ⇒ 实现侧必须**改名** | 无 —— 参数个数不同是合法重载 |
+| 结论 | 保留（惰性富余） | **收窄** |
+
+判据就是 §16.2 那句话的反面：*"合并要么让 CSDN 那条路收下它永远不用的参数，
+要么砍掉掘金的能力"* —— **让调用方每次都写一个自己永远不用的值，不是"惰性富余"，
+是描述错了。**
+
+⭐ **收窄可证是行为保持的**：`broadcast` 只把参数转发给 `push`，
+而 `push` 把 `null` 的 `planId` / `runId` 序列化成空串 ⇒ **线上载荷逐字节不变**。
+由 `BlogPlanSseServiceTest#broadcastFansOutToPushWithoutPlanOrRunContext` 钉住
+（注入 E 证明它接着线）。
+
+### 20.3 顺手补掉一条零覆盖：`broadcast` 从来没被跑过
+
+`broadcast` 只有**一个**调用方（admin 的控制器），而 `BlogPlanRunServiceTest`
+把整个 SSE 服务 mock 掉了 ⇒ 它的方法体在测试里**一次都没执行过**。
+`BlogPlanSseServiceTest` 此前三条用例全部只走 `push` / `subscribe` / `remove`。
+
+⇒ 补两条：`broadcastReturnsTheNumberOfCurrentlyRegisteredConnections`（0 个连接返回 0；
+2 + 1 个标签页返回 **3** —— 是**连接**数不是**用户**数）与上面那条扇出断言。
+
+⚠️ **返回值的语义（连接 vs 用户）没有任何地方写着**，只有 `AdminNotificationController`
+的注释说"返回接收连接数"。注入 G 把 `recipients += connections.size()` 改成
+`recipients += 1`，只有这一条断言会红。
+
+⚠️ 顺带修掉新测试里 `methodNamed` 的一个不确定性：原来"取第一个同名方法"，
+一旦端口上出现**重载**，它会**按 JVM 的方法顺序**挑一个，断言就开始检查另一个方法
+—— 而它们仍然"通过"（**没有失败信息，因为根本没有失败**）。
+改成断言"恰好一个"。注入 A 同时踩中这条与 `noMethodIsDefault`。
+
+### 20.4 ⭐ 实测：跨单元实现边归零
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| impl 语句 / 边 | 18 / 8 | **17 / 7** |
+| 跨单元语句 / 边 | 1 / 1 | **0 / 0** |
+| api 两列 | 9 / 6 | 9 / 6（不动） |
+
+`admin` 作为来源域在跨单元层面**归零**（它仍有两组**同单元**出边：
+`admin → identity` 2、`admin → virtualpay` 1）。`automation` 作为目标域也**归零**。
+
+### 20.5 ⚠️ 归零之后，这条不变式**没有任何门禁守着**（新缝）
+
+这是本刀最值得记的一条。归零之前，图里至少还有一条边；归零之后，
+**"跨单元实现边 = 0"变成了这一轮重构的头条成果，而它是无人看守的**：
+
+| 门禁 | 新增一条**单向**跨单元实现边（A → B，无回边）时会怎样 |
+|---|---|
+| `deployment-unit-coupling` 判据 1 | 通过 —— 它只管 `bloghtml` 有没有边 |
+| `deployment-unit-coupling` 判据 2 | 通过 —— 单向边**不会让任何单元进入强连通分量** |
+| `deployment-unit-coupling` 判据 3 | 通过 —— 没有产生新的互依对 |
+| `cross-domain-import-baseline` | 通过 —— 它的基线是 `scan.py` 的**产物**（待办 16） |
+
+⇒ **两条门禁都不会红。** 而这不是本刀造成的缝：`deployment-unit-coupling` 从写下来那天
+起就只判**形状**（"不许出现新的环 / 新的互依对"），判**大小**从来是
+`cross-domain-import-baseline` 的活 —— 而那条的基线取自被测物本身（待办 16，**已问过九次**）。
+
+⚠️ 归零之前这条缝**被掩盖着**：那时跨单元边不是 0，任何人读 `cross-domain-imports.yaml`
+都能看到实际值，门禁的通过消息也还在描述一个非空图。归零之后，
+**"0"本身成了要守的东西**，而它现在只活在文档里。
+
+修法（**未做，见待办 56**）：把期望值写成 `ci_gates.py` 里的一个**常量**
+（`EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0`），与 `MUTUAL_UNIT_PAIRS` 同一个模式
+—— 基线来自**判据之外**。⚠️ 这个常量在归零**之前**写不出来（数字一直在动，写死就得每刀改一次），
+**归零之后它才成为一个稳定常量** —— 所以这个修法是被本刀**解锁**的，而本刀**没有顺手做**：
+它是一次 CI 设计变更，与待办 16 同族，应该由人拍板，不该在一次抽取里悄悄落地。
+
+### 20.6 门禁改动：让通过消息报**实测**边数
+
+`deployment-unit-coupling` 的通过消息此前是
+"…every unit is a singleton and the cross-unit implementation graph is acyclic…"。
+⚠️ 图形状变了之后这句话开始**掩盖结果**：它对"空图"和"有几条单向边"读起来**一模一样**，
+而这两件事的迁移含义完全不同（前者是完工，后者还有活）。而判据本身在两种形状下都成立，
+所以**永远不会有人因为"它红了"去修它**。
+
+⇒ 两个分支都补上实测值：
+
+```text
+…every unit is a singleton and the cross-unit implementation graph is acyclic
+(0 cross-unit edge(s) / 0 statement(s) left), so no unit can block another's extraction…
+```
+
+这是 §18.9 那条"分量大小为 1 时另起一句"的**同族第二次**：
+失真的都是**通过消息**，不是判定。
+⇒ **任何通过消息里的形容词（"acyclic" / "isolated" / "singleton"），
+都要问一句"它对另一种形状还成立吗？两种形状读起来一样吗？"**
+
+### 20.7 注入验证：七次
+
+七条注入、七个锚点**全部生效、全部逐字节还原**。判据分三类：契约形状（A / B / C / F）、
+消费方接线（D，判据是**指标**不是测试）、行为保持（E / G）。
+
+| # | 注入 | 落点 | 实测红 |
+|---|---|---|---|
+| A | 端口上加一个 `default` 重载 | `NotificationBroadcastPort` | **4** |
+| B | 端口与实现的返回值 `int` → `Integer` | 端口 + `BlogPlanSseService` | **2** |
+| C | 把 `planId` / `runId` 放回端口 | 端口 + 实现 + 消费方（三处同改） | **2** |
+| D | 消费方退回具体类 `@Service` | `AdminNotificationController` | **指标** |
+| E | 扇出里写死的两个 `null` → `0L` | `BlogPlanSseService` | **1** |
+| F | 端口上多一个常量 | `NotificationBroadcastPort` | **1** |
+| G | `recipients += connections.size()` → `+= 1` | `BlogPlanSseService` | **1** |
+
+- **A（4 条）**：`declaresExactlyTheOneKnownMethodWithThisExactSignature`、
+  `returnsIntSoTheProviderSideIsAPureTypeReplacement`、
+  `takesExactlyThreeStringsAndNoPlanOrRunContext`、
+  `noMethodIsDefaultBecauseThatWouldWidenTheContractSilently`。
+  ⚠️ 这是本刀那个 `methodNamed` 改动的**直接受益者**：改之前"取第一个同名方法"只有签名清单
+  会红，改成"恰好一个"之后**两个**用 `methodNamed` 的用例一起红。
+  它同时是待办 57 的实测样本 —— 端口加 `default` 方法**在生产代码里编译得过、指标一动不动、
+  26 门禁全 PASS**，只有反射测试红（与 §9.8 同族）。
+- **B（2 条）**：签名清单 + `returnsInt…`。⚠️ 装箱不只是"多一个没传的态"：
+  `Integer` 返回值会**逼实现类改签名**，于是"提供方侧退化成纯类型替换"这个前提当场失效。
+- **C（2 条）**：签名清单 + `takesExactlyThree…`（`expected: <3> but was: <5>`）。
+  ⚠️ 这条注入要**三个文件一起改**才能编译过 —— 恰好说明"**镜像**只需改端口就能编译，
+  而它仍然被守卫拦住"：守卫判的是**端口自己的形状**，不是"改起来费不费劲"。
+- **D（指标）**：`impl / edges / cross_stmt / cross_edges / api_stmt / api_edges`
+  = `18 / 8 / 1 / 1 / 9 / 6`，且 `admin -> automation impl = 1`。
+  ⇒ 本刀搬动的那一格**确实就是**这一个数字；"0"不是文档里的说法，是**扫描器实测的 0**。
+- **E（1 条）**：`broadcastFansOutToPushWithoutPlanOrRunContext`。
+  这是"收窄可证行为保持"的**唯一一条**断言：把写死的 `null` 换成 `0L`，
+  出站载荷就从空串变成 `"0"`，而除它以外没有任何东西会红。
+- **F（1 条）**：`carriesNoConstantsBecauseTheMessageTypeBelongsToTheConsumer`。
+- **G（1 条）**：`broadcastReturnsTheNumberOfCurrentlyRegisteredConnections`。
+  它钉的是**返回值语义（连接数 ≠ 用户数）**—— 这个语义此前只写在控制器的注释里。
+
+还原判据统一用 `git hash-object`，三个文件的收尾 blob 与注入前**逐字节相同**：
+
+```text
+NotificationBroadcastPort.java      08d9a042da75c72bd048b6f3c77b93a9d9703f0b
+BlogPlanSseService.java             8df1c761fba1d4b2843666a24661bf741857edea
+AdminNotificationController.java    02806e1835b880accd02bdac0adcd8a294b2b454
+```
+
+⚠️ **一次差点被误判成"还原失败"的读数（新缝，待办 58）**：
+E / G 的 `restore` 行打印 `1ae8d38b…`，而驱动脚本与收尾 `git status` 打印 `8df1c761…`
+—— 同一个文件、同一个时刻，**两个哈希**，看起来像还原没到位。
+
+实测（`git cat-file -t 1ae8d38b` ⇒ `Not a valid object name`；文件 12695 字节、267 个 CRLF、
+0 个裸 LF）：
+
+| 算法 | 值 |
+|---|---|
+| 原始字节（harness 的 `blob()`，带 `blob <len>\0` 头） | `1ae8d38b…` |
+| `sha1sum`（原始字节，**不带**头） | `87578e00…` |
+| `git hash-object`（**先做 CRLF→LF 归一**，本仓 `core.autocrlf=true`） | `8df1c761…` |
+
+⇒ `1ae8d38b` **就是**还原后基线的原始字节哈希。**没有残留**。这是待办 42
+（`sha1sum` ≠ `git hash-object`）的**第三种形态**，而且比前两种更难发现：
+前两种是"两个**外部工具**给出不同值"，这次是**同一个脚本的两条代码路径**各自打印一个，
+还**挨着打印**在同一个输出里。
+
+⇒ 已把 `inj20.py` 的 `blob()` 改成先归一 CRLF 再哈希，与 `git hash-object` **逐字等价**，
+复跑 E：`apply` → `0ed8dd20…`、`restore` → `8df1c761…`，两侧一致。
+七条注入再全量 `apply` + `restore` 一遍，逐条 ok、收尾三文件哈希不变、`git status` 仍 12 项。
+
+⚠️ 判据层面的教训（**不是**"还原失败"，而是"判据用了错算法"）：
+**"脚本打印了一个陌生的哈希"与"文件被改坏了"是两件事；分辨它们的是 `git diff`
+（差异是否逐行都是本刀意图），不是哈希比对。**
+
+### 20.8 为什么没有加 `contract-changes.yaml` 条目
+
+（同 §18.8 / §19.8：纯类型替换 + 一个方法，消费方调用点只少了两个 `null`，
+没有字段增减、没有语义变化。）
+
+### 20.9 下一刀
+
+跨单元实现边已经归零 ⇒ **没有"下一刀抽取"了**。剩下的是三类**不是抽取**的工作：
+
+1. **把"0"变成有人守的不变式**（待办 56）—— 本刀解锁的、最该做的一件。
+2. **补 `*BlogSyncPort` 的"同形不同源"守卫**（待办 54，第十九刀发现）。
+3. `BlogContentPlanService` 的 `toVO` 残留（待办 53）—— 它**会改变行为**，
+   所以不是重构，要单独决定。
+
+⚠️ 还有一件**更大**的事：`cross-domain-imports.yaml` 里剩下的 7 条边**全部同单元**。
+`deployment-unit-coupling` 三条判据此后只剩"不许变坏"的含义 ——
+那时要重新想 `MUTUAL_UNIT_PAIRS` / `WAVE2_UNITS` 的关系（§18.9 已把互依对清空）。
+
+## 21. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -3635,8 +3860,11 @@ SSE / WebSocket 契约的改动；消费方注入的类型换了，但同进程�
 | 53 | **⚠️ `BlogContentPlanService` 的"已知残留"：端口路径被迫做两次凭证查询，然后**把结果丢掉** | **未修**（§19.5 末）。`ContentPlanPort` 的读方法都经过 `toVO`，而 `toVO` 要调两个 `isAuthorized` 去填前端要的派生字段；随后 `toView` 把它们**收窄掉**（`ContentPlanView` 里没有这两个字段）。⇒ 一个智能体并不读的派生字段，能让一次状态变更失败。**本刀刻意没顺手修**：修了会同时改变行为（端口路径不再可能被凭证查询的失败带崩），而本次抽取要能**被证明**是纯重构。修法是把实现体改成返回实体、由两个公开方法各自包装 —— 独立的一刀 |
 | 54 | **⚠️ `CsdnBlogSyncPort` / `JuejinBlogSyncPort` 缺"同形不同源"守卫** —— 它们的 `sync` / `findSucceeded` 签名也**部分同形**，今天没有调用点会写反只是巧合 | **未做**（§19.4 末）。`BlogPlanRunService` 只注入了 `JuejinBlogSyncPort`（`publishCsdn` 走的是 `publicationService.publish(command, "csdn")`，不是端口），`agent` 侧同理 ⇒ 暂时没有写反的机会。但下一个同时接入两个同步端口的调用方就会踩到，而**那一步不会有任何东西报错**。补法与 §19.4 相同：不对称桩 |
 | 55 | **⚠️ 注入验证与"判据强度"的边界要说清** —— 注入**能**发现"某个具体位置没人守"，**不能**发现"判据的**形状**够不够" | **本刀澄清**（§19.4 末）。前一条此前被写成"这类缺陷注入验证发现不了"，**过宽了**：注入 D 就发现了一处真的没人守的位置。正确的区分是 —— 前者是**位置**问题，注入落在那里就能看见；后者是**判据**问题（例如只断言参数类型不断言参数名），注入永远看不见，只能**反着用一次**：拿判据去断言它本该拒绝的形状。待办 11 / 46 / 51 都是后者 |
+| 56 | **⚠️ 跨单元实现边归零之后，"= 0"这条不变式没有任何门禁守着** | **未做，本刀解锁**（§20.5）。归零**之前**写不出这个基线（数字一直在动）；归零之后它成了稳定常量。⚠️ 现状：新增一条**单向**跨单元实现边时，`deployment-unit-coupling` 三条判据全过（单向边不进分量、不产生互依对），`cross-domain-import-baseline` 也过（基线是 `scan.py` 的产物，待办 16）⇒ **两条门禁都不红**。修法：在 `ci_gates.py` 写一个常量 `EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0`，与 `MUTUAL_UNIT_PAIRS` 同一个模式（基线来自判据之外）。⚠️ 属于 CI 设计变更，与待办 16 同族，**刻意没有在抽取里顺手落地** |
+| 57 | **⚠️ 反射测试"按名字取方法"要断言**恰好一个**同名方法** | **本刀修了新测试、其余未修**（§20.3 末）。原来的写法是"遍历取第一个同名方法" ⇒ 端口上出现**重载**时，它会**按 JVM 的方法顺序**挑一个，后续断言开始检查另一个方法，而它们仍然**通过**（**没有失败信息，因为根本没有失败**）。⚠️ 现状：`NotificationPortTest` / `ContentPlanPortTest` / `EmailReminderPortTest` 三处仍是旧写法；风险被"恰好签名清单"那条断言**间接**挡住（端口多一个方法它先红），所以不是活缺陷 —— 但守卫不该依赖**另一条**测试先红。注入 A 同时踩中本刀新测试的这条与 `noMethodIsDefault` |
+| 58 | **⚠️ 同一次注入验证里混用了两种哈希算法** —— 注入脚本自己打印一个（原始字节），驱动脚本打印另一个（`git hash-object`，先 CRLF→LF 归一），**两条输出挨着** | **本刀踩到、已修**（§20.7）。`BlogPlanSseService.java` 的 `restore` 行报 `1ae8d38b…`、收尾报 `8df1c761…`，看起来像还原没到位，白查一轮。实测三种算法同一文件三个值：原始字节带 `blob <len>\0` 头 `1ae8d38b…` / `sha1sum` 原始字节 `87578e00…` / `git hash-object` 归一后 `8df1c761…`（本仓 `core.autocrlf=true`）。⚠️ 这是待办 42 的**第三种形态**：42 是"两个**外部工具**给出不同值"，本刀是"**同一个脚本的两条代码路径**各自打印一个"。⇒ 判据已统一：`inj20.py` 的 `blob()` 改成先归一再哈希，与 `git hash-object` 逐字等价，复跑验证通过。⚠️ 通用规则：**"脚本打印了一个陌生的哈希" ≠ "文件被改坏了"**；分辨它们的是 `git diff`（差异是否逐行都是本次意图），不是哈希比对 |
 
-### 20.1 第 1 项的边界（明确不许顺手放宽）
+### 21.1 第 1 项的边界（明确不许顺手放宽）
 
 `CONTRACT_ALLOWED_IMPORT_PREFIXES` **不得**为了过门禁而放宽。
 遇到"契约需要 Jackson 类型"时，正确动作是**改设计**（§1.4），不是改门禁。
@@ -3647,7 +3875,7 @@ SSE / WebSocket 契约的改动；消费方注入的类型换了，但同进程�
 
 ---
 
-## 21. 一句话记法
+## 22. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

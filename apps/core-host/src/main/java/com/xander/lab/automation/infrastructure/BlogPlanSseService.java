@@ -1,6 +1,7 @@
 package com.xander.lab.automation.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.automation.spi.NotificationBroadcastPort;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
 import lombok.extern.slf4j.Slf4j;
@@ -30,10 +31,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 手段 A 是把每条连接登记进 {@link ConnectionRegistry}，由每实例的 reconciler 主动关闭；
  * 手段 B 是 {@link #emit} 在每一帧出站前（含心跳）做 O(1) 校验。
  * 命中时以 403 结束该条连接，而不是静默丢弃事件 —— 静默丢弃会让前端一直显示"在线"。</p>
+ *
+ * <p><b>跨域面（第二十刀）</b>：本类只对外暴露<b>一个</b>契约方法
+ * {@link #broadcast}（{@link NotificationBroadcastPort}）。{@link #subscribe} 返回
+ * {@code SseEmitter}（框架类型），{@link #push} 收 {@code planId} / {@code runId}
+ * （blog-plan 域的概念），连接注册表与封禁校验都是实现细节 —— 它们全部留在本类里。
+ * {@code admin} 域此前直接注入本类、只为调一个 {@code broadcast}；现在改注入端口，
+ * 于是它不再需要知道 {@code SseEmitter} 存在过。</p>
  */
 @Slf4j
 @Component
-public class BlogPlanSseService {
+public class BlogPlanSseService implements NotificationBroadcastPort {
 
     private final ObjectMapper objectMapper;
     /** 本实例的已封禁账号集合（V9 §48）。 */
@@ -124,13 +132,24 @@ public class BlogPlanSseService {
         }
     }
 
-    /** Broadcasts a live-only diagnostic message and returns its recipient count. */
-    public int broadcast(String type, String title, String message, Long planId, Long runId) {
+    /**
+     * Broadcasts a live-only diagnostic message and returns its recipient count.
+     *
+     * <p>{@inheritDoc}</p>
+     *
+     * <p>⚠️ 这里<b>不再收</b> {@code planId} / {@code runId}（第二十刀）。它们是 blog-plan 域
+     * 的概念，而唯一调用方 {@code admin} 的诊断端点永远传 {@code null} —— 一个要求调用方
+     * 每次都撒谎的参数不该出现在契约上。收窄可证是行为保持的：转发给 {@link #push} 的两个值
+     * 由"调用方传 null"变成"这里写死 null"，而 {@code push} 本来就把 null 序列化成空串，
+     * 所以线上载荷逐字节不变（{@code BlogPlanSseServiceTest} 有对应断言）。</p>
+     */
+    @Override
+    public int broadcast(String type, String title, String message) {
         int recipients = 0;
         for (Long userId : subscribers.keySet()) {
             List<NotificationConnection> connections = subscribers.get(userId);
             if (connections != null) recipients += connections.size();
-            push(userId, type, title, message, planId, runId);
+            push(userId, type, title, message, null, null);
         }
         log.info("[SSE] 广播测试已发送 activeConnections={}", recipients);
         return recipients;

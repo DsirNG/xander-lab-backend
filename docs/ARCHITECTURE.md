@@ -262,12 +262,23 @@ empty except for shared infrastructure:
    a receiver swap compiles — unlike `CsdnBlogSyncPort` / `JuejinBlogSyncPort`, whose
    differing parameter lists catch that at compile time, this one is caught only by
    an asymmetric-stub behavioural test. That deleted the last `automation →
-   integration` statement. **Nothing in `integration` is crossed by another
-   deployment unit any more**; the only cross-unit implementation edge left in the
-   whole repo is `admin → automation` (1 statement: `AdminNotificationController`
-   needs an SSE broadcast port, and a contract may not carry `SseEmitter`, so its
-   shape has to be designed first). Each cut is recorded in
-   `docs/migration/lib-extraction.md`.
+   integration` statement, so **nothing in `integration` is crossed by another
+   deployment unit any more**. The last cross-unit implementation edge in the
+   whole repo — `admin → automation`, where `AdminNotificationController` injected
+   the concrete `BlogPlanSseService` only to call `broadcast` — is now gone too,
+   deleted by `NotificationBroadcastPort` in `automation.spi`. The class itself
+   cannot be moved (`subscribe` returns `SseEmitter`, `push` takes blog-plan ids),
+   but the *edge* carried nothing but three `String`s and returned an `int`, so the
+   port takes exactly those three: a **narrow port**, not a relocated class. It also
+   drops the implementation's `planId` / `runId` parameters, because the sole caller
+   always passed `null` and a parameter the caller must fake on every call does not
+   belong on a contract. **Cross-deployment-unit implementation edges are now
+   zero** — the 17 implementation statements / 7 edges that remain are all inside a
+   single deployment unit. ⚠️ Zero is an **unguarded** invariant today: a new
+   one-way cross-unit edge reddens no gate, because `deployment-unit-coupling` only
+   judges shape (a one-way edge joins no component and creates no mutual pair) and
+   `cross-domain-import-baseline`'s baseline is the scanner's own output. Each cut is
+   recorded in `docs/migration/lib-extraction.md`.
 
 9. `contracts/core-api` holds the runtime model-routing SPI (`ModelGateway`), its
    `ModelEndpoint` record, and `FeatureModelNotConfiguredException`. Like item 7

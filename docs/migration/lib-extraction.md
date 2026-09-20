@@ -3598,6 +3598,210 @@ public interface JuejinCredentialPort { boolean isAuthorized(Long userId); }
 ⚠️ 两条都收掉之后**跨单元实现边归零** —— 那时要重新想 `MUTUAL_UNIT_PAIRS` /
 `WAVE2_UNITS` 的关系。
 
+## 3trevicies. 第二十刀：`NotificationBroadcastPort` —— 跨单元实现边**归零**，以及一条被错记成"卡在框架类型上"的边
+
+### 3trevicies.1 目标边：不是"调能力"，也不是"借凭证"，是**把一条广播转发出去**
+
+`AdminNotificationController` 注入 `BlogPlanSseService`（`automation.infrastructure`），
+只为了调它的 `broadcast` 发一条诊断消息。这是 §3duodevicies.10 留下的**最后一条**跨单元实现边
+（`dinqor-core-host ──1──▶ dinqor-content-automation`）。
+
+⚠️ 上一刀把它记成"**卡在框架类型上**"：`subscribe` 返回 `SseEmitter`、`push` 收
+`planId` / `runId`，于是"契约不许带框架类型"这条铁律像是把这条路封死了。
+**这个结论是错的，而且错在一个很基本的地方。**
+
+### 3trevicies.2 ⭐ 侦察结论：**整个类碰不得 ≠ 其中一条方法碰不得**
+
+先把跨域**表面**数一遍（§3duodevicies.1 立下的规矩）：消费方一共只用了
+`BlogPlanSseService` 的**一个**方法，签名是
+
+```java
+public int broadcast(String type, String title, String message, Long planId, Long runId)
+```
+
+—— 三个 `String`、两个 `Long`、返回 `int`。**没有任何框架类型。**
+
+⇒ "这个类碰不得"是真的（`subscribe` / `push` / 连接注册表 / 封禁校验全都不能上端口），
+但"它里面**每一条**方法都碰不得"是假的。
+**窄端口的判据从来不是"这个类长什么样"，而是"这条边上流过了什么"。**
+
+⚠️ 错记的代价：`package-info.java` 与 `NotificationPort` 的注释里都写着
+"SSE 广播端口…要的是 `SseEmitter`…单独一刀" ⇒ **一条本来当刀就能收掉的边，
+被记成了"形状要先设计"**，于是它在边表上多躺了一刀。两处注释本刀都已订正。
+
+### 3trevicies.3 ⭐ 形状决定一：端口只收**三个**参数，而不是实现的五个
+
+`planId` / `runId` 是 **blog-plan 域的概念**，而唯一调用方（admin 的诊断端点）
+**永远传 `null`**。
+
+- 收下它们 ⇒ 契约上出现两个"要求每个调用方每次都撒谎"的参数。
+- 不收 ⇒ 转发给 `push` 的两个值由"调用方传 `null`"变成"实现里写死 `null`"。
+
+⇒ **收窄可证行为保持**：`push` 本来就把 `null` 序列化成空串，出站载荷**逐字节不变**。
+
+⚠️ 这**偏离了** §3duodecies.6 立下的先例"端口形状选**与实现同形**"。理由是把两种
+"多出来的东西"分开：
+
+| 多出来的东西 | 调用方要做什么 | 该不该上端口 |
+|---|---|---|
+| 多余的**返回值**（§3duodecies 的 `Long`） | 忽略它 | 可以留（同形 ⇒ 实现类只加 `implements`） |
+| 多余的**参数**（本刀） | 每次**伪造一个值** | **不该留** |
+
+⇒ **"同形"是好性质，不是目标。** 目标是端口宽度 = 调用方真正需要的形状；
+当"同形"要求调用方**撒谎**时，同形让位。
+
+### 3trevicies.4 ⚠️ 形状决定二：这是**第三个** `automation` 端口，不是往 `NotificationPort` 加方法
+
+`NotificationPort` 是 `knowledgebase → automation` 的**落库通知**（2 方法 + 2 常量）。
+本刀这条边是 **SSE 实时广播** —— 不同的消费方、不同的能力、不同的形状
+（一个写库、一个推连接）。⇒ 新端口 `NotificationBroadcastPort`（`automation.spi`，同包）。
+判据同 §3sexdecies.3：**两种形状不混。**
+
+### 3trevicies.5 ⚠️ 形状决定三：返回 `int`（**连接**数），而这个语义要有人守
+
+实现返回的是**当前登记在册的连接数**（一个用户开两个标签页算 2）。
+这个语义**此前只写在 `AdminNotificationController` 的注释里**，没有任何断言。
+
+⇒ 端口保留 `int`，并补一条断言钉住（注入 G：`recipients += connections.size()`
+改成 `+= 1`，只有它红）。⚠️ 与 §3decies 同族：**"没人写那条断言"不会有任何东西报错。**
+
+### 3trevicies.6 端口"变宽"依然没人守（**第九次确认**）
+
+给端口加一个带实现体的 `default` 方法：**编译过、指标一动不动、26 门禁全 PASS、
+消费方一个 mock 都不用改**，只有反射测试红（注入 A，**4** 条）。
+
+本刀顺手把新测试的 `methodNamed` 从"取第一个同名方法"改成"断言**恰好一个**" ——
+改之前只有签名清单会红，改之后**两个**用例一起红（ADR 待办 57）。
+
+### 3trevicies.7 ⭐ 实测收益：**跨单元实现边归零**
+
+| 指标 | 前 | 后 |
+|---|---|---|
+| `implementation_statements` | 18 | **17** |
+| `implementation_edges` | 8 | **7** |
+| `cross_deployment_unit_statements` | 1 | **0** |
+| `cross_deployment_unit_edges` | 1 | **0** |
+| `api_statements` / `api_edges` | 9 / 6 | 9 / 6（不动） |
+
+`admin` 作为来源域在跨单元层面**归零**（它仍有两组**同单元**出边：
+`admin → identity` 2、`admin → virtualpay` 1）；`automation` 作为目标域也**归零**。
+⚠️ 剩下的 7 条实现边**全部同单元**。
+
+### 3trevicies.8 ⚠️⭐ 归零之后，"= 0"这条不变式**没有任何门禁守着**（新缝）
+
+**本刀最值得记的一条。** 归零之前图里至少还有一条边；归零之后，
+**"跨单元实现边 = 0"成了这一轮重构的头条成果，而它是无人看守的**：
+
+| 门禁 | 新增一条**单向**跨单元实现边（A → B，无回边）时会怎样 |
+|---|---|
+| `deployment-unit-coupling` 判据 1 | 通过 —— 它只管 `bloghtml` 有没有边 |
+| `deployment-unit-coupling` 判据 2 | 通过 —— 单向边**不会让任何单元进入强连通分量** |
+| `deployment-unit-coupling` 判据 3 | 通过 —— 没有产生新的互依对 |
+| `cross-domain-import-baseline` | 通过 —— 它的基线是 `scan.py` 的**产物**（待办 16） |
+
+⇒ **两条门禁都不会红。** 而这不是本刀造成的缝：`deployment-unit-coupling` 从写下来那天
+起就只判**形状**（"不许出现新的环 / 新的互依对"），判**大小**从来是
+`cross-domain-import-baseline` 的活 —— 而那条的基线取自被测物本身（待办 16，**已问过九次**）。
+
+⚠️ 归零之前这条缝**被掩盖着**：那时任何人读 `cross-domain-imports.yaml` 都能看到非零值。
+归零之后，**"0"本身成了要守的东西**，而它现在只活在文档里。
+
+修法（**未做**，ADR 待办 56）：在 `ci_gates.py` 写常量
+`EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0`，与 `MUTUAL_UNIT_PAIRS` 同一个模式
+（基线来自**判据之外**）。⚠️ 这个常量在归零**之前**写不出来（数字一直在动，写死就得每刀改一次），
+**归零之后它才成为一个稳定常量** —— 所以这个修法是被本刀**解锁**的，而本刀**刻意没有顺手做**：
+它是一次 CI 设计变更，与待办 16 同族，应该由人拍板。
+
+### 3trevicies.9 门禁改动：让通过消息报**实测**边数
+
+`deployment-unit-coupling` 的通过消息此前是"…the cross-unit implementation graph is
+acyclic…"。⚠️ 图形状变了之后这句话开始**掩盖结果**：它对"空图"和"有几条单向边"
+读起来**一模一样**，而这两件事的迁移含义完全不同（前者是完工，后者还有活）。
+而判据本身在两种形状下都成立，所以**永远不会有人因为"它红了"去修它**。
+
+⇒ 补上实测值：`…acyclic (0 cross-unit edge(s) / 0 statement(s) left)…`。
+这是 §3unvicies 那条"分量大小为 1 时另起一句"的**同族第二次**：失真的都是**通过消息**，
+不是判定。⇒ **任何通过消息里的形容词（"acyclic" / "isolated" / "singleton"），
+都要问一句"它对另一种形状还成立吗？两种形状读起来一样吗？"**
+
+### 3trevicies.10 注入验证：七次
+
+落点分三类，**契约侧与消费方侧必须分开跑**（待办 41）：契约侧（A / B / C / F）用
+`-Dtest=NotificationBroadcastPortTest`（`core-host` 匹配不到测试、不会被跳过）；
+消费方侧（E / G）用 `-Dtest=BlogPlanSseServiceTest`；**D 的判据是指标，不跑 maven**。
+
+| # | 注入 | 落在 | 实测红 |
+|---|---|---|---|
+| A | 端口加一个 `default` 重载 | `NotificationBroadcastPort` | **4** |
+| B | 返回值 `int` → `Integer` | 端口 + 实现 | **2** |
+| C | ⭐ 把 `planId` / `runId` 放回端口 | 端口 + 实现 + 消费方（三处同改） | **2** |
+| D | 消费方退回具体 `@Service` | `AdminNotificationController` | **指标 18/8/1/1 → 18/8/1/1 的形状回来** |
+| E | ⭐ 扇出里写死的两个 `null` → `0L` | `BlogPlanSseService` | **1** |
+| F | 端口上多一个常量 | `NotificationBroadcastPort` | **1** |
+| G | `recipients += connections.size()` → `+= 1` | `BlogPlanSseService` | **1** |
+
+⭐ **C**：要**三个文件一起改**才能编译过 —— 恰好说明"**镜像**只需改端口就能编译，
+而它仍然被守卫拦住"：守卫判的是**端口自己的形状**，不是"改起来费不费劲"。
+
+⭐ **E**：这是"收窄可证行为保持"的**唯一一条**断言。把写死的 `null` 换成 `0L`，
+出站载荷就从空串变成 `"0"`，而**除它以外没有任何东西会红**。
+
+**D** 证明**指标确实是这一刀搬动的**：`impl / edges / cross_stmt / cross_edges`
+= `18 / 8 / 1 / 1`，`admin -> automation impl = 1`。
+
+⚠️ 七个目标文件全部逐字节还原（`git hash-object` 与基线逐个相同）。
+
+### 3trevicies.11 ⚠️ 一条差点被误判成"还原失败"的读数：同一次验证里混用了**两种哈希算法**
+
+E / G 的 `restore` 行打印 `1ae8d38b…`，而驱动脚本与收尾 `git status` 打印 `8df1c761…`
+—— 同一个文件、同一个时刻、**两个哈希**，看起来像还原没到位。
+
+实测（文件 12695 字节、267 个 CRLF、0 个裸 LF；`git cat-file -t 1ae8d38b` ⇒
+`Not a valid object name`）：
+
+| 算法 | 值 |
+|---|---|
+| 原始字节（注入脚本的 `blob()`，带 `blob <len>\0` 头） | `1ae8d38b…` |
+| `sha1sum`（原始字节，**不带**头） | `87578e00…` |
+| `git hash-object`（**先做 CRLF→LF 归一**；本仓 `core.autocrlf=true`） | `8df1c761…` |
+
+⇒ `1ae8d38b` **就是**还原后基线的原始字节哈希。**没有残留。**
+这是 §3novemdecies.8 那条（`sha1sum` ≠ `git hash-object`，ADR 待办 42）的
+**第三种形态**，而且比前两种更难发现：前两种是"两个**外部工具**给出不同值"，
+这次是**同一个脚本的两条代码路径**各自打印一个，还**挨着打印**在同一个输出里。
+
+⇒ 已把注入脚本的 `blob()` 改成先归一 CRLF 再哈希，与 `git hash-object` **逐字等价**；
+复跑 E（`apply` → `0ed8dd20…`、`restore` → `8df1c761…`），两侧一致；七条注入再全量
+`apply` + `restore` 一遍，逐条 ok、收尾三文件哈希不变、`git status` 仍 12 项。
+
+⚠️ 判据层面的教训：**"脚本打印了一个陌生的哈希"与"文件被改坏了"是两件事；
+分辨它们的是 `git diff`（差异是否逐行都是本次意图），不是哈希比对。**
+（登记为 ADR 待办 58。）
+
+### 3trevicies.12 为什么没有加 `contract-changes.yaml` 条目
+
+同 §3duodevicies.8：新端口是新类型；消费方注入的类型换了，但同进程内仍是同一个 bean，
+出站载荷（`push` 的两个 `null` → 空串）**逐字节不变**，返回值语义一分没变 ⇒ 可证纯重构。
+
+### 3trevicies.13 ⚠️ 刻意没做的事 / 残留
+
+1. **"把 0 变成有人守的不变式"没做**（§3trevicies.8 / ADR 待办 56）——
+   本刀解锁的、最该做的一件，但它是 CI 设计变更，不该在一次抽取里悄悄落地。
+2. **`*BlogSyncPort` 的"同形不同源"守卫没补**（§3duodevicies.4 末 / ADR 待办 54）。
+3. **`BlogContentPlanService` 的 `toVO` 残留没修**（ADR 待办 53）——
+   它**会改变行为**，所以不是重构，要单独决定。
+4. **`NotificationPortTest` / `ContentPlanPortTest` / `EmailReminderPortTest` 三处
+   `methodNamed` 仍是旧写法**（ADR 待办 57）。
+
+### 3trevicies.14 下一刀
+
+**没有"下一刀抽取"了** —— 跨单元实现边已经归零。剩下的是三类**不是抽取**的工作：
+①把"0"变成有人守的不变式（最该做的一件）；②补同形守卫；③决定 `toVO` 残留。
+
+⚠️ 还有一件**更大**的事：`cross-domain-imports.yaml` 里剩下的 7 条边**全部同单元**。
+`deployment-unit-coupling` 三条判据此后只剩"不许变坏"的含义 ——
+那时要重新想 `MUTUAL_UNIT_PAIRS` / `WAVE2_UNITS` 的关系（§3unvicies.7 已把互依对清空）。
+
 ## 4. 必须留痕的判断
 
 ### 4.1 `PageData` 放 `xander-mybatis-support`，不放 `xander-model`

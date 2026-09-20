@@ -792,6 +792,15 @@ def gate_deployment_unit_coupling() -> None:
     # Report the MEASURED component, not len(WAVE2_UNITS): agent left on 2026-09-17, so
     # printing the constant would overstate the component by one and hide real progress.
     wave2_component = max(components.values(), key=len)
+    # ⚠️ And report the MEASURED edge count. Once the graph empties, the word "acyclic"
+    # starts hiding the result: "every unit is a singleton and the graph is acyclic" reads
+    # the same for an empty graph and for a graph with a few one-way edges, and those two
+    # mean very different things for the migration (one is finished, the other still has
+    # work). Neither criterion above can tell them apart either -- a new *one-way* edge
+    # joins no component and creates no mutual pair, so it passes this gate silently.
+    # This detail line is therefore the only place that says the count reached zero.
+    cross_unit_edges = len(edges)
+    cross_unit_statements = sum(edges.values())
     # ⚠️ Once every component is a singleton, `outside` stops meaning "the units that left
     # the component": `max` breaks ties on iteration order, so it would name
     # len(WAVE2_UNITS) - 1 arbitrary units and the line would read as "one unit is still
@@ -799,13 +808,16 @@ def gate_deployment_unit_coupling() -> None:
     if len(wave2_component) == 1:
         detail = (f"0 of {len(WAVE2_UNITS)} Wave 2 unit(s) share a component "
                   f"({len(mutual)} mutually-dependent pair(s)); every unit is a singleton "
-                  f"and the cross-unit implementation graph is acyclic, so no unit can "
-                  f"block another's extraction; {bloghtml_unit} still isolated")
+                  f"and the cross-unit implementation graph is acyclic "
+                  f"({cross_unit_edges} cross-unit edge(s) / {cross_unit_statements} "
+                  f"statement(s) left), so no unit can block another's extraction; "
+                  f"{bloghtml_unit} still isolated")
     else:
         outside = sorted(set(WAVE2_UNITS) - wave2_component)
         detail = (f"{len(wave2_component)} of {len(WAVE2_UNITS)} Wave 2 unit(s) in one component "
                   f"({len(mutual)} mutually-dependent pair(s)); "
-                  f"{bloghtml_unit} still isolated")
+                  f"{cross_unit_edges} cross-unit edge(s) / {cross_unit_statements} "
+                  f"statement(s) left; {bloghtml_unit} still isolated")
         if outside:
             detail += (f"; {outside} left the component (no unit points back at them) and can "
                        f"now be extracted alone")

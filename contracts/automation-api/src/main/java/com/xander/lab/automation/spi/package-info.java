@@ -6,6 +6,8 @@
  *   <li>{@link com.xander.lab.automation.spi.EmailReminderPort} —— 定时邮件提醒能力</li>
  *   <li>{@link com.xander.lab.automation.spi.ContentPlanPort} —— 定时发文计划能力</li>
  *   <li>{@link com.xander.lab.automation.spi.NotificationPort} —— 写一条持久化用户通知的能力</li>
+ *   <li>{@link com.xander.lab.automation.spi.NotificationBroadcastPort} —— 向<b>在线</b>连接
+ *       广播一条<b>瞬时</b>消息的能力（第二十刀）</li>
  *   <li>读模型：{@link com.xander.lab.automation.spi.EmailReminderView} /
  *       {@link com.xander.lab.automation.spi.ContentPlanView}</li>
  *   <li>写入草稿：{@link com.xander.lab.automation.spi.EmailReminderDraft} /
@@ -78,15 +80,24 @@
  * </table>
  * <p>这刀把 {@code automation} 的<b>扇入</b>又削掉一路：原本 4 个单元指向它，现在
  * {@code agent} 已改走契约，只剩 {@code admin}（SSE，要 {@code SseEmitter} 框架类型）与
- * {@code integration}（邮件模板真环）两条，两条都卡在别的决定上。</p>
+ * {@code integration}（邮件模板真环）两条，两条都卡在别的决定上。
+ * ✅ <b>这两条后来都收了</b>：{@code integration} 那条在第十八刀（渲染搬回 automation，
+ * {@code MailService} 收窄成只投递）；{@code admin} 那条在第二十刀
+ * （{@link com.xander.lab.automation.spi.NotificationBroadcastPort}）——
+ * 而它并没有像这里预料的那样"卡在框架类型上"，见上。</p>
  * <p>两个常量 {@code TYPE_KNOWLEDGE_STRUCTURE_PENDING} 与 {@code RESOURCE_KNOWLEDGE_FILE}
  * 随之从 {@code BlogNotification} 实体<b>搬到这里</b> —— 不搬的话消费方仍要 import 实体，
  * 一条语句都减不掉。它们在 automation 内部无人使用，所以搬得干净。</p>
  *
  * <h2>有意不在这次改动里的</h2>
  * <ul>
- *   <li>SSE 广播端口（{@code admin} 要）。它要的是 {@code SseEmitter}（框架类型），
- *       形状与本模块三个端口完全不同，单独一刀。</li>
+ *   <li><s>SSE 广播端口（{@code admin} 要）。它要的是 {@code SseEmitter}（框架类型），
+ *       形状与本模块三个端口完全不同，单独一刀。</s>
+ *       ✅ <b>第二十刀已做</b>：{@link com.xander.lab.automation.spi.NotificationBroadcastPort}。
+ *       ⚠️ 当时那句话对<b>类</b>成立、对<b>边</b>不成立 —— 边只经过 {@code broadcast}，
+ *       而它收三个 {@code String}、返回 {@code int}，本来就不带框架类型；
+ *       {@code subscribe} 返回 {@code SseEmitter} 这件事从来没跨过边界。
+ *       这是"窄端口"的价值：整个类碰不得，不等于其中一条方法碰不得。</li>
  *   <li><s>邮件模板。{@code integration.mail.MailService} import 了
  *       {@code automation.domain.EmailReminderMailTemplates}，这是<b>反方向</b>，
  *       而且闭成了一个真环：automation 的 {@code EmailReminderScheduler} 调
