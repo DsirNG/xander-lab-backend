@@ -312,10 +312,10 @@ core-host 快照/增量对账，默认仍关闭。开启前必须完成客户端
 
 配置类：`RefreshTokenProperties`（`@ConfigurationProperties(prefix = "auth.refresh")`）。
 
-> ⚠️ `RefreshTokenProperties` 的 19 个键目前**只以 Java 默认值存在**，
-> `application.yml` 里一个都没有，因此对 `config-ownership-drift` 等门禁**不可见**，
-> 尽管该类自己的 Javadoc 写着这些值"全部属于 Contract"（§36）。
-> 补法（给 `scan_config()` 加 `@ConfigurationProperties` 扫描）见 `config-ownership.yaml` 的已知缺口。
+> `RefreshTokenProperties` 的 19 个键已由扫描器纳入 `config-inventory.yaml` 与
+> `config-ownership.yaml`，并由 `configuration-properties-coverage` 校验源代码与清单一致。
+> 当前仍以 Java 默认值作为配置来源；若后续补充 `application.yml` / Nacos 显式值，仍需按配置
+> Owner 规则登记。原先“对门禁不可见”的缺口已关闭。
 
 ### 9.1 Grace 参数属于 Contract（§36）
 
