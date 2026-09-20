@@ -1187,9 +1187,9 @@ routes:
     path: "/api/blog/posts/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#softDeletePost"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 66
+    handler: "com.xander.lab.publishing.api.BlogMutationController#delete"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogMutationController.java
+    line: 57
   - id: publishing-get-blog-posts-id
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1209,9 +1209,9 @@ routes:
     path: "/api/blog/posts/{id}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#updatePost"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 46
+    handler: "com.xander.lab.publishing.api.BlogMutationController#update"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogMutationController.java
+    line: 25
   - id: publishing-delete-blog-posts-id-permanent
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1220,9 +1220,9 @@ routes:
     path: "/api/blog/posts/{id}/permanent"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#permanentlyDeletePost"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 76
+    handler: "com.xander.lab.publishing.api.BlogMutationController#permanentlyDelete"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogMutationController.java
+    line: 73
   - id: publishing-patch-blog-posts-id-status
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1231,9 +1231,9 @@ routes:
     path: "/api/blog/posts/{id}/status"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#updatePostStatus"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 55
+    handler: "com.xander.lab.publishing.api.BlogMutationController#updateStatus"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogMutationController.java
+    line: 41
   - id: publishing-post-blog-posts-id-view
     logical_owner: publishing
     deployment_unit: dinqor-content-automation

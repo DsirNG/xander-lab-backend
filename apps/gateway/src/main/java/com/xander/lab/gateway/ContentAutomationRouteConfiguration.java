@@ -27,6 +27,14 @@ public class ContentAutomationRouteConfiguration {
                         .and()
                         .method(org.springframework.http.HttpMethod.GET)
                         .uri(contentAutomationUri))
+                .route("content-publishing-private-mutations", route -> route
+                        .path("/api/blog/posts/{id}", "/api/blog/posts/{id}/status",
+                                "/api/blog/posts/{id}/permanent")
+                        .and()
+                        .method(org.springframework.http.HttpMethod.PUT,
+                                org.springframework.http.HttpMethod.PATCH,
+                                org.springframework.http.HttpMethod.DELETE)
+                        .uri(contentAutomationUri))
                 .route("content-publishing-public-reads", route -> route
                         .path("/api/blog/posts", "/api/blog/posts/recent")
                         .and()
