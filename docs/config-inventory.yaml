@@ -7,9 +7,249 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 619
-  leaves: 462
+  total: 667
+  leaves: 486
 config:
+  - key: server
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: server.port
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SERVER_PORT:30004}"
+    leaf: true
+    logical_owner: shared
+  - key: spring
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: spring.application
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.application.name
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SPRING_APPLICATION_NAME:dinqor-agent}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.config
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.config.import
+    source: apps/agent/src/main/resources/application.yml
+    value: "optional:application-local.yml"
+    leaf: true
+    logical_owner: shared
+  - key: spring.flyway
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.flyway.enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "false"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.datasource.url
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/dinqor?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.username
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SPRING_DATASOURCE_USERNAME:dinqor_agent}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.password
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SPRING_DATASOURCE_PASSWORD:}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.datasource.driver-class-name
+    source: apps/agent/src/main/resources/application.yml
+    value: com.mysql.cj.jdbc.Driver
+    leaf: true
+    logical_owner: shared
+  - key: spring.data
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.data.redis
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.data.redis.host
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SPRING_REDIS_HOST:localhost}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.port
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SPRING_REDIS_PORT:6379}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.password
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SPRING_REDIS_PASSWORD:}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.database
+    source: apps/agent/src/main/resources/application.yml
+    value: "${SPRING_REDIS_DATABASE:0}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.timeout
+    source: apps/agent/src/main/resources/application.yml
+    value: "5000ms"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_IMPORT_CHECK_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${NACOS_DISCOVERY_ENABLED:false}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.server-addr
+    source: apps/agent/src/main/resources/application.yml
+    value: "${NACOS_SERVER_ADDR:127.0.0.1:8848}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.namespace
+    source: apps/agent/src/main/resources/application.yml
+    value: "${NACOS_NAMESPACE:}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.group
+    source: apps/agent/src/main/resources/application.yml
+    value: "${NACOS_GROUP:DINQOR-AGENT}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.cloud.nacos.discovery.service
+    source: apps/agent/src/main/resources/application.yml
+    value: "${NACOS_SERVICE_NAME:${spring.application.name}}"
+    leaf: true
+    logical_owner: shared
+  - key: management
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web.exposure
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoints.web.exposure.include
+    source: apps/agent/src/main/resources/application.yml
+    value: "health,info,prometheus"
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.probes
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.probes.enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "true"
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint.health.show-details
+    source: apps/agent/src/main/resources/application.yml
+    value: never
+    leaf: true
+    logical_owner: unassigned
+  - key: management.endpoint.health.group
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.group.readiness
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.endpoint.health.group.readiness.include
+    source: apps/agent/src/main/resources/application.yml
+    value: readinessState
+    leaf: true
+    logical_owner: unassigned
+  - key: management.metrics
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.metrics.tags
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: management.metrics.tags.application
+    source: apps/agent/src/main/resources/application.yml
+    value: "${spring.application.name}"
+    leaf: true
+    logical_owner: unassigned
   - key: server
     source: apps/bloghtml-preview/src/main/resources/application.yml
     value: ""

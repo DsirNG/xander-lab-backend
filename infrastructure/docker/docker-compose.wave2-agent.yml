@@ -1,0 +1,37 @@
+# V9 §94/§95 — Agent host bootstrap only.
+#
+# This file deliberately exposes health before business cutover. It must not be
+# used to route Agent traffic until the Wave 2 drain checklist in §96 is complete.
+services:
+  agent:
+    image: ${DINQOR_AGENT_IMAGE:-dinqor-agent:wave2}
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        APP_MODULE: apps/agent
+        APP_PORT: "30004"
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: ${AGENT_SPRING_PROFILES_ACTIVE:-default}
+      SPRING_DATASOURCE_URL: ${AGENT_DB_URL:-jdbc:mysql://mysql:3306/dinqor?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+      SPRING_DATASOURCE_USERNAME: ${AGENT_DB_USERNAME:-dinqor_agent}
+      SPRING_DATASOURCE_PASSWORD: ${AGENT_DB_PASSWORD:-}
+      SPRING_REDIS_HOST: ${AGENT_REDIS_HOST:-redis}
+      SPRING_REDIS_PORT: ${AGENT_REDIS_PORT:-6379}
+      NACOS_DISCOVERY_ENABLED: ${AGENT_NACOS_DISCOVERY_ENABLED:-false}
+      NACOS_CONFIG_IMPORT_CHECK_ENABLED: ${AGENT_NACOS_CONFIG_IMPORT_CHECK_ENABLED:-false}
+    ports:
+      - ${AGENT_PORT:-30004}:30004
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:30004/actuator/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - dinqor-wave2
+
+networks:
+  dinqor-wave2:
+    name: ${DINQOR_WAVE2_NETWORK:-dinqor-wave2}

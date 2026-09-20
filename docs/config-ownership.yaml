@@ -13,10 +13,10 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 462
-  service_private: 401
-  secret: 52
-  shared: 9
+  total: 486
+  service_private: 422
+  secret: 54
+  shared: 10
 config:
   - key: agent.conversation.compaction-enabled
     source: apps/core-host/src/main/resources/application.yml
@@ -1584,6 +1584,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: server.port
+    source: apps/agent/src/main/resources/application.yml
+    classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: server.port
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: shared
     owner: shared
@@ -1601,6 +1606,11 @@ config:
   - key: server.port
     source: apps/migration-runner/src/main/resources/application.yml
     classification: shared
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.application.name
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
     owner: shared
     nacos_group: COMMON
   - key: spring.application.name
@@ -1659,6 +1669,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.config.import-check.enabled
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.config.import-check.enabled
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1674,6 +1689,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.enabled
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.enabled
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1689,6 +1709,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.group
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.group
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1704,6 +1729,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.namespace
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.namespace
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1719,6 +1749,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.server-addr
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.server-addr
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1730,6 +1765,11 @@ config:
     nacos_group: COMMON
   - key: spring.cloud.nacos.discovery.server-addr
     source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.discovery.service
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -1749,7 +1789,17 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.config.import
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.config.import
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.database
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -1765,6 +1815,11 @@ config:
     nacos_group: COMMON
   - key: spring.data.redis.database
     source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.host
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -1789,6 +1844,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.data.redis.password
+    source: apps/agent/src/main/resources/application.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.password
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: secret
     owner: shared
@@ -1801,6 +1861,11 @@ config:
   - key: spring.data.redis.password
     source: apps/gateway/src/main/resources/application.yml
     classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.port
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
     owner: shared
     nacos_group: COMMON
   - key: spring.data.redis.port
@@ -1824,6 +1889,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.data.redis.timeout
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.timeout
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1835,6 +1905,11 @@ config:
     nacos_group: COMMON
   - key: spring.data.redis.timeout
     source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.driver-class-name
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -1869,6 +1944,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.datasource.password
+    source: apps/agent/src/main/resources/application.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.password
     source: apps/core-host/src/main/resources/application.yml
     classification: secret
     owner: shared
@@ -1884,6 +1964,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.datasource.url
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.url
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -1895,6 +1980,11 @@ config:
     nacos_group: COMMON
   - key: spring.datasource.url
     source: apps/migration-runner/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.datasource.username
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -1930,6 +2020,11 @@ config:
     nacos_group: COMMON
   - key: spring.flyway.clean-disabled
     source: apps/migration-runner/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.flyway.enabled
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -2204,7 +2299,17 @@ config:
     owner: unassigned
     nacos_group: COMMON
   - key: management.endpoint.health.group.readiness.include
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.endpoint.health.group.readiness.include
     source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.endpoint.health.probes.enabled
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
     nacos_group: COMMON
@@ -2224,6 +2329,11 @@ config:
     owner: unassigned
     nacos_group: COMMON
   - key: management.endpoint.health.show-details
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.endpoint.health.show-details
     source: apps/bloghtml-preview/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
@@ -2235,6 +2345,11 @@ config:
     nacos_group: COMMON
   - key: management.endpoint.health.show-details
     source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.endpoints.web.exposure.include
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
     nacos_group: COMMON
@@ -2265,6 +2380,11 @@ config:
     nacos_group: COMMON
   - key: management.metrics.read-timeout-millis
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: management.metrics.tags.application
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: unassigned
     nacos_group: COMMON

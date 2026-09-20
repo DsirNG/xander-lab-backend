@@ -73,9 +73,14 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
 ## Config keys
 
-- total keys: **619** (leaf: 462)
-- unassigned leaves: **43**
+- total keys: **667** (leaf: 486)
+- unassigned leaves: **48**
 
+  - `management.endpoints.web.exposure.include` (apps/agent/src/main/resources/application.yml)
+  - `management.endpoint.health.probes.enabled` (apps/agent/src/main/resources/application.yml)
+  - `management.endpoint.health.show-details` (apps/agent/src/main/resources/application.yml)
+  - `management.endpoint.health.group.readiness.include` (apps/agent/src/main/resources/application.yml)
+  - `management.metrics.tags.application` (apps/agent/src/main/resources/application.yml)
   - `management.endpoints.web.exposure.include` (apps/bloghtml-preview/src/main/resources/application.yml)
   - `management.endpoint.health.probes.enabled` (apps/bloghtml-preview/src/main/resources/application.yml)
   - `management.endpoint.health.show-details` (apps/bloghtml-preview/src/main/resources/application.yml)

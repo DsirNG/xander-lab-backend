@@ -24,6 +24,7 @@ COPY contracts/agent-api/pom.xml ./contracts/agent-api/pom.xml
 COPY contracts/automation-api/pom.xml ./contracts/automation-api/pom.xml
 COPY contracts/recitation-api/pom.xml ./contracts/recitation-api/pom.xml
 COPY contracts/blogagent-api/pom.xml ./contracts/blogagent-api/pom.xml
+COPY apps/agent/pom.xml ./apps/agent/pom.xml
 COPY apps/bloghtml-preview/pom.xml ./apps/bloghtml-preview/pom.xml
 COPY apps/gateway/pom.xml ./apps/gateway/pom.xml
 COPY apps/core-host/pom.xml ./apps/core-host/pom.xml
