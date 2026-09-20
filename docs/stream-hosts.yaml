@@ -86,7 +86,8 @@ hosts:
     boundary_files:
       - apps/core-host/src/main/java/com/xander/lab/studio/api/Img2ThreeController.java
     heartbeat: none
-    tests: []
+    tests:
+      - src/test/java/com/xander/lab/studio/api/Img2ThreeControllerTest.java
     notes: >-
       本端点没有心跳调度器，所以 §28.4 的"心跳兜底"在这里不存在，主要手段只能是
       reconciler 的主动断开 —— 这就是 §52 把 core-host 列进 Security Local Cache

@@ -291,7 +291,7 @@ Timer 接入并发布 P95/P99 与 Histogram；来源时间来自 `account_securi
 |---|---|---|
 | 多实例部署未开启 Redis Pub/Sub | 开关关闭时只有抢到 ShedLock 的实例走发件箱本地快路径，其余实例靠各自 reconciler 在 1.5 秒内收敛；多实例切流前必须开启 `auth.refresh.security-pubsub-enabled` | 部署配置项 |
 | `SecurityStateCache` 无持久化 | 实例启动先由 Bootstrap 做快照 + replay，再开放流量；运行期仍靠 reconciler 增量/全量对账，缓存不持久化是有意取舍 | 设计取舍 |
-| `Img2ThreeController` 无心跳 | 见 §6，该流在无业务事件时完全依赖手段 A | 已知 |
+| `Img2ThreeController` 无心跳 | 见 §6，该流在无业务事件时完全依赖手段 A；连接注册、封禁关闭与发送边界已有 `Img2ThreeControllerTest` 覆盖 | 设计取舍；测试已补 |
 | `contract-changes.yaml` 的 `security-plane-fail-closed` | §28.2 的 stale fail-closed 与 §103 互相否定（security plane 与 refresh 表同库），Wave 2 放行评审前必须二选一 | 待对齐 |
 
 ---
@@ -312,9 +312,10 @@ java ... -Dtest=SecurityStateApplierTest test
 python scripts/migration/ci_gates.py
 ```
 
-⚠️ `Img2ThreeController` **当前没有测试类**（`stream-hosts.yaml` 里该宿主的 `tests` 为空数组）。
-它同时是唯一无心跳、且 Wave 1/Wave 2 都留在 core-host 的流 ——
-这是清单里风险最高、覆盖最弱的一格，补测试应排在 Wave 2 Staging 之前。
+`Img2ThreeController` 没有心跳，且 Wave 1/Wave 2 都留在 core-host；
+它依赖 reconciler 的主动断开作为主要手段。现已由
+`Img2ThreeControllerTest` 固定连接注册、正常摘除和封禁后的发送边界，
+仍需在 Wave 2 Staging 验证无业务事件时的真实断开时延。
 
 `stream-hosts.yaml` 的 `unregistered_routes` 当前为空，表示 8 条流全部已登记。
 **这个字段必须保持显式存在**：删掉它会让门禁无法区分"没有未登记的流"
