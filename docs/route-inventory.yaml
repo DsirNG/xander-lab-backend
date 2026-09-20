@@ -947,7 +947,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#generateTopics"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 105
+    line: 93
   - id: automation-delete-blog-plans-id
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -991,7 +991,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogContentPlanController#nextRun"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 98
+    line: 86
   - id: automation-get-blog-plans-id-runs
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -1000,9 +1000,9 @@ routes:
     path: "/api/blog-plans/{id}/runs"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.api.BlogContentPlanController#runs"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 85
+    handler: "com.xander.lab.automation.api.BlogPlanRunReadController#list"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogPlanRunReadController.java
+    line: 20
   - id: automation-get-blog-plans-id-runs-runid
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -1011,9 +1011,9 @@ routes:
     path: "/api/blog-plans/{id}/runs/{runId}"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.api.BlogContentPlanController#runDetail"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 92
+    handler: "com.xander.lab.automation.api.BlogPlanRunReadController#detail"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogPlanRunReadController.java
+    line: 29
   - id: automation-patch-blog-plans-id-status
     logical_owner: automation
     deployment_unit: dinqor-content-automation

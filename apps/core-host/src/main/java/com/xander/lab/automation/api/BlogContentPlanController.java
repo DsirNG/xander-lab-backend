@@ -82,18 +82,6 @@ public class BlogContentPlanController {
         return Result.success(runService.toRunVO(run));
     }
 
-    @GetMapping("/{id}/runs")
-    public Result<BlogPlanRunsPage> runs(@PathVariable Long id,
-                                         @RequestParam(defaultValue = "1") long page,
-                                         @RequestParam(defaultValue = "10") long size) {
-        return Result.success(planService.listRuns(UserContext.getUserId(), id, page, size));
-    }
-
-    @GetMapping("/{id}/runs/{runId}")
-    public Result<BlogPlanRunVO> runDetail(@PathVariable Long id, @PathVariable Long runId) {
-        return Result.success(planService.runDetail(UserContext.getUserId(), id, runId));
-    }
-
     /** Preview of the next Nth trigger time (used to show the next fire date). */
     @GetMapping("/{id}/next")
     public Result<Instant> nextRun(@PathVariable Long id,
