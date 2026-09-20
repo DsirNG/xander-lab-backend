@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 255
+  total: 256
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -1153,6 +1153,23 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: automation-post-internal-automation-blog-plans-id-trigger
+    owner: automation
+    old:
+      method: POST
+      path: "/internal/automation/blog-plans/{id}/trigger"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: billing-get-admin-billing-model-prices
     owner: billing
     old:

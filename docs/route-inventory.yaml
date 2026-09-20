@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 260
+  total: 261
   streams: 8
   websocket: 1
   sse: 7
@@ -1033,9 +1033,9 @@ routes:
     path: "/api/blog-plans/{id}/trigger"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.automation.api.BlogContentPlanController#trigger"
-    file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogContentPlanController.java
-    line: 29
+    handler: "com.xander.lab.automation.api.BlogPlanTriggerController#trigger"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogPlanTriggerController.java
+    line: 20
   - id: publishing-get-blog-categories
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -2818,6 +2818,17 @@ routes:
     handler: "com.xander.lab.identity.api.AgentRecitationController#recordQuiz"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentRecitationController.java
     line: 89
+  - id: automation-post-internal-automation-blog-plans-id-trigger
+    logical_owner: automation
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/automation/blog-plans/{id}/trigger"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.automation.api.InternalBlogPlanTriggerController#trigger"
+    file: apps/core-host/src/main/java/com/xander/lab/automation/api/InternalBlogPlanTriggerController.java
+    line: 50
   - id: identity-get-internal-security-state-changes
     logical_owner: identity
     deployment_unit: dinqor-core-host
