@@ -38,8 +38,8 @@ long-running application container.
 It assumes Nacos, MySQL and Redis already exist outside this Compose project and keeps the
 historical root `docker-compose.yml` unchanged.
 
-Create a private `.env.wave1` file with separate database credentials, then run from the repo
-root:
+Copy `.env.wave1.example` to a private `.env.wave1` file and fill in the test-environment
+endpoints and separate database credentials, then run from the repo root:
 
 ```bash
 docker compose --env-file .env.wave1 \
@@ -49,10 +49,11 @@ docker compose --env-file .env.wave1 \
 The required database variables are `MIGRATION_DB_URL`, `MIGRATION_DB_PASSWORD`, `CORE_DB_URL`
 and `CORE_DB_PASSWORD`; usernames default to `dinqor_migration` and `dinqor_core`. The Nacos
 variables `NACOS_SERVER_ADDR` and `NACOS_NAMESPACE` are also required. `BACKEND_ENV_FILE` may
-point at the existing `.env.production` common secret file for Redis, mail, OSS and model
-credentials, but its database username/password are overridden by the two service-specific
-pairs above. When `BACKEND_ENV_FILE` is omitted, `.env.wave1` itself is injected into all four
-containers.
+point at a private common secret file for Redis, mail, OSS and model credentials; for a repo-root
+`.env.production`, set `BACKEND_ENV_FILE=../../.env.production` because `env_file` paths are
+resolved relative to this Compose file. Its database username/password are overridden by the
+two service-specific pairs above. When `BACKEND_ENV_FILE` is omitted, `.env.wave1` itself is
+injected into all four containers.
 
 Wave 2 切换新 Refresh Session 协议前，在部署环境设置 `AUTH_REFRESH_ENABLED=true`，并先
 完成客户端联调；Wave 1 默认值为 `false`，不会改变现有无状态 JWT refresh 行为。
