@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 221
+  total: 228
   streams: 8
   websocket: 1
   sse: 7
@@ -2400,6 +2400,83 @@ routes:
     handler: "com.xander.lab.identity.api.AgentAccessTokenController#resolve"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentAccessTokenController.java
     line: 38
+  - id: identity-post-internal-agent-billing-balance
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/billing/balance"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentBillingController#balance"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentBillingController.java
+    line: 70
+  - id: identity-post-internal-agent-billing-charge-flat
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/billing/charge-flat"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentBillingController#chargeFlat"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentBillingController.java
+    line: 48
+  - id: identity-post-internal-agent-billing-charge-tokens
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/billing/charge-tokens"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentBillingController#chargeTokens"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentBillingController.java
+    line: 39
+  - id: identity-post-internal-agent-billing-ensure-available
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/billing/ensure-available"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentBillingController#ensureAvailable"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentBillingController.java
+    line: 63
+  - id: identity-post-internal-agent-billing-flat-points
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/billing/flat-points"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentBillingController#flatPoints"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentBillingController.java
+    line: 56
+  - id: identity-post-internal-agent-billing-grant-register
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/billing/grant-register"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentBillingController#grantRegister"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentBillingController.java
+    line: 77
+  - id: identity-post-internal-agent-billing-transfer-balance
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/billing/transfer-balance"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentBillingController#transferBalance"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentBillingController.java
+    line: 84
   - id: identity-get-internal-security-state-changes
     logical_owner: identity
     deployment_unit: dinqor-core-host

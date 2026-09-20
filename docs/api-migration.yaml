@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 216
+  total: 223
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -1721,6 +1721,125 @@ entries:
     old:
       method: POST
       path: "/internal/agent/auth/resolve"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-internal-agent-billing-balance
+    owner: identity
+    old:
+      method: POST
+      path: "/internal/agent/billing/balance"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-internal-agent-billing-charge-flat
+    owner: identity
+    old:
+      method: POST
+      path: "/internal/agent/billing/charge-flat"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-internal-agent-billing-charge-tokens
+    owner: identity
+    old:
+      method: POST
+      path: "/internal/agent/billing/charge-tokens"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-internal-agent-billing-ensure-available
+    owner: identity
+    old:
+      method: POST
+      path: "/internal/agent/billing/ensure-available"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-internal-agent-billing-flat-points
+    owner: identity
+    old:
+      method: POST
+      path: "/internal/agent/billing/flat-points"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-internal-agent-billing-grant-register
+    owner: identity
+    old:
+      method: POST
+      path: "/internal/agent/billing/grant-register"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: identity-post-internal-agent-billing-transfer-balance
+    owner: identity
+    old:
+      method: POST
+      path: "/internal/agent/billing/transfer-balance"
     new:
       method: POST
       path: ""
