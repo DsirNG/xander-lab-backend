@@ -339,6 +339,12 @@ public class BlogContentPlanService implements ContentPlanPort {
         return normalized;
     }
 
+    @Transactional(readOnly = true)
+    public BlogContentPlanVO detail(Long userId, Long planId) {
+        requireUser(userId);
+        return toVO(requireOwnedPlan(planId, userId), userId);
+    }
+
     @Transactional
     public BlogContentPlanVO update(Long userId, Long planId, BlogContentPlanUpdateRequest request) {
         requireUser(userId);
@@ -589,6 +595,17 @@ public class BlogContentPlanService implements ContentPlanPort {
         return agentService.generateTopicSeries(
                 userId, seed, request.getAudience(), request.getTone(),
                 request.getCount(), excludeTitles);
+    }
+
+    @Transactional(readOnly = true)
+    public Instant nextRunAfter(Long userId, Long planId, long count) {
+        requireUser(userId);
+        BlogContentPlan plan = requireOwnedPlan(planId, userId);
+        Instant cursor = Instant.now();
+        for (long i = 0; i < Math.max(1, count); i++) {
+            cursor = BlogContentPlanScheduleCalculator.nextRun(plan, cursor);
+        }
+        return cursor;
     }
 
     private LambdaQueryWrapper<BlogContentPlan> ownedWrapper(Long userId) {

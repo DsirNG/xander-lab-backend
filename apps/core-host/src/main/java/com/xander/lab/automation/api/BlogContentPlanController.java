@@ -26,11 +26,6 @@ public class BlogContentPlanController {
     private final BlogPlanRunDispatcher dispatcher;
     private final BlogPlanRunService runService;
 
-    @PostMapping
-    public Result<BlogContentPlanVO> create(@Valid @RequestBody BlogContentPlanCreateRequest request) {
-        return Result.success(planService.create(UserContext.getUserId(), request));
-    }
-
     /** AI 生成计划: creates `days` one-shot plans, one per day from tomorrow. */
     @PostMapping("/ai-generate")
     public Result<List<BlogContentPlanVO>> aiGenerate(

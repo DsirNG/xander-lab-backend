@@ -40,6 +40,10 @@ content-automation:
   stream:
     drain-enabled: ${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}
 
+blog-content-plan:
+  max-active-per-user: ${BLOG_CONTENT_PLAN_MAX_ACTIVE_PER_USER:50}
+  max-created-per-day: ${BLOG_CONTENT_PLAN_MAX_CREATED_PER_DAY:20}
+
 management:
   endpoints:
     web:

@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 813
-  leaves: 577
+  total: 816
+  leaves: 579
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -868,6 +868,21 @@ config:
   - key: content-automation.stream.drain-enabled
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}"
+    leaf: true
+    logical_owner: content-automation
+  - key: blog-content-plan
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: blog-content-plan.max-active-per-user
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${BLOG_CONTENT_PLAN_MAX_ACTIVE_PER_USER:50}"
+    leaf: true
+    logical_owner: content-automation
+  - key: blog-content-plan.max-created-per-day
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${BLOG_CONTENT_PLAN_MAX_CREATED_PER_DAY:20}"
     leaf: true
     logical_owner: content-automation
   - key: management
