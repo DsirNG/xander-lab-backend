@@ -4622,17 +4622,17 @@ C 类拆登记四处，D 类拆行为，各配对照组。
 | 2 | 契约能否依赖契约 | **未拍板**。今天禁止，代价是 `StoredImage` / `TokenUsage` 这类重复类型 |
 | 3 | `MediaAssetRef` 收窄到前端真正读的 3 个字段 | **未做**，独立 §11 变更 |
 | 4 | `agent -> publishing` 的 9 条 impl 语句（`BlogService`） | **已做**（§5）。边归零，只剩 1 条 api（§5.10） |
-| 5 | `@JsonIgnoreProperties` 存量清单与清理时点 | **未清点** |
+| 5 | `@JsonIgnoreProperties` 存量清单与清理时点 | **已清点：存量 0**（2026-09-20 实测）。`grep -rn JsonIgnoreProperties apps libs contracts`（排除 `target/`）只有 **3 处**，全在契约测试的断言消息里（断言"不许出现它"），**生产代码一处都没有**。⚠️ 但行为上的等价物搬到了**配置层**：`apps/core-host/src/main/resources/application.yml:61` 的 `spring.jackson.deserialization.fail-on-unknown-properties: false` 是**全局**豁免，比逐类注解宽得多（注解逐类显式，这个开关让所有反序列化点一起宽松）。⇒ 这一项从"清理时点"变成"**配置层的契约语义**"，已登记为**待办 66** |
 | 6 | `agent-api`（`AgentTool.parametersSchema()` 返回 `JsonNode`） | **已做**（§6）。结论是**不搬 `AgentTool`**，只加窄端口 `RemoteToolCatalog` / `RemoteTool` / `RemoteToolCall`，50 个实现一个没动。契约包名取 `agent.spi` 而非 `agent.api`，理由见 §2.7 |
 | 7 | `TokenUsage` / `ContentPost` / `ContentPostPage` 分量顺序是否要登记为 §11 契约变更 | **未定**。今天不登记（理由同 §2.6），但拆分后契约 jar 独立版本化时它们会变成线上格式 |
 | 8 | `blogagent → publishing` 的 1 条 api 语句（`BlogPostVO`） | **未做**，独立一刀（§5.10） |
 | 9 | `ContentPostPort` 的 16 个不上端口方法，拆分后是否需要新的端口 | **未定**。`automation` / `blogagent` 与内容域同单元，拆完还在一个进程里 |
-| 10 | `automation-api`（10 条语句指向它，当时最大的目标域） | **接近完成**（§7 + §8 + §18）。`agent → automation` 6 条（§7）与 `knowledgebase → automation` 2 条（§8，端口 `NotificationPort`，零接线扩展）已清；`integration` 1（**构成真环**，要改 `MailService` 的 API 而非加端口）**已做**（§18）。**只剩 `admin` 1**（需要 SSE 广播端口，形状不同） |
+| 10 | `automation-api`（10 条语句指向它，当时最大的目标域） | **接近完成**（§7 + §8 + §18）。`agent → automation` 6 条（§7）与 `knowledgebase → automation` 2 条（§8，端口 `NotificationPort`，零接线扩展）已清；`integration` 1（**构成真环**，要改 `MailService` 的 API 而非加端口）**已做**（§18）。**`admin` 1 也已做**（§20）⇒ `automation` 今天的**扇入是 0 条边**（2026-09-20 实测）。⚠️ 本行写"只剩 admin"时 §20 还没做，表格没跟着更新 |
 | 11 | `deployment-unit-coupling` 判据 2 **空转**：根单元 `dinqor-agent` 离开分量后 `joined` 恒为空 | **已修**（§7.10）。判据改成对**每个** Wave 2 单元取分量并集；detail 改报**实测**分量大小，并新增"哪些单元已可单独抽取"的进度提示 |
 | 12 | `UpdatePlanTool` 的 `triggerTime` 分支**从工具路径不可达**：只给 `triggerTime` 会走到 `parseSendTimes([])` 抛"请设置至少一个发送时间" | **未修**，既有行为，本刀逐字保留 —— 顺手修会让这次改动不再是可证明的纯重构（§7.12） |
 | 13 | `shared-kernel-classification` 缺**反向**判据：只查"每个发布的包都有条目"，不查"每个条目都有包"，于是 `util` 是死条目 | **未修**，删 `util` 触发 0 门禁 / 0 指标（见 `backend-norms`） |
 | 14 | `RESOURCE_KNOWLEDGE_FILE` 的**归属**：它语义上更像 knowledgebase 的资源类型，而不是通知表的词表 | **未定**。§8 按"跟着端口搬"处理（纯搬家、可证）；改归属是另一个决定，且会动契约的公共常量 |
-| 15 | `automation` 剩两条扇入：`admin`（SSE，要 `SseEmitter`）与 `integration`（邮件模板真环） | **部分已做**（§18）：`integration`（邮件模板真环）已断 —— 渲染搬回 `automation` 的 `EmailReminderMailRenderer`，`MailService` 收窄成只投递并实现 `MailPort`。**只剩 `admin`**（SSE，要 `SseEmitter`，形状要先设计） |
+| 15 | `automation` 剩两条扇入：`admin`（SSE，要 `SseEmitter`）与 `integration`（邮件模板真环） | **部分已做**（§18）：`integration`（邮件模板真环）已断 —— 渲染搬回 `automation` 的 `EmailReminderMailRenderer`，`MailService` 收窄成只投递并实现 `MailPort`。**`admin` 也已做**（§20，`AdminNotificationController` 接入 `NotificationBroadcastPort`）⇒ `automation` 扇入归零（2026-09-20 实测）。⚠️ 本行写"只剩 admin"时 §20 还没做 |
 | 16 | **⚠️ `cross-domain-import-baseline` 在"先 scan 后 gates"的既定流程下不可能变红** —— 它把 `docs/cross-domain-imports.yaml`（`scan.py` 的产物）当作自己的基线，于是基线 == 实时值 | **未修**（高优先）。2026-09-17 实测：把 `RESOURCE_KNOWLEDGE_FILE` 放回实体并让 `knowledgebase` 重新 import 它 ⇒ 扫描器如实报 42 → **43** 条、边从 18 → **19**，而该门禁仍报 **PASS**。它今天实际只检测"改了代码没重跑 scan"。修法二选一：加人工基线文件（照 `capability-baseline.yaml` + `.lock` 的模式），或从上次提交读基线。已先改掉门禁 docstring 里那句失实的保证（§8.11） |
 | 17 | 契约测试里按下标反射取方法的写法（`getDeclaredMethods()[0]`） | **已修**（§8.11）。`NotificationPortTest` 与既有的 `UserLookupPortTest` 各一处；`getDeclaredMethods()` 的顺序 JVM 不保证，加一个方法就会静默换检查对象 |
 | 18 | **⚠️ 端口方法同类自调用失事务**：Spring 事务是代理实现的，`this.富方法(...)` 不走代理，被调方法上的 `@Transactional` 不生效。第九刀的 5 个端口方法因此全部在无事务下执行（其中两处的富方法第一句是 `SELECT ... FOR UPDATE`，锁不住任何东西） | **已修**（§9.8）：5 个方法各补注解；新增 `PortDelegationTransactionTest` 把这条不变量交给机器守（§9.9），并带一条**双向**完整性判据 |
@@ -4678,11 +4678,14 @@ C 类拆登记四处，D 类拆行为，各配对照组。
 | 56 | **⚠️ 跨单元实现边归零之后，"= 0"这条不变式没有任何门禁守着** | **已做**（§21，**不是抽取刀**）。修法：`ci_gates.py` 加常量 `EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0` + `deployment-unit-coupling` 第 4 条判据（放在三条形状判据**之后**，双向）。⭐ 实测**直接对照**：注入 D（消费方退回具体类）时，**常量=1 ⇒ 24 pass / 0 fail，而且 detail 仍印着 `1 cross-unit edge(s) left`**；**常量=0 ⇒ 23 pass / 1 fail，唯一红的就是它**。⇒ 形状判据不是漏了，是**结构上看不见**单向边。⚠️ 归零**之前**这个常量写不出来（数字一直在动）⇒ 是 §20 解锁的。⚠️ **待办 16 仍未修**（修它要人工维护的基线文件，代价不同，已问过九次） |
 | 57 | **⚠️ 反射测试"按名字取方法"要断言**恰好一个**同名方法** | **已做**（§23）。⚠️ **原清单是错的**：写着三处，实测是**七处** —— `EmailReminderPortTest` **根本没有这个写法**（多写了），而 `blogagent-api` 两个 / `recitation-api` 两个 / `integration-api/MailPortTest`（收齐了却 `.findFirst()`）**四处没列**（漏了）。⇒ 与待办 54 同族：**清单是推出来的，不是数出来的**，而且漏的四处里有两个别的模块（写清单时只扫了 `automation-api`）。七处统一改成"先数一遍、断言恰好一个、再返回"；`ContentPlanPortTest.indexOf` 顺带从"返回下标"改成"返回 `Method`"。⚠️ 今天**没有任何端口上有重载**（`RecitationQuizPort` 那个两参重载在**服务**上，不在端口上）⇒ 潜在缺陷，不是活缺陷。注入 H1 / H2（两种实现形状；⚠️ 必须**同时**改签名清单，否则清单断言先红会掩盖它）实测 2 fail / 1 fail，报的都是具名断言。⚠️ 另四处是同一段代码、**没有逐处注入** —— 那句判断本身是推的 |
 | 59 | **⚠️ 反射断言读 `getParameterTypes()[n]` 前要先查 `getParameterCount()`** | **已做**（§25，**纯测试加固，生产代码零改动**）。⚠️ **原清单是错的**：写着"三处"，实测是 **11 个读数 / 5 个测试方法 / 4 个文件**（`grep` 命中 28 处，其中 6 处是注释 ⇒ 22 处代码读数，13 处已守卫 ⇒ 9 处未守卫；同族的 `getParameters()[n]` 另有 2 处未守卫）⇒ **连续第三张"推出来"的错清单**（§22.3 / §23.2）。修法：**6 条下界守卫** + **1 条移位**。⭐ 判据用**下界**不用精确值 —— 守卫的职责只是让失败信息指到真正的原因，精确值会多出一条"参数表恰好 n 个"的主张（同一文件里已有逐字清单），还会对"末尾追加参数"产生假阳性（§25.3）。⭐ `runStream` 那条是**移位**：它本来就断言 `== 4`，但排在两个下标读数**之后** ⇒ 参数表缩短时先抛 `ArrayIndexOutOfBoundsException`，**判据在、却轮不到说**。注入 A5a / A5b 用"把 `runStream` 换成两参的 `publish`"这一对直接测顺序（只抬高守卫绑定值测不出来 —— "守卫通过 ⇒ 读数在范围内"是逻辑蕴含，分不开）⇒ 守卫在前得具名消息、守卫在后得 `Index 2 out of bounds for length 2`。八次注入全部按预期，blob 逐字还原 |
-| 62 | **⚠️ "读第 n 个参数"的守卫仍靠"记得写"** —— 可以抽成 `parameterAt(Method, int)` 帮手，让守卫**结构上无法遗漏** | **未做**（§25.5 刻意没做）。`ContractShape` 在每个契约模块的 test 作用域里**各有一份**（契约模块不能互相依赖）⇒ 帮手要复制 3 份，而且只在 4 个模块里用、其余模块仍用裸读法 ⇒ **反而更不一致**。要收就一次收全部模块，是独立的一刀 |
+| 62 | **⚠️ "读第 n 个参数"的守卫仍靠"记得写"** —— 可以抽成 `parameterAt(Method, int)` 帮手，让守卫**结构上无法遗漏** | **未做**（§25.5 刻意没做）。`ContractShape` 在每个契约模块的 test 作用域里**各有一份**（契约模块不能互相依赖）⇒ 帮手要复制 3 份，而且只在 4 个模块里用、其余模块仍用裸读法 ⇒ **反而更不一致**。要收就一次收全部模块，是独立的一刀。**2026-09-20 实测**：`ContractShape` 在 **5 个**契约模块各一份（`agent-api` / `automation-api` / `blogagent-api` / `integration-api` / `recitation-api` —— 不是 3 份），且**已经分叉**：`signature` / `typeName` 5/5 逐字相同；`assertNoFrameworkComponentTypes` / `recordComponents` 3/3 逐字相同（automation + blogagent + recitation）；`declaredSignatures` / `assertNoDefaultMethods` / `assertNoFrameworkTypes` 5/5 但 `integration-api` 那份实现不同（前两个只差参数名与失败消息；第三个把包名前缀拼成 `getPackageName() + "."`，而别处是 `getPackageName()` 再拼 `"."` —— **判据等价**）；`assertFirstParameterIsTheCallerId` / `assertNoParameterIsNamed` 只有 2 份且**各写各的**。⇒ 抽 `xander-test-support` **不是"搬"**，是"先合并 5 份已分叉的判据再搬"，**合并不当会让某个模块的守卫静默变松** |
 | 58 | **⚠️ 同一次注入验证里混用了两种哈希算法** —— 注入脚本自己打印一个（原始字节），驱动脚本打印另一个（`git hash-object`，先 CRLF→LF 归一），**两条输出挨着** | **本刀踩到、已修**（§20.7）。`BlogPlanSseService.java` 的 `restore` 行报 `1ae8d38b…`、收尾报 `8df1c761…`，看起来像还原没到位，白查一轮。实测三种算法同一文件三个值：原始字节带 `blob <len>\0` 头 `1ae8d38b…` / `sha1sum` 原始字节 `87578e00…` / `git hash-object` 归一后 `8df1c761…`（本仓 `core.autocrlf=true`）。⚠️ 这是待办 42 的**第三种形态**：42 是"两个**外部工具**给出不同值"，本刀是"**同一个脚本的两条代码路径**各自打印一个"。⇒ 判据已统一：`inj20.py` 的 `blob()` 改成先归一再哈希，与 `git hash-object` 逐字等价，复跑验证通过。⚠️ 通用规则：**"脚本打印了一个陌生的哈希" ≠ "文件被改坏了"**；分辨它们的是 `git diff`（差异是否逐行都是本次意图），不是哈希比对 |
 | 63 | **⚠️ 另外两处门禁也在做"全文子串匹配"，注释同样能满足** —— `gate_gateway_stream_proxy_config`（`token not in text`，读 `infrastructure/gateway` 的 YAML）与 `stream-ban-boundary-coverage`（`"ConnectionRegistry" not in text`，读 Java 文件） | **未修**（§26.5 实测的同一形状）。`dockerfile-module-coverage` 已在第二十三刀修掉（匹配前逐行丢注释）；这两处**刻意没顺手改** —— 前者 Wave 1 才有落点（今天 SKIP，改了也测不了），后者要先拍板"注释里出现类名算不算注册"。⚠️ 通用形状：**凡"某段文本在不在文件里"的判据，都要先问"注释算不算"** |
 | 64 | `xander-webmvc-support` 的 `GlobalExceptionHandler` 把两个 Redis 异常映射成 503 ⇒ 库必须带 `spring-data-redis` | **已处理**（§26.2 ③）：声明成 `provided`。义务是**响的** —— 消费方没有它会在**注册 advice 时**启动失败（`@ExceptionHandler` 里是类字面量），不是请求期静默出错。逃生口是把这个 handler 从 `GlobalExceptionHandler` 拆出去，但 §20 是**整类**列的 ⇒ 拆是**行为可见**的改动，不是重构 |
 | 65 | **⚠️ `xander-webmvc-support` 的 4 个类零 Java 消费方 ⇒ 这一族的改动没有任何编译期信号** | **已记录**（§26.2 ①），`package-info.java` 里写明"这一族的改动需要接线测试，不是绿构建"。今天靠 `AuthInterceptorTest`（33 条，含两条新增行为用例）与 `GlobalExceptionHandlerTest`（2 条）守着；**`WebConfig` 与 `ResultStatusResponseBodyAdvice` 仍然一条测试都没有** —— 前者靠 217 条路由的 `auth-policy-coverage` 间接覆盖，后者没有 |
+
+| 66 | **⚠️ Jackson 的"宽松反序列化"从逐类注解搬到了全局配置** —— `apps/core-host/src/main/resources/application.yml:61` 的 `spring.jackson.deserialization.fail-on-unknown-properties: false` 让**所有**反序列化点都不再对未知字段报错 | **未定**（§27 第 5 项的实测副产物）。ADR §1.3 的豁免口径是"逐类、显式、要在注释里写明为什么留"，而全局开关是"一处配置改变全部契约的序列化语义" —— 比注解宽得多，而且 `config-ownership.yaml` 只记 `owner` / `classification` / `nacos_group`，**不记"这个键改变了契约语义"**（与待办 43 同族：扫描器只能看见它被设计来数的那种耦合）。⚠️ 拆服务后它随 `core-host` 走、**不会**跟着契约 jar 走 ⇒ 别的服务的反序列化严格性会和 `core-host` 不一致 |
+| 67 | **⚠️ `assertFirstParameterIsTheCallerId` 在 5 个契约模块里只有 2 份，而且两份各缺一条** | **已修**（§29）。`integration-api` 版断言 `getParameterCount() > 0` + 参数名，但**不查类型**（`String userId` 会绿着过）；`blogagent-api` 版查类型 + 参数名，但**零参方法 `continue` 跳过**（`BlogAgentPort` 今天没有零参方法 ⇒ 潜在缺陷，不是活缺陷）。⇒ 取**并集**：有参数 / 类型 `Long` / 名字 `userId` 三条一起钉，两份逐字相同。注入 A（加 `boolean isEnabled();`）/ B（首参改 `Integer`）/ C（参数名改 `ownerId`）各一次，全部按预期变红且失败消息是那条具名断言，还原逐字节相同 |
 
 ### 27.1 第 1 项的边界（明确不许顺手放宽）
 
@@ -4701,3 +4704,82 @@ C 类拆登记四处，D 类拆行为，各配对照组。
 契约不认框架，实体不出边界。
 省事的写法在这里几乎总是错的那一种 —— 因为"省事"的下一步就是"再多加一个依赖"。
 ```
+
+---
+
+## 29. 落地记录（二十四）：`assertFirstParameterIsTheCallerId` 的两份实现强度不同
+
+⚠️ **本节编号在 §28 之后，是有意的** —— §27 是待办表、§28 是一句话记法，
+把落地记录插在它们之前要重排 §27 / §28 的编号，风险大于收益。
+
+### 29.1 缝：同名、同目的、**强度不同**的两份判据
+
+`ContractShape.assertFirstParameterIsTheCallerId` 只存在于两个契约模块（`blogagent-api` 与
+`integration-api`），两份**各缺一条**：
+
+| | 零参方法 | 类型是 `Long` | 名字是 `userId` |
+|---|---|---|---|
+| `integration-api` 版 | **红**（`assertTrue(getParameterCount() > 0)`） | **不查** | 查（`assertEquals`） |
+| `blogagent-api` 版 | **静默跳过**（`if (parameters.length == 0) continue;`） | 查 | 查 |
+
+两份都叫同一个名字、javadoc 都声称在钉"第一个参数是调用方 id"，但**没有东西会告诉你它们不一样**。
+⇒ 这是"**判据只朝一个方向看**"的**第八个实例**，而且比前七次隐蔽：前七次是"一条判据假设了某种形状"，
+这次是"**两条判据互相补不了对方的缺口**"。
+
+⚠️ **两份都不是活的缺陷**：
+- `BlogAgentPort` 的 5 个方法全部是 `(Long userId, …)` ⇒ 零参分支今天不可能触发；
+- `integration-api` 的 4 个端口 6 个方法首参全是 `Long userId` ⇒ 类型分支今天也不会触发。
+⇒ **潜在缺陷，不是活缺陷** —— 与待办 57（今天没有端口有重载）同族。
+
+### 29.2 修法：取并集，两份逐字相同
+
+三条性质一起钉：有参数 / 类型 `Long` / 名字 `userId`。三件事各挡一种错误形状 ——
+只钉"有参数"会放过 `sync(Long taskId, Long userId)`（两个都是 `Long`，语义却是"拿 taskId 当用户 id 去查"）；
+只钉类型会放过 `String userId`；只钉名字会放过零参方法。
+
+两份 `assertFirstParameterIsTheCallerId`（含 javadoc）现在**逐字相同**
+（忽略空白后 md5 一致：`e05286a6`）。`assertNoParameterIsNamed` **没有**统一 ——
+它两份只差失败消息里举的例子，而举的例子必须是本模块自己的端口（`BlogAgentImagePort` vs `MailPort`），
+统一反而会丢掉信息。这一点写在两边的类注释里，避免下一个人再去"顺手统一"。
+
+顺手修掉两处：
+- `integration-api` 的 `ContractShape` 类注释说"与 `blogagent-api` 里那个同名类是**第二次落地**"，
+  以及 `blogagent-api` 那份说"与 **`recitation-api`** 里的同名类基本相同，只有包名、
+  `assertFirstParameterIsTheCallerId` 与 `assertNoParameterIsNamed` 这三处不同" ——
+  **`recitation-api` 那份根本没有这两个方法**（实测方法集：recitation 只有
+  `declaredSignatures` / `recordComponents` / `assertNoDefaultMethods` / `assertNoFrameworkTypes` /
+  `assertNoFrameworkComponentTypes` / `signature` / `typeName`）。两处都改成了实测过的事实。
+- `integration-api` 的 `assertEquals` 静态导入在改完后成了死导入，已删。
+
+### 29.3 注入验证：三次，全部按预期
+
+| 注入 | 改法 | 期望 | 实测 |
+|---|---|---|---|
+| C | `BlogAgentPort.create(Long userId, …)` → `create(Long ownerId, …)` | 只有参数名那条红 | ✅ `Tests run=26, failures=1`，消息是"`BlogAgentPort.create` 的第一个参数叫 `ownerId`，不叫 `userId`…" |
+| B | `create(Long userId, …)` → `create(Integer userId, …)` | 类型那条红 | ✅ `Tests run=26, failures=1`，消息是"第一个参数类型是 `Integer`，不是 `Long`…" |
+| A | 加 `boolean isEnabled();` | 零参那条红 | ✅ `Tests run=26, failures=2` —— 守卫那条 + 签名清单那条 |
+
+⚠️ **B 与 A 必须同时改 `BlogAgentPortTest.EXPECTED_SIGNATURES`**，否则清单断言先红会掩盖守卫
+（本仓已踩过：待办 57）。**C 不用改清单** —— `ContractShape.signature()` 只用参数**类型**，不含参数名。
+⇒ 这三条一起说明了一件事：**"签名清单"与"形状守卫"是两条独立防线**，
+清单管"方法表有没有变"，守卫管"每个方法的形状对不对"。
+
+还原判据统一用 `git hash-object`，两个文件的收尾 blob 与注入前逐字节相同
+（`3a7bb4d42f73` / `c09f811c8a97`）。
+
+### 29.4 ⚠️ 注入脚本连踩两次"把目标文件留在注入态"
+
+第一次：脚本在删除旧 surefire 报告时撞上沙箱的批量删除守卫（`SAFE_DELETE_BULK_CONFIRM_REQUIRED`）
+而中断，**`BlogAgentPort.java` 停在 `ownerId` 状态**。第二次：改用
+`C:/jdk-17.0.2/bin/java.exe`（Windows 形式）之前写的是 MSYS 的 `/c/jdk-17.0.2/bin/java`，
+Python 的 `subprocess` 走 `CreateProcess` 解析不了 ⇒ `FileNotFoundError: [WinError 2]`，
+**同一个文件又停了一次**。
+
+两次都是靠"下一轮 `apply()` 的前置断言发现锚点出现 0 次"暴露的，然后用
+`git checkout -- <path>` + `git hash-object` 核对恢复。
+
+⇒ 两条规则：
+1. **Python 起 Java/Maven 一律写 Windows 路径**（`C:/...`），MSYS 的 `/c/...` 只在 shell 里有效。
+   这与"`mvn.sh` 是 shell 脚本、Windows `CreateProcess` 不能直接 exec"是同一条。
+2. **注入脚本启动时先把基线 blob 打出来**，并在每轮 `apply()` 前断言锚点恰好出现一次 ——
+   这样"残留"会当场报错，而不是被当成"注入没生效"。

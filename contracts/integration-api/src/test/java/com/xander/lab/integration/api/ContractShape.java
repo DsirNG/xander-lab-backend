@@ -6,13 +6,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 契约形状的共用断言。与 {@code blogagent-api} 里那个同名类是同一条判据的第二次落地
- * （两个契约模块在 test scope 上互不可见，只能各带一份）。
+ * 契约形状的共用断言。与 {@code contracts/blogagent-api} 里的同名类是同一条判据的另一份落地：
+ * 契约模块之间不能互相依赖（只允许 JDK + 本包），所以每个契约模块各留一份。其中
+ * {@link #assertFirstParameterIsTheCallerId} 两份逐字相同，{@link #assertNoParameterIsNamed}
+ * 只差失败消息里举的例子（举的例子必须是本模块自己的端口）。
  *
  * <p>存在的理由：端口的"变宽"不会触发任何一道其它防线 —— 编译过、耦合指标一动不动、
  * 26 条门禁全绿、单元测试也全绿。只有反射能守。</p>
@@ -53,26 +54,33 @@ final class ContractShape {
     }
 
     /**
-     * 每个方法的第一个参数必须叫 {@code userId}。
+     * 端口的<b>每个</b>方法都必须把调用方 id 作为第一个参数：有参数、类型 {@code Long}、名字 {@code userId}。
      *
-     * <p>⚠️ 这条断言的是<b>参数名</b>，不是类型。只断言类型 {@code Long} 是不够的：
-     * {@code sync(Long taskId, Long userId)} 两个都是 {@code Long}，
-     * 类型断言<b>绿着过</b>，而语义是"用 taskId 当用户 id 去查"。{@code -parameters} 已开，
-     * 所以参数名在运行时可见 —— 这是把"判据只朝一个方向看"堵住的那一次。</p>
+     * <p>三件事要一起钉，缺一条就有一种错误形状能绿着过去：只钉"有参数"会放过
+     * {@code sync(Long taskId, Long userId)}（两个都是 {@code Long}，而语义是"拿 taskId 当用户 id 去查"）；
+     * 只钉类型会放过 {@code String userId}；只钉名字会放过零参方法。跨进程后提供方读不到调用方的
+     * ThreadLocal，身份只能靠参数传。</p>
      *
-     * <p>⚠️ 断言首参前先查 {@code getParameterCount() > 0}：无参方法上取
-     * {@code getParameters()[0]} 是越界，失败信息会指向错误的地方。</p>
+     * <p>读参数名要求 javac 开着 {@code -parameters}（本仓库经 spring-boot-starter-parent 开启），
+     * 名字会进 class 文件的 {@code MethodParameters} 属性 —— 已用 {@code javap -v} 实测确认。
+     * 若哪天它被关掉，这条断言会以"参数名变成了 {@code arg0}"的形态变红，那也是一个真实信号。</p>
      */
-    static void assertFirstParameterIsTheCallerId(Class<?> contract) {
-        for (Method method : contract.getDeclaredMethods()) {
+    static void assertFirstParameterIsTheCallerId(Class<?> type) {
+        for (Method method : type.getDeclaredMethods()) {
             if (method.isSynthetic()) continue;
-            assertTrue(method.getParameterCount() > 0,
-                    method.getName() + " 一个参数都没有，不可能显式收到调用方身份。"
+            Parameter[] parameters = method.getParameters();
+            String where = type.getSimpleName() + "." + method.getName();
+            assertTrue(parameters.length > 0,
+                    where + " 一个参数都没有，不可能显式收到调用方身份。"
                             + "跨进程后提供方读不到调用方的 ThreadLocal，身份只能靠参数传。");
-            assertEquals("userId", method.getParameters()[0].getName(),
-                    method.getName() + " 的第一个参数必须叫 userId（实际叫 "
-                            + method.getParameters()[0].getName() + "）。"
-                            + "它必须是调用方身份 —— 归属判定全靠它。");
+            assertTrue(parameters[0].getType() == Long.class,
+                    where + " 的第一个参数类型是 " + parameters[0].getType().getSimpleName()
+                            + "，不是 Long —— 它必须是调用方 id。");
+            assertTrue("userId".equals(parameters[0].getName()),
+                    where + " 的第一个参数叫 " + parameters[0].getName() + "，不叫 userId。"
+                            + "只断言「类型是 Long」是不够的：sync(Long taskId, Long userId) "
+                            + "同样满足那个断言。要么把参数名改成 userId，要么把它挪到第二位"
+                            + "并让真正的 userId 排第一。");
         }
     }
 

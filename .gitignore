@@ -25,6 +25,10 @@ target/
 *.temp
 *.tmp
 .DS_Store
+# scripts/migration/*.py 被门禁与扫描器导入时会在原地生成字节码缓存；
+# 它不进构建产物，但会让 `git add -A` 把 .pyc 提交进仓库。
+__pycache__/
+*.pyc
 # Working copy of the V9 refactoring plan. It is a reference document kept in the tree for the
 # agent to read, not a repo artifact -- and `git add -A docs` kept trying to commit it.
 docs/DinQorAI_*.md

@@ -21,9 +21,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 而且就算有也不能用 —— 用被测方的函数去算判据，等于让它自己给自己打分。
  * 这一点和门禁校验生成物清单那条规矩是同一条。</p>
  *
- * <p>与 {@code contracts/recitation-api} 里的同名类基本相同，只有包名、
- * {@link #assertFirstParameterIsTheCallerId} 与 {@link #assertNoParameterIsNamed} 这三处不同：
- * 契约模块之间不能互相依赖（只允许 JDK + 本包），所以这份小工具每个契约模块各留一份。</p>
+ * <p>与 {@code contracts/integration-api} 里的同名类是同一条判据的另一份落地：契约模块之间
+ * 不能互相依赖（只允许 JDK + 本包），所以每个契约模块各留一份。其中
+ * {@link #assertFirstParameterIsTheCallerId} 两份逐字相同，{@link #assertNoParameterIsNamed}
+ * 只差失败消息里举的例子（举的例子必须是本模块自己的端口）。</p>
  *
  * <p>⚠️ 那两条参数判据是<b>一对</b>：一个断言"这个端口收了名为 {@code userId} 的调用方 id"，
  * 另一个断言"这个端口里根本没有叫 {@code userId} 的参数"。有了反向的那条，
@@ -74,37 +75,33 @@ final class ContractShape {
     }
 
     /**
-     * 每个方法的第一参数必须是<b>名为 {@code userId} 的调用方 id</b>。
+     * 端口的<b>每个</b>方法都必须把调用方 id 作为第一个参数：有参数、类型 {@code Long}、名字 {@code userId}。
      *
-     * <p>为什么不能只断言"类型是 {@code Long}"：那个断言对
-     * {@code publish(Long taskId, Long userId)} <b>同样成立</b> —— 也就是说不出来它想说的那件事。
-     * 本项目已经有四个契约的提供方是"taskId 在前、userId 在后"的形状
-     * （{@code BlogAgentService} 的 {@code publish} / {@code findPublishedPost} / {@code runStream}），
-     * 照抄提供方顺序就能让守卫绿着放过它自己名字所禁止的形状。
-     * <b>判据只朝一个方向看，另一个方向就没人看</b> —— 与 {@code util} 死条目、
-     * {@code deployment-unit-coupling} 判据 2 空转同源。</p>
+     * <p>三件事要一起钉，缺一条就有一种错误形状能绿着过去：只钉"有参数"会放过
+     * {@code sync(Long taskId, Long userId)}（两个都是 {@code Long}，而语义是"拿 taskId 当用户 id 去查"）；
+     * 只钉类型会放过 {@code String userId}；只钉名字会放过零参方法。跨进程后提供方读不到调用方的
+     * ThreadLocal，身份只能靠参数传。</p>
      *
-     * <p>这里读的是<b>参数名</b>。javac 在本仓库开了 {@code -parameters}
-     * （spring-boot-starter-parent 的 {@code maven.compiler.parameters}），
+     * <p>读参数名要求 javac 开着 {@code -parameters}（本仓库经 spring-boot-starter-parent 开启），
      * 名字会进 class 文件的 {@code MethodParameters} 属性 —— 已用 {@code javap -v} 实测确认。
-     * 若哪天 {@code -parameters} 被关掉，这条断言会以"参数名变成了 arg0"的形态变红，
-     * 那也是一个真实信号（关掉它会让所有基于参数名的诊断失效）。</p>
+     * 若哪天它被关掉，这条断言会以"参数名变成了 {@code arg0}"的形态变红，那也是一个真实信号。</p>
      */
     static void assertFirstParameterIsTheCallerId(Class<?> type) {
         for (Method method : type.getDeclaredMethods()) {
             if (method.isSynthetic()) continue;
             Parameter[] parameters = method.getParameters();
-            if (parameters.length == 0) continue;
+            String where = type.getSimpleName() + "." + method.getName();
+            assertTrue(parameters.length > 0,
+                    where + " 一个参数都没有，不可能显式收到调用方身份。"
+                            + "跨进程后提供方读不到调用方的 ThreadLocal，身份只能靠参数传。");
             assertTrue(parameters[0].getType() == Long.class,
-                    type.getSimpleName() + "." + method.getName() + " 的第一个参数不是 Long："
-                            + "端口方法必须显式收调用方 id（智能体轮次在线程池线程上跑，"
-                            + "ThreadLocal 不跨线程）。");
+                    where + " 的第一个参数类型是 " + parameters[0].getType().getSimpleName()
+                            + "，不是 Long —— 它必须是调用方 id。");
             assertTrue("userId".equals(parameters[0].getName()),
-                    type.getSimpleName() + "." + method.getName() + " 的第一个参数叫 "
-                            + parameters[0].getName() + "，不叫 userId。"
-                            + "只断言\"类型是 Long\"是不够的：publish(Long taskId, Long userId) "
+                    where + " 的第一个参数叫 " + parameters[0].getName() + "，不叫 userId。"
+                            + "只断言「类型是 Long」是不够的：sync(Long taskId, Long userId) "
                             + "同样满足那个断言。要么把参数名改成 userId，要么把它挪到第二位"
-                            + "并让真正的 userId 排第一 —— 四个既有契约都是这个形状。");
+                            + "并让真正的 userId 排第一。");
         }
     }
 
