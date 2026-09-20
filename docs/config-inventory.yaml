@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 802
-  leaves: 568
+  total: 809
+  leaves: 573
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -748,6 +748,41 @@ config:
   - key: spring.datasource.hikari.keepalive-time
     source: apps/content-automation/src/main/resources/application.yml
     value: "300000"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.data.redis
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: shared
+  - key: spring.data.redis.host
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_REDIS_HOST:localhost}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.port
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_REDIS_PORT:6379}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.password
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_REDIS_PASSWORD:}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.database
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_REDIS_DATABASE:0}"
+    leaf: true
+    logical_owner: shared
+  - key: spring.data.redis.timeout
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${SPRING_REDIS_TIMEOUT:5000ms}"
     leaf: true
     logical_owner: shared
   - key: spring.cloud

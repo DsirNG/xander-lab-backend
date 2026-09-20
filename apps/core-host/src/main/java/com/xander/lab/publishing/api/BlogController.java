@@ -130,20 +130,6 @@ public class BlogController {
         }
     }
 
-    @PostMapping("/posts/{id}/view")
-    public Result<ViewResult> recordView(
-            @PathVariable Long id,
-            @RequestHeader(value = "User-Agent", required = false) String userAgent) {
-        Long userId = UserContext.getUserId();
-        String ip = UserContext.getClientIp();
-        if (ip == null || ip.isEmpty()) {
-            ip = "unknown";
-        }
-
-        boolean counted = blogService.recordView(id, userId, ip, userAgent);
-        return Result.success(new ViewResult(counted));
-    }
-
     private <T> Result<T> mapBlogError(IllegalArgumentException e) {
         String message = e.getMessage() == null ? "请求无效" : e.getMessage();
         if (message.contains("未登录")) {
@@ -158,6 +144,5 @@ public class BlogController {
         return Result.badRequest(message);
     }
 
-    public record ViewResult(boolean counted) {}
     public record PublishStatus(String status, Long postId) {}
 }

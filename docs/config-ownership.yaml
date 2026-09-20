@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 568
-  service_private: 497
-  secret: 59
+  total: 573
+  service_private: 501
+  secret: 60
   shared: 12
 config:
   - key: agent.conversation.compaction-enabled
@@ -2124,6 +2124,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.data.redis.database
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.database
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -2144,6 +2149,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.data.redis.host
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.host
     source: apps/core-host/src/main/resources/application.yml
     classification: service_private
     owner: shared
@@ -2169,6 +2179,11 @@ config:
     owner: shared
     nacos_group: COMMON
   - key: spring.data.redis.password
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: secret
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.password
     source: apps/core-host/src/main/resources/application.yml
     classification: secret
     owner: shared
@@ -2185,6 +2200,11 @@ config:
     nacos_group: COMMON
   - key: spring.data.redis.port
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.port
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON
@@ -2210,6 +2230,11 @@ config:
     nacos_group: COMMON
   - key: spring.data.redis.timeout
     source: apps/bloghtml-preview/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.data.redis.timeout
+    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON

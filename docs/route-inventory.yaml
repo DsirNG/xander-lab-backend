@@ -1242,9 +1242,9 @@ routes:
     path: "/api/blog/posts/{id}/view"
     stream: none
     last_event_id: false
-    handler: "com.xander.lab.publishing.api.BlogController#recordView"
-    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 133
+    handler: "com.xander.lab.publishing.api.BlogPublicViewController#recordView"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPublicViewController.java
+    line: 23
   - id: integration-post-blog-posts-postid-sync-csdn
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
