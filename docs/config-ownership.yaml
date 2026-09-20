@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 573
-  service_private: 501
+  total: 575
+  service_private: 503
   secret: 60
   shared: 12
 config:
@@ -2588,6 +2588,16 @@ config:
     classification: service_private
     owner: studio
     nacos_group: DINQOR-CORE
+  - key: gateway.agent-uri
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: gateway
+    nacos_group: DINQOR-GATEWAY
+  - key: gateway.agent-ws-uri
+    source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: gateway
+    nacos_group: DINQOR-GATEWAY
   - key: gateway.security-state.core-host-base-url
     source: apps/gateway/src/main/resources/application.yml
     classification: service_private

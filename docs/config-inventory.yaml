@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 809
-  leaves: 573
+  total: 811
+  leaves: 575
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -2939,6 +2939,16 @@ config:
     source: apps/gateway/src/main/resources/application.yml
     value: ""
     leaf: false
+    logical_owner: unassigned
+  - key: gateway.agent-uri
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_AGENT_URI:lb://dinqor-agent}"
+    leaf: true
+    logical_owner: unassigned
+  - key: gateway.agent-ws-uri
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_AGENT_WS_URI:lb:ws://dinqor-agent}"
+    leaf: true
     logical_owner: unassigned
   - key: gateway.platform-integration-uri
     source: apps/gateway/src/main/resources/application.yml

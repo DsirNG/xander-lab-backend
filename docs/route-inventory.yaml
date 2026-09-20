@@ -1101,7 +1101,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#publishPost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 39
+    line: 30
   - id: integration-any-blog-posts-sync
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
