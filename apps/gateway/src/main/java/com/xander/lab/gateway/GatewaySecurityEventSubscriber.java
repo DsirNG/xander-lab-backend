@@ -10,6 +10,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.time.DateTimeException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * Gateway 安全事件快路径订阅者。
@@ -66,6 +69,20 @@ public class GatewaySecurityEventSubscriber implements MessageListener {
         long securityVersion = version != null && version.canConvertToLong()
                 ? version.asLong() : 0L;
         securityStateCache.apply(accountId.asLong(), ACCOUNT_DISABLED.equals(event.eventType()),
-                securityVersion);
+                securityVersion, epochMillis(payload.get("occurredAt")));
+    }
+
+    private long epochMillis(JsonNode value) {
+        if (value == null || !value.isTextual() || value.asText().isBlank()) {
+            return 0L;
+        }
+        try {
+            return LocalDateTime.parse(value.asText()).atZone(ZoneId.systemDefault())
+                    .toInstant().toEpochMilli();
+        } catch (DateTimeException ex) {
+            log.debug("[GatewaySecurity] occurredAt 无法解析，忽略延迟观测字段 value={}",
+                    value.asText());
+            return 0L;
+        }
     }
 }

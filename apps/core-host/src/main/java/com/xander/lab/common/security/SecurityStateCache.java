@@ -40,6 +40,12 @@ public class SecurityStateCache {
     /** 命中缓存而拒绝的请求数，供观测使用。 */
     private final AtomicLong denialHits = new AtomicLong(0L);
 
+    /** 最近一次带来源时间的封禁传播延迟，供 admin_ban_* 指标使用。 */
+    private final AtomicLong lastPropagationLatencyMillis = new AtomicLong(0L);
+
+    /** 最近一次实际关闭已建立流的封禁延迟。 */
+    private final AtomicLong lastStreamDisconnectLatencyMillis = new AtomicLong(0L);
+
     /** 账号是否已被封禁。这是热路径，必须无锁且无 IO。 */
     public boolean isDisabled(Long accountId) {
         if (accountId == null) {
@@ -117,6 +123,30 @@ public class SecurityStateCache {
 
     public long denialHits() {
         return denialHits.get();
+    }
+
+    public void recordPropagationLatency(long sourceEpochMillis) {
+        if (sourceEpochMillis > 0L) {
+            lastPropagationLatencyMillis.set(elapsedMillis(sourceEpochMillis));
+        }
+    }
+
+    public void recordStreamDisconnectLatency(long sourceEpochMillis) {
+        if (sourceEpochMillis > 0L) {
+            lastStreamDisconnectLatencyMillis.set(elapsedMillis(sourceEpochMillis));
+        }
+    }
+
+    public long lastPropagationLatencyMillis() {
+        return lastPropagationLatencyMillis.get();
+    }
+
+    public long lastStreamDisconnectLatencyMillis() {
+        return lastStreamDisconnectLatencyMillis.get();
+    }
+
+    private static long elapsedMillis(long sourceEpochMillis) {
+        return Math.max(0L, System.currentTimeMillis() - sourceEpochMillis);
     }
 
     /** 仅用于测试与诊断。 */

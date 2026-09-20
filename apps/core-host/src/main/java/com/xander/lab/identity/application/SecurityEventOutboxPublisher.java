@@ -12,6 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.DateTimeException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 /**
@@ -205,7 +208,8 @@ public class SecurityEventOutboxPublisher {
                     + " 与 aggregate_id=" + entry.getAggregateId() + " 不一致");
         }
         SecurityStateApplier.Outcome outcome =
-                securityStateApplier.apply(payload.accountId(), disabled, payload.securityVersion());
+                securityStateApplier.apply(payload.accountId(), disabled, payload.securityVersion(),
+                        payload.occurredAtEpochMillis());
         if (outcome.newlyDisabled()) {
             log.warn("[Security] 快路径封禁生效 account={} version={} 关闭连接={}",
                     payload.accountId(), payload.securityVersion(), outcome.closedConnections());
@@ -240,7 +244,22 @@ public class SecurityEventOutboxPublisher {
         }
         JsonNode version = node.get("securityVersion");
         long securityVersion = version != null && version.canConvertToLong() ? version.asLong() : 0L;
-        return new Payload(accountId.asLong(), securityVersion);
+        return new Payload(accountId.asLong(), securityVersion, epochMillis(node.get("occurredAt")));
+    }
+
+    /** 旧事件可能没有 occurredAt，或来自未来版本的格式异常；不影响安全事件本身投递。 */
+    private long epochMillis(JsonNode value) {
+        if (value == null || !value.isTextual() || value.asText().isBlank()) {
+            return 0L;
+        }
+        try {
+            return LocalDateTime.parse(value.asText()).atZone(ZoneId.systemDefault())
+                    .toInstant().toEpochMilli();
+        } catch (DateTimeException ex) {
+            log.debug("[Security] 事件 occurredAt 无法解析，忽略延迟观测字段 value={}",
+                    value.asText());
+            return 0L;
+        }
     }
 
     /**
@@ -287,6 +306,6 @@ public class SecurityEventOutboxPublisher {
     }
 
     /** 投递所需的负载字段。 */
-    private record Payload(long accountId, long securityVersion) {
+    private record Payload(long accountId, long securityVersion, long occurredAtEpochMillis) {
     }
 }

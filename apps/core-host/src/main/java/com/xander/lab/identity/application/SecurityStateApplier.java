@@ -74,6 +74,15 @@ public class SecurityStateApplier {
      * @throws IllegalArgumentException accountId 为空
      */
     public Outcome apply(Long accountId, boolean disabled, long securityVersion) {
+        return apply(accountId, disabled, securityVersion, 0L);
+    }
+
+    /**
+     * 应用带 SOT 来源时间的状态变更，用于计算封禁传播与流断开延迟。
+     * 来源时间为 0 时保持 focused test / 旧调用方的无时间语义。
+     */
+    public Outcome apply(Long accountId, boolean disabled, long securityVersion,
+                         long sourceEpochMillis) {
         if (accountId == null) {
             // 不能静默当成"无需处理"：那会让一条畸形事件变成永久漏掉的封禁。
             throw new IllegalArgumentException("accountId 不能为空");
@@ -94,12 +103,14 @@ public class SecurityStateApplier {
         }
 
         securityStateCache.markDisabled(accountId, securityVersion);
+        securityStateCache.recordPropagationLatency(sourceEpochMillis);
         if (wasDisabled) {
             // 已经是封禁态：不重复断连。重复投递到这里必须是无害的。
             return Outcome.NONE;
         }
         int closed = connectionRegistry.closeAll(accountId, CLOSE_REASON_ACCOUNT_DISABLED);
         if (closed > 0) {
+            securityStateCache.recordStreamDisconnectLatency(sourceEpochMillis);
             // 手段 A（主要手段）：主动断开已建立的长连接。
             // 手段 B（每次发送前 O(1) 校验）是兜底，见 SSE / WS 的发送边界。
             log.warn("[Security] 封禁生效，关闭已建立连接 account={} closed={}", accountId, closed);

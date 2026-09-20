@@ -22,5 +22,13 @@ public class GatewaySecurityMetrics {
                         cache -> cache.syncAgeMillis(System.currentTimeMillis()))
                 .description("Gateway 距离上次成功安全状态同步的毫秒数")
                 .register(meterRegistry);
+        Gauge.builder("admin_ban_new_request_block_latency", stateCache,
+                        cache -> cache.lastPropagationLatencyMillis())
+                .description("最近一次封禁传播到 Gateway deny cache 的毫秒数")
+                .register(meterRegistry);
+        Gauge.builder("admin_ban_propagation_latency", stateCache,
+                        cache -> cache.lastPropagationLatencyMillis())
+                .description("最近一次封禁事件传播到 Gateway 安全平面的毫秒数")
+                .register(meterRegistry);
     }
 }

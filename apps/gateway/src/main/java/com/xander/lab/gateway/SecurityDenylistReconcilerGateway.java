@@ -123,7 +123,8 @@ public class SecurityDenylistReconcilerGateway implements ApplicationRunner {
         stateCache.markSourceWatermark(changes.watermark());
         long nextCursor = cursor;
         for (SecurityStateSyncApi.Entry entry : changes.changes()) {
-            stateCache.apply(entry.accountId(), entry.disabled(), entry.securityVersion());
+            stateCache.apply(entry.accountId(), entry.disabled(), entry.securityVersion(),
+                    entry.occurredAtEpochMillis());
             nextCursor = Math.max(nextCursor, entry.changeSeq());
         }
         if (nextCursor <= cursor) {

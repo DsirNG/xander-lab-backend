@@ -216,7 +216,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:146
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java:147
     notes: >-
       低频全量对账兜底（5 分钟）。实例长时间离线后，本地游标可能落后于已被清理的历史区间，
       此时增量拉取会永久漏掉那一段 —— 全量刷新（listDisabled + replaceAll）保证最终收敛。
@@ -229,7 +229,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java:120
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java:123
     notes: >-
       V9 §27 的快路径：消费 security_event_outbox 并投递。
       **为什么是 global_once 而不是 per_instance**：本任务领取的是共享的发件箱行，

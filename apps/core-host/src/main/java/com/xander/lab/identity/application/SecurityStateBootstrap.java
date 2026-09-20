@@ -194,7 +194,8 @@ public class SecurityStateBootstrap implements ApplicationRunner {
             for (AccountSecurityState state : batch) {
                 // 第 6 步的版本闸门在 SecurityStateApplier 内部（两条传播路径的唯一收口点），
                 // 这里刻意不重复判断，否则两条路径的语义会各自漂移。
-                securityStateApplier.apply(state.getAccountId(), state.isDisabled(), versionOf(state));
+                securityStateApplier.apply(state.getAccountId(), state.isDisabled(), versionOf(state),
+                        epochMillis(state.getDisabledAt()));
                 applied++;
                 if (state.getChangeSeq() != null) {
                     maxSeq = Math.max(maxSeq, state.getChangeSeq());
@@ -217,5 +218,10 @@ public class SecurityStateBootstrap implements ApplicationRunner {
 
     private static long versionOf(AccountSecurityState state) {
         return state.getSecurityVersion() == null ? 0L : state.getSecurityVersion();
+    }
+
+    private static long epochMillis(java.time.LocalDateTime value) {
+        return value == null ? 0L : value.atZone(java.time.ZoneId.systemDefault())
+                .toInstant().toEpochMilli();
     }
 }

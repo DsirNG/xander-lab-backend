@@ -19,6 +19,7 @@ public class GatewaySecurityStateCache {
     private final AtomicLong lastSeenSeq = new AtomicLong();
     private final AtomicLong sourceWatermark = new AtomicLong();
     private final AtomicLong lastSuccessfulSyncAt = new AtomicLong();
+    private final AtomicLong lastPropagationLatencyMillis = new AtomicLong();
 
     public boolean isDisabled(long accountId) {
         State state = states.get(accountId);
@@ -27,12 +28,21 @@ public class GatewaySecurityStateCache {
 
     /** 版本单调地应用封禁/解封事件，重复或迟到事件无副作用。 */
     public synchronized void apply(long accountId, boolean disabled, long securityVersion) {
-        states.compute(accountId, (ignored, current) -> {
-            if (current != null && current.securityVersion() >= securityVersion) {
-                return current;
-            }
-            return new State(disabled, securityVersion);
-        });
+        apply(accountId, disabled, securityVersion, 0L);
+    }
+
+    /** 应用带 SOT 来源时间的状态，供封禁传播延迟观测使用。 */
+    public synchronized void apply(long accountId, boolean disabled, long securityVersion,
+                                   long sourceEpochMillis) {
+        State current = states.get(accountId);
+        if (current != null && current.securityVersion() >= securityVersion) {
+            return;
+        }
+        states.put(accountId, new State(disabled, securityVersion));
+        if (disabled && sourceEpochMillis > 0L) {
+            lastPropagationLatencyMillis.set(Math.max(0L,
+                    System.currentTimeMillis() - sourceEpochMillis));
+        }
     }
 
     /** 用 core-host 的完整快照替换本实例状态，包含已解封账号以保留版本闸门。 */
@@ -69,6 +79,10 @@ public class GatewaySecurityStateCache {
 
     public long reconcileLag() {
         return Math.max(0L, sourceWatermark() - lastSeenSeq());
+    }
+
+    public long lastPropagationLatencyMillis() {
+        return lastPropagationLatencyMillis.get();
     }
 
     public int disabledCount() {

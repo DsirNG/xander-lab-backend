@@ -77,6 +77,8 @@ class SecurityEventOutboxPublisherTest {
 
         assertThat(cache.isDisabled(ACCOUNT)).isTrue();
         assertThat(cache.versionOf(ACCOUNT)).hasValue(7L);
+        assertThat(cache.lastPropagationLatencyMillis()).isGreaterThanOrEqualTo(0L);
+        assertThat(cache.lastStreamDisconnectLatencyMillis()).isGreaterThanOrEqualTo(0L);
         assertThat(handle.closeReason).isEqualTo(ConnectionRegistry.REASON_ACCOUNT_DISABLED);
         verify(outboxMapper).markPublished(1L);
     }

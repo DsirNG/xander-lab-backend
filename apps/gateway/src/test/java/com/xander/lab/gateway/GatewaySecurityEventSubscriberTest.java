@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.Message;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -18,11 +20,13 @@ class GatewaySecurityEventSubscriberTest {
         GatewaySecurityEventSubscriber subscriber = new GatewaySecurityEventSubscriber(objectMapper, cache);
         Message message = message(objectMapper.writeValueAsString(new GatewaySecurityEventMessage(
                 7L, "ACCOUNT", "42", "ACCOUNT_DISABLED",
-                "{\"accountId\":42,\"securityVersion\":3}")));
+                "{\"accountId\":42,\"securityVersion\":3,\"occurredAt\":\""
+                        + LocalDateTime.now().minusNanos(50_000_000L) + "\"}")));
 
         subscriber.onMessage(message, null);
 
         assertThat(cache.isDisabled(42L)).isTrue();
+        assertThat(cache.lastPropagationLatencyMillis()).isGreaterThanOrEqualTo(0L);
     }
 
     @Test

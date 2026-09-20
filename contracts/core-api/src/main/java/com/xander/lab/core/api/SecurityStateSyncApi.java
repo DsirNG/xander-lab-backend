@@ -14,7 +14,11 @@ public final class SecurityStateSyncApi {
     private SecurityStateSyncApi() {
     }
 
-    public record Entry(long accountId, boolean disabled, long securityVersion, long changeSeq) {
+    public record Entry(long accountId, boolean disabled, long securityVersion, long changeSeq,
+                        long occurredAtEpochMillis) {
+        public Entry(long accountId, boolean disabled, long securityVersion, long changeSeq) {
+            this(accountId, disabled, securityVersion, changeSeq, 0L);
+        }
     }
 
     public record Snapshot(List<Entry> states, long watermark) {

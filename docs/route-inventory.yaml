@@ -2399,7 +2399,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.SecurityStateSyncController#changes"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/SecurityStateSyncController.java
-    line: 63
+    line: 64
   - id: identity-get-internal-security-state-snapshot
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -2410,7 +2410,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.identity.api.SecurityStateSyncController#snapshot"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/SecurityStateSyncController.java
-    line: 47
+    line: 48
   - id: agent-get-ws-agent
     logical_owner: agent
     deployment_unit: dinqor-agent

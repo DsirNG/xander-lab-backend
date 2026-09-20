@@ -55,6 +55,17 @@ class SecurityStateApplierTest {
     }
 
     @Test
+    void recordsPropagationAndStreamDisconnectLatencyWhenSourceTimeIsPresent() {
+        RecordingHandle handle = new RecordingHandle(ACCOUNT, ConnectionRegistry.KIND_SSE);
+        registry.register(handle);
+
+        applier.apply(ACCOUNT, true, 7L, System.currentTimeMillis() - 50L);
+
+        assertThat(cache.lastPropagationLatencyMillis()).isGreaterThanOrEqualTo(0L);
+        assertThat(cache.lastStreamDisconnectLatencyMillis()).isGreaterThanOrEqualTo(0L);
+    }
+
+    @Test
     void disableOnlyClosesConnectionsOfTheTargetAccount() {
         RecordingHandle mine = new RecordingHandle(ACCOUNT, ConnectionRegistry.KIND_SSE);
         RecordingHandle other = new RecordingHandle(ACCOUNT + 1, ConnectionRegistry.KIND_SSE);

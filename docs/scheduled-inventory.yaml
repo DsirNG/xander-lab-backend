@@ -64,7 +64,7 @@ scheduled:
     trigger: "fixedDelayString = \"${auth.refresh.security-outbox-publish-interval-ms:1000}\""
     logical_owner: identity
     file: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityEventOutboxPublisher.java
-    line: 120
+    line: 123
   - id: security-state-reconciler-reconcile
     class: com.xander.lab.identity.application.SecurityStateReconciler
     method: reconcile
@@ -78,7 +78,7 @@ scheduled:
     trigger: "fixedDelayString = \"${auth.refresh.security-full-reconcile-interval-ms:300000}\""
     logical_owner: identity
     file: apps/core-host/src/main/java/com/xander/lab/identity/application/SecurityStateReconciler.java
-    line: 146
+    line: 147
   - id: csdn-authorization-service
     class: com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService
     method: cleanupExpiredSessions

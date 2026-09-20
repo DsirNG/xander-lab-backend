@@ -45,5 +45,17 @@ public class SecurityPlaneMetrics {
                         registry -> registry.activeCountByKind(ConnectionRegistry.KIND_WS))
                 .description("当前 core-host 实例活跃 WebSocket 连接数")
                 .register(meterRegistry);
+        Gauge.builder("admin_ban_new_request_block_latency", stateCache,
+                        cache -> cache.lastPropagationLatencyMillis())
+                .description("最近一次封禁传播到 core-host deny cache 的毫秒数")
+                .register(meterRegistry);
+        Gauge.builder("admin_ban_propagation_latency", stateCache,
+                        cache -> cache.lastPropagationLatencyMillis())
+                .description("最近一次封禁事件传播到 core-host 安全平面的毫秒数")
+                .register(meterRegistry);
+        Gauge.builder("admin_ban_stream_disconnect_latency", stateCache,
+                        cache -> cache.lastStreamDisconnectLatencyMillis())
+                .description("最近一次封禁关闭已建立长连接的毫秒数")
+                .register(meterRegistry);
     }
 }

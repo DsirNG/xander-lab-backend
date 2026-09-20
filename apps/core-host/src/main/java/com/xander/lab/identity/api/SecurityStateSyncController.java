@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import java.time.ZoneId;
 import java.security.MessageDigest;
 import java.util.List;
 
@@ -89,7 +90,12 @@ public class SecurityStateSyncController {
                 state.getAccountId(),
                 state.isDisabled(),
                 valueOrZero(state.getSecurityVersion()),
-                valueOrZero(state.getChangeSeq()));
+                valueOrZero(state.getChangeSeq()),
+                epochMillis(state.getDisabledAt()));
+    }
+
+    private static long epochMillis(java.time.LocalDateTime value) {
+        return value == null ? 0L : value.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
     }
 
     private static long valueOrZero(Long value) {

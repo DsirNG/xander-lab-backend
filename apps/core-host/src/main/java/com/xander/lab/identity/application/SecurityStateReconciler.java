@@ -114,7 +114,8 @@ public class SecurityStateReconciler {
                 // 应用动作（标记 + 断连）由 SecurityStateApplier 独占实现：
                 // 快路径的 SecurityEventOutboxPublisher 走的是同一个方法。
                 SecurityStateApplier.Outcome outcome =
-                        securityStateApplier.apply(state.getAccountId(), state.isDisabled(), version);
+                        securityStateApplier.apply(state.getAccountId(), state.isDisabled(), version,
+                                epochMillis(state.getDisabledAt()));
                 if (outcome.newlyDisabled()) {
                     newlyDisabled++;
                 }
@@ -162,5 +163,10 @@ public class SecurityStateReconciler {
         } catch (RuntimeException ex) {
             log.warn("[Security] 全量对账失败: {}", ex.getMessage());
         }
+    }
+
+    private static long epochMillis(java.time.LocalDateTime value) {
+        return value == null ? 0L : value.atZone(java.time.ZoneId.systemDefault())
+                .toInstant().toEpochMilli();
     }
 }
