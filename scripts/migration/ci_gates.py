@@ -683,12 +683,55 @@ WAVE2_UNITS = (
 # new mutual pair is reported, which is the point.
 MUTUAL_UNIT_PAIRS: frozenset[tuple[str, str]] = frozenset()
 
+# The SIZE baseline for the cross-unit implementation graph, added 2026-09-20 once the
+# count reached zero (the NotificationBroadcastPort cut).
+#
+# ⚠️ This constant could not be written before that cut: while the number was still moving,
+# hard-coding it would have meant editing it in every cut. Zero is the first value that is
+# stable, so zero is the first value that can be guarded. Before it, the gap was *masked*
+# anyway -- the count was visibly non-zero to anyone reading cross-domain-imports.yaml.
+#
+# ⚠️ Why it lives here and not in `cross-domain-import-baseline`: that gate reads
+# `docs/cross-domain-imports.yaml`, which is `scan.py`'s own product, so its baseline
+# equals its live value under the documented "scan, then gates" order and it can never
+# fail (ADR TODO 16). A literal constant is a baseline from OUTSIDE the criterion -- the
+# same shape as MUTUAL_UNIT_PAIRS above. The two are a family: this one guards the *size*
+# of the graph, that one guards the presence of cycles in it.
+#
+# ⚠️ Why criteria 1-3 cannot cover it: all three judge the *shape* of the graph. A new
+# ONE-WAY cross-unit edge (A -> B, no edge back) joins no strongly-connected component and
+# creates no mutual pair, so it passes all three.
+#
+# Measured on 2026-09-20, on a real injection (revert `AdminNotificationController` to the
+# concrete `BlogPlanSseService`, i.e. re-create `dinqor-core-host -> dinqor-content-automation`,
+# 1 statement) under the documented "scan, then gates" order:
+#
+#   constant = 1 (equivalent to this criterion not existing) -> 24 pass, 0 fail, 2 skip
+#       ...and the PASS detail line still read "1 cross-unit edge(s) / 1 statement(s) left".
+#       The gate was green while its own summary named the regression.
+#   constant = 0 (this criterion)                            -> 23 pass, 1 fail, 2 skip
+#       ...the single failure being this criterion's message, which is itself proof that
+#       criteria 1-3 returned early and therefore passed.
+#
+# So this closes a hole that was real and measurable, not a hypothetical one.
+#
+# Bidirectional, like MUTUAL_UNIT_PAIRS: a count that DROPS below the constant is also a
+# change to the recorded baseline and must be acknowledged by editing the constant, not
+# silently absorbed. (At 0 the "below" direction is unreachable, but the check is written
+# that way so the constant stays honest if it is ever raised.)
+#
+# ⚠️ Statements need no separate constant: `edges` is built by summing
+# `implementation_statements` per unit pair and skipping pairs with none, so
+# `len(edges) == 0` implies `sum(edges.values()) == 0`.
+EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0
+
 
 def gate_deployment_unit_coupling() -> None:
     """The deployment-unit graph must not get *more* tangled than it is.
 
-    Three criteria, all about the shape of the graph rather than its size (the size is
-    ``cross-domain-import-baseline``'s job):
+    Four criteria. The first three are about the **shape** of the graph; the fourth is
+    about its **size**, which became a stable baseline on 2026-09-20 (see
+    ``EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES``).
 
     1. **``bloghtml`` stays isolated.** V9 section 3 extracts it alone in Wave 1, ahead of
        every other domain. That is only possible because it currently has no cross-unit
@@ -705,6 +748,10 @@ def gate_deployment_unit_coupling() -> None:
     3. **No new mutually-dependent pair.** Weaker than criterion 2 and reported separately
        because it is the more actionable signal: a mutual pair is a concrete pair of
        statements to convert, whereas the component is a summary.
+    4. **The cross-unit implementation edge count matches its constant.** This is the only
+       one of the four that a **one-way** edge trips: it joins no component and creates no
+       mutual pair, so criteria 1-3 pass it. Checked last so the more specific messages win
+       when an edge trips both.
 
     The reverse direction is reported too: pairs that stopped being mutual, or a component
     that shrank, are progress and should be removed from the baselines so the remaining
@@ -788,7 +835,30 @@ def gate_deployment_unit_coupling() -> None:
                f"other. Convert one direction through a contract first")
         return
 
+    # Criterion 4: the SIZE of the graph, against a constant baseline. Deliberately placed
+    # LAST, after the three shape criteria, so that an edge which also trips one of them
+    # keeps its more specific message (bloghtml's Wave 1 precondition, a new component
+    # member, a new mutual pair). This criterion fires for the residual case the other
+    # three cannot see: a one-way edge that joins nothing and pairs with nothing.
+    measured_edges = len(edges)
+    if measured_edges != EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES:
+        detail = (f"{measured_edges} cross-unit implementation edge(s) / "
+                  f"{sum(edges.values())} statement(s), but the baseline is "
+                  f"{EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES} edge(s)")
+        if measured_edges > EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES:
+            detail += (f". Present: {sorted(f'{a} -> {b}' for a, b in edges)} -- these units "
+                       f"now reach each other's *implementations* rather than a contract, so "
+                       f"they cannot be deployed separately. Convert the new edge through a "
+                       f"port in the consumer's own contract module first")
+        else:
+            detail += (f". That is progress, not a failure: lower "
+                       f"EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES to {measured_edges} so the "
+                       f"remaining work stays visible")
+        report(gate, False, detail)
+        return
+
     cleared = sorted(baseline_pairs - mutual)
+
     # Report the MEASURED component, not len(WAVE2_UNITS): agent left on 2026-09-17, so
     # printing the constant would overstate the component by one and hide real progress.
     wave2_component = max(components.values(), key=len)
