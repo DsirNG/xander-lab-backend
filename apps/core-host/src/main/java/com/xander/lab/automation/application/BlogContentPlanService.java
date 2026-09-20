@@ -7,7 +7,6 @@ import com.xander.lab.automation.api.BlogContentPlanCreateRequest;
 import com.xander.lab.automation.api.BlogContentPlanTopicsGenerateRequest;
 import com.xander.lab.automation.api.BlogContentPlanUpdateRequest;
 import com.xander.lab.automation.api.BlogContentPlanVO;
-import com.xander.lab.automation.api.BlogContentPlansPage;
 import com.xander.lab.automation.api.BlogPlanRunVO;
 import com.xander.lab.automation.api.BlogPlanRunsPage;
 import com.xander.lab.automation.domain.BlogContentPlan;
@@ -308,22 +307,6 @@ public class BlogContentPlanService implements ContentPlanPort {
         return created;
     }
 
-    @Transactional(readOnly = true)
-    public BlogContentPlansPage list(Long userId, long page, long size) {
-        requireUser(userId);
-        long safeSize = Math.min(Math.max(size, 1), 50);
-        Page<BlogContentPlan> result = planMapper.selectPage(
-                new Page<>(Math.max(page, 1), safeSize),
-                ownedWrapper(userId).orderByDesc(BlogContentPlan::getCreatedAt)
-                        .orderByDesc(BlogContentPlan::getId));
-        return BlogContentPlansPage.builder()
-                .records(result.getRecords().stream().map(plan -> toVO(plan, userId)).toList())
-                .total(result.getTotal())
-                .page(result.getCurrent())
-                .size(result.getSize())
-                .build();
-    }
-
     /** 当前用户全部计划（不分页），status 非空时按状态过滤（如 ACTIVE / FAILED），
      * ALL 或空表示全部；供智能体一次调用拿全量，无需逐页查询。 */
     @Override
@@ -354,12 +337,6 @@ public class BlogContentPlanService implements ContentPlanPort {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不支持的计划状态筛选");
         }
         return normalized;
-    }
-
-    @Transactional(readOnly = true)
-    public BlogContentPlanVO detail(Long userId, Long planId) {
-        requireUser(userId);
-        return toVO(requireOwnedPlan(planId, userId), userId);
     }
 
     @Transactional

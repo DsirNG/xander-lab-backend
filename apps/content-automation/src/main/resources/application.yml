@@ -36,6 +36,7 @@ spring:
 
 content-automation:
   core-base-url: ${CONTENT_AUTOMATION_CORE_BASE_URL:http://localhost:30002}
+  platform-integration-base-url: ${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_BASE_URL:http://localhost:30005}
   stream:
     drain-enabled: ${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}
 
