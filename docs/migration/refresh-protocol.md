@@ -461,7 +461,7 @@ Refresh 是 POST，所以默认不重试。两个方案：
 
 | 缺口 | 影响 | 归属 |
 |---|---|---|
-| `rotate()` 尚未接上 HTTP 端点 | 生产仍走旧实现，四分支在生产未生效 | Wave 2 切流 |
+| `auth.refresh.enabled` 默认关闭 | `/api/auth/refresh` 已接入 `AuthService.refresh`，开关关闭时继续走旧 JWT；开启后才启用 MySQL Session rotation、grace 与 reuse 四分支 | Wave 2 切流 |
 | `auth.refresh.enabled` 默认 `false` | 新协议不参与运行 | 设计如此 |
 | `RefreshTokenProperties` 的 19 个键对门禁不可见 | Contract 参数无机器守护 | 见 `auth-token-model.md` §9 |
 | 通用 `httpPolicy` 与 refresh 重试是两套逻辑 | 未来若有人给 refresh 加 `_retryIdempotent` 会双重重试 | 已用 §9.3 说明；建议加门禁 |
