@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 220
+  total: 221
   streams: 8
   websocket: 1
   sse: 7
@@ -2389,6 +2389,17 @@ routes:
     handler: "com.xander.lab.common.HealthController#readiness"
     file: apps/core-host/src/main/java/com/xander/lab/common/HealthController.java
     line: 76
+  - id: identity-post-internal-agent-auth-resolve
+    logical_owner: identity
+    deployment_unit: dinqor-core-host
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/auth/resolve"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.identity.api.AgentAccessTokenController#resolve"
+    file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentAccessTokenController.java
+    line: 38
   - id: identity-get-internal-security-state-changes
     logical_owner: identity
     deployment_unit: dinqor-core-host

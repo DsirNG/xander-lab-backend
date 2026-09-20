@@ -52,6 +52,10 @@ management:
       application: ${spring.application.name}
 
 agent:
+  core-client:
+    enabled: ${AGENT_CORE_CLIENT_ENABLED:false}
+    base-url: ${AGENT_CORE_BASE_URL:http://core-host:30002}
+    internal-token: ${AGENT_CORE_INTERNAL_TOKEN:}
   event-bus:
     pubsub-enabled: ${AGENT_EVENT_BUS_PUBSUB_ENABLED:false}
     pubsub-channel: ${AGENT_EVENT_BUS_PUBSUB_CHANNEL:dinqor:agent-events}

@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 512
-  service_private: 446
-  secret: 56
+  total: 519
+  service_private: 451
+  secret: 58
   shared: 10
 config:
   - key: agent.conversation.compaction-enabled
@@ -161,6 +161,36 @@ config:
   - key: agent.conversation.stale-conversation-minutes
     source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.core-client.base-url
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.core-client.base-url
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentCoreClientProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.core-client.enabled
+    source: apps/agent/src/main/resources/application.yml
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.core-client.enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentCoreClientProperties.java
+    classification: service_private
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.core-client.internal-token
+    source: apps/agent/src/main/resources/application.yml
+    classification: secret
+    owner: agent
+    nacos_group: DINQOR-AGENT
+  - key: agent.core-client.internal-token
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentCoreClientProperties.java
+    classification: secret
     owner: agent
     nacos_group: DINQOR-AGENT
   - key: agent.event-bus.pubsub-channel
@@ -1795,6 +1825,11 @@ config:
     nacos_group: COMMON
   - key: spring.cloud.gateway.routes.uri
     source: apps/gateway/src/main/resources/application.yml
+    classification: service_private
+    owner: shared
+    nacos_group: COMMON
+  - key: spring.cloud.nacos.config.enabled
+    source: apps/agent/src/main/resources/application.yml
     classification: service_private
     owner: shared
     nacos_group: COMMON

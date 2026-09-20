@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 699
-  leaves: 512
+  total: 707
+  leaves: 519
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -129,6 +129,11 @@ config:
     source: apps/agent/src/main/resources/application.yml
     value: ""
     leaf: false
+    logical_owner: shared
+  - key: spring.cloud.nacos.config.enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${NACOS_CONFIG_ENABLED:false}"
+    leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.config.import-check
     source: apps/agent/src/main/resources/application.yml
@@ -255,6 +260,26 @@ config:
     value: ""
     leaf: false
     logical_owner: unassigned
+  - key: agent.core-client
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: agent
+  - key: agent.core-client.enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CORE_CLIENT_ENABLED:false}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.core-client.base-url
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CORE_BASE_URL:http://core-host:30002}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.core-client.internal-token
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_CORE_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: agent
   - key: agent.event-bus
     source: apps/agent/src/main/resources/application.yml
     value: ""
@@ -2827,6 +2852,27 @@ config:
     logical_owner: agent
     source_kind: java-configuration-properties
     line: 17
+  - key: agent.core-client.base-url
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentCoreClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 12
+  - key: agent.core-client.enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentCoreClientProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 11
+  - key: agent.core-client.internal-token
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentCoreClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 13
   - key: agent.event-bus.pubsub-channel
     source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentEventBusProperties.java
     value: "<java-default>"
