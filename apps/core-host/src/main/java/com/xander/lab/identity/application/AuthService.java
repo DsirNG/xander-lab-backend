@@ -58,6 +58,7 @@ public class AuthService implements AccessTokenLookupPort {
     private final AccountMergeMapper accountMergeMapper;
     private final RefreshTokenService refreshTokenService;
     private final SecurityStateCache securityStateCache;
+    private final LegacyRedisMetrics legacyRedisMetrics;
 
     /** 保留旧测试与本地构造路径；新协议默认关闭时完全走旧行为。 */
     public AuthService(JwtUtil jwtUtil,
@@ -86,7 +87,6 @@ public class AuthService implements AccessTokenLookupPort {
                 wechatMiniAppClient, accountMergeMapper, refreshTokenService, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public AuthService(JwtUtil jwtUtil,
                        MailPort mailPort,
                        UserMapper userMapper,
@@ -97,6 +97,23 @@ public class AuthService implements AccessTokenLookupPort {
                        AccountMergeMapper accountMergeMapper,
                        RefreshTokenService refreshTokenService,
                        SecurityStateCache securityStateCache) {
+        this(jwtUtil, mailPort, userMapper, redisTemplate, passwordEncoder, billingPort,
+                wechatMiniAppClient, accountMergeMapper, refreshTokenService,
+                securityStateCache, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthService(JwtUtil jwtUtil,
+                       MailPort mailPort,
+                       UserMapper userMapper,
+                       StringRedisTemplate redisTemplate,
+                       PasswordEncoder passwordEncoder,
+                       BillingPort billingPort,
+                       WechatMiniAppClient wechatMiniAppClient,
+                       AccountMergeMapper accountMergeMapper,
+                       RefreshTokenService refreshTokenService,
+                       SecurityStateCache securityStateCache,
+                       LegacyRedisMetrics legacyRedisMetrics) {
         this.jwtUtil = jwtUtil;
         this.mailPort = mailPort;
         this.userMapper = userMapper;
@@ -107,6 +124,7 @@ public class AuthService implements AccessTokenLookupPort {
         this.accountMergeMapper = accountMergeMapper;
         this.refreshTokenService = refreshTokenService;
         this.securityStateCache = securityStateCache;
+        this.legacyRedisMetrics = legacyRedisMetrics;
     }
 
 /**
@@ -566,6 +584,9 @@ public class AuthService implements AccessTokenLookupPort {
                     redisTemplate.delete(Constants.REDIS_TOKEN_PREFIX + token);
                 }
             }
+            if (legacyRedisMetrics != null) {
+                legacyRedisMetrics.recordAccessRevoked(tokens.size());
+            }
         } catch (RuntimeException e) {
             log.warn("[Auth] 撤销临时账号 {} 的 token 失败: {}", userId, e.getMessage());
             return;
@@ -673,6 +694,9 @@ public class AuthService implements AccessTokenLookupPort {
                     String userId = jwtUtil.getSubject(accessToken);
                     // 从用户活跃 token 集合中移除
                     redisTemplate.opsForSet().remove(Constants.REDIS_USER_TOKENS_PREFIX + userId, accessToken);
+                    if (legacyRedisMetrics != null) {
+                        legacyRedisMetrics.recordAccessRevoked(1L);
+                    }
                 }
             } catch (Exception e) {
                 // JWT 解析失败也要尝试删除 Redis key；记录原因便于排查
@@ -765,6 +789,9 @@ public class AuthService implements AccessTokenLookupPort {
             );
             // 记录该用户所有活跃 token，方便强制全部下线。
             redisTemplate.opsForSet().add(Constants.REDIS_USER_TOKENS_PREFIX + userIdStr, accessToken);
+            if (legacyRedisMetrics != null) {
+                legacyRedisMetrics.recordAccessIssued();
+            }
         }
 
         return TokenResponse.builder()

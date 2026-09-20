@@ -222,8 +222,10 @@ identity:legacy_access_issued
 identity:legacy_access_active_estimate
 ```
 
-- `legacy_access_issued`：从 T1 起**不再增加** —— 它是"是否还有人在签发旧 token"的开关指标；
-- `legacy_access_active_estimate`：低频 SCAN reconciliation **+** 签发/主动撤销事件计数。
+- `legacy_access_issued`：现在以 `legacy_access_issued_total` 记录，从 T1 起必须**不再增加** ——
+  它是"是否还有人在签发旧 token"的开关指标；
+- `legacy_access_active_estimate`：现在由低频 SCAN 更新，签发/主动撤销事件另以
+  `legacy_access_revoked_total` 留痕，便于解释盘点窗口内的变化。
 
 推荐 SCAN 频率：**每 30～60 分钟**。§58 明确：只做迁移期指标，不做实时指标。
 

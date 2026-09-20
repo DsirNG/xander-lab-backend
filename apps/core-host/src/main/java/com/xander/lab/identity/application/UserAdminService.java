@@ -191,6 +191,9 @@ public class UserAdminService {
                 }
             }
             redisTemplate.delete(setKey);
+            if (legacyRedisMetrics != null) {
+                legacyRedisMetrics.recordAccessRevoked(tokens.size());
+            }
             return tokens.size();
         } finally {
             if (legacyRedisMetrics != null) {

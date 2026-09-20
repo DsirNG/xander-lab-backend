@@ -57,7 +57,7 @@ scheduled:
     trigger: "initialDelay = 60_000L, fixedDelay = 3_600_000L"
     logical_owner: identity
     file: apps/core-host/src/main/java/com/xander/lab/identity/application/LegacyRedisMetrics.java
-    line: 49
+    line: 61
   - id: security-event-outbox-publisher
     class: com.xander.lab.identity.application.SecurityEventOutboxPublisher
     method: publishDueEvents
