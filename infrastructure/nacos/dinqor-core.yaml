@@ -2,6 +2,9 @@
 spring:
   application:
     name: dinqor-core-host
+  datasource:
+    # The password remains an environment/deployment Secret.
+    username: ${SPRING_DATASOURCE_USERNAME:dinqor_core}
   flyway:
     enabled: false
   cloud:

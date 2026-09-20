@@ -22,3 +22,8 @@ Runtime activation:
 
 Each `application-nacos.yml` imports exactly two DataIds: `dinqor-shared.yaml` from `COMMON`
 and the service-private DataId from its stable logical Group.
+
+The `nacos` profile also switches `dinqor-core-host` to the `dinqor_core` runtime account;
+`SPRING_DATASOURCE_PASSWORD` is still required from deployment Secret. The standalone
+`migration-runner` keeps using `dinqor_migration` and is never activated by a business-service
+profile.

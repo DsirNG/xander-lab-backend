@@ -1106,6 +1106,10 @@ def gate_nacos_config_profile() -> None:
         for data_id in data_ids:
             if f"optional:nacos:{data_id}" not in text:
                 problems.append(f"{module}: missing import {data_id}")
+        if module == "apps/core-host" and "dinqor_core" not in text:
+            problems.append(
+                "apps/core-host: nacos profile does not select the dinqor_core runtime account"
+            )
     if problems:
         report(gate, False, "; ".join(problems))
         return
