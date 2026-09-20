@@ -25,6 +25,7 @@ import com.xander.lab.integration.api.CsdnCredentialPort;
 import com.xander.lab.integration.api.JuejinCredentialPort;
 import com.xander.lab.recitation.spi.RecitationMaterialPort;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 /** C-end use cases for daily content plans: CRUD, lifecycle transitions,
  * manual test trigger, run history, and next-fire preview. */
@@ -61,24 +63,49 @@ import java.util.Set;
  * （读方法也走 {@code toVO}，为的是让"往读模型落字段"只有一处 —— 见 {@code toView} 上的注释）。
  * 多一次内存里的对象构造，换来的是"这次抽取不改变任何行为"可以被直接看出来。</p>
  *
- * <p>⚠️ <b>已知残留（本刀未修）</b>：端口调用会经过 {@code toVO}，而它要调
- * {@link CsdnCredentialPort#isAuthorized} / {@link JuejinCredentialPort#isAuthorized}
- * 去填那两个前端要的派生字段（{@link ContentPlanView} 里没有它们）。
- * 同进程里这没有区别（今天就是这样），但拆服务后
- * {@link ContentPlanPort#updateStatus} 会变得比它需要的样子更脆：一个智能体并不读的派生字段，
- * 能让一次状态变更失败。要修就得把实现体改成返回实体、由两个公开方法各自包装 ——
- * 那是独立的一刀，不在这次重构里做。</p>
+ * <h2>⚠️ 两个派生字段的失败语义：fail-soft</h2>
+ * <p>{@code toVO} 会调 {@link CsdnCredentialPort#isAuthorized} /
+ * {@link JuejinCredentialPort#isAuthorized} 去填 {@code csdnAuthorized} /
+ * {@code juejinAuthorized}（{@link ContentPlanView} 里没有这两个字段，只有前端 VO 有）。
+ * 它们是<b>纯补充信息</b>，所以它们的失败<b>不得</b>改变主流程的成功/失败语义：
+ * 查不出来就按"不可用"处理、留下一条 WARN，请求照常成功。</p>
  *
- * <p>⚠️ 凭证抽取那一刀（{@code CsdnCredentialPort} / {@code JuejinCredentialPort}）
- * 让这处残留<b>更具体了但没有变好</b>：那两个查询现在会经过端口。之所以没有顺手一起修，
- * 是因为那会同时改变行为（端口路径不再做两次凭证查询、因而不再可能被凭证查询的失败带崩），
- * 而本次抽取要能<b>被证明</b>是纯重构。残留照旧登记在 ADR 待办里。</p>
+ * <p>判据是凭证在<b>这条路径里的语义角色</b>，不是"它叫凭证"：</p>
+ * <ul>
+ *   <li>这两个字段<b>不参与</b>鉴权（那是 {@code requireUser}）、租户隔离
+ *       （那是 {@code requireOwnedPlan} / {@code ownedWrapper}）、执行身份判定，
+ *       也<b>不决定</b>是否允许操作 ⇒ 可以 fail-soft。</li>
+ *   <li>若哪天有派生字段被用来<b>决定是否允许操作</b>，它必须 fail-closed，不能吞。</li>
+ * </ul>
+ *
+ * <p>⚠️ <b>容错的范围必须只包住凭证查询本身。</b>用的是只有<b>一个语句</b>的 try 块
+ * （见 {@link #credentialAuthorizedOrFalse}）：主流程的失败（{@code UNAUTHORIZED} /
+ * {@code NOT_FOUND} / {@code CONFLICT} / 非法 action 的 {@link IllegalArgumentException}）
+ * 一律照抛。<b>不要</b>把这个 try 扩大到包住方法体 —— 那会让"计划不存在"变成一个静默的成功。
+ * 钉住这条的是
+ * {@code BlogContentPlanServiceTest#theCredentialFailSoftDoesNotSwallowTheMainFlowFailures}。</p>
+ *
+ * <p>⚠️ <b>成本没变：这条路径仍然做两次凭证查询。</b>改的是"它们能不能把请求带崩"，
+ * 不是"要不要做"。{@code list} / {@code listAll} 是<b>逐行</b>调 {@code toVO}，
+ * 所以是 2N 次查询；而这两个字段在本仓与前端仓里<b>一个消费方都没有</b>（前端走的是
+ * MCP 凭证状态接口）。删掉字段是另一刀 —— 那会改线上 JSON，不在这次改动里。</p>
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BlogContentPlanService implements ContentPlanPort {
 
     private static final String UNAUTHORIZED_MESSAGE = "未登录或登录已过期";
+
+    /**
+     * 派生字段查询失败时的<b>固定日志标记</b>，同时是将来那条指标的名字。
+     *
+     * <p>本仓<b>没有</b> Micrometer / Actuator（{@code core-host-lifecycle.md} 把指标列为
+     * Wave 2 的事），所以这条不变式今天只能由日志承载。标记取的就是指标名本身、逐字相同：
+     * 将来接入 Micrometer 时是"加一个同名 Counter"，不是"再想一个名字"，
+     * 基于日志的告警规则也不必改。</p>
+     */
+    private static final String VO_CREDENTIAL_ENRICHMENT_FAILURE = "blog_plan_vo_credential_enrichment_failure";
 
     private static final Set<String> PLAN_STATUSES = Set.of(
             BlogContentPlan.STATUS_ACTIVE,
@@ -653,9 +680,49 @@ public class BlogContentPlanService implements ContentPlanPort {
                 .updatedAt(plan.getUpdatedAt())
                 // ⚠️ 两个端口的 isAuthorized 签名逐字相同，接收者写反**编译得过**（不会报错、指标不动）。
                 // 钉住这条的是 BlogContentPlanServiceTest 里那条不对称桩用例（一个授权、一个不授权）。
-                .csdnAuthorized(csdnCredentialPort.isAuthorized(userId))
-                .juejinAuthorized(juejinCredentialPort.isAuthorized(userId))
+                // ⚠️ 查不出来时降级为 false，绝不把主流程带崩 —— 见类注释「两个派生字段的失败语义」。
+                .csdnAuthorized(credentialAuthorizedOrFalse(
+                        "csdn", userId, () -> csdnCredentialPort.isAuthorized(userId)))
+                .juejinAuthorized(credentialAuthorizedOrFalse(
+                        "juejin", userId, () -> juejinCredentialPort.isAuthorized(userId)))
                 .build();
+    }
+
+    /**
+     * 凭证查询的 <b>fail-soft</b> 包装：只回答"这个属主的凭证现在可用吗"，
+     * 查不出来就<b>按不可用处理</b>。
+     *
+     * <p>⚠️ try 块里<b>只有一条语句</b>，而那条语句就是外部查询本身 —— 这是刻意的：
+     * 容错的范围必须与"外部查询失败"这个语义严格等宽。把这个 try 扩大到包住方法体，
+     * 或把两个平台的查询合进同一个 try，都会让主流程的失败被静默吞掉；后者的症状尤其隐蔽
+     * —— CSDN 查失败会让掘金那个字段一起变成 {@code false}，而"两个都是 false"看起来完全正常。</p>
+     *
+     * <p>⚠️ 捕 {@link RuntimeException} 而不是某个具体类型：端口契约说的是
+     * "未授权返回 {@code false}、不抛"，但<b>查询机制本身</b>失败（库不可用、拆服务后
+     * 提供方不可达）抛什么类型取决于实现，而契约不许依赖框架类型（ADR-1）。
+     * 范围由"单语句 try"保证，<b>不由异常类型保证</b>。</p>
+     *
+     * <p>⚠️ 只打消息、<b>不打堆栈</b>：{@code list} / {@code listAll} 是逐行调 {@code toVO}，
+     * 一个坏掉的凭证查询会产生 2N 条堆栈，把日志淹掉。要看堆栈时按这个标记去查。</p>
+     */
+    private boolean credentialAuthorizedOrFalse(String platform, Long userId, BooleanSupplier lookup) {
+        try {
+            return lookup.getAsBoolean();
+        } catch (RuntimeException e) {
+            log.warn("[BlogPlan] {} platform={} userId={}: {}",
+                    VO_CREDENTIAL_ENRICHMENT_FAILURE, platform, userId, rootMessage(e));
+            return false;
+        }
+    }
+
+    /** 取根因消息，给被吞掉的异常留一句能看的日志。 */
+    private String rootMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        String message = current.getMessage();
+        return message == null || message.isBlank() ? current.getClass().getSimpleName() : message;
     }
 
     /**

@@ -19,6 +19,10 @@ package com.xander.lab.integration.api;
  * 纯查询、不联系外部平台、不消耗限流额度。同域的 {@code requireCredential}
  * 才是未授权时抛 {@code IllegalStateException} 的那个方法 —— 它要的是一份能用的凭证。</p>
  *
+ * <p>⚠️ 同样与 {@link CsdnCredentialPort} 相同：<b>"不抛"说的是"未授权"，不是"永远不会抛"。</b>
+ * 查询机制本身失败仍然抛运行时异常，调用方按它在<b>这条路径里的语义角色</b>决定降级
+ * （只做展示补充时）还是 fail-closed（决定是否允许操作时）—— 理由与做法见那一个的类注释。</p>
+ *
  * <h2>调用方身份</h2>
  * <p>显式收 {@code userId}，必须是参数名 {@code userId}。它是<b>凭证属主</b>，
  * 不一定是当前登录用户（{@code BlogPlanRunService} 传的是计划属主）。</p>
@@ -29,7 +33,8 @@ public interface JuejinCredentialPort {
      * 这个用户的掘金凭证是否处于可用状态。
      *
      * @param userId 凭证属主，不一定是当前登录用户
-     * @return 未授权时为 {@code false}；不抛异常
+     * @return 未授权时为 {@code false}。<b>未授权不抛</b>；查询机制本身失败时抛运行时异常
+     *         （见类注释「失败语义」的第二段：调用方按语义角色决定降级还是 fail-closed）
      */
     boolean isAuthorized(Long userId);
 }

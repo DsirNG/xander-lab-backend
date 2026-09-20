@@ -3803,7 +3803,9 @@ E / G 的 `restore` 行打印 `1ae8d38b…`，而驱动脚本与收尾 `git stat
    ⚠️ 做的时候发现这里的假设是错的：`PublishPostTool` **早就**同时持有两个端口，
    写反的机会一直存在（§22.1）。
 3. `BlogContentPlanService` 的 `toVO` 残留（待办 53）—— 它**会改变行为**，
-   所以不是重构，要单独决定。
+   所以不是重构，要单独决定。**✅ 已做，见 §24** —— 判据是"凭证在这条路径里的**语义角色**"，
+   结论是 fail-soft；⚠️ 口径比原文写的**宽**（修在 `toVO` 上，不是只绕开端口路径），
+   而且实测那两个派生字段**前后端都零消费方**（§24.2）。
 4. 端口测试的 `methodNamed` 仍是"取第一个"的旧写法（待办 57）。**✅ 已做，见 §23** ——
    ⚠️ 实测是**七处**不是三处，而且清单里还多写了一个（§23.2）。
 
@@ -4072,7 +4074,208 @@ return found;
   那是**另一个**已记录的形状（"守卫的失败信息必须指向真正的原因"），
   与"恰好一个"不是同一件事；混在一起会让这次改动的性质变模糊。记进待办 59。
 
-## 24. 待办
+## 24. 落地记录（二十一）：待办 53 —— 派生字段的 fail-soft，以及"凭证是不是安全边界"这个判据
+
+与 §22 / §23 不同，这一刀**会改行为**（§19.5 起就登记为"独立的一刀"）：生产代码动了 1 个类、
+契约注释动了 2 个文件。所以它**不能**靠指标验收。
+
+### 24.1 缝：一个没人读的派生字段，能让一次状态变更失败
+
+`ContentPlanPort` 的五个读方法都经过 `toVO`，而 `toVO` 结尾要调两次 `isAuthorized(userId)`
+去填 `csdnAuthorized` / `juejinAuthorized`；`toView` 紧接着把这两个字段收窄掉
+（`ContentPlanView` 只有 11 个分量）。于是：**一个智能体并不读的派生字段，能让一次状态变更整体失败。**
+
+⚠️ 而且后果比待办 53 原文写的那句重一档。原文只说"能让一次状态变更失败"，实际上
+`create` / `update` / `updateStatus` 都是 `@Transactional`，凭证查询抛出的异常会
+**逃出事务方法** ⇒ 一次**已经写成功**的状态变更被**回滚**。
+
+### 24.2 ⭐ 实测：那两个字段**一个消费方都没有**
+
+动手前先数了一遍（`grep -rn 'csdnAuthorized|juejinAuthorized'`）：
+
+| 位置 | 结果 |
+|---|---|
+| `xander-lab-backend` 全仓 | 只有 `BlogContentPlanVO` 的**定义**，以及测试里读它 |
+| `xander-lab-frontend` 全仓（`src/**/*.{js,jsx,ts,tsx}`） | **零命中** |
+| 前端怎么拿授权状态 | `CsdnAuthorizationPanel.jsx` / `JuejinAuthorizationPanel.jsx` 走 **MCP 凭证状态接口**（`state === "AUTHORIZED"`），与计划 VO 无关 |
+
+⇒ 这两个字段是**纯写不读**的 API 表面。所以"保留它们"的代价是两件事：
+① 每个计划行 2 次凭证查询（`list` / `listAll` 逐行调 `toVO` ⇒ **2N 次**）；
+② 一条能把写事务带崩的失败路径。
+
+⚠️ **但本刀没有删它们。** 删字段会改线上 JSON（`BlogContentPlanVO` 是前端可见类型），
+那是 §11 口径下的契约变更，不是这次改动的范围。已记进待办 61。
+
+### 24.3 判据：不是"它叫凭证"，是"它在这条路径里的语义角色"
+
+用户给的决策原文：
+
+> 「`BlogContentPlanService` 的端口路径，不应该因为"用于 VO 补充信息的凭证查询失败"而整体失败。
+> 但如果这个凭证参与**鉴权、租户隔离、执行身份判定或决定是否允许操作**，必须 fail-closed，不能吞。
+> 也就是说，关键不是"它叫凭证"，而是它在这条路径里的**语义角色**。」
+
+逐条对照这条路径：
+
+| 可能的语义角色 | 本路径上由谁承担 | 这两个派生字段参与吗 |
+|---|---|---|
+| 鉴权 | `requireUser(userId)` → 401 | **不参与** |
+| 租户隔离 | `requireOwnedPlan` / `ownedWrapper(userId)` → 404 | **不参与** |
+| 执行身份判定 | 无（写操作的身份由上面两条决定） | **不参与** |
+| 决定是否允许操作 | 无（同步与否由 `plan.syncCsdn` 决定，真正的门在 `BlogPlanRunService.publishCsdn`） | **不参与** |
+
+⇒ 四个都不沾 ⇒ **fail-soft**。
+
+⚠️ 反向样本就在同一对端口上：`BlogPlanRunService` 用 `isAuthorized` 决定"是否跳过同步"。
+那条也不是安全边界（跳过会被记成 `AUTH_REQUIRED`），但**它不是本类的事**，本刀一个字没改（§24.5）。
+
+### 24.4 修法
+
+```java
+private boolean credentialAuthorizedOrFalse(String platform, Long userId, BooleanSupplier lookup) {
+    try {
+        return lookup.getAsBoolean();          // ← try 块里只有这一条语句
+    } catch (RuntimeException e) {
+        log.warn("[BlogPlan] {} platform={} userId={}: {}",
+                VO_CREDENTIAL_ENRICHMENT_FAILURE, platform, userId, rootMessage(e));
+        return false;
+    }
+}
+```
+
+四条取舍，每条都是判据而不是风格：
+
+1. **try 块里只有一条语句，而它就是外部查询本身。** 容错的范围必须与"外部查询失败"这个语义
+   **严格等宽** —— 范围由**形状**保证，不由自觉保证。
+2. **捕 `RuntimeException` 而不是某个具体类型。** 契约说"未授权返回 `false`、不抛"，
+   但**查询机制本身**失败抛什么类型取决于实现（今天是 MyBatis 的 `DataAccessException`，
+   拆服务后是 HTTP 客户端的异常），而契约不许依赖框架类型（ADR-1）。
+   ⚠️ **捕具体类型的话，这条 fail-soft 会在拆服务那天静默失效** —— 那正是它要防的场景。
+3. **降级值是 `false` 而不是 `true`。** fail-soft 不能变成 fail-open：没查到授权不等于已授权。
+4. **只打消息、不打堆栈。** `list` / `listAll` 逐行调用 ⇒ 一个坏掉的凭证查询会产生 2N 条堆栈。
+
+### 24.5 刻意没做的事
+
+- **没动 `BlogPlanRunService`。** 它用同一对端口做"是否跳过同步"的判断，语义角色不同
+  （执行决策，不是展示补充）。改它要另立判据。
+- **没删那两个字段。** 理由见 §24.2，会改线上 JSON。
+- **没把两次查询提到循环外。** `list` / `listAll` 现在是 2N 次查询；提成"每请求两次"是纯收益，
+  但会改变可观测的查询模式，属于另一刀。
+- **没加 Micrometer 计数器**，见 §24.7。
+- **没改 `toView` 的"读路径也走 `toVO`"这个结构**，见 §24.6。
+
+### 24.6 ⚠️ 口径：为什么修了 `toVO`（宽）而不是只修端口路径（窄）
+
+待办 53 原文给的修法是**窄**的：把实现体改成返回实体、由两个公开方法各自包装，
+让端口路径不再经过 `toVO`。那样端口路径**连查询都不做**，比 fail-soft 更彻底。本刀没选它：
+
+1. **同一条语义角色在两个路径上一模一样。** `toVO` 里那次查询在 `detail` / `list` / `create` 上
+   也是"只填展示字段"。窄口径修完，`GET /plans/{id}` 仍然会**因为一个展示字段的查询失败而 500**
+   —— 判据说它该 fail-soft，而窄口径只照顾了它的一半。
+2. **窄口径要造第二份映射**（实体 → `ContentPlanView`），而 `toView` 上的注释整段在论证
+   "只有一处映射"这个性质。两份映射迟早不一致，症状是"列表接口和创建接口对同一条计划返回不同的值"。
+3. 用户给的判据本身就是按**语义角色**说的，没有按调用方说。
+
+⚠️ **这是一次口径扩大，必须写清楚。** 如果结论应该是窄的，回退动作很小：
+把 `toVO` 的两个 `credentialAuthorizedOrFalse` 调用删掉、让 `toView` 直读实体 —— 5 处调用点要动。
+
+### 24.7 ⚠️ 冻结契约里的"指标"这一条**没有实现**，原因不是没做，是**不存在**
+
+冻结契约要求「留下可观测性（`log warn/debug` + 指标 `blog_plan_vo_credential_enrichment_failure`）」。
+实测：**本仓没有 Micrometer，也没有 Actuator。**
+
+```
+grep -rn 'micrometer|MeterRegistry|actuator' --include=pom.xml .   → 零命中
+find . -name '*Metric*.java' -o -name '*Counter*.java'             → 零命中
+```
+
+而文档里早把这件事排到了后面：`core-host-lifecycle.md` 第 242 行
+「回滚阈值无自动化 | §93 的五个阈值都需要指标（Micrometer）与告警规则，**Wave 2 才有**」；
+`lib-extraction.md` 也写着"Wave 1 引入 Actuator/Micrometer"。
+
+⇒ 本刀做了两件事，都不假装指标已经存在：
+
+1. **日志标记取的就是指标名本身、逐字相同**（`blog_plan_vo_credential_enrichment_failure`），
+   并带上 `platform` / `userId` 两个将来会变成 tag 的字段。今天它可被日志告警直接使用；
+   接入 Micrometer 那天是"加一个同名 Counter"，不是"再想一个名字"。
+2. **登记待办 60**，把这条缝写下来。
+
+⚠️ 反过来做（在类里加一个 `LongAdder` 字段）**更糟**：一个没有出口的计数器看起来像可观测性，
+实际上没有任何人能读到它 —— 与"绿着撒谎的判据"是同一族。
+
+### 24.8 测试
+
+`BlogContentPlanServiceTest` 10 → **15**（+5），全部是行为用例：
+
+| # | 用例 | 钉的性质 |
+|---|---|---|
+| ① | `thePortPathSurvivesAFailingCredentialLookup` | 端口路径（`updateStatus`）在凭证查询失败时**照常成功**，且状态迁移的 mapper 调用确实发生了 |
+| ② | `theFrontendPathStillReturnsTheWholePlanWithTheDerivedFieldsDegraded` | VO **照常返回全部字段**，只有那两个派生字段降级为 `false` |
+| ③ | `aFailingCredentialLookupLeavesAWarningWithTheStableMarker` | 留下**恰好一条**带固定标记的 WARN（标记 + `platform` + `userId` + 根因消息） |
+| ④ | `onlyThePlatformWhoseLookupFailedDegradesTheOtherStillAnswers` | 两个平台的查询**各自独立** fail-soft |
+| ⑤ | `theCredentialFailSoftDoesNotSwallowTheMainFlowFailures` | 容错**不覆盖**主流程：404 / 401 照抛 |
+
+⚠️ ① 没有真实事务代理，所以"回滚"这一步在这里量不到。能量到的是它的**直接原因**：
+异常不再逃出这个 `@Transactional` 方法 —— 而"有异常逃出去"正是回滚的触发条件。
+
+⚠️ ⑤ 的绿色**不依赖凭证端口被调用**（404 / 401 都发生在 `toVO` 之前），所以它的桩是 `lenient` 的
+—— 这一点本身就是要说明的事。它守的是"容错的范围"这个形状，注入 C 证明它接着线（§24.9）。
+这是"判据只朝一个方向看"那一族的**正例**用法：拿判据去断言它本该拒绝的形状。
+
+⚠️ 日志断言用 Logback `ListAppender`（与 `RequestLoggingFilterTest` 同一个手法）。
+没有这条断言，"fail-soft"会退化成"fail-silent" —— 一个永远不报错的降级路径。
+
+### 24.9 注入验证：六次，全部按预期变红
+
+全部落在 `BlogContentPlanService.java`，`-Dtest=BlogContentPlanServiceTest` 收窄（待办 41 的量法）。
+
+| # | 变异 | 纸面预期 | **实测** | 报出来的形态 |
+|---|---|---|---|---|
+| A | 撤掉 fail-soft（catch 里改 `throw e;`） | ①②③④ | **①②③④** ✅ | `Errors: 4`，异常直接逃逸 |
+| B | 降级值写成 `true` | ②④ | **②④** ✅ | `Failures: 2`；② 报的是具名断言 `[查不出来就按不可用处理…]` |
+| C | 容错扩大到整个 `detail` 方法体（典型 blanket catch） | ⑤ | **⑤** ✅ | `Failures: 1`，`AssertionError` |
+| D | 两次查询合进同一个 try | ③④ | **③④ + ①②** ⚠️ | ③④ 是 `Failures`（具名断言）；①② 是 `Errors: UnnecessaryStubbing` |
+| E | 去掉日志 | ③ | **③** ✅ | `Failures: 1` |
+| F | 接收者写反 | 既有那条 | **既有那条 + ④** ⚠️ | 两条都是 `Failures`，消息都指向"接收者写反" |
+
+⚠️ **D 比纸面多红了 2 条**，成因已查清：合并之后第一次调用就抛异常 ⇒ **掘金那个桩从来没被用到**
+⇒ Mockito 的严格桩报 `UnnecessaryStubbingException`。多出来的两条红是**同一个根因的第二个症状**，
+而且它报的错因是**指向根因的**（"这个桩没被用到" = "第二次查询根本没发生"）。
+⇒ 顺带发现：**Mockito 的严格桩本身也是这条不变式的一条守卫**，此前没意识到。
+
+⚠️ **F 比纸面多红了 1 条**，成因是 ④ 的桩（CSDN 抛 / 掘金 `true`）在写反之后让 `csdnAuthorized`
+读到了掘金的值。**第一遍跑出来时 ④ 的失败消息是空的**（`expected false but was true`，
+指不到错因）—— 正是待办 45 / 51 那一族。已给 ④ 的第一条断言补上 `.as(...)`；
+重跑 F 后两条红的消息都指向"接收者写反"。
+
+⭐ 六条注入的 `before` / `after` blob 全部逐字节相同
+（`796e7da281938a1cac1357487e87c6df31b9faab`），且这个值与 `git hash-object` **相等**
+（`inj53.py` 的 `blob()` 与它逐字等价 —— 待办 42 / 58 的算法口径）。
+
+### 24.10 实测收益
+
+| 项 | 前 | 后 |
+|---|---|---|
+| 六个耦合指标 | 17 / 7 / 0 / 0 / 9 / 6 | **17 / 7 / 0 / 0 / 9 / 6**（不动） |
+| `BlogContentPlanServiceTest` | 10 | **15** |
+| core-host 测试 | 1236 | **1241** |
+| 全反应堆 | 1509 | **1514** |
+| 26 条门禁 | 24 / 0 / 2 | **24 / 0 / 2** |
+
+指标不动是**预期**：本刀没有跨域 import，只在同一个类里改了失败语义。
+⚠️ 这也是为什么这一刀**不能**靠指标验收 —— 它的收益是"一条能把写事务带崩的失败路径消失了"，
+而这件事在 `cross-domain-imports.yaml` 里一个字都看不到。**又一次：指标只能看见它被设计来数的那种耦合**（待办 43）。
+
+### 24.11 为什么没有加 `contract-changes.yaml` 条目
+
+契约侧只改了**注释**（两个凭证端口的失败语义段落 + `@return` 的措辞），没有动签名、
+没有动任何类型的分量。按 §19.8 的口径，注释不进 `contract-changes.yaml`。
+
+⚠️ 顺带订正了一句**失实的契约保证**：两个端口的 `@return` 原来写的是
+「未授权时为 `false`；**不抛异常**」。那句话在"查询机制失败"这个形状下是假的 ——
+实现是 MyBatis 查询，库不可用时它照抛。已改成「未授权不抛；查询机制本身失败时抛运行时异常」。
+⚠️ 这与待办 16 同族：**一句写在契约上、却不可能被任何东西验证的保证。**
+
+## 25. 待办
 
 | # | 事项 | 状态 |
 |---|---|---|
@@ -4128,7 +4331,9 @@ return found;
 | 50 | **⚠️ 静默换位点的第三类：同形不同源** —— 两个**不同提供方**的对象，方法名与签名逐字相同 ⇒ **接收者写反编译得过** | **本刀引入并已守**（§19.4）：`CsdnCredentialPort` / `JuejinCredentialPort` 的 `isAuthorized(Long) -> boolean` 逐字相同，`csdnPort.isAuthorized(id)` 写成 `juejinPort.isAuthorized(id)` 编译通过、指标一动不动、26 门禁全绿。⚠️ §16.2 的两个同步端口**也是同形**，但它们靠**参数表不同**（掘金多收分类与标签 id）把这类错误挡在编译期 —— 本刀把这个前提拿掉了。**修法：不对称桩**（一个平台授权、另一个不授权） |
 | 51 | **⚠️ "某个地方有测试挡着" ≠ "这个错误形状被守住了"** —— 同一个错误形状，一个消费方被既有用例挡住、另一个完全没人守 | **本刀实测**（§19.7 注入 C / D）：同一个"接收者写反"，`BlogPlanRunService` 红 **3** 条（其中 2 条是**既有**用例**碰巧**挡住的 —— 它们给一个端口打桩 `true`、另一个默认 `false`，正好把两者分开），而 `BlogContentPlanService` 只红新加的 **1** 条（那里**根本没有读那两个派生字段的断言**）。⇒ **别拿"另一个地方有测试挡着"当这个形状被守住的证据。** 与待办 11 / 46 同族 |
 | 52 | **⚠️ 断言"参数必须叫 `userId`"的守卫，前提是 `-parameters` 开着** | **本刀实例**（§19.7 注入 E）：把首参从 `userId` 改名成 `credentialOwnerId`，实现类**不用**跟着改（Java 允许覆写时换参数名），处处编译通过 ⇒ 只有 `assertFirstParameterIsTheCallerId` 能抓，**没有其它断言变红**。⚠️ 反过来，断言**类型** `Long` 的判据在这种改动下**绿着过** —— 这是待办 11 那条"判据只朝一个方向看"的**正例样本**：修好之后注入能证明它接着线 |
-| 53 | **⚠️ `BlogContentPlanService` 的"已知残留"：端口路径被迫做两次凭证查询，然后**把结果丢掉** | **未修**（§19.5 末）。`ContentPlanPort` 的读方法都经过 `toVO`，而 `toVO` 要调两个 `isAuthorized` 去填前端要的派生字段；随后 `toView` 把它们**收窄掉**（`ContentPlanView` 里没有这两个字段）。⇒ 一个智能体并不读的派生字段，能让一次状态变更失败。**本刀刻意没顺手修**：修了会同时改变行为（端口路径不再可能被凭证查询的失败带崩），而本次抽取要能**被证明**是纯重构。修法是把实现体改成返回实体、由两个公开方法各自包装 —— 独立的一刀 |
+| 53 | **⚠️ `BlogContentPlanService` 的"已知残留"：端口路径被迫做两次凭证查询，然后**把结果丢掉** | **已做**（§24，**会改行为的一刀**，指标不动 ⇒ 只能靠行为用例验收）。`ContentPlanPort` 的读方法都经过 `toVO`，而 `toVO` 要调两个 `isAuthorized` 去填前端要的派生字段；随后 `toView` 把它们**收窄掉**。⇒ 一个智能体并不读的派生字段，能让一次状态变更失败。⚠️ **原文漏了一档后果**：`create` / `update` / `updateStatus` 都是 `@Transactional`，凭证查询抛出的异常会逃出事务方法 ⇒ 一次**已经写成功**的变更被**回滚**。修法：`toVO` 里那两次查询各自走一个**单语句 try** 的 fail-soft 包装（`credentialAuthorizedOrFalse`），失败降级为 `false` 并留一条带固定标记的 WARN。⚠️ **口径是宽的**（修在 `toVO` 上，两个路径一起受益），**不是**原文写的窄口径（只让端口路径绕开 `toVO`）—— 理由与回退动作见 §24.6。⚠️ 另外实测：那两个派生字段**前后端都零消费方**（§24.2），删它们是另一刀（待办 61）。⚠️ 冻结契约要求的**指标没实现**，因为本仓没有 Micrometer（待办 60） |
+| 60 | **⚠️ `blog_plan_vo_credential_enrichment_failure` 今天只是日志标记，不是指标** —— 本仓没有 Micrometer / Actuator（`grep --include=pom.xml` 零命中，`*Metric*.java` / `*Counter*.java` 零命中） | **未做**（§24.7）。`core-host-lifecycle.md` 第 242 行把指标列为 **Wave 2**；`lib-extraction.md` 说 Wave 1 引入 Actuator/Micrometer。⇒ 本刀把日志标记取成**指标名本身、逐字相同**（带 `platform` / `userId` 两个将来的 tag），今天可被日志告警使用。**接入 Micrometer 那天：加一个同名 Counter，不要另起名字**，并把类注释里"只能由日志承载"那段删掉。⚠️ 刻意**没有**加一个 `LongAdder` 字段 —— 没有出口的计数器看起来像可观测性，实际没人读得到 |
+| 61 | **⚠️ `BlogContentPlanVO.csdnAuthorized` / `juejinAuthorized` 前后端都零消费方，却让每个计划行多两次凭证查询** —— `list` / `listAll` 逐行调 `toVO` ⇒ **2N 次查询**，而 `ContentPlanView` 根本不带这两个字段 | **未做**（§24.2 实测）。前端走的是 MCP 凭证状态接口（`CsdnAuthorizationPanel.jsx` 的 `state === "AUTHORIZED"`），不是计划 VO。删字段 + 删查询是**纯收益**，但会改线上 JSON ⇒ 属 §11 口径的契约变更，不是待办 53 那一刀的范围。**若只做"把两次查询提到循环外"**，那是另一种改法（不改 JSON、不改语义，只改查询模式），可以独立做 |
 | 54 | **⚠️ `CsdnBlogSyncPort` / `JuejinBlogSyncPort` 缺"同形不同源"守卫** —— `findSucceeded(Long, Long) -> BlogSyncResult` 在两个端口上**签名逐字相同**（`sync` 不同形，参数表不同 ⇒ 写反编译不过） | **已做**（§22，**不是抽取刀**）。⚠️ **原文那句"今天没有调用点会写反只是巧合 / 暂时没有写反的机会"是错的**：`PublishPostTool`（`dinqor-agent`）**早就**同时持有两个端口，`reconcile` 的 131 / 135 行两个 `findSucceeded` **相邻、参数表逐字相同、只有接收者不同** ⇒ 写反的机会一直存在，只是从来没有东西会报错。⚠️ 纸面为什么会错：结论是从"谁注入了什么"**推**出来的，没**数**。修法三条：①契约侧钉「可互换的方法集**恰好** `{findSucceeded}`」（**双向**）；②`core-host` 扫类路径，出现同时持有两个端口的类就红（基线 `PublishPostTool` + **反向 sanity**）；③`PublishPostToolTest` 补**不对称桩**两条（两个方向各一条，桩取不同的值 + 断言另一个端口**零交互** + `thenAnswer` 断言实收参数）。⭐ **②写出来当天就抓到①** —— 基线还是空的时候它直接点名了 `PublishPostTool`。注入 A–G 七次全部按预期变红（§22.4）。⚠️ 既有用例其实也挡得住写反，但症状是 `NoSuchElementException: No value present` —— **红的原因指不到错因**，容易被当 flaky（待办 45 / 51 同族） |
 | 55 | **⚠️ 注入验证与"判据强度"的边界要说清** —— 注入**能**发现"某个具体位置没人守"，**不能**发现"判据的**形状**够不够" | **本刀澄清**（§19.4 末）。前一条此前被写成"这类缺陷注入验证发现不了"，**过宽了**：注入 D 就发现了一处真的没人守的位置。正确的区分是 —— 前者是**位置**问题，注入落在那里就能看见；后者是**判据**问题（例如只断言参数类型不断言参数名），注入永远看不见，只能**反着用一次**：拿判据去断言它本该拒绝的形状。待办 11 / 46 / 51 都是后者 |
 | 56 | **⚠️ 跨单元实现边归零之后，"= 0"这条不变式没有任何门禁守着** | **已做**（§21，**不是抽取刀**）。修法：`ci_gates.py` 加常量 `EXPECTED_CROSS_UNIT_IMPLEMENTATION_EDGES = 0` + `deployment-unit-coupling` 第 4 条判据（放在三条形状判据**之后**，双向）。⭐ 实测**直接对照**：注入 D（消费方退回具体类）时，**常量=1 ⇒ 24 pass / 0 fail，而且 detail 仍印着 `1 cross-unit edge(s) left`**；**常量=0 ⇒ 23 pass / 1 fail，唯一红的就是它**。⇒ 形状判据不是漏了，是**结构上看不见**单向边。⚠️ 归零**之前**这个常量写不出来（数字一直在动）⇒ 是 §20 解锁的。⚠️ **待办 16 仍未修**（修它要人工维护的基线文件，代价不同，已问过九次） |
@@ -4147,7 +4352,7 @@ return found;
 
 ---
 
-## 25. 一句话记法
+## 26. 一句话记法
 
 ```text
 契约不认框架，实体不出边界。

@@ -54,6 +54,14 @@ package com.xander.lab.integration.api;
  *       把 {@code isAuthorized} 改成"未授权即抛"，会让一次"用户还没连 CSDN"的正常跳过
  *       变成 run 失败。</li>
  *   <li>纯查询：<b>不联系外部平台</b>、不消耗平台限流额度、不修改任何行。</li>
+ *   <li>⚠️ <b>"不抛"说的是"未授权"，不是"永远不会抛"。</b>查询机制本身失败
+ *       （库不可用；拆服务后提供方不可达）仍然抛运行时异常 —— 契约不点名具体类型，
+ *       因为契约不许依赖框架类型（ADR-1）。<b>调用方按它在<b>这条路径里的语义角色</b>
+ *       决定怎么办：</b>只拿它做展示补充的（{@code BlogContentPlanVO} 的
+ *       {@code csdnAuthorized}）应当降级为 {@code false} 并留下可观测信号，
+ *       而不是让整个请求失败（{@code BlogContentPlanService#credentialAuthorizedOrFalse}）；
+ *       若它被用来<b>决定是否允许操作</b>，则必须 fail-closed。
+ *       判据是语义角色，不是"它叫凭证"。</li>
  * </ul>
  *
  * <h2>调用方身份</h2>
@@ -75,7 +83,8 @@ public interface CsdnCredentialPort {
      * 于是调用方会记 {@code AUTH_REQUIRED} 并提示用户重新授权。</p>
      *
      * @param userId 凭证属主，不一定是当前登录用户
-     * @return 未授权时为 {@code false}；不抛异常
+     * @return 未授权时为 {@code false}。<b>未授权不抛</b>；查询机制本身失败时抛运行时异常
+     *         （见类注释「失败语义」的最后一条：调用方按语义角色决定降级还是 fail-closed）
      */
     boolean isAuthorized(Long userId);
 }
