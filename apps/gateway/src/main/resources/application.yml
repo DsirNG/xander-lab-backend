@@ -61,6 +61,8 @@ management:
 
 # Fast path only. Durable Gateway bootstrap/reconcile is a separate Wave 2 step.
 gateway:
+  agent-uri: ${GATEWAY_AGENT_URI:lb://dinqor-agent}
+  agent-ws-uri: ${GATEWAY_AGENT_WS_URI:lb:ws://dinqor-agent}
   platform-integration-uri: ${GATEWAY_PLATFORM_INTEGRATION_URI:lb://dinqor-platform-integration}
   content-automation-uri: ${GATEWAY_CONTENT_AUTOMATION_URI:lb://dinqor-content-automation}
   security-state:
