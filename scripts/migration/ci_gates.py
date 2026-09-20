@@ -307,6 +307,79 @@ def gate_table_ownership_drift() -> None:
     report(gate, True, f"{len(owned_set)} tables, single owner each")
 
 
+def gate_deployment_unit_mapping() -> None:
+    """Keep curated deployment-unit declarations aligned with V9 section 3.
+
+    ``scan.DEPLOYMENT_UNIT`` is the machine-readable form of the domain map used by
+    route generation and coupling analysis.  The table and stream-host inventories are
+    hand-authored, so they need an independent check: a typo or a domain assigned to the
+    wrong target unit must fail before it can turn into an incorrect GRANT or drain plan.
+    """
+    gate = "deployment-unit-mapping"
+    expected_by_domain = scan.DEPLOYMENT_UNIT
+    allowed_units = set(expected_by_domain.values()) | {"shared", "migration-runner"}
+    problems: list[str] = []
+
+    ownership = load("table-ownership.yaml")
+    for entry in ownership.get("tables") or []:
+        table = entry.get("table", "<unnamed>")
+        owner = entry.get("logical_owner")
+        target = entry.get("target_deployment_unit")
+        if target not in allowed_units:
+            problems.append(f"table {table}: unknown target_deployment_unit={target!r}")
+        if owner in expected_by_domain:
+            expected = expected_by_domain[owner]
+            if target != expected:
+                problems.append(
+                    f"table {table}: logical_owner={owner!r} expects {expected!r}, got {target!r}")
+        elif owner == "migration":
+            if target != "migration-runner":
+                problems.append(f"table {table}: migration owner must target migration-runner")
+        elif owner in {"shared", "shared-kernel"}:
+            if target != "shared":
+                problems.append(f"table {table}: shared owner must target shared")
+        else:
+            problems.append(f"table {table}: unknown logical_owner={owner!r}")
+
+    route_inventory = load("route-inventory.yaml")
+    for route in route_inventory.get("routes") or []:
+        route_id = route.get("id", "<unnamed>")
+        owner = route.get("logical_owner")
+        target = route.get("deployment_unit")
+        expected = expected_by_domain.get(owner)
+        if owner == "shared-kernel":
+            expected = "dinqor-core-host"
+        if expected is None:
+            problems.append(f"route {route_id}: unknown logical_owner={owner!r}")
+        elif target != expected:
+            problems.append(
+                f"route {route_id}: logical_owner={owner!r} expects {expected!r}, got {target!r}")
+
+    stream_hosts = load("stream-hosts.yaml")
+    route_by_id = {route.get("id"): route for route in route_inventory.get("routes") or []}
+    for host in stream_hosts.get("hosts") or []:
+        host_id = host.get("id", "<unnamed>")
+        host_unit = host.get("deployment_unit")
+        if host_unit not in allowed_units:
+            problems.append(f"stream host {host_id}: unknown deployment_unit={host_unit!r}")
+        for route_id in host.get("routes") or []:
+            route = route_by_id.get(route_id)
+            if route is not None and route.get("deployment_unit") != host_unit:
+                problems.append(
+                    f"stream host {host_id}: route {route_id} belongs to "
+                    f"{route.get('deployment_unit')!r}, not {host_unit!r}")
+
+    if problems:
+        report(gate, False, "; ".join(problems[:12]))
+        return
+    table_count = len(ownership.get("tables") or [])
+    route_count = len(route_inventory.get("routes") or [])
+    host_count = len(stream_hosts.get("hosts") or [])
+    report(gate, True,
+           f"{table_count} tables, {route_count} routes, {host_count} stream hosts "
+           "match the V9 deployment-unit map")
+
+
 OWNER_TRANSITION_STAGES = {
     "stage-a-integration-write": (True, False, False),
     "stage-b-agent-write": (False, True, False),
@@ -2007,6 +2080,7 @@ GATES = {
     "scheduler-lock-scope-consistency": gate_scheduler_lock_scope_consistency,
     "scheduled-scan-ref-freshness": gate_scheduled_scan_ref_freshness,
     "table-ownership-drift": gate_table_ownership_drift,
+    "deployment-unit-mapping": gate_deployment_unit_mapping,
     "owner-transition-contract": gate_owner_transition_contract,
     "config-ownership-drift": gate_config_ownership_drift,
     "configuration-properties-coverage": gate_configuration_properties_coverage,

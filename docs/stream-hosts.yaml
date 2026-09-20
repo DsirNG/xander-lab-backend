@@ -52,7 +52,7 @@ hosts:
     notes: "SseConnectionHandle 以 completeWithError(403) 结束流；封禁后不再发 payload 与心跳。"
 
   - id: blogagent-task-sse
-    deployment_unit: dinqor-agent
+    deployment_unit: dinqor-content-automation
     routes:
       - blogagent-get-blog-agent-tasks-id-events
       - blogagent-post-blog-agent-tasks-id-messages-stream
