@@ -62,7 +62,7 @@ config:
     logical_owner: shared
   - key: spring.datasource.url
     source: apps/agent/src/main/resources/application.yml
-    value: "${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/dinqor?useUnicode=true&characterEncoding=utf-8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}"
+    value: "${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/xander_lab?useUnicode=true&characterEncoding=utf-8&useSSL=false&connectionTimeZone=Asia%2FShanghai&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true}"
     leaf: true
     logical_owner: shared
   - key: spring.datasource.username

@@ -1,0 +1,54 @@
+# V9 local verification infrastructure.
+#
+# This file intentionally starts only isolated dependencies. Application services stay in
+# docker-compose.wave1.yml / docker-compose.wave2-agent.yml so migration order and service
+# ownership remain explicit. The canonical schema name is xander_lab, matching migrations/,
+# grants/ and the production Nacos JDBC defaults.
+services:
+  mysql:
+    image: mysql:8.0.36
+    container_name: ${DINQOR_LOCAL_MYSQL_CONTAINER:-dinqor-local-mysql}
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DINQOR_LOCAL_MYSQL_ROOT_PASSWORD:?set DINQOR_LOCAL_MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: xander_lab
+    ports:
+      - ${DINQOR_LOCAL_MYSQL_PORT:-3306}:3306
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - dinqor-local-mysql-data:/var/lib/mysql
+    networks:
+      - dinqor-local-infra
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${DINQOR_LOCAL_REDIS_CONTAINER:-dinqor-local-redis}
+    restart: unless-stopped
+    ports:
+      - ${DINQOR_LOCAL_REDIS_PORT:-6379}:6379
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - dinqor-local-redis-data:/data
+    networks:
+      - dinqor-local-infra
+
+volumes:
+  dinqor-local-mysql-data:
+  dinqor-local-redis-data:
+
+networks:
+  dinqor-local-infra:
+    name: ${DINQOR_LOCAL_INFRA_NETWORK:-dinqor-local-infra}

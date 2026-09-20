@@ -1,5 +1,20 @@
 # Wave 1 service images
 
+## Local MySQL / Redis
+
+For an isolated dependency-only environment, start
+`docker-compose.local-infra.yml` first. It creates the canonical `xander_lab` schema
+and does not start any application service:
+
+```powershell
+$env:DINQOR_LOCAL_MYSQL_ROOT_PASSWORD = "local-only-password"
+docker-compose -f infrastructure/docker/docker-compose.local-infra.yml up -d
+```
+
+Run the single migration runner against `jdbc:mysql://mysql:3306/xander_lab` before
+starting business services. Do not reuse this local password in staging or production;
+service accounts and their DML-only grants come from `migrations/grants/`.
+
 The root `Dockerfile` builds the full Maven reactor once and selects the executable jar at
 the runtime stage. This keeps dependency resolution and module coverage in one place while
 allowing each deployment unit to receive its own image:
