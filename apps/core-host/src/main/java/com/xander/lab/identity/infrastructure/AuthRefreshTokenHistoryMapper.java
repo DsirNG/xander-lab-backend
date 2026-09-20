@@ -95,4 +95,13 @@ public interface AuthRefreshTokenHistoryMapper extends BaseMapper<AuthRefreshTok
     /** 全局会话行数，供 `refresh_session_rows` 指标使用。 */
     @Select("SELECT COUNT(*) FROM auth_refresh_session")
     int countSessions();
+
+    /** 两张 Refresh 表的数据与索引占用字节数，供 `history_storage_size` 指标使用。 */
+    @Select("""
+            SELECT COALESCE(SUM(data_length + index_length), 0)
+              FROM information_schema.tables
+             WHERE table_schema = DATABASE()
+               AND table_name IN ('auth_refresh_session', 'auth_refresh_token_history')
+            """)
+    long storageSizeBytes();
 }

@@ -136,11 +136,13 @@
 ```text
 refresh_session_rows
 refresh_history_rows
+history_storage_size
 ```
 
 统计不放在 Micrometer 的 scrape 回调中，避免监控抓取直接占用数据库连接；每个
 core-host 实例独立保留最近一次成功值，观测 SQL 失败时保留旧值并等待下一轮，
-不会把监控故障变成 Refresh 故障。
+不会把监控故障变成 Refresh 故障。`history_storage_size` 统计两张 Refresh 表的
+数据与索引占用字节数，依赖 MySQL `information_schema.tables` 的只读可见性。
 
 ---
 

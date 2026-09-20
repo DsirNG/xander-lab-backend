@@ -19,6 +19,7 @@ public class RefreshStorageMetrics {
     private final AuthRefreshTokenHistoryMapper historyMapper;
     private final AtomicLong sessionRows = new AtomicLong();
     private final AtomicLong historyRows = new AtomicLong();
+    private final AtomicLong storageSizeBytes = new AtomicLong();
 
     public RefreshStorageMetrics(MeterRegistry meterRegistry,
                                  AuthRefreshTokenHistoryMapper historyMapper) {
@@ -28,6 +29,9 @@ public class RefreshStorageMetrics {
                 .register(meterRegistry);
         Gauge.builder("refresh_history_rows", historyRows, AtomicLong::doubleValue)
                 .description("auth_refresh_token_history 当前行数")
+                .register(meterRegistry);
+        Gauge.builder("history_storage_size", storageSizeBytes, AtomicLong::doubleValue)
+                .description("Refresh Session 与 History 表的数据和索引占用字节数")
                 .register(meterRegistry);
     }
 
@@ -40,6 +44,7 @@ public class RefreshStorageMetrics {
         try {
             sessionRows.set(historyMapper.countSessions());
             historyRows.set(historyMapper.countAll());
+            storageSizeBytes.set(Math.max(0L, historyMapper.storageSizeBytes()));
         } catch (RuntimeException ex) {
             // 观测失败不能影响 refresh 主链路；保留上次值并等待下一轮。
             log.warn("[Refresh] 表行数观测失败，保留上次值：{}", ex.getMessage());

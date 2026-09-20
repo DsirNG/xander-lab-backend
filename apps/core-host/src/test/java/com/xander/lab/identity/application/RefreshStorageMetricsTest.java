@@ -15,6 +15,7 @@ class RefreshStorageMetricsTest {
         AuthRefreshTokenHistoryMapper mapper = mock(AuthRefreshTokenHistoryMapper.class);
         when(mapper.countSessions()).thenReturn(12);
         when(mapper.countAll()).thenReturn(48);
+        when(mapper.storageSizeBytes()).thenReturn(4096L);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         RefreshStorageMetrics metrics = new RefreshStorageMetrics(registry, mapper);
 
@@ -22,6 +23,7 @@ class RefreshStorageMetricsTest {
 
         assertThat(registry.get("refresh_session_rows").gauge().value()).isEqualTo(12D);
         assertThat(registry.get("refresh_history_rows").gauge().value()).isEqualTo(48D);
+        assertThat(registry.get("history_storage_size").gauge().value()).isEqualTo(4096D);
     }
 
     @Test
@@ -29,6 +31,7 @@ class RefreshStorageMetricsTest {
         AuthRefreshTokenHistoryMapper mapper = mock(AuthRefreshTokenHistoryMapper.class);
         when(mapper.countSessions()).thenReturn(12).thenThrow(new IllegalStateException("db down"));
         when(mapper.countAll()).thenReturn(48);
+        when(mapper.storageSizeBytes()).thenReturn(4096L);
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         RefreshStorageMetrics metrics = new RefreshStorageMetrics(registry, mapper);
 
@@ -37,5 +40,6 @@ class RefreshStorageMetricsTest {
 
         assertThat(registry.get("refresh_session_rows").gauge().value()).isEqualTo(12D);
         assertThat(registry.get("refresh_history_rows").gauge().value()).isEqualTo(48D);
+        assertThat(registry.get("history_storage_size").gauge().value()).isEqualTo(4096D);
     }
 }
