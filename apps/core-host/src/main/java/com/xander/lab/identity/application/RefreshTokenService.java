@@ -11,6 +11,7 @@ import com.xander.lab.identity.infrastructure.SecurityEventOutboxMapper;
 import com.xander.lab.identity.infrastructure.UserMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -102,6 +103,7 @@ public class RefreshTokenService {
     private final UserMapper userMapper;
     private final RefreshTokenProperties properties;
     private final SuccessorTokenCipher cipher;
+    private final RefreshMetrics metrics;
     private final Clock clock;
 
     @Autowired
@@ -110,9 +112,10 @@ public class RefreshTokenService {
                                SecurityEventOutboxMapper outboxMapper,
                                UserMapper userMapper,
                                RefreshTokenProperties properties,
-                               SuccessorTokenCipher cipher) {
+                               SuccessorTokenCipher cipher,
+                               RefreshMetrics metrics) {
         this(sessionMapper, historyMapper, outboxMapper, userMapper, properties, cipher,
-                Clock.systemDefaultZone());
+                metrics, Clock.systemDefaultZone());
     }
 
     /** 供测试注入固定时钟，让 grace / retention 的边界可被确定性地断言。 */
@@ -123,12 +126,25 @@ public class RefreshTokenService {
                         RefreshTokenProperties properties,
                         SuccessorTokenCipher cipher,
                         Clock clock) {
+        this(sessionMapper, historyMapper, outboxMapper, userMapper, properties, cipher,
+                null, clock);
+    }
+
+    RefreshTokenService(AuthRefreshSessionMapper sessionMapper,
+                        AuthRefreshTokenHistoryMapper historyMapper,
+                        SecurityEventOutboxMapper outboxMapper,
+                        UserMapper userMapper,
+                        RefreshTokenProperties properties,
+                        SuccessorTokenCipher cipher,
+                        RefreshMetrics metrics,
+                        Clock clock) {
         this.sessionMapper = sessionMapper;
         this.historyMapper = historyMapper;
         this.outboxMapper = outboxMapper;
         this.userMapper = userMapper;
         this.properties = properties;
         this.cipher = cipher;
+        this.metrics = metrics;
         this.clock = clock;
     }
 
@@ -189,6 +205,22 @@ public class RefreshTokenService {
      */
     @Transactional
     public Rotation rotate(String rawRefreshToken) {
+        long startedAt = System.nanoTime();
+        try {
+            Rotation rotation = rotateInternal(rawRefreshToken);
+            if (metrics != null) {
+                metrics.recordRotation(rotation.outcome(), System.nanoTime() - startedAt);
+            }
+            return rotation;
+        } catch (DataAccessException ex) {
+            if (metrics != null) {
+                metrics.recordDatabaseError(System.nanoTime() - startedAt);
+            }
+            throw ex;
+        }
+    }
+
+    private Rotation rotateInternal(String rawRefreshToken) {
         LocalDateTime now = now();
 
         Optional<RefreshTokenFormat.Parsed> parsed = RefreshTokenFormat.parse(rawRefreshToken);
@@ -357,6 +389,9 @@ public class RefreshTokenService {
         }
         int affected = sessionMapper.revokeSession(sid,
                 AuthRefreshSession.REASON_LOGOUT, now());
+        if (metrics != null) {
+            metrics.recordLogout(affected > 0);
+        }
         return affected > 0;
     }
 

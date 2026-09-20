@@ -6,6 +6,13 @@
 前置：`auth-token-model.md`（Token 模型与权威源）。
 清理任务的容量与调度细节见 `refresh-history-retention.md`。
 
+当前后端已接入基础运行指标：`refresh_requests_total`、
+`refresh_success_total`、`refresh_success_rate`、`refresh_grace_replay_total`、
+`refresh_reuse_detected_total`、`refresh_family_revoked_total`、
+`refresh_invalid_total`、`refresh_db_latency`、`refresh_db_error_total` 与
+`logout_success_total`。Refresh QPS 由 `refresh_requests_total` 的时间窗口 rate
+推导；客户端 retry 指标与跨 Tab 协调仍属于 Wave 2 联调范围，不能由服务端单独伪造。
+
 ---
 
 ## 1. 一句话结论
