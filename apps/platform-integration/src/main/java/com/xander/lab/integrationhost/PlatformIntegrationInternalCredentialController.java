@@ -45,7 +45,8 @@ public class PlatformIntegrationInternalCredentialController {
             throw new IllegalStateException(
                     "platform-integration.internal-token 在启用平台凭证状态内网 API 时不能为空");
         }
-        if (properties.getCoreInternalToken() == null || properties.getCoreInternalToken().isBlank()) {
+        if (credentialStore.isEmpty()
+                && (properties.getCoreInternalToken() == null || properties.getCoreInternalToken().isBlank())) {
             throw new IllegalStateException(
                     "platform-integration.core-internal-token 在启用平台凭证状态内网 API 时不能为空");
         }

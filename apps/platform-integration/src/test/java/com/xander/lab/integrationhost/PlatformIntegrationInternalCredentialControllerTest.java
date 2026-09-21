@@ -19,7 +19,7 @@ class PlatformIntegrationInternalCredentialControllerTest {
         PlatformCredentialStatusStore store = mock(PlatformCredentialStatusStore.class);
         when(store.isAuthorized("csdn", 7L)).thenReturn(true);
 
-        PlatformIntegrationInternalCredentialController controller = controller(Optional.of(store));
+        PlatformIntegrationInternalCredentialController controller = controller(Optional.of(store), "");
 
         var response = controller.csdnStatus("platform-token", 7L);
 
@@ -41,9 +41,14 @@ class PlatformIntegrationInternalCredentialControllerTest {
 
     private PlatformIntegrationInternalCredentialController controller(
             Optional<PlatformCredentialStatusStore> store) {
+        return controller(store, "core-token");
+    }
+
+    private PlatformIntegrationInternalCredentialController controller(
+            Optional<PlatformCredentialStatusStore> store, String coreToken) {
         PlatformIntegrationProperties properties = new PlatformIntegrationProperties();
         properties.setInternalToken("platform-token");
-        properties.setCoreInternalToken("core-token");
+        properties.setCoreInternalToken(coreToken);
         return new PlatformIntegrationInternalCredentialController(
                 RestClient.builder(), properties, store);
     }
