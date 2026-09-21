@@ -312,6 +312,15 @@ Timer 接入并发布 P95/P99 与 Histogram；来源时间来自 `account_securi
 还修复并验证了空增量批次：没有新变更时只推进不超过 watermark 的 cursor，不再把正常空批次
 误报成“cursor 未推进”并每 1.5 秒重复告警。
 
+随后在本地 `dinqor.account_security_state` 写入一条高位临时账号状态做端到端收敛验证：
+
+- 封禁变更 `change_seq=1` 后，Core snapshot 为 1 条、watermark 为 1；Agent/Content
+  的 `security_reconcile_cursor=1` 且本地 deny cache size 为 1，Gateway deny cache size
+  也为 1。
+- 解封变更 `change_seq=2` 后，三类宿主 cursor 均为 2，三个 deny cache 均回到 0。
+- 临时行已删除，复查计数为 0；该测试验证的是 SOT→reconcile→本地缓存，不替代管理台
+  封禁事务和 Redis Pub/Sub 快路径验收。
+
 该证据证明的是后端安全平面对账和 readiness，不等同于生产密钥、Gateway 流量切换或客户端
 重连验收；内部令牌仍必须由部署 Secret 注入，不能写进 Nacos 明文。
 
