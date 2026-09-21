@@ -455,6 +455,24 @@ Refresh 是 POST，所以默认不重试。两个方案：
 §45 未点名的状态一律保守归为 transient：误判为 transient 只是多一次重试、
 用户仍是登录态；误判为 unrecoverable 是不可逆地清凭据踢下线。
 
+### 9.5 本地 Docker Staging 实证
+
+在已完成 `2026092101` 迁移的本地 MySQL 上，单独启动一个临时 `core-host` 实例并注入
+`AUTH_REFRESH_ENABLED=true` 与临时 `AUTH_REFRESH_ENCRYPTION_KEY`，通过 Nacos
+`dinqor-dev` 加载 Core 配置后实际调用 HTTP 端点，结果如下：
+
+| 场景 | 结果 |
+|---|---:|
+| 注册并签发 `rt_...` opaque token | HTTP 200 |
+| current token 首次 rotation | HTTP 200，返回新 successor |
+| grace 窗口内重放旧 token | HTTP 200，返回同一个 successor |
+| 随机垃圾 token | HTTP 401 |
+| 垃圾 token 后继续使用 successor | HTTP 200，session family 未被误撤销 |
+
+该实例验证结束后已移除，避免与仍使用旧协议的 Core smoke 实例同时注册同一服务名。
+这证明的是 Wave 2 staging 行为，不等于生产切流；默认开关仍保持关闭，等待客户端联调和
+§97 全部门槛完成。
+
 ---
 
 ## 10. 已知缺口
