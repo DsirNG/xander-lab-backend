@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 898
-  leaves: 650
+  total: 908
+  leaves: 660
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -3450,6 +3450,31 @@ config:
     value: "${PLATFORM_INTEGRATION_MAX_RESPONSE_BYTES:16777216}"
     leaf: true
     logical_owner: integration
+  - key: platform-integration.credential-store-enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_CREDENTIAL_STORE_ENABLED:false}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.credential-store-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_CREDENTIAL_STORE_URL:}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.credential-store-username
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_CREDENTIAL_STORE_USERNAME:}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.credential-store-password
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_CREDENTIAL_STORE_PASSWORD:}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.credential-store-query-timeout-seconds
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_CREDENTIAL_STORE_QUERY_TIMEOUT_SECONDS:2}"
+    leaf: true
+    logical_owner: integration
   - key: management
     source: apps/platform-integration/src/main/resources/application.yml
     value: ""
@@ -4860,6 +4885,41 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 14
+  - key: platform-integration.credential-store-enabled
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 18
+  - key: platform-integration.credential-store-password
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 21
+  - key: platform-integration.credential-store-query-timeout-seconds
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 22
+  - key: platform-integration.credential-store-url
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 19
+  - key: platform-integration.credential-store-username
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 20
   - key: platform-integration.internal-api-enabled
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default:none>"

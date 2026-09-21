@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 650
-  service_private: 564
-  secret: 74
+  total: 660
+  service_private: 572
+  secret: 76
   shared: 12
 config:
   - key: agent.conversation.compaction-enabled
@@ -1851,6 +1851,56 @@ config:
   - key: platform-integration.core-internal-token
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-enabled
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-password
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-password
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-query-timeout-seconds
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-query-timeout-seconds
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-url
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-username
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.credential-store-username
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.internal-api-enabled

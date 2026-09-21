@@ -1,6 +1,7 @@
 package com.xander.lab.integration.host;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -19,6 +20,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.Optional;
 
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 
@@ -33,9 +35,12 @@ public class PlatformIntegrationInternalCredentialController {
 
     private final RestClient restClient;
     private final PlatformIntegrationProperties properties;
+    private final Optional<PlatformCredentialStatusStore> credentialStore;
 
+    @Autowired
     public PlatformIntegrationInternalCredentialController(RestClient.Builder restClientBuilder,
-                                                            PlatformIntegrationProperties properties) {
+                                                            PlatformIntegrationProperties properties,
+                                                            Optional<PlatformCredentialStatusStore> credentialStore) {
         if (properties.getInternalToken() == null || properties.getInternalToken().isBlank()) {
             throw new IllegalStateException(
                     "platform-integration.internal-token 在启用平台凭证状态内网 API 时不能为空");
@@ -49,6 +54,13 @@ public class PlatformIntegrationInternalCredentialController {
         requestFactory.setReadTimeout(Duration.ofMillis(timeout(properties.getReadTimeoutMillis())));
         this.restClient = restClientBuilder.requestFactory(requestFactory).build();
         this.properties = properties;
+        this.credentialStore = credentialStore;
+    }
+
+    /** Compatibility constructor for tests and bridge-only deployments. */
+    public PlatformIntegrationInternalCredentialController(RestClient.Builder restClientBuilder,
+                                                            PlatformIntegrationProperties properties) {
+        this(restClientBuilder, properties, Optional.empty());
     }
 
     @GetMapping("/{userId}/csdn/status")
@@ -57,6 +69,9 @@ public class PlatformIntegrationInternalCredentialController {
             @PathVariable Long userId) {
         authorize(token);
         validateUser(userId);
+        if (credentialStore.isPresent()) {
+            return localStatus("csdn", userId);
+        }
         return forward("/internal/integration/platform-credentials/" + userId + "/csdn/status");
     }
 
@@ -66,7 +81,18 @@ public class PlatformIntegrationInternalCredentialController {
             @PathVariable Long userId) {
         authorize(token);
         validateUser(userId);
+        if (credentialStore.isPresent()) {
+            return localStatus("juejin", userId);
+        }
         return forward("/internal/integration/platform-credentials/" + userId + "/juejin/status");
+    }
+
+    private ResponseEntity<byte[]> localStatus(String platform, Long userId) {
+        boolean authorized = credentialStore.get().isAuthorized(platform, userId);
+        return ResponseEntity.ok()
+                .header("Content-Type", "application/json")
+                .body(("{\"authorized\":" + authorized + "}")
+                        .getBytes(StandardCharsets.UTF_8));
     }
 
     private ResponseEntity<byte[]> forward(String path) {
