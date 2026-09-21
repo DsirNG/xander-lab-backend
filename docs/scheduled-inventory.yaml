@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 17
+  total: 19
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -23,6 +23,20 @@ scheduled:
     logical_owner: automation
     file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java
     line: 40
+  - id: content-security-state-reconciler-reconcile
+    class: com.xander.lab.automation.infrastructure.ContentSecurityStateReconciler
+    method: reconcile
+    trigger: "fixedDelayString = \"${content-automation.security-state.reconcile-interval-ms:1500}\""
+    logical_owner: automation
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentSecurityStateReconciler.java
+    line: 68
+  - id: content-security-state-reconciler-full-reconcile
+    class: com.xander.lab.automation.infrastructure.ContentSecurityStateReconciler
+    method: fullReconcile
+    trigger: "fixedDelayString = \"${content-automation.security-state.full-reconcile-interval-ms:300000}\""
+    logical_owner: automation
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentSecurityStateReconciler.java
+    line: 88
   - id: email-reminder-scheduler
     class: com.xander.lab.automation.infrastructure.EmailReminderScheduler
     method: dispatchDueReminders
