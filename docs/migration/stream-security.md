@@ -321,6 +321,13 @@ Timer 接入并发布 P95/P99 与 Histogram；来源时间来自 `account_securi
 - 临时行已删除，复查计数为 0；该测试验证的是 SOT→reconcile→本地缓存，不替代管理台
   封禁事务和 Redis Pub/Sub 快路径验收。
 
+另起一组隔离的 Pub/Sub staging：Core `30042` 和 Gateway `30047` 均加载 Nacos 配置，
+共享 `dinqor:security-events` 频道，Redis `PUBSUB NUMSUB` 观测到 2 个订阅者。临时关闭
+该 Gateway 的 reconciler 后，向频道发布与 Core 发件箱一致的 `AccountDisabled` 消息，
+Gateway deny cache 由 0 变为 1；再发布更高 `securityVersion` 的 `AccountEnabled` 消息，
+缓存回到 0。该验证锁定了 Pub/Sub 订阅、事件类型和版本单调闸门；不等同于管理台事务、
+Redis 故障恢复或客户端重连验收。
+
 该证据证明的是后端安全平面对账和 readiness，不等同于生产密钥、Gateway 流量切换或客户端
 重连验收；内部令牌仍必须由部署 Secret 注入，不能写进 Nacos 明文。
 

@@ -25,8 +25,9 @@ import java.time.ZoneId;
 public class GatewaySecurityEventSubscriber implements MessageListener {
 
     private static final Logger log = LoggerFactory.getLogger(GatewaySecurityEventSubscriber.class);
-    private static final String ACCOUNT_DISABLED = "ACCOUNT_DISABLED";
-    private static final String ACCOUNT_ENABLED = "ACCOUNT_ENABLED";
+    /** Must stay aligned with SecurityEventOutboxEntry.TYPE_ACCOUNT_* in core-host. */
+    private static final String ACCOUNT_DISABLED = "AccountDisabled";
+    private static final String ACCOUNT_ENABLED = "AccountEnabled";
 
     private final ObjectMapper objectMapper;
     private final GatewaySecurityStateCache securityStateCache;

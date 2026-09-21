@@ -19,7 +19,7 @@ class GatewaySecurityEventSubscriberTest {
         GatewaySecurityStateCache cache = new GatewaySecurityStateCache();
         GatewaySecurityEventSubscriber subscriber = new GatewaySecurityEventSubscriber(objectMapper, cache);
         Message message = message(objectMapper.writeValueAsString(new GatewaySecurityEventMessage(
-                7L, "ACCOUNT", "42", "ACCOUNT_DISABLED",
+                7L, "ACCOUNT", "42", "AccountDisabled",
                 "{\"accountId\":42,\"securityVersion\":3,\"occurredAt\":\""
                         + LocalDateTime.now().minusNanos(50_000_000L) + "\"}")));
 
@@ -27,6 +27,13 @@ class GatewaySecurityEventSubscriberTest {
 
         assertThat(cache.isDisabled(42L)).isTrue();
         assertThat(cache.lastPropagationLatencyMillis()).isGreaterThanOrEqualTo(0L);
+
+        Message enabled = message(objectMapper.writeValueAsString(new GatewaySecurityEventMessage(
+                8L, "ACCOUNT", "42", "AccountEnabled",
+                "{\"accountId\":42,\"securityVersion\":4}")));
+        subscriber.onMessage(enabled, null);
+
+        assertThat(cache.isDisabled(42L)).isFalse();
     }
 
     @Test
@@ -34,7 +41,7 @@ class GatewaySecurityEventSubscriberTest {
         GatewaySecurityStateCache cache = new GatewaySecurityStateCache();
         GatewaySecurityEventSubscriber subscriber = new GatewaySecurityEventSubscriber(objectMapper, cache);
         Message mismatched = message(objectMapper.writeValueAsString(new GatewaySecurityEventMessage(
-                7L, "ACCOUNT", "41", "ACCOUNT_DISABLED",
+                7L, "ACCOUNT", "41", "AccountDisabled",
                 "{\"accountId\":42,\"securityVersion\":3}")));
         Message malformed = message("not-json");
 
