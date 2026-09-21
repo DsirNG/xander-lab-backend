@@ -14,9 +14,9 @@
     <artifactId>xander-platform-integration</artifactId>
     <name>dinqor-platform-integration</name>
     <description>
-        Wave 2 platform-integration deployment boundary. The first cut is a compatibility
-        proxy so Gateway traffic can be drained away from core-host without changing the
-        public contract. Domain implementation extraction follows after route cutover.
+        Wave 2 platform-integration deployment boundary. The compatibility proxy remains the
+        fallback while the Juejin catalog vertical slice is extracted behind an opt-in owner
+        switch; further vendor write extraction follows the same drain protocol.
     </description>
 
     <dependencies>

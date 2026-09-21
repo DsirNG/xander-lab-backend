@@ -18,6 +18,14 @@ platform-integration:
   connect-timeout-millis: ${PLATFORM_INTEGRATION_CONNECT_TIMEOUT_MILLIS:2000}
   read-timeout-millis: ${PLATFORM_INTEGRATION_READ_TIMEOUT_MILLIS:15000}
   max-response-bytes: ${PLATFORM_INTEGRATION_MAX_RESPONSE_BYTES:16777216}
+  juejin-catalog-enabled: false
+  juejin:
+    base-url: ${JUEJIN_API_BASE_URL:https://api.juejin.cn}
+    default-aid: ${JUEJIN_DEFAULT_AID:2608}
+    credential-encryption-key: ${JUEJIN_CREDENTIAL_ENCRYPTION_KEY:}
+    connect-timeout-millis: ${JUEJIN_CONNECT_TIMEOUT_MILLIS:10000}
+    read-timeout-millis: ${JUEJIN_READ_TIMEOUT_MILLIS:30000}
+    catalog-freshness-hours: 24
   credential-store-enabled: false
   credential-store-url: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_URL:}
   credential-store-username: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_USERNAME:}

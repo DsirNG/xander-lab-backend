@@ -7,10 +7,13 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.InetSocketAddress;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class PlatformIntegrationInternalCatalogControllerTest {
 
@@ -51,6 +54,20 @@ class PlatformIntegrationInternalCatalogControllerTest {
                 () -> controller().sync("wrong-token", 7L));
 
         assertEquals(404, exception.getStatusCode().value());
+    }
+
+    @Test
+    void usesPlatformCatalogOwnerWithoutRequiringCoreToken() {
+        PlatformJuejinCatalogService localCatalog = mock(PlatformJuejinCatalogService.class);
+        PlatformIntegrationProperties properties = new PlatformIntegrationProperties();
+        properties.setInternalToken("platform-token");
+        PlatformIntegrationInternalCatalogController controller =
+                new PlatformIntegrationInternalCatalogController(
+                        RestClient.builder(), properties, Optional.of(localCatalog));
+
+        controller.sync("platform-token", 7L);
+
+        verify(localCatalog).sync(7L);
     }
 
     private PlatformIntegrationInternalCatalogController controller() {

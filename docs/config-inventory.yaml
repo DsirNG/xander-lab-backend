@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 970
-  leaves: 716
+  total: 978
+  leaves: 724
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -3660,6 +3660,11 @@ config:
     value: "${PLATFORM_INTEGRATION_MAX_RESPONSE_BYTES:16777216}"
     leaf: true
     logical_owner: integration
+  - key: platform-integration.juejin-catalog-enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_JUEJIN_CATALOG_ENABLED:false}"
+    leaf: true
+    logical_owner: integration
   - key: platform-integration.credential-store-enabled
     source: apps/platform-integration/src/main/resources/application.yml
     value: "${PLATFORM_INTEGRATION_CREDENTIAL_STORE_ENABLED:false}"
@@ -5241,35 +5246,35 @@ config:
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
-    line: 18
+    line: 19
   - key: platform-integration.credential-store-password
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
-    line: 21
+    line: 22
   - key: platform-integration.credential-store-query-timeout-seconds
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
-    line: 22
+    line: 23
   - key: platform-integration.credential-store-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
-    line: 19
+    line: 20
   - key: platform-integration.credential-store-username
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
-    line: 20
+    line: 21
   - key: platform-integration.internal-api-enabled
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default:none>"
@@ -5284,6 +5289,13 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 13
+  - key: platform-integration.juejin-catalog-enabled
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 18
   - key: platform-integration.max-response-bytes
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
@@ -5298,3 +5310,45 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 16
+  - key: platform-integration.juejin.base-url
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 11
+  - key: platform-integration.juejin.catalog-freshness-hours
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 16
+  - key: platform-integration.juejin.connect-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 14
+  - key: platform-integration.juejin.credential-encryption-key
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 13
+  - key: platform-integration.juejin.default-aid
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 12
+  - key: platform-integration.juejin.read-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 15

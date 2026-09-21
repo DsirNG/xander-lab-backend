@@ -3367,7 +3367,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalCatalogController#sync"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalCatalogController.java
-    line: 52
+    line: 64
   - id: integration-get-internal-platform-integration-platform-credentials-userid-juejin-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration

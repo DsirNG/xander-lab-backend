@@ -16,10 +16,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.util.Optional;
 
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 
-/** Bridges the Platform-owned Juejin catalog command to Core during compatibility drain. */
+/** Owns the Juejin catalog command, with Core forwarding retained as a compatibility fallback. */
 @RestController
 @RequestMapping("/internal/platform-integration/platform-credentials")
 @ConditionalOnProperty(prefix = "platform-integration", name = "internal-api-enabled",
@@ -30,15 +31,18 @@ public class PlatformIntegrationInternalCatalogController {
 
     private final RestClient restClient;
     private final PlatformIntegrationProperties properties;
+    private final Optional<PlatformJuejinCatalogService> localCatalog;
 
     public PlatformIntegrationInternalCatalogController(
             RestClient.Builder restClientBuilder,
-            PlatformIntegrationProperties properties) {
+            PlatformIntegrationProperties properties,
+            Optional<PlatformJuejinCatalogService> localCatalog) {
         if (properties.getInternalToken() == null || properties.getInternalToken().isBlank()) {
             throw new IllegalStateException(
                     "platform-integration.internal-token 在启用掘金目录内网 API 时不能为空");
         }
-        if (properties.getCoreInternalToken() == null || properties.getCoreInternalToken().isBlank()) {
+        if (localCatalog.isEmpty()
+                && (properties.getCoreInternalToken() == null || properties.getCoreInternalToken().isBlank())) {
             throw new IllegalStateException(
                     "platform-integration.core-internal-token 在启用掘金目录内网 API 时不能为空");
         }
@@ -47,6 +51,14 @@ public class PlatformIntegrationInternalCatalogController {
         requestFactory.setReadTimeout(Duration.ofMillis(timeout(properties.getReadTimeoutMillis())));
         this.restClient = restClientBuilder.requestFactory(requestFactory).build();
         this.properties = properties;
+        this.localCatalog = localCatalog;
+    }
+
+    /** Compatibility constructor for the Core bridge path and focused tests. */
+    public PlatformIntegrationInternalCatalogController(
+            RestClient.Builder restClientBuilder,
+            PlatformIntegrationProperties properties) {
+        this(restClientBuilder, properties, Optional.empty());
     }
 
     @PostMapping("/{userId}/juejin/catalog/sync")
@@ -55,6 +67,10 @@ public class PlatformIntegrationInternalCatalogController {
             @PathVariable Long userId) {
         authorize(token);
         validateUser(userId);
+        if (localCatalog.isPresent()) {
+            localCatalog.get().sync(userId);
+            return;
+        }
         try {
             ResponseEntity<Void> response = restClient.post()
                     .uri(targetUri("/internal/integration/platform-credentials/" + userId

@@ -3,7 +3,7 @@ package com.xander.lab.integration.host;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-/** Runtime settings for the temporary Core compatibility bridge. */
+/** Runtime settings for the Platform deployment boundary and its Core fallback bridge. */
 @Component
 @ConfigurationProperties(prefix = "platform-integration")
 public class PlatformIntegrationProperties {
@@ -15,6 +15,7 @@ public class PlatformIntegrationProperties {
     private int connectTimeoutMillis = 2_000;
     private int readTimeoutMillis = 15_000;
     private int maxResponseBytes = 16 * 1024 * 1024;
+    private boolean juejinCatalogEnabled;
     private boolean credentialStoreEnabled;
     private String credentialStoreUrl = "";
     private String credentialStoreUsername = "";
@@ -75,6 +76,14 @@ public class PlatformIntegrationProperties {
 
     public void setMaxResponseBytes(int maxResponseBytes) {
         this.maxResponseBytes = maxResponseBytes;
+    }
+
+    public boolean isJuejinCatalogEnabled() {
+        return juejinCatalogEnabled;
+    }
+
+    public void setJuejinCatalogEnabled(boolean juejinCatalogEnabled) {
+        this.juejinCatalogEnabled = juejinCatalogEnabled;
     }
 
     public boolean isCredentialStoreEnabled() {

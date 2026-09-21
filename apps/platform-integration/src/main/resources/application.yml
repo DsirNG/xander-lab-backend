@@ -25,6 +25,7 @@ platform-integration:
   connect-timeout-millis: ${PLATFORM_INTEGRATION_CONNECT_TIMEOUT_MILLIS:2000}
   read-timeout-millis: ${PLATFORM_INTEGRATION_READ_TIMEOUT_MILLIS:15000}
   max-response-bytes: ${PLATFORM_INTEGRATION_MAX_RESPONSE_BYTES:16777216}
+  juejin-catalog-enabled: ${PLATFORM_INTEGRATION_JUEJIN_CATALOG_ENABLED:false}
   # Disabled during the bridge phase; when enabled, Platform reads credential status locally.
   credential-store-enabled: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_ENABLED:false}
   credential-store-url: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_URL:}
