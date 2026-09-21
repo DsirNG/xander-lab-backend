@@ -473,6 +473,21 @@ Refresh 是 POST，所以默认不重试。两个方案：
 这证明的是 Wave 2 staging 行为，不等于生产切流；默认开关仍保持关闭，等待客户端联调和
 §97 全部门槛完成。
 
+本轮还在同一隔离 MySQL 中复核了持久化结构：`auth_refresh_session` 和
+`auth_refresh_token_history` 均已由 Flyway 建表，`current_token_id` 唯一约束、family/status、
+`retained_until`、`successor_ciphertext_expires_at` 和 sid/generation 索引均存在；Flyway
+历史中的 7 条基线/迁移记录全部成功。后端专项测试也通过：
+
+```text
+RefreshTokenServiceTest / AuthServiceTest
+AuthRefreshHistoryCleanupTest / AuthRefreshCiphertextCleanupTest
+AuthRefreshRetentionServiceTest / RetentionBatchLoopTest
+RefreshMetricsTest / RefreshRetentionMetricsTest / RefreshStorageMetricsTest
+```
+
+这证明的是服务端协议、持久化模型和清理任务；客户端并发协调、503 错误分类和真实
+客户端 retry 仍属于 Wave 2 联调门槛，因此能力清单仍保留 `planned`，不伪造已切流。
+
 ---
 
 ## 10. 已知缺口
