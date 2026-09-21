@@ -1,0 +1,13 @@
+package com.xander.lab.blogagent.api;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
+
+/** Revision instruction accepted by the content-owned BlogAgent stream endpoint. */
+@Data
+public class BlogAgentMessageRequest {
+    @NotBlank(message = "修改要求不能为空")
+    @Size(max = 4000, message = "修改要求不能超过 4000 个字符")
+    private String content;
+}

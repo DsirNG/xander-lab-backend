@@ -18,6 +18,9 @@ public final class BlogAgentModelContract {
     public record ReviewRequest(String content, String request) {
     }
 
+    public record RevisionRequest(String content, String instruction) {
+    }
+
     public record ComplianceRequest(String title, String content) {
     }
 

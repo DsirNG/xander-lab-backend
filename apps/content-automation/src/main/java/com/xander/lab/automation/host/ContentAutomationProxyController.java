@@ -20,8 +20,8 @@ import static org.springframework.http.HttpStatus.BAD_GATEWAY;
  * Streaming-safe compatibility bridge for the not-yet-cut BlogAgent and automation routes.
  *
  * <p>The response body is copied directly to the servlet response instead of being buffered in
- * memory. This is required for the three BlogAgent SSE routes and the notification SSE route;
- * a compatibility boundary must not turn a never-ending stream into a byte array.</p>
+ * memory. This is required for the notification SSE route; a compatibility boundary must not
+ * turn a never-ending stream into a byte array.</p>
  */
 @RestController
 public class ContentAutomationProxyController {
@@ -43,9 +43,6 @@ public class ContentAutomationProxyController {
     }
 
     @RequestMapping({
-            "/api/blog-agent/tasks/{id}/events",
-            "/api/blog-agent/tasks/{id}/messages/stream",
-            "/api/blog-agent/tasks/{id}/run/stream",
             "/api/blog-plans/**",
             "/api/notifications/events"
     })

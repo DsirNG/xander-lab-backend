@@ -116,6 +116,11 @@ public class BlogAgentModelClient {
                 "本轮用户要求：\n" + userRequest + "\n\n待审校文章：\n" + content, false);
     }
 
+    /** Collects a revision result without exposing the provider's stream to another service yet. */
+    public ModelCallResult reviseArticle(String currentArticle, String instruction) {
+        return reviseArticleStream(currentArticle, instruction, ignored -> { });
+    }
+
     /** Compliance gate for auto-publishing: rejects forbidden or unsafe content. */
     public ModelCallResult reviewCompliance(String title, String content) {
         return requestJson(

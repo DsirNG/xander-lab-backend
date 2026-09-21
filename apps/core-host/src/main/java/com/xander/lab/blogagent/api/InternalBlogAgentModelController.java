@@ -93,6 +93,14 @@ public class InternalBlogAgentModelController {
         return response(modelClient.reviewArticle(request.content(), request.request()));
     }
 
+    @PostMapping("/revise")
+    public BlogAgentModelContract.Response revise(
+            @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String token,
+            @RequestBody BlogAgentModelContract.RevisionRequest request) {
+        authorize(token);
+        return response(modelClient.reviseArticle(request.content(), request.instruction()));
+    }
+
     @PostMapping("/compliance")
     public BlogAgentModelContract.Response compliance(
             @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String token,

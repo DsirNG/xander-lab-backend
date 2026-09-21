@@ -22,6 +22,7 @@ import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 
 /**
  * Durable BlogAgent command owner for content-automation.
@@ -90,27 +91,52 @@ public class BlogAgentTaskWriteService {
     }
 
     public BlogAgentTaskVO run(long userId, long taskId) {
+        return run(userId, taskId, (event, data) -> { });
+    }
+
+    public BlogAgentTaskVO run(long userId, long taskId,
+                               BiConsumer<String, String> observer) {
         claimInitialRun(userId, taskId);
         try {
             BlogAgentTask task = requireOwnedTask(userId, taskId);
             String input = task.getInput();
-            updateStage(userId, taskId, "analyze", "正在理解你的目标和文章边界");
+            updateStage(userId, taskId, "analyze", "正在理解你的目标和文章边界", observer);
             Response analysis = modelClient.analyze(input);
             JsonNode analysisPayload = requirePayload(analysis);
-            updateStage(userId, taskId, "research", "正在联网查找并核验相关资料");
+            updateStage(userId, taskId, "research", "正在联网查找并核验相关资料", observer);
             Response research = modelClient.research(input, analysisPayload);
             JsonNode researchPayload = requirePayload(research);
-            updateStage(userId, taskId, "write", "正在根据策划和调研结果撰写文章草稿");
+            updateStage(userId, taskId, "write", "正在根据策划和调研结果撰写文章草稿", observer);
             String writingInput = input
                     + "\n\n策划结果：\n" + analysisPayload
                     + "\n\n调研结果：\n" + researchPayload;
             Response article = modelClient.article(writingInput);
             JsonNode articlePayload = requirePayload(article);
-            updateStage(userId, taskId, "review", "正在进行最终逻辑与表达审校");
+            updateStage(userId, taskId, "review", "正在进行最终逻辑与表达审校", observer);
             Response review = modelClient.review(articlePayload.path("content").asText(), input);
             return finalizeReady(userId, taskId, articlePayload, review);
         } catch (RuntimeException exception) {
             markFailed(userId, taskId, exception.getMessage());
+            throw exception;
+        }
+    }
+
+    public BlogAgentTaskVO revise(long userId, long taskId, String instruction,
+                                  BiConsumer<String, String> observer) {
+        if (!StringUtils.hasText(instruction)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "修改要求不能为空");
+        }
+        claimRevision(userId, taskId, instruction.trim());
+        try {
+            String currentArticle = requireOwnedTask(userId, taskId).getContent();
+            updateStage(userId, taskId, "write", "正在根据你的新要求修改文章", observer);
+            Response revision = modelClient.revise(currentArticle, instruction.trim());
+            JsonNode articlePayload = requirePayload(revision);
+            updateStage(userId, taskId, "review", "正在检查本轮修改", observer);
+            Response review = modelClient.review(articlePayload.path("content").asText(), instruction.trim());
+            return finalizeReady(userId, taskId, articlePayload, review);
+        } catch (RuntimeException exception) {
+            markRevisionFailed(userId, taskId, exception.getMessage());
             throw exception;
         }
     }
@@ -128,13 +154,44 @@ public class BlogAgentTaskWriteService {
         throw new ResponseStatusException(HttpStatus.CONFLICT, "当前任务状态不能重新启动");
     }
 
-    private void updateStage(long userId, long taskId, String stage, String message) {
+    private void updateStage(long userId, long taskId, String stage, String message,
+                             BiConsumer<String, String> observer) {
         transactionTemplate.executeWithoutResult(status -> {
             int updated = jdbcTemplate.update(
                     "UPDATE blog_agent_task SET stage = ? WHERE id = ? AND user_id = ? AND status = 'running'",
                     stage, taskId, userId);
             if (updated != 1) throw new IllegalStateException("博客生成助手执行权已失效");
             insertMessage(taskId, "assistant", "process", stage, message);
+        });
+        observer.accept("stage", stage + "|" + message);
+    }
+
+    private void claimRevision(long userId, long taskId, String instruction) {
+        Integer updated = transactionTemplate.execute(status -> jdbcTemplate.update(
+                "UPDATE blog_agent_task SET status = 'running', stage = 'write', error_message = NULL"
+                        + " WHERE id = ? AND user_id = ? AND status = 'ready'",
+                taskId, userId));
+        if (updated != null && updated == 1) {
+            transactionTemplate.executeWithoutResult(status ->
+                    insertMessage(taskId, "user", "message", null, instruction));
+            return;
+        }
+        BlogAgentTask task = requireOwnedTask(userId, taskId);
+        if ("running".equals(task.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "任务正在执行，请勿重复提交修改");
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "当前文章尚未准备好，不能修改");
+    }
+
+    private void markRevisionFailed(long userId, long taskId, String errorMessage) {
+        transactionTemplate.executeWithoutResult(status -> {
+            int updated = jdbcTemplate.update(
+                    "UPDATE blog_agent_task SET status = 'ready', stage = 'review', error_message = ?"
+                            + " WHERE id = ? AND user_id = ? AND status = 'running'",
+                    limit(defaultText(errorMessage, "本轮修改失败"), 1000), taskId, userId);
+            if (updated == 1) {
+                insertMessage(taskId, "assistant", "process", "review", "本轮修改失败，已保留上一版文章");
+            }
         });
     }
 
@@ -185,8 +242,8 @@ public class BlogAgentTaskWriteService {
     }
 
     private void saveSources(long taskId, JsonNode sourceNodes) {
-        jdbcTemplate.update("DELETE FROM blog_agent_source WHERE task_id = ?", taskId);
         if (sourceNodes == null || !sourceNodes.isArray()) return;
+        jdbcTemplate.update("DELETE FROM blog_agent_source WHERE task_id = ?", taskId);
         for (JsonNode node : sourceNodes) {
             String url = node.path("url").asText();
             if (!StringUtils.hasText(url) || !url.startsWith("http") || url.length() > 2000) continue;

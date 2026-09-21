@@ -40,6 +40,10 @@ public class BlogAgentModelClient {
         return post("/review", new BlogAgentModelContract.ReviewRequest(content, request));
     }
 
+    public BlogAgentModelContract.Response revise(String content, String instruction) {
+        return post("/revise", new BlogAgentModelContract.RevisionRequest(content, instruction));
+    }
+
     public BlogAgentModelContract.Response compliance(String title, String content) {
         return post("/compliance",
                 new BlogAgentModelContract.ComplianceRequest(title, content));

@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "V9 section 81 backlog. Only implementation_statements counts: api_statements are the contract surface Wave 0B is building, and same-deployment-unit edges never become network calls. Shared-kernel -> business imports are not listed here; the section 21 gate owns them."
 counts:
-  implementation_statements: 19
+  implementation_statements: 20
   implementation_edges: 8
   cross_deployment_unit_statements: 0
   cross_deployment_unit_edges: 0
@@ -87,6 +87,16 @@ edges:
     implementation_statements: 2
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/automation/application/BlogPlanRunService.java
+  - from: blogagent
+    to: automation
+    from_unit: dinqor-content-automation
+    to_unit: dinqor-content-automation
+    crosses_deployment_unit: false
+    api_statements: 0
+    implementation_statements: 2
+    implementation_files:
+      - apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentStreamController.java
+      - apps/content-automation/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentModelClient.java
   - from: admin
     to: virtualpay
     from_unit: dinqor-core-host
@@ -96,15 +106,6 @@ edges:
     implementation_statements: 1
     implementation_files:
       - apps/core-host/src/main/java/com/xander/lab/admin/api/AdminVirtualPaySettingsController.java
-  - from: blogagent
-    to: automation
-    from_unit: dinqor-content-automation
-    to_unit: dinqor-content-automation
-    crosses_deployment_unit: false
-    api_statements: 0
-    implementation_statements: 1
-    implementation_files:
-      - apps/content-automation/src/main/java/com/xander/lab/blogagent/infrastructure/BlogAgentModelClient.java
   - from: profile
     to: identity
     from_unit: dinqor-core-host

@@ -55,15 +55,20 @@ hosts:
   - id: blogagent-task-sse
     deployment_unit: dinqor-content-automation
     routes:
-      - blogagent-get-blog-agent-tasks-id-events
-      - blogagent-post-blog-agent-tasks-id-messages-stream
-      - blogagent-post-blog-agent-tasks-id-run-stream
+      - blogagent-get-blog-agent-tasks-id-events-blogagentstreamcontroller
+      - blogagent-get-blog-agent-tasks-id-events-blogagentcontroller
+      - blogagent-post-blog-agent-tasks-id-messages-stream-blogagentstreamcontroller
+      - blogagent-post-blog-agent-tasks-id-messages-stream-blogagentcontroller
+      - blogagent-post-blog-agent-tasks-id-run-stream-blogagentstreamcontroller
+      - blogagent-post-blog-agent-tasks-id-run-stream-blogagentcontroller
     boundary_files:
+      - apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentStreamController.java
       - apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
     heartbeat: "SseEmitter 心跳 15s，走同一出口校验"
     tests:
+      - apps/content-automation/src/test/java/com/xander/lab/blogagent/api/BlogAgentStreamControllerTest.java
       - src/test/java/com/xander/lab/blogagent/api/BlogAgentControllerTest.java
-    notes: "三条端点共用同一个 SseSubscriber 句柄；拒绝队列满时也走同一收尾路径。"
+    notes: "新 content-automation 流使用本地 ConnectionRegistry；core-host 旧实现保留为 drain 兼容边界，直到旧流量归零。"
 
   - id: notifications-sse
     deployment_unit: dinqor-content-automation

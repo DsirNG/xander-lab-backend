@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 263
+  total: 264
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -769,54 +769,6 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
-  - id: automation-any-blog-agent-tasks-id-events
-    owner: automation
-    old:
-      method: ANY
-      path: "/api/blog-agent/tasks/{id}/events"
-    new:
-      method: ANY
-      path: "/api/v2/content/blog-agent/tasks/{id}/events"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: automation-any-blog-agent-tasks-id-messages-stream
-    owner: automation
-    old:
-      method: ANY
-      path: "/api/blog-agent/tasks/{id}/messages/stream"
-    new:
-      method: ANY
-      path: "/api/v2/content/blog-agent/tasks/{id}/messages/stream"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
-  - id: automation-any-blog-agent-tasks-id-run-stream
-    owner: automation
-    old:
-      method: ANY
-      path: "/api/blog-agent/tasks/{id}/run/stream"
-    new:
-      method: ANY
-      path: "/api/v2/content/blog-agent/tasks/{id}/run/stream"
-    clients:
-      web: pending
-      miniprogram: pending
-      admin: not_applicable
-    compatibility:
-      v1_enabled: true
-      v2_enabled: false
-    status: planned
   - id: automation-get-blog-plans
     owner: automation
     old:
@@ -1346,7 +1298,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-get-blog-agent-tasks-id-events
+  - id: blogagent-get-blog-agent-tasks-id-events-blogagentstreamcontroller
     owner: blogagent
     old:
       method: GET
@@ -1362,7 +1314,39 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-post-blog-agent-tasks-id-messages-stream
+  - id: blogagent-get-blog-agent-tasks-id-events-blogagentcontroller
+    owner: blogagent
+    old:
+      method: GET
+      path: "/api/blog-agent/tasks/{id}/events"
+    new:
+      method: GET
+      path: "/api/v2/content/blog-agent/tasks/{id}/events"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-post-blog-agent-tasks-id-messages-stream-blogagentstreamcontroller
+    owner: blogagent
+    old:
+      method: POST
+      path: "/api/blog-agent/tasks/{id}/messages/stream"
+    new:
+      method: POST
+      path: "/api/v2/content/blog-agent/tasks/{id}/messages/stream"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-post-blog-agent-tasks-id-messages-stream-blogagentcontroller
     owner: blogagent
     old:
       method: POST
@@ -1410,7 +1394,23 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: blogagent-post-blog-agent-tasks-id-run-stream
+  - id: blogagent-post-blog-agent-tasks-id-run-stream-blogagentstreamcontroller
+    owner: blogagent
+    old:
+      method: POST
+      path: "/api/blog-agent/tasks/{id}/run/stream"
+    new:
+      method: POST
+      path: "/api/v2/content/blog-agent/tasks/{id}/run/stream"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: blogagent-post-blog-agent-tasks-id-run-stream-blogagentcontroller
     owner: blogagent
     old:
       method: POST
@@ -1499,6 +1499,23 @@ entries:
     old:
       method: POST
       path: "/internal/agent/blog/model/review"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: blogagent-post-internal-agent-blog-model-revise
+    owner: blogagent
+    old:
+      method: POST
+      path: "/internal/agent/blog/model/revise"
     new:
       method: POST
       path: ""
