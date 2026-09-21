@@ -20,7 +20,7 @@ class AgentContentPostHttpAdapterTest {
     void forwardsQueryAndDeserializesTheContentPage() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://core-host:30002/internal/agent/content/list-my-posts"))
+        server.expect(requestTo("http://content-automation:30006/internal/agent/content/list-my-posts"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("X-DinQor-Internal-Token", "sync-secret"))
                 .andExpect(content().json(
@@ -39,7 +39,7 @@ class AgentContentPostHttpAdapterTest {
     void forwardsTheExplicitPublishFlag() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        server.expect(requestTo("http://core-host:30002/internal/agent/content/move-to-trash"))
+        server.expect(requestTo("http://content-automation:30006/internal/agent/content/move-to-trash"))
                 .andExpect(header("X-DinQor-Internal-Token", "sync-secret"))
                 .andExpect(content().json("{\"userId\":42,\"postId\":99}"))
                 .andRespond(withSuccess());
@@ -49,10 +49,10 @@ class AgentContentPostHttpAdapterTest {
         server.verify();
     }
 
-    private AgentCoreClientProperties properties() {
-        AgentCoreClientProperties properties = new AgentCoreClientProperties();
+    private AgentContentClientProperties properties() {
+        AgentContentClientProperties properties = new AgentContentClientProperties();
         properties.setEnabled(true);
-        properties.setBaseUrl("http://core-host:30002");
+        properties.setBaseUrl("http://content-automation:30006");
         properties.setInternalToken("sync-secret");
         return properties;
     }

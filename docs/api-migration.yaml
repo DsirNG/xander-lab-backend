@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 311
+  total: 318
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -4574,6 +4574,125 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: publishing-post-internal-agent-content-count-managed
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/content/count-managed"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: publishing-post-internal-agent-content-create
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/content/create"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: publishing-post-internal-agent-content-find-owned
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/content/find-owned"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: publishing-post-internal-agent-content-list-all-my-posts
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/content/list-all-my-posts"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: publishing-post-internal-agent-content-list-my-posts
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/content/list-my-posts"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: publishing-post-internal-agent-content-move-to-trash
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/content/move-to-trash"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: publishing-post-internal-agent-content-update
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/content/update"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: publishing-post-internal-agent-publications-postid-find-succeeded-platform
     owner: publishing
     old:

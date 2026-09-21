@@ -87,6 +87,59 @@ public class BlogPrivateReadService {
         return posts.isEmpty() ? null : posts.get(0);
     }
 
+    /** Full owned-post query used by the Agent internal content contract. */
+    public List<BlogPostVO> listAllMine(long userId, Integer status, String search,
+                                        Boolean juejinSynced, Boolean csdnSynced, Integer limit) {
+        Integer normalizedStatus = normalizeStatus(status);
+        StringBuilder sql = new StringBuilder(SELECT_COLUMNS)
+                .append(" WHERE p.user_id = ?");
+        List<Object> args = new ArrayList<>();
+        args.add(userId);
+        if (normalizedStatus == null) {
+            sql.append(" AND p.status IN (0, 1)");
+        } else {
+            sql.append(" AND p.status = ?");
+            args.add(normalizedStatus);
+        }
+        if (search != null && !search.isBlank()) {
+            sql.append(" AND (p.title LIKE CONCAT('%', ?, '%')"
+                    + " OR p.summary LIKE CONCAT('%', ?, '%'))");
+            args.add(search.trim());
+            args.add(search.trim());
+        }
+        appendSyncFilter(sql, args, "juejin", juejinSynced);
+        appendSyncFilter(sql, args, "csdn", csdnSynced);
+        sql.append(" GROUP BY p.id, p.title, p.summary, p.content, p.category_id, c.name,"
+                + " p.cover_image, p.user_id, p.author, p.published_at, p.read_time,"
+                + " p.tips, p.views, p.status"
+                + " ORDER BY COALESCE(p.published_at, p.updated_at) DESC, p.id DESC");
+        if (limit != null) {
+            int safeLimit = Math.min(Math.max(limit, 1), 100);
+            sql.append(" LIMIT ?");
+            args.add(safeLimit);
+        }
+        return jdbcTemplate.query(sql.toString(), new BlogPostRowMapper(), args.toArray());
+    }
+
+    public long countManaged(long userId) {
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM blog_post WHERE user_id = ? AND status IN (0, 1)",
+                Long.class, userId);
+        return count == null ? 0L : count;
+    }
+
+    private static void appendSyncFilter(StringBuilder sql, List<Object> args,
+                                         String platform, Boolean synced) {
+        if (synced == null) {
+            return;
+        }
+        sql.append(synced ? " AND EXISTS (" : " AND NOT EXISTS (")
+                .append("SELECT 1 FROM blog_publish_record r"
+                        + " WHERE r.task_id = -p.id AND r.platform = ?"
+                        + " AND r.status = 'SUCCEEDED')");
+        args.add(platform);
+    }
+
     private QueryParts queryParts(long userId, Integer status, String search) {
         StringBuilder where = new StringBuilder(" WHERE p.user_id = ?");
         List<Object> args = new ArrayList<>();

@@ -5,8 +5,6 @@ import com.xander.lab.content.api.ContentPostInput;
 import com.xander.lab.content.api.ContentPostPage;
 import com.xander.lab.content.api.ContentPostPort;
 import com.xander.lab.content.api.ContentPostQuery;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
@@ -16,11 +14,10 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.List;
 
-/** 通过 core-host 内网契约 API 调用内容文章服务。 */
+/** 通过 content-automation 内网契约 API 调用内容文章服务。 */
 @Component
-@ConditionalOnProperty(prefix = "agent.core-client", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "agent.content-client", name = "enabled", havingValue = "true")
 public class AgentContentPostHttpAdapter implements ContentPostPort {
-    private static final Logger log = LoggerFactory.getLogger(AgentContentPostHttpAdapter.class);
     private static final String INTERNAL_TOKEN_HEADER = "X-DinQor-Internal-Token";
 
     private final RestClient restClient;
@@ -28,13 +25,13 @@ public class AgentContentPostHttpAdapter implements ContentPostPort {
 
     @Autowired
     public AgentContentPostHttpAdapter(RestClient.Builder builder,
-                                       AgentCoreClientProperties properties) {
+                                       AgentContentClientProperties properties) {
         if (properties.getBaseUrl() == null || properties.getBaseUrl().isBlank()) {
-            throw new IllegalStateException("agent.core-client.base-url 在启用 core-client 时不能为空");
+            throw new IllegalStateException("agent.content-client.base-url 在启用 content-client 时不能为空");
         }
         if (properties.getInternalToken() == null || properties.getInternalToken().isBlank()) {
             throw new IllegalStateException(
-                    "agent.core-client.internal-token 在启用 core-client 时不能为空");
+                    "agent.content-client.internal-token 在启用 content-client 时不能为空");
         }
         String baseUrl = properties.getBaseUrl().endsWith("/")
                 ? properties.getBaseUrl().substring(0, properties.getBaseUrl().length() - 1)
@@ -98,8 +95,7 @@ public class AgentContentPostHttpAdapter implements ContentPostPort {
                     .retrieve()
                     .body(responseType);
         } catch (RestClientException exception) {
-            log.warn("core-host content boundary unavailable; rejecting content operation");
-            throw new IllegalStateException("core-host content boundary unavailable", exception);
+            throw new IllegalStateException("content-automation content boundary unavailable", exception);
         }
     }
 

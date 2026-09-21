@@ -12,6 +12,7 @@ public class ContentAutomationProperties {
     private int coreReadTimeoutMillis = 15_000;
     private int coreMaxResponseBytes = 1 * 1024 * 1024;
     private boolean publishingCreateEnabled;
+    private boolean agentContentApiEnabled;
     private String platformIntegrationBaseUrl = "http://localhost:30005";
     private String platformIntegrationInternalToken = "";
     private int platformIntegrationConnectTimeoutMillis = 2_000;
@@ -69,6 +70,14 @@ public class ContentAutomationProperties {
 
     public void setPublishingCreateEnabled(boolean publishingCreateEnabled) {
         this.publishingCreateEnabled = publishingCreateEnabled;
+    }
+
+    public boolean isAgentContentApiEnabled() {
+        return agentContentApiEnabled;
+    }
+
+    public void setAgentContentApiEnabled(boolean agentContentApiEnabled) {
+        this.agentContentApiEnabled = agentContentApiEnabled;
     }
 
     public String getPlatformIntegrationBaseUrl() {

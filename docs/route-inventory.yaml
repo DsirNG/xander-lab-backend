@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 316
+  total: 323
   streams: 12
   websocket: 1
   sse: 11
@@ -2818,6 +2818,17 @@ routes:
     handler: "com.xander.lab.blogagent.api.AgentBlogTopicSeriesController#generate"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/AgentBlogTopicSeriesController.java
     line: 40
+  - id: publishing-post-internal-agent-content-count-managed
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/count-managed"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentAgentPostController#countManaged"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentAgentPostController.java
+    line: 66
   - id: identity-post-internal-agent-content-count-managed
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -2829,6 +2840,17 @@ routes:
     handler: "com.xander.lab.identity.api.AgentContentPostController#countManaged"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
     line: 66
+  - id: publishing-post-internal-agent-content-create
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/create"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentAgentPostController#create"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentAgentPostController.java
+    line: 73
   - id: identity-post-internal-agent-content-create
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -2840,6 +2862,17 @@ routes:
     handler: "com.xander.lab.identity.api.AgentContentPostController#create"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
     line: 74
+  - id: publishing-post-internal-agent-content-find-owned
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/find-owned"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentAgentPostController#findOwned"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentAgentPostController.java
+    line: 59
   - id: identity-post-internal-agent-content-find-owned
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -2851,6 +2884,17 @@ routes:
     handler: "com.xander.lab.identity.api.AgentContentPostController#findOwned"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
     line: 59
+  - id: publishing-post-internal-agent-content-list-all-my-posts
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/list-all-my-posts"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentAgentPostController#listAllMyPosts"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentAgentPostController.java
+    line: 51
   - id: identity-post-internal-agent-content-list-all-my-posts
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -2862,6 +2906,17 @@ routes:
     handler: "com.xander.lab.identity.api.AgentContentPostController#listAllMyPosts"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
     line: 50
+  - id: publishing-post-internal-agent-content-list-my-posts
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/list-my-posts"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentAgentPostController#listMyPosts"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentAgentPostController.java
+    line: 44
   - id: identity-post-internal-agent-content-list-my-posts
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -2873,6 +2928,17 @@ routes:
     handler: "com.xander.lab.identity.api.AgentContentPostController#listMyPosts"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
     line: 43
+  - id: publishing-post-internal-agent-content-move-to-trash
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/move-to-trash"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentAgentPostController#moveToTrash"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentAgentPostController.java
+    line: 87
   - id: identity-post-internal-agent-content-move-to-trash
     logical_owner: identity
     deployment_unit: dinqor-core-host
@@ -2884,6 +2950,17 @@ routes:
     handler: "com.xander.lab.identity.api.AgentContentPostController#moveToTrash"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentContentPostController.java
     line: 88
+  - id: publishing-post-internal-agent-content-update
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/content/update"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentAgentPostController#update"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentAgentPostController.java
+    line: 80
   - id: identity-post-internal-agent-content-update
     logical_owner: identity
     deployment_unit: dinqor-core-host

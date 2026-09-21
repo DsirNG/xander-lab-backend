@@ -13,7 +13,9 @@ import java.util.List;
  * 内部类”。</p>
  *
  * <h2>为什么是抽端口，不是把 {@code BlogService} 搬过来</h2>
- * <p>{@code BlogService} 是具体实现：{@code @Service} + {@code @RequiredArgsConstructor}，
+ * <p>{@code BlogService} 是 Core 兼容实现，Content-Automation 的
+ * {@code ContentAgentPostService} 是 Agent 内网边界实现：两者都是具体实现，
+ * 前者保留 {@code @Service} + {@code @RequiredArgsConstructor} 的旧形态，后者直接落 Content 数据，
  * 注入了四个 MyBatis mapper（{@code BlogPostMapper} / {@code BlogCategoryMapper} /
  * {@code BlogTagMapper} / {@code BlogPostViewMapper}）、{@code UserLookupPort} 与
  * {@code StringRedisTemplate}。搬进契约等于把 MyBatis 与 Redis 拖进每个消费者，

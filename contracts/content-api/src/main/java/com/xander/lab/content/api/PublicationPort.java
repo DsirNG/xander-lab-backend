@@ -4,7 +4,7 @@ package com.xander.lab.content.api;
  * 内容域对外公开的“发布与查证”端口。
  *
  * <h2>为什么这个接口必须住在中立模块</h2>
- * <p>它由 {@code publishing.application.PublicationService} 实现，调用方是 integration 域的
+ * <p>兼容期它由 Core 中的 {@code publishing.application.PublicationService} 实现，调用方是 integration 域的
  * {@code CsdnBlogSyncService} / {@code JuejinBlogSyncService}（{@code dinqor-platform-integration}）。
  * 拆服务之后让它们 import 内容域的具体 {@code @Service}，就是“一个服务直接调另一个服务的内部类”。</p>
  *
