@@ -3,6 +3,7 @@ package com.xander.lab.identity.application;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
+import com.xander.lab.core.api.SecurityEventPubSubApi;
 import com.xander.lab.identity.domain.SecurityEventOutboxEntry;
 import com.xander.lab.identity.infrastructure.SecurityEventOutboxMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,14 +51,14 @@ class RedisSecurityEventPubSubTest {
         RedisSecurityEventBroadcaster broadcaster =
                 new RedisSecurityEventBroadcaster(redisTemplate, objectMapper, properties);
         SecurityEventOutboxEntry source = event(7L, SecurityEventOutboxEntry.TYPE_ACCOUNT_DISABLED);
-        when(redisTemplate.convertAndSend(CHANNEL, objectMapper.writeValueAsString(
-                SecurityEventPubSubMessage.from(source)))).thenReturn(2L);
+        SecurityEventPubSubApi.Message message = message(source);
+        when(redisTemplate.convertAndSend(CHANNEL, objectMapper.writeValueAsString(message)))
+                .thenReturn(2L);
 
         broadcaster.publish(source);
 
-        verify(redisTemplate).convertAndSend(CHANNEL, objectMapper.writeValueAsString(
-                SecurityEventPubSubMessage.from(source)));
-        assertThat(SecurityEventPubSubMessage.from(source).payload()).contains("securityVersion");
+        verify(redisTemplate).convertAndSend(CHANNEL, objectMapper.writeValueAsString(message));
+        assertThat(message.payload()).contains("securityVersion");
     }
 
     @Test
@@ -65,8 +66,8 @@ class RedisSecurityEventPubSubTest {
         RedisSecurityEventBroadcaster broadcaster =
                 new RedisSecurityEventBroadcaster(redisTemplate, objectMapper, properties);
         SecurityEventOutboxEntry source = event(7L, SecurityEventOutboxEntry.TYPE_ACCOUNT_DISABLED);
-        when(redisTemplate.convertAndSend(CHANNEL, objectMapper.writeValueAsString(
-                SecurityEventPubSubMessage.from(source)))).thenReturn(0L);
+        when(redisTemplate.convertAndSend(CHANNEL, objectMapper.writeValueAsString(message(source))))
+                .thenReturn(0L);
 
         assertThatThrownBy(() -> broadcaster.publish(source))
                 .isInstanceOf(IllegalStateException.class)
@@ -84,7 +85,7 @@ class RedisSecurityEventPubSubTest {
                 objectMapper);
         RedisSecurityEventSubscriber subscriber =
                 new RedisSecurityEventSubscriber(objectMapper, publisher);
-        SecurityEventPubSubMessage message = SecurityEventPubSubMessage.from(
+        SecurityEventPubSubApi.Message message = message(
                 event(7L, SecurityEventOutboxEntry.TYPE_ACCOUNT_DISABLED));
         Message redisMessage = mock(Message.class);
         when(redisMessage.getBody()).thenReturn(objectMapper.writeValueAsString(message)
@@ -122,5 +123,10 @@ class RedisSecurityEventPubSubTest {
         entry.setStatus(SecurityEventOutboxEntry.STATUS_PENDING);
         entry.setAttempts(0);
         return entry;
+    }
+
+    private SecurityEventPubSubApi.Message message(SecurityEventOutboxEntry entry) {
+        return new SecurityEventPubSubApi.Message(entry.getId(), entry.getAggregateType(),
+                entry.getAggregateId(), entry.getEventType(), entry.getPayload());
     }
 }

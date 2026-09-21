@@ -2,6 +2,7 @@ package com.xander.lab.identity.application;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.core.api.SecurityEventPubSubApi;
 import com.xander.lab.identity.domain.SecurityEventOutboxEntry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +30,9 @@ public class RedisSecurityEventBroadcaster implements SecurityEventBroadcaster {
     public void publish(SecurityEventOutboxEntry entry) {
         String message;
         try {
-            message = objectMapper.writeValueAsString(SecurityEventPubSubMessage.from(entry));
+            message = objectMapper.writeValueAsString(new SecurityEventPubSubApi.Message(
+                    entry.getId(), entry.getAggregateType(), entry.getAggregateId(),
+                    entry.getEventType(), entry.getPayload()));
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("安全事件无法编码为 Pub/Sub 消息 id=" + entry.getId(), ex);
         }

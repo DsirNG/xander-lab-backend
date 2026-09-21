@@ -1,6 +1,7 @@
 package com.xander.lab.gateway;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.core.api.SecurityEventPubSubApi;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.connection.Message;
 
@@ -18,7 +19,7 @@ class GatewaySecurityEventSubscriberTest {
     void appliesMatchingAccountEvents() throws Exception {
         GatewaySecurityStateCache cache = new GatewaySecurityStateCache();
         GatewaySecurityEventSubscriber subscriber = new GatewaySecurityEventSubscriber(objectMapper, cache);
-        Message message = message(objectMapper.writeValueAsString(new GatewaySecurityEventMessage(
+        Message message = message(objectMapper.writeValueAsString(new SecurityEventPubSubApi.Message(
                 7L, "ACCOUNT", "42", "AccountDisabled",
                 "{\"accountId\":42,\"securityVersion\":3,\"occurredAt\":\""
                         + LocalDateTime.now().minusNanos(50_000_000L) + "\"}")));
@@ -28,7 +29,7 @@ class GatewaySecurityEventSubscriberTest {
         assertThat(cache.isDisabled(42L)).isTrue();
         assertThat(cache.lastPropagationLatencyMillis()).isGreaterThanOrEqualTo(0L);
 
-        Message enabled = message(objectMapper.writeValueAsString(new GatewaySecurityEventMessage(
+        Message enabled = message(objectMapper.writeValueAsString(new SecurityEventPubSubApi.Message(
                 8L, "ACCOUNT", "42", "AccountEnabled",
                 "{\"accountId\":42,\"securityVersion\":4}")));
         subscriber.onMessage(enabled, null);
@@ -40,7 +41,7 @@ class GatewaySecurityEventSubscriberTest {
     void ignoresMismatchedOrMalformedEvents() throws Exception {
         GatewaySecurityStateCache cache = new GatewaySecurityStateCache();
         GatewaySecurityEventSubscriber subscriber = new GatewaySecurityEventSubscriber(objectMapper, cache);
-        Message mismatched = message(objectMapper.writeValueAsString(new GatewaySecurityEventMessage(
+        Message mismatched = message(objectMapper.writeValueAsString(new SecurityEventPubSubApi.Message(
                 7L, "ACCOUNT", "41", "AccountDisabled",
                 "{\"accountId\":42,\"securityVersion\":3}")));
         Message malformed = message("not-json");

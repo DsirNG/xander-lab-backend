@@ -1,5 +1,6 @@
 package com.xander.lab.identity.domain;
 
+import com.xander.lab.core.api.SecurityEventPubSubApi;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -22,11 +23,11 @@ import java.time.LocalDateTime;
 public class SecurityEventOutboxEntry {
 
     /** 事件类型：账号被封禁 */
-    public static final String TYPE_ACCOUNT_DISABLED = "AccountDisabled";
+    public static final String TYPE_ACCOUNT_DISABLED = SecurityEventPubSubApi.ACCOUNT_DISABLED;
     /** 事件类型：账号被解封 */
-    public static final String TYPE_ACCOUNT_ENABLED = "AccountEnabled";
+    public static final String TYPE_ACCOUNT_ENABLED = SecurityEventPubSubApi.ACCOUNT_ENABLED;
     /** 事件类型：检测到 refresh token 重用 */
-    public static final String TYPE_REFRESH_TOKEN_REUSE = "RefreshTokenReuse";
+    public static final String TYPE_REFRESH_TOKEN_REUSE = SecurityEventPubSubApi.REFRESH_TOKEN_REUSE;
 
     /** 投递状态：待投递 */
     public static final String STATUS_PENDING = "PENDING";

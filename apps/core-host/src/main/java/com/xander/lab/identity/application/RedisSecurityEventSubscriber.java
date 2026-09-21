@@ -1,6 +1,8 @@
 package com.xander.lab.identity.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.core.api.SecurityEventPubSubApi;
+import com.xander.lab.identity.domain.SecurityEventOutboxEntry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -29,11 +31,22 @@ public class RedisSecurityEventSubscriber implements MessageListener {
     public void onMessage(Message message, byte[] pattern) {
         try {
             String raw = new String(message.getBody(), StandardCharsets.UTF_8);
-            SecurityEventPubSubMessage event = objectMapper.readValue(raw, SecurityEventPubSubMessage.class);
-            outboxPublisher.deliverLocally(event.toOutboxEntry());
+            SecurityEventPubSubApi.Message event = objectMapper.readValue(
+                    raw, SecurityEventPubSubApi.Message.class);
+            outboxPublisher.deliverLocally(toOutboxEntry(event));
         } catch (Exception ex) {
             // Pub/Sub 没有 ack/replay；异常不能打断监听线程，reconciler 会兜底恢复状态。
             log.error("[Security] Pub/Sub 安全事件处理失败，将由 reconciler 兜底: {}", ex.getMessage(), ex);
         }
+    }
+
+    private SecurityEventOutboxEntry toOutboxEntry(SecurityEventPubSubApi.Message event) {
+        SecurityEventOutboxEntry entry = new SecurityEventOutboxEntry();
+        entry.setId(event.id());
+        entry.setAggregateType(event.aggregateType());
+        entry.setAggregateId(event.aggregateId());
+        entry.setEventType(event.eventType());
+        entry.setPayload(event.payload());
+        return entry;
     }
 }

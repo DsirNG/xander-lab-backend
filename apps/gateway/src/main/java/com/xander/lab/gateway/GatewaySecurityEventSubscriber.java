@@ -2,6 +2,7 @@ package com.xander.lab.gateway;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.core.api.SecurityEventPubSubApi;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.connection.Message;
 import org.springframework.data.redis.connection.MessageListener;
@@ -25,10 +26,6 @@ import java.time.ZoneId;
 public class GatewaySecurityEventSubscriber implements MessageListener {
 
     private static final Logger log = LoggerFactory.getLogger(GatewaySecurityEventSubscriber.class);
-    /** Must stay aligned with SecurityEventOutboxEntry.TYPE_ACCOUNT_* in core-host. */
-    private static final String ACCOUNT_DISABLED = "AccountDisabled";
-    private static final String ACCOUNT_ENABLED = "AccountEnabled";
-
     private final ObjectMapper objectMapper;
     private final GatewaySecurityStateCache securityStateCache;
 
@@ -42,10 +39,10 @@ public class GatewaySecurityEventSubscriber implements MessageListener {
     public void onMessage(Message message, byte[] pattern) {
         try {
             String raw = new String(message.getBody(), StandardCharsets.UTF_8);
-            GatewaySecurityEventMessage event = objectMapper.readValue(
-                    raw, GatewaySecurityEventMessage.class);
-            if (!ACCOUNT_DISABLED.equals(event.eventType())
-                    && !ACCOUNT_ENABLED.equals(event.eventType())) {
+            SecurityEventPubSubApi.Message event = objectMapper.readValue(
+                    raw, SecurityEventPubSubApi.Message.class);
+            if (!SecurityEventPubSubApi.ACCOUNT_DISABLED.equals(event.eventType())
+                    && !SecurityEventPubSubApi.ACCOUNT_ENABLED.equals(event.eventType())) {
                 return;
             }
             apply(event);
@@ -56,7 +53,7 @@ public class GatewaySecurityEventSubscriber implements MessageListener {
         }
     }
 
-    private void apply(GatewaySecurityEventMessage event) throws Exception {
+    private void apply(SecurityEventPubSubApi.Message event) throws Exception {
         if (event.aggregateId() == null || event.payload() == null) {
             throw new IllegalArgumentException("安全事件缺少 aggregateId 或 payload");
         }
@@ -69,7 +66,8 @@ public class GatewaySecurityEventSubscriber implements MessageListener {
         }
         long securityVersion = version != null && version.canConvertToLong()
                 ? version.asLong() : 0L;
-        securityStateCache.apply(accountId.asLong(), ACCOUNT_DISABLED.equals(event.eventType()),
+        securityStateCache.apply(accountId.asLong(),
+                SecurityEventPubSubApi.ACCOUNT_DISABLED.equals(event.eventType()),
                 securityVersion, epochMillis(payload.get("occurredAt")));
     }
 

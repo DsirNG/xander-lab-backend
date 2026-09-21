@@ -368,8 +368,16 @@ empty except for shared infrastructure:
     port's *width* is an invariant nothing else guards: adding a `default` method
     compiles, moves no metric, and trips no gate, yet each method is another way
     around the boundary. `UserLookupPortTest` therefore reflects over the declared
-   methods and asserts there is exactly one — verified by injection, where a second
+    methods and asserts there is exactly one — verified by injection, where a second
    `default` method left the build green and every other test passing.
+
+    The same contract module now owns `SecurityEventPubSubApi`: the stable JSON message
+    shape and the persisted `AccountDisabled` / `AccountEnabled` / `RefreshTokenReuse`
+    event vocabulary used by the Core Redis fast path and Gateway deny-cache subscriber.
+    Keeping this vocabulary in `core-api` is deliberate: the publisher lives in
+    `dinqor-core-host`, while the subscriber lives in the WebFlux Gateway. Neither side
+    may copy the event literals or depend on the other's domain classes; a contract test
+    pins the field order and values because a mismatch would be a silent runtime failure.
 
 12. `contracts/integration-api` also holds `MailPort` — three methods, and the most
     useful thing about it is what it does *not* carry. It replaces
