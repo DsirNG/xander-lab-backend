@@ -13,6 +13,7 @@ import json
 import sys
 from dataclasses import dataclass
 from urllib.parse import urlencode
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 
@@ -50,6 +51,15 @@ def get(base_url: str, path: str, params: dict[str, str]) -> tuple[int, bytes]:
         return response.status, response.read()
 
 
+def get_url(url: str) -> tuple[int, bytes]:
+    """Read a local URL while preserving expected HTTP error statuses."""
+    try:
+        with urlopen(Request(url), timeout=10) as response:  # noqa: S310 - local smoke URL
+            return response.status, response.read()
+    except HTTPError as response:
+        return response.code, response.read()
+
+
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
@@ -63,6 +73,12 @@ def main() -> int:
         "--skip-readiness",
         action="store_true",
         help="Only verify Nacos health/config/discovery, not local service ports",
+    )
+    parser.add_argument(
+        "--gateway-port",
+        type=int,
+        default=30017,
+        help="Local host port of the Nacos-enabled Gateway smoke instance",
     )
     args = parser.parse_args()
     base_url = args.nacos_url.rstrip("/")
@@ -115,6 +131,18 @@ def main() -> int:
                     {},
                 )
                 require(status == 200, f"readiness returned HTTP {status}: {service.name}")
+
+            gateway_url = f"http://localhost:{args.gateway_port}"
+            status, _ = get_url(f"{gateway_url}/api/blog/categories")
+            require(
+                status == 200,
+                f"Gateway -> Content public route returned HTTP {status}",
+            )
+            status, _ = get_url(f"{gateway_url}/api/publishing/csdn/authorization/status")
+            require(
+                status == 401,
+                f"Gateway protected Platform route returned HTTP {status}, expected 401",
+            )
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"FAIL nacos-smoke: {exc}", file=sys.stderr)
         return 1

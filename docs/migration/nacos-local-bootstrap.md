@@ -42,9 +42,10 @@ python scripts/migration/nacos_smoke.py
 ```
 
 验收应同时确认 Nacos health、`dinqor-dev` Namespace、上述 DataId、COMMON 服务注册和
-各服务 readiness。最近一次本地验收结果为：7 个 DataId、6 个服务注册、readiness 全部
-通过。服务启动日志还应出现 `Nacos Config ... Load config ... success` 和
-`NacosServiceRegistry ... register finished`。
+各服务 readiness，并通过 Gateway 实际验证一条 `lb://` Content 公共读路由（200）和一条
+无凭据 Platform 受保护路由（401）。最近一次本地验收结果为：7 个 DataId、6 个服务注册、
+readiness 全部通过，Gateway 两条路由也通过。服务启动日志还应出现
+`Nacos Config ... Load config ... success` 和 `NacosServiceRegistry ... register finished`。
 
 Wave 1/2 Compose 默认启用 Nacos Config/Discovery，并要求注入：
 
