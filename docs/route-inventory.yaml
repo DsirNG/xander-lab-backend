@@ -3037,7 +3037,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalCredentialController#csdnStatus"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalCredentialController.java
-    line: 66
+    line: 67
   - id: integration-get-internal-platform-integration-platform-credentials-userid-juejin-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3048,7 +3048,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalCredentialController#juejinStatus"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalCredentialController.java
-    line: 78
+    line: 79
   - id: identity-get-internal-security-state-changes
     logical_owner: identity
     deployment_unit: dinqor-core-host

@@ -4,6 +4,7 @@ server:
 core:
   stream:
     drain-enabled: ${CORE_STREAM_DRAIN_ENABLED:false}
+    instance-id: ${CORE_STREAM_INSTANCE_ID:${HOSTNAME:unknown}}
 
 spring:
   config:

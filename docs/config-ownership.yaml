@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 660
-  service_private: 572
+  total: 662
+  service_private: 574
   secret: 76
   shared: 12
 config:
@@ -1399,6 +1399,16 @@ config:
     owner: core
     nacos_group: DINQOR-CORE
   - key: core.stream.drain-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/core/stream/CoreHostStreamProperties.java
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: core.stream.instance-id
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: core.stream.instance-id
     source: apps/core-host/src/main/java/com/xander/lab/core/stream/CoreHostStreamProperties.java
     classification: service_private
     owner: core

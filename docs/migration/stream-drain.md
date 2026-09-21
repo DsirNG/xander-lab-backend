@@ -190,7 +190,7 @@ deny cache event 丢失后的 reconcile
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| 旧流存量与 drain 开关 | Core 的旧 BlogAgent / 通知 SSE 已接入逐实例 `legacy_agent_sse_active`、`legacy_content_sse_active` 和 `core_legacy_stream_drain_enabled`；指标仍需接入部署侧 instance 标签并由发布流程逐实例读取 | 代码已落地，发布侧待接入 |
+| 旧流存量与 drain 开关 | Core 的旧 BlogAgent / 通知 SSE 已接入逐实例 `legacy_agent_sse_active`、`legacy_content_sse_active` 和 `core_legacy_stream_drain_enabled`；三项指标统一带 `instance` 标签，实例 ID 由 `CORE_STREAM_INSTANCE_ID`（默认回退 `HOSTNAME`）提供 | ✅ 代码、Wave 1 Compose 模板与本地运行验证已完成；生产发布流程仍需逐实例读取 |
 | 关闭速率与重连成功率 | `drain_connection_close_rate`、`client_reconnect_success_rate` 仍需要客户端/网关观测，不能用服务端存量指标伪造 | Wave 2 |
 | Phase 3 的「迁移/重连信号」协议未定义 | 5 分钟到点后要"主动发送迁移/重连信号"，但 SSE / WS 上用什么事件名、客户端如何响应尚未设计。当前 SSE 无应用层关闭码（见 `stream-security.md` §4.1），这个信号只能走普通事件帧 | Wave 2 设计 |
 | 无空闲超时兜底 | SSE `SseEmitter(0L)` 永不超时，WS 也没有空闲超时；Phase 3 的上限是唯一的时间边界 | 设计取舍 |
