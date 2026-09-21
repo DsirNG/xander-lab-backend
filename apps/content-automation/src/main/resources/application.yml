@@ -49,6 +49,8 @@ content-automation:
     request-timeout-ms: ${CONTENT_AUTOMATION_SECURITY_STATE_REQUEST_TIMEOUT_MS:2000}
   stream:
     drain-enabled: ${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}
+  plan-executor:
+    enabled: ${CONTENT_AUTOMATION_PLAN_EXECUTOR_ENABLED:false}
 
 blog-content-plan:
   max-active-per-user: ${BLOG_CONTENT_PLAN_MAX_ACTIVE_PER_USER:50}

@@ -16,7 +16,7 @@ import com.xander.lab.common.security.SecurityPlaneConfiguration;
         "com.xander.lab.publishing",
         "com.xander.lab.blogagent"
 })
-@EnableConfigurationProperties(ContentAutomationProperties.class)
+@EnableConfigurationProperties({ContentAutomationProperties.class, ContentPlanExecutionProperties.class})
 @Import(SecurityPlaneConfiguration.class)
 public class ContentAutomationApplication {
 

@@ -1057,7 +1057,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogPlanTriggerController#trigger"
     file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogPlanTriggerController.java
-    line: 20
+    line: 22
   - id: publishing-get-blog-categories
     logical_owner: publishing
     deployment_unit: dinqor-content-automation

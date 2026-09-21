@@ -79,7 +79,7 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
 ## Config keys
 
-- total keys: **839** (leaf: 599)
+- total keys: **842** (leaf: 601)
 - unassigned leaves: **61**
 
   - `management.endpoints.web.exposure.include` (apps/agent/src/main/resources/application.yml)
@@ -149,17 +149,17 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 Counted from `import com.xander.lab.<other domain>.<layer>...`. Only the
 implementation layer is backlog; `api` is the contract surface Wave 0B builds.
 
-- implementation statements: **20** across 8 edges
+- implementation statements: **26** across 8 edges
 - of which cross a deployment unit (the real backlog): **0** across 0 edges
-- api-layer statements (contract surface): **11**
+- api-layer statements (contract surface): **15**
 
 | from | to | impl | api | crosses unit | from unit -> to unit |
 |---|---|---|---|---|---|
+| automation | blogagent | 9 | 4 | no | dinqor-content-automation -> dinqor-content-automation |
 | virtualpay | identity | 5 | 0 | no | dinqor-core-host -> dinqor-core-host |
-| automation | blogagent | 4 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
+| automation | publishing | 3 | 2 | no | dinqor-content-automation -> dinqor-content-automation |
 | blogagent | publishing | 3 | 4 | no | dinqor-content-automation -> dinqor-content-automation |
 | admin | identity | 2 | 2 | no | dinqor-core-host -> dinqor-core-host |
-| automation | publishing | 2 | 0 | no | dinqor-content-automation -> dinqor-content-automation |
 | blogagent | automation | 2 | 0 | no | dinqor-content-automation -> dinqor-content-automation |
 | admin | virtualpay | 1 | 1 | no | dinqor-core-host -> dinqor-core-host |
 | profile | identity | 1 | 1 | no | dinqor-core-host -> dinqor-core-host |
