@@ -134,6 +134,50 @@ public class PlatformCsdnCredentialStore {
         }
     }
 
+    /** Returns the decrypted active browser cookie only to the Platform vendor adapter. */
+    public String requireCookie(Long userId) {
+        if (userId == null || userId <= 0) {
+            throw new IllegalArgumentException("凭证属主参数非法");
+        }
+        String status = null;
+        String encrypted = null;
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement(SELECT)) {
+            statement.setQueryTimeout(queryTimeout());
+            statement.setLong(1, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) {
+                    status = result.getString(1);
+                    encrypted = result.getString(2);
+                }
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("读取 CSDN 授权失败", exception);
+        }
+        if (!"ACTIVE".equals(status) || !hasText(encrypted)) {
+            throw new IllegalStateException("CSDN authorization is required");
+        }
+        try {
+            return decrypt(encrypted);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to read CSDN authorization", exception);
+        }
+    }
+
+    /** Moves only an active row to EXPIRED after a provider-authentication failure. */
+    public void markExpired(Long userId) {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE csdn_platform_credential SET status = 'EXPIRED' "
+                             + "WHERE user_id = ? AND status = 'ACTIVE'")) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
+        } catch (Exception exception) {
+            log.warn("[PlatformCredential] failed to mark CSDN credential expired userId={} reason={}",
+                    userId, exception.getMessage());
+        }
+    }
+
     private Connection connection() throws Exception {
         return DriverManager.getConnection(integrationProperties.getCredentialStoreUrl(),
                 integrationProperties.getCredentialStoreUsername(),
@@ -152,6 +196,17 @@ public class PlatformCsdnCredentialStore {
         return Base64.getEncoder().encodeToString(iv) + "."
                 + Base64.getEncoder().encodeToString(
                 cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private String decrypt(String value) throws Exception {
+        String[] parts = value.split("\\.", 2);
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("invalid encrypted credential");
+        }
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, key,
+                new GCMParameterSpec(128, Base64.getDecoder().decode(parts[0])));
+        return new String(cipher.doFinal(Base64.getDecoder().decode(parts[1])), StandardCharsets.UTF_8);
     }
 
     private boolean hasText(String value) {

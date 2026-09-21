@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 747
-  service_private: 652
-  secret: 83
+  total: 757
+  service_private: 658
+  secret: 87
   shared: 12
 config:
   - key: agent.conversation.compaction-enabled
@@ -2153,12 +2153,32 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.api-key
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.api-key
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.csdn.authorization-timeout-seconds
     source: apps/platform-integration/src/main/resources/application.yml
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.csdn.authorization-timeout-seconds
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.base-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.base-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
     classification: service_private
     owner: integration
@@ -2173,6 +2193,16 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.connect-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.connect-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.csdn.credential-encryption-key
     source: apps/platform-integration/src/main/resources/application.yml
     classification: secret
@@ -2183,6 +2213,16 @@ config:
     classification: secret
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.read-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.read-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.csdn.selenium-url
     source: apps/platform-integration/src/main/resources/application.yml
     classification: service_private
@@ -2191,6 +2231,16 @@ config:
   - key: platform-integration.csdn.selenium-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
     classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.web-console-secret
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.csdn.web-console-secret
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    classification: secret
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.internal-api-enabled

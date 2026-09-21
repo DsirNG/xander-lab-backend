@@ -21,10 +21,15 @@ platform-integration:
   juejin-catalog-enabled: false
   authorization-enabled: false
   csdn:
+    base-url: ${CSDN_API_BASE_URL:https://bizapi.csdn.net}
+    api-key: ${CSDN_API_KEY:}
+    web-console-secret: ${CSDN_WEB_CONSOLE_SECRET:9znpamsyl2c7cdrr9sas0le9vbc3r6ba}
     selenium-url: ${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}
     credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
     authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:35}
     cleanup-interval-ms: ${CSDN_AUTHORIZATION_CLEANUP_INTERVAL_MS:15000}
+    connect-timeout-millis: ${CSDN_CONNECT_TIMEOUT_MILLIS:10000}
+    read-timeout-millis: ${CSDN_READ_TIMEOUT_MILLIS:30000}
   juejin:
     base-url: ${JUEJIN_API_BASE_URL:https://api.juejin.cn}
     default-aid: ${JUEJIN_DEFAULT_AID:2608}

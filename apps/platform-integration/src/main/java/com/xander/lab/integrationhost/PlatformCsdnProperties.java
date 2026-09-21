@@ -8,10 +8,39 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "platform-integration.csdn")
 public class PlatformCsdnProperties {
 
+    private String baseUrl = "https://bizapi.csdn.net";
+    private String apiKey = "";
+    private String webConsoleSecret = "9znpamsyl2c7cdrr9sas0le9vbc3r6ba";
     private String seleniumUrl = "http://selenium:4444/wd/hub";
     private String credentialEncryptionKey = "";
     private int authorizationTimeoutSeconds = 35;
     private long cleanupIntervalMs = 15_000;
+    private int connectTimeoutMillis = 10_000;
+    private int readTimeoutMillis = 30_000;
+
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    public String getApiKey() {
+        return apiKey;
+    }
+
+    public void setApiKey(String apiKey) {
+        this.apiKey = apiKey;
+    }
+
+    public String getWebConsoleSecret() {
+        return webConsoleSecret;
+    }
+
+    public void setWebConsoleSecret(String webConsoleSecret) {
+        this.webConsoleSecret = webConsoleSecret;
+    }
 
     public String getSeleniumUrl() {
         return seleniumUrl;
@@ -43,5 +72,21 @@ public class PlatformCsdnProperties {
 
     public void setCleanupIntervalMs(long cleanupIntervalMs) {
         this.cleanupIntervalMs = cleanupIntervalMs;
+    }
+
+    public int getConnectTimeoutMillis() {
+        return connectTimeoutMillis;
+    }
+
+    public void setConnectTimeoutMillis(int connectTimeoutMillis) {
+        this.connectTimeoutMillis = connectTimeoutMillis;
+    }
+
+    public int getReadTimeoutMillis() {
+        return readTimeoutMillis;
+    }
+
+    public void setReadTimeoutMillis(int readTimeoutMillis) {
+        this.readTimeoutMillis = readTimeoutMillis;
     }
 }

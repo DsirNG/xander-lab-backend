@@ -30,10 +30,12 @@ import java.util.Optional;
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 
 /**
- * Authenticated bridge from content-automation to the Core integration compatibility boundary.
+ * Authenticated Content/Agent boundary for one-post vendor synchronization.
  *
- * <p>This bridge owns no publication state. It validates the caller token, replaces it with the
- * Core token, bounds the response, and translates transport failures to a generic 502.</p>
+ * <p>When a local Platform vendor owner is enabled and the caller supplies the ownership-checked
+ * article projection, the write stays local. Legacy id-only requests continue through the Core
+ * compatibility boundary; that path validates the caller token, replaces it with the Core token,
+ * bounds the response, and translates transport failures to a generic 502.</p>
  */
 @RestController
 @RequestMapping("/internal/platform-integration/blog-posts")
@@ -47,12 +49,14 @@ public class PlatformIntegrationInternalSyncController {
     private final PlatformIntegrationProperties properties;
     private final ObjectMapper objectMapper;
     private final Optional<PlatformJuejinPublisher> juejinPublisher;
+    private final Optional<PlatformCsdnPublisher> csdnPublisher;
 
     @Autowired
     public PlatformIntegrationInternalSyncController(RestClient.Builder restClientBuilder,
                                                       PlatformIntegrationProperties properties,
                                                       ObjectMapper objectMapper,
-                                                      Optional<PlatformJuejinPublisher> juejinPublisher) {
+                                                      Optional<PlatformJuejinPublisher> juejinPublisher,
+                                                      Optional<PlatformCsdnPublisher> csdnPublisher) {
         if (properties.getInternalToken() == null || properties.getInternalToken().isBlank()) {
             throw new IllegalStateException(
                     "platform-integration.internal-token 在启用内网站外同步 API 时不能为空");
@@ -68,13 +72,22 @@ public class PlatformIntegrationInternalSyncController {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.juejinPublisher = juejinPublisher;
+        this.csdnPublisher = csdnPublisher;
     }
 
     /** Compatibility constructor used by the Core-bridge unit tests and legacy callers. */
     public PlatformIntegrationInternalSyncController(RestClient.Builder restClientBuilder,
                                                       PlatformIntegrationProperties properties,
                                                       ObjectMapper objectMapper) {
-        this(restClientBuilder, properties, objectMapper, Optional.empty());
+        this(restClientBuilder, properties, objectMapper, Optional.empty(), Optional.empty());
+    }
+
+    /** Compatibility constructor for tests that inject only the Juejin owner. */
+    public PlatformIntegrationInternalSyncController(RestClient.Builder restClientBuilder,
+                                                      PlatformIntegrationProperties properties,
+                                                      ObjectMapper objectMapper,
+                                                      Optional<PlatformJuejinPublisher> juejinPublisher) {
+        this(restClientBuilder, properties, objectMapper, juejinPublisher, Optional.empty());
     }
 
     /** Forwards one CSDN sync while replacing the caller token with the Core token. */
@@ -85,6 +98,15 @@ public class PlatformIntegrationInternalSyncController {
             @RequestBody CsdnSyncRequest request) {
         authorize(token);
         validatePost(postId, request.userId(), request.postId());
+        if (csdnPublisher.isPresent() && request.post() != null) {
+            BlogPostPayload post = request.post();
+            if (post.id() != null && !postId.equals(post.id())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "站外同步文章载荷非法");
+            }
+            return csdnPublisher.get().publish(new PlatformCsdnPublisher.PublishRequest(
+                    request.userId(), postId, post.title(), post.summary(), post.content(),
+                    post.categoryName(), post.coverImage(), post.tags()));
+        }
         return forward("/internal/integration/blog-posts/" + postId + "/sync/csdn",
                 new CsdnSyncRequest(request.userId(), postId));
     }
@@ -221,7 +243,10 @@ public class PlatformIntegrationInternalSyncController {
         return Math.max(1, value);
     }
 
-    public record CsdnSyncRequest(Long userId, Long postId) {
+    public record CsdnSyncRequest(Long userId, Long postId, BlogPostPayload post) {
+        public CsdnSyncRequest(Long userId, Long postId) {
+            this(userId, postId, null);
+        }
     }
 
     public record JuejinSyncRequest(Long userId, Long postId, String juejinCategoryId,

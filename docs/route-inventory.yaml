@@ -3279,7 +3279,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#findSucceededCsdn"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
-    line: 117
+    line: 139
   - id: integration-post-internal-platform-integration-blog-posts-postid-find-succeeded-juejin
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3290,7 +3290,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#findSucceededJuejin"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
-    line: 129
+    line: 151
   - id: integration-post-internal-platform-integration-blog-posts-postid-sync-csdn
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3301,7 +3301,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#syncCsdn"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
-    line: 81
+    line: 94
   - id: integration-post-internal-platform-integration-blog-posts-postid-sync-juejin
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3312,7 +3312,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#syncJuejin"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
-    line: 93
+    line: 115
   - id: integration-get-internal-platform-integration-files-download-filename
     logical_owner: integration
     deployment_unit: dinqor-platform-integration

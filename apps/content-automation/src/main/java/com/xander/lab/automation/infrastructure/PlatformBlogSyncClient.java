@@ -64,7 +64,11 @@ public class PlatformBlogSyncClient {
 
     /** Publishes the local post to CSDN through platform-integration. */
     public BlogSyncResult syncCsdn(Long userId, Long postId) {
-        return sync("csdn", userId, postId, new CsdnSyncRequest(userId, postId));
+        BlogPostVO post = privateReadService.map(service -> service.findMine(userId, postId)).orElse(null);
+        if (privateReadService.isPresent() && post == null) {
+            throw new IllegalArgumentException("Blog post does not exist");
+        }
+        return sync("csdn", userId, postId, new CsdnSyncRequest(userId, postId, toPayload(post)));
     }
 
     /** Publishes the local post to Juejin through platform-integration. */
@@ -147,7 +151,7 @@ public class PlatformBlogSyncClient {
         return Math.max(1, value);
     }
 
-    private record CsdnSyncRequest(Long userId, Long postId) {
+    private record CsdnSyncRequest(Long userId, Long postId, BlogPostPayload post) {
     }
 
     private record JuejinSyncRequest(Long userId, Long postId, String juejinCategoryId,

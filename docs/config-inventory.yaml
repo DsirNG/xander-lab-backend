@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 1003
-  leaves: 747
+  total: 1013
+  leaves: 757
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -3675,6 +3675,21 @@ config:
     value: ""
     leaf: false
     logical_owner: integration
+  - key: platform-integration.csdn.base-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${CSDN_API_BASE_URL:https://bizapi.csdn.net}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.csdn.api-key
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${CSDN_API_KEY:}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.csdn.web-console-secret
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${CSDN_WEB_CONSOLE_SECRET:9znpamsyl2c7cdrr9sas0le9vbc3r6ba}"
+    leaf: true
+    logical_owner: integration
   - key: platform-integration.csdn.selenium-url
     source: apps/platform-integration/src/main/resources/application.yml
     value: "${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}"
@@ -3693,6 +3708,16 @@ config:
   - key: platform-integration.csdn.cleanup-interval-ms
     source: apps/platform-integration/src/main/resources/application.yml
     value: "${CSDN_AUTHORIZATION_CLEANUP_INTERVAL_MS:15000}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.csdn.connect-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${CSDN_CONNECT_TIMEOUT_MILLIS:10000}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.csdn.read-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${CSDN_READ_TIMEOUT_MILLIS:30000}"
     leaf: true
     logical_owner: integration
   - key: platform-integration.juejin
@@ -5304,34 +5329,69 @@ config:
     logical_owner: unassigned
     source_kind: java-configuration-properties
     line: 19
-  - key: platform-integration.csdn.authorization-timeout-seconds
-    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 13
-  - key: platform-integration.csdn.cleanup-interval-ms
-    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: integration
-    source_kind: java-configuration-properties
-    line: 14
-  - key: platform-integration.csdn.credential-encryption-key
+  - key: platform-integration.csdn.api-key
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 12
-  - key: platform-integration.csdn.selenium-url
+  - key: platform-integration.csdn.authorization-timeout-seconds
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 16
+  - key: platform-integration.csdn.base-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 11
+  - key: platform-integration.csdn.cleanup-interval-ms
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 17
+  - key: platform-integration.csdn.connect-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 18
+  - key: platform-integration.csdn.credential-encryption-key
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 15
+  - key: platform-integration.csdn.read-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 19
+  - key: platform-integration.csdn.selenium-url
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 14
+  - key: platform-integration.csdn.web-console-secret
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 13
   - key: platform-integration.connect-timeout-millis
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"

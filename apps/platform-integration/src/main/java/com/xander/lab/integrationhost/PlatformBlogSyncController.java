@@ -16,9 +16,9 @@ import java.util.Map;
 /**
  * Platform-owned public boundary for one-post vendor synchronization.
  *
- * <p>The public route now resolves the caller and owns the wire response here. During the
- * compatibility phase the actual vendor write is still executed through the token-protected
- * Core bridge, so there is one write path and no dual-owner publication state.</p>
+ * <p>The public route resolves the caller and owns the wire response here. It remains an id-only
+ * compatibility entry during the staged cutover, so it uses the Core bridge until a caller that
+ * owns the article projection uses the internal Platform boundary.</p>
  */
 @RestController
 @RequestMapping("/api/blog/posts")

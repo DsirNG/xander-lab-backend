@@ -69,8 +69,12 @@ public class AgentPlatformBlogSyncClient {
     }
 
     public BlogSyncResult syncCsdn(Long userId, Long postId) {
+        ContentPost post = contentPostPort.map(port -> port.findOwned(userId, postId)).orElse(null);
+        if (contentPostPort.isPresent() && post == null) {
+            throw new IllegalArgumentException("Blog post does not exist");
+        }
         return post("/internal/platform-integration/blog-posts/" + postId + "/sync/csdn",
-                new CsdnRequest(userId, postId), false);
+                new CsdnRequest(userId, postId, toPayload(post)), false);
     }
 
     public BlogSyncResult syncJuejin(Long userId, Long postId,
@@ -86,12 +90,12 @@ public class AgentPlatformBlogSyncClient {
 
     public BlogSyncResult findSucceededCsdn(Long userId, Long postId) {
         return post("/internal/platform-integration/blog-posts/" + postId + "/find-succeeded/csdn",
-                new CsdnRequest(userId, postId), true);
+                new CsdnRequest(userId, postId, null), true);
     }
 
     public BlogSyncResult findSucceededJuejin(Long userId, Long postId) {
         return post("/internal/platform-integration/blog-posts/" + postId + "/find-succeeded/juejin",
-                new CsdnRequest(userId, postId), true);
+                new CsdnRequest(userId, postId, null), true);
     }
 
     private BlogSyncResult post(String path, Object request, boolean allowEmpty) {
@@ -168,7 +172,7 @@ public class AgentPlatformBlogSyncClient {
         return Math.max(1, value);
     }
 
-    private record CsdnRequest(Long userId, Long postId) {
+    private record CsdnRequest(Long userId, Long postId, BlogPostPayload post) {
     }
 
     private record JuejinRequest(Long userId, Long postId, String juejinCategoryId,
