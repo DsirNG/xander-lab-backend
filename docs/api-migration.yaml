@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 277
+  total: 279
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -2492,7 +2492,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-post-blog-posts-postid-sync-csdn
+  - id: integration-post-blog-posts-postid-sync-csdn-csdnblogsynccontroller
     owner: integration
     old:
       method: POST
@@ -2508,7 +2508,39 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-post-blog-posts-postid-sync-juejin
+  - id: integration-post-blog-posts-postid-sync-csdn-platformblogsynccontroller
+    owner: integration
+    old:
+      method: POST
+      path: "/api/blog/posts/{postId}/sync/csdn"
+    new:
+      method: POST
+      path: "/api/v2/content/blog/posts/{postId}/sync/csdn"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-blog-posts-postid-sync-juejin-juejinblogsynccontroller
+    owner: integration
+    old:
+      method: POST
+      path: "/api/blog/posts/{postId}/sync/juejin"
+    new:
+      method: POST
+      path: "/api/v2/content/blog/posts/{postId}/sync/juejin"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-blog-posts-postid-sync-juejin-platformblogsynccontroller
     owner: integration
     old:
       method: POST

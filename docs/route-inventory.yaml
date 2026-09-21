@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 282
+  total: 284
   streams: 12
   websocket: 1
   sse: 11
@@ -1267,7 +1267,7 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogPublicViewController#recordView"
     file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPublicViewController.java
     line: 23
-  - id: integration-post-blog-posts-postid-sync-csdn
+  - id: integration-post-blog-posts-postid-sync-csdn-csdnblogsynccontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1278,7 +1278,18 @@ routes:
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnBlogSyncController#sync"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnBlogSyncController.java
     line: 20
-  - id: integration-post-blog-posts-postid-sync-juejin
+  - id: integration-post-blog-posts-postid-sync-csdn-platformblogsynccontroller
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/api/blog/posts/{postId}/sync/csdn"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformBlogSyncController#syncCsdn"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformBlogSyncController.java
+    line: 41
+  - id: integration-post-blog-posts-postid-sync-juejin-juejinblogsynccontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1289,6 +1300,17 @@ routes:
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinBlogSyncController#sync"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinBlogSyncController.java
     line: 30
+  - id: integration-post-blog-posts-postid-sync-juejin-platformblogsynccontroller
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/api/blog/posts/{postId}/sync/juejin"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformBlogSyncController#syncJuejin"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformBlogSyncController.java
+    line: 53
   - id: publishing-get-blog-tags
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
