@@ -1915,8 +1915,6 @@ def gate_nacos_completed_cutover() -> None:
             "blogagent-stream-enabled"), False),
         "core.legacy.notification-stream-enabled": (core_legacy.get(
             "notification-stream-enabled"), False),
-        "core.legacy.platform-public-enabled": (core_legacy.get(
-            "platform-public-enabled"), False),
         "gateway.content-publishing-create-enabled": (gateway.get(
             "content-publishing-create-enabled"), True),
         "content-automation.publishing-create-enabled": (content.get(

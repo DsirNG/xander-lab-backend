@@ -30,7 +30,7 @@ core:
     publishing-create-enabled: false
     blogagent-stream-enabled: false
     notification-stream-enabled: false
-    platform-public-enabled: false
+    platform-public-enabled: true
     blog-content-plan-scheduler-enabled: false
     email-reminder-scheduler-enabled: true
 
