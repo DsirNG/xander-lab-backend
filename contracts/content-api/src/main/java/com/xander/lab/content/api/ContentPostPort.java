@@ -16,9 +16,8 @@ import java.util.List;
  * <p>{@code BlogService} 是 Core 兼容实现，Content-Automation 的
  * {@code ContentAgentPostService} 是 Agent 内网边界实现：两者都是具体实现，
  * 前者保留 {@code @Service} + {@code @RequiredArgsConstructor} 的旧形态，后者直接落 Content 数据，
- * 注入了四个 MyBatis mapper（{@code BlogPostMapper} / {@code BlogCategoryMapper} /
- * {@code BlogTagMapper} / {@code BlogPostViewMapper}）、{@code UserLookupPort} 与
- * {@code StringRedisTemplate}。搬进契约等于把 MyBatis 与 Redis 拖进每个消费者，
+ * 通过 Content 自己的 JDBC 读写服务与 {@code StringRedisTemplate} 访问数据。搬进契约等于把
+ * JDBC 与 Redis 拖进每个消费者，
  * 那会把它拖进 spring-webmvc，启动就失败。所以只在契约里描述接口，实现留在内容域。</p>
  *
  * <h2>⚠️ 为什么每个方法都要显式收 {@code userId}</h2>

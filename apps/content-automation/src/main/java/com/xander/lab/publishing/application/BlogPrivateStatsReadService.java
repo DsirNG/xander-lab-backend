@@ -14,6 +14,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /** Database/Redis-backed private publishing status and dashboard reads. */
 @Service
@@ -52,6 +53,15 @@ public class BlogPrivateStatsReadService {
         }
         redisTemplate.delete(key);
         return null;
+    }
+
+    /** Remembers a committed publish request for the retry/status compatibility contract. */
+    public void rememberPublishedPostId(long userId, String requestId, long postId) {
+        if (requestId == null || requestId.isBlank()) {
+            return;
+        }
+        redisTemplate.opsForValue().set(PUBLISH_REQUEST_PREFIX + userId + ":" + requestId.trim(),
+                Long.toString(postId), 24, TimeUnit.HOURS);
     }
 
     public BlogPublishRhythmVO weeklyPublishRhythm(long userId, LocalDate today) {

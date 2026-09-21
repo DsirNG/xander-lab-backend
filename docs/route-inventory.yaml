@@ -1123,7 +1123,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogCreateController#create"
     file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogCreateController.java
-    line: 31
+    line: 26
   - id: publishing-post-blog-posts-blogcontroller
     logical_owner: publishing
     deployment_unit: dinqor-content-automation

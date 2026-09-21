@@ -25,13 +25,16 @@ public class ContentAgentPostService implements ContentPostPort {
 
     private final JdbcTemplate jdbcTemplate;
     private final BlogPrivateReadService privateReadService;
+    private final BlogPrivateStatsReadService privateStatsReadService;
     private final BlogMutationService mutationService;
 
     public ContentAgentPostService(JdbcTemplate jdbcTemplate,
                                    BlogPrivateReadService privateReadService,
+                                   BlogPrivateStatsReadService privateStatsReadService,
                                    BlogMutationService mutationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.privateReadService = privateReadService;
+        this.privateStatsReadService = privateStatsReadService;
         this.mutationService = mutationService;
     }
 
@@ -72,9 +75,21 @@ public class ContentAgentPostService implements ContentPostPort {
     @Override
     @Transactional
     public ContentPost create(Long userId, ContentPostInput input, boolean publish) {
+        return toContract(createBlog(userId, input, publish, null));
+    }
+
+    /** Creates a post for Content's public publishing boundary with retry-safe request semantics. */
+    @Transactional
+    public BlogPostVO createBlog(Long userId, ContentPostInput input, boolean publish, String requestId) {
         requireUser(userId);
         if (input == null || blank(input.title()) || blank(input.content())) {
             throw new IllegalArgumentException("标题和正文不能为空");
+        }
+        if (publish && requestId != null && !requestId.isBlank()) {
+            Long existingId = privateStatsReadService.publishedPostId(userId, requestId);
+            if (existingId != null) {
+                return privateReadService.findMine(userId, existingId);
+            }
         }
         String title = input.title().trim();
         String content = input.content();
@@ -91,18 +106,19 @@ public class ContentAgentPostService implements ContentPostPort {
         String finalAuthor = author;
         jdbcTemplate.update(connection -> {
             PreparedStatement statement = connection.prepareStatement(
-                    "INSERT INTO blog_post (user_id, title, summary, content, category_id, author,"
-                            + " read_time, status, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO blog_post (user_id, title, summary, content, cover_image, category_id, author,"
+                            + " read_time, status, published_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS);
             statement.setLong(1, userId);
             statement.setString(2, title);
             statement.setString(3, finalSummary);
             statement.setString(4, content);
-            statement.setString(5, input.categoryId());
-            statement.setString(6, finalAuthor);
-            statement.setString(7, Math.max(1, content.length() / 500) + " min");
-            statement.setInt(8, publish ? 1 : 0);
-            statement.setObject(9, publish ? LocalDate.now() : null);
+            statement.setString(5, input.coverImage());
+            statement.setString(6, input.categoryId());
+            statement.setString(7, finalAuthor);
+            statement.setString(8, Math.max(1, content.length() / 500) + " min");
+            statement.setInt(9, publish ? 1 : 0);
+            statement.setObject(10, publish ? LocalDate.now() : null);
             return statement;
         }, keyHolder);
         Number key = keyHolder.getKey();
@@ -110,7 +126,10 @@ public class ContentAgentPostService implements ContentPostPort {
             throw new IllegalStateException("文章发布失败");
         }
         saveTags(key.longValue(), input.tags());
-        return toContract(privateReadService.findMine(userId, key.longValue()));
+        if (publish && requestId != null && !requestId.isBlank()) {
+            privateStatsReadService.rememberPublishedPostId(userId, requestId, key.longValue());
+        }
+        return privateReadService.findMine(userId, key.longValue());
     }
 
     @Override

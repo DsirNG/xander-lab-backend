@@ -1,8 +1,8 @@
 package com.xander.lab.publishing.api;
 
-import com.xander.lab.automation.host.ContentAutomationProperties;
 import com.xander.lab.common.Result;
-import com.xander.lab.publishing.infrastructure.ContentBlogCreateClient;
+import com.xander.lab.content.api.ContentPostInput;
+import com.xander.lab.publishing.application.ContentAgentPostService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,15 +17,10 @@ import org.springframework.web.bind.annotation.RestController;
         havingValue = "true")
 public class BlogCreateController {
 
-    private final ContentBlogCreateClient client;
+    private final ContentAgentPostService service;
 
-    public BlogCreateController(ContentBlogCreateClient client, ContentAutomationProperties properties) {
-        if (properties.isPublishingCreateEnabled()
-                && (properties.getCoreInternalToken() == null || properties.getCoreInternalToken().isBlank())) {
-            throw new IllegalStateException(
-                    "content-automation.core-internal-token 不能为空：发文入口启用时必须配置 Core 内网令牌");
-        }
-        this.client = client;
+    public BlogCreateController(ContentAgentPostService service) {
+        this.service = service;
     }
 
     @PostMapping("/posts")
@@ -41,7 +36,9 @@ public class BlogCreateController {
             return Result.badRequest("请求体不能为空");
         }
         boolean publish = request.getPublish() == null || request.getPublish();
-        return Result.success(client.create(userId, request, publish, requestId));
+        ContentPostInput input = new ContentPostInput(request.getTitle(), request.getSummary(),
+                request.getContent(), request.getCategoryId(), request.getCoverImage(), request.getTags());
+        return Result.success(service.createBlog(userId, input, publish, requestId));
     }
 
     private Long parseUserId(String value) {
