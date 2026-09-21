@@ -348,8 +348,8 @@ protected:
     owner: publishing
   - id: blog-post-publish-sync
     match: {method: POST, path_pattern: /api/blog/posts/*}
-    owner: publishing
-    note: "同步发布到 CSDN / 掘金，私有写操作。公开的浏览计数 /view 在其上方特判。"
+    owner: integration
+    note: "Platform 接管 CSDN / 掘金同步入口；兼容期实际供应商写入经唯一 Core 内部桥执行。公开的浏览计数 /view 在其上方特判。"
   - id: blog-media-upload
     match: {method: POST, path: /api/blog/media/images}
     owner: publishing
