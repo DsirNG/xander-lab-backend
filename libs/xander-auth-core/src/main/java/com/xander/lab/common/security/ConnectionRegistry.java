@@ -42,6 +42,12 @@ public class ConnectionRegistry {
      */
     public static final String REASON_ACCOUNT_DISABLED = "ACCOUNT_DISABLED";
 
+    /** 旧宿主进入 Phase 3 deadline 后，请客户端迁移并建立新连接。 */
+    public static final String REASON_STREAM_MIGRATION = "STREAM_MIGRATION";
+
+    /** SSE 迁移信号的稳定事件名；客户端收到后应立即重连到新宿主。 */
+    public static final String SSE_EVENT_STREAM_MIGRATE = "stream-migrate";
+
     /**
      * 账号封禁时 WS 使用的应用层 Close Code。
      *

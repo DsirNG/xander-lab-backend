@@ -5,6 +5,7 @@ import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.core.stream.CoreHostStreamProperties;
+import com.xander.lab.core.stream.CoreLegacyStreamDrainRegistry;
 import com.xander.lab.core.stream.CoreLegacyStreamState;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
@@ -69,6 +70,25 @@ class BlogAgentControllerTest {
         assertThatCode(() -> controller.send(subscriber, "delta", "content"))
                 .doesNotThrowAnyException();
         assertThat(subscriber.isOpen()).isFalse();
+    }
+
+    @Test
+    void legacyDrainSendsMigrationSignalBeforeCompletingSse() throws Exception {
+        ConnectionRegistry connectionRegistry = new ConnectionRegistry();
+        CoreLegacyStreamDrainRegistry drainRegistry = new CoreLegacyStreamDrainRegistry();
+        CoreLegacyStreamState streamState = new CoreLegacyStreamState();
+        streamState.openedLegacyAgentSse();
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter = mock(SseEmitter.class);
+        BlogAgentController.SseSubscriber subscriber = new BlogAgentController.SseSubscriber(
+                connectionRegistry, drainRegistry, streamState, 7L, 42L, emitter);
+        drainRegistry.register(subscriber);
+
+        subscriber.close(ConnectionRegistry.REASON_STREAM_MIGRATION);
+
+        verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter).complete();
+        assertThat(streamState.legacyAgentSseActive()).isZero();
+        assertThat(drainRegistry.activeCount()).isZero();
     }
 
     @Test

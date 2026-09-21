@@ -38,7 +38,7 @@ REVOKE 发生在 Drain 之前
 |---|---|---|
 | **1. Route Cut** | 新建 SSE/WS 全部进入新服务 | 新服务 health 通过后才切 |
 | **2. Drain** | core-host 不再接受新连接；存量连接继续运行 | 记录 `active SSE` / `active WS` |
-| **3. Graceful Drain Deadline** | 等待自然完成；**建议上限 5 分钟**；到期主动发送迁移/重连信号并关闭剩余连接 | 到点必须动作，不能无限等 |
+| **3. Graceful Drain Deadline** | 等待自然完成；**建议上限 5 分钟**；到期发送 `stream-migrate` 迁移/重连事件并关闭剩余连接 | 到点必须动作，不能无限等 |
 | **4. Disable** | `active connection = 0`，或已完成强制 drain，才禁用旧 Controller / Handler | 逐实例判据，见 §4 |
 | **5. REVOKE** | 再撤销 core-host 对该域表的权限 | 最后一步 |
 
@@ -144,6 +144,16 @@ client_reconnect_success_rate
 - `client_reconnect_success_rate`：客户端拿到迁移/重连信号后能否成功连到新服务。
   这个值是**回滚决策的主要依据**：如果重连成功率低，drain 得再快也没意义。
 
+Core 旧 Agent/content SSE 的 Phase 3 协议已固定为：
+
+```text
+event: stream-migrate
+data: {"reason":"STREAM_MIGRATION","reconnect":true}
+```
+
+信号发送后连接正常结束；客户端应使用原有游标/订阅参数重连到新宿主。封禁仍使用
+`ACCOUNT_DISABLED` + 403，不能与迁移信号混用。
+
 ### 5.2 回滚信号（§55.3）
 
 ```text
@@ -191,8 +201,9 @@ deny cache event 丢失后的 reconcile
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | 旧流存量与 drain 开关 | Core 的旧 BlogAgent / 通知 SSE 已接入逐实例 `legacy_agent_sse_active`、`legacy_content_sse_active` 和 `core_legacy_stream_drain_enabled`；三项指标统一带 `instance` 标签，实例 ID 由 `CORE_STREAM_INSTANCE_ID`（默认回退 `HOSTNAME`）提供 | ✅ 代码、Wave 1 Compose 模板与本地运行验证已完成；生产发布流程仍需逐实例读取 |
-| 关闭速率与重连成功率 | `drain_connection_close_rate`、`client_reconnect_success_rate` 仍需要客户端/网关观测，不能用服务端存量指标伪造 | Wave 2 |
-| Phase 3 的「迁移/重连信号」协议未定义 | 5 分钟到点后要"主动发送迁移/重连信号"，但 SSE / WS 上用什么事件名、客户端如何响应尚未设计。当前 SSE 无应用层关闭码（见 `stream-security.md` §4.1），这个信号只能走普通事件帧 | Wave 2 设计 |
+| 关闭速率 | Core 旧 Agent/content SSE 的 deadline drainer 已接入 `drain_connection_close_rate{instance}`，只在 Phase 3 实际关闭连接时计数 | ✅ 代码与单测已完成；生产多实例读取仍待执行 |
+| 重连成功率 | `client_reconnect_success_rate` 仍需要客户端/网关观测，不能用服务端存量指标伪造 | Wave 2 |
+| Phase 3 的「迁移/重连信号」协议 | Core 旧 SSE 已固定 `stream-migrate` 事件与 JSON 载荷；WS/新服务客户端联调仍待完成 | ✅ 服务端协议已落地；客户端联调 Wave 2 |
 | 无空闲超时兜底 | SSE `SseEmitter(0L)` 永不超时，WS 也没有空闲超时；Phase 3 的上限是唯一的时间边界 | 设计取舍 |
 | 逐实例判据依赖 Micrometer | 若某实例指标端点不可达，§4 的「全部实例各自为 0」无法判定 —— 此时应视为**未完成**（fail-closed），不得当作 0 | Wave 2 放行评审 |
 

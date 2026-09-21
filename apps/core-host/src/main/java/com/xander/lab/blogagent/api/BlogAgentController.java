@@ -11,6 +11,7 @@ import com.xander.lab.blogagent.domain.BlogAgentEvent;
 import com.xander.lab.blogagent.application.BlogAgentEventService;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.core.stream.CoreHostStreamProperties;
+import com.xander.lab.core.stream.CoreLegacyStreamDrainRegistry;
 import com.xander.lab.core.stream.CoreLegacyStreamState;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -60,6 +61,8 @@ public class BlogAgentController {
     private final SecurityStateCache securityStateCache;
     /** 本实例的活跃连接注册表：封禁时主动断开已建立的流。 */
     private final ConnectionRegistry connectionRegistry;
+    /** 只供旧 Agent/content 流 Phase 3 drain 使用，不包含 Studio 流。 */
+    private final CoreLegacyStreamDrainRegistry legacyStreamDrainRegistry;
     /** Wave 2 drain switch for this legacy compatibility boundary. */
     private final CoreHostStreamProperties streamProperties;
     private final CoreLegacyStreamState streamState;
@@ -72,6 +75,7 @@ public class BlogAgentController {
                                @Qualifier("blogAgentHeartbeatScheduler") TaskScheduler blogAgentHeartbeatScheduler,
                                SecurityStateCache securityStateCache,
                                ConnectionRegistry connectionRegistry,
+                               CoreLegacyStreamDrainRegistry legacyStreamDrainRegistry,
                                CoreHostStreamProperties streamProperties,
                                CoreLegacyStreamState streamState) {
         this.service = service;
@@ -81,6 +85,7 @@ public class BlogAgentController {
         this.blogAgentHeartbeatScheduler = blogAgentHeartbeatScheduler;
         this.securityStateCache = securityStateCache;
         this.connectionRegistry = connectionRegistry;
+        this.legacyStreamDrainRegistry = legacyStreamDrainRegistry;
         this.streamProperties = streamProperties;
         this.streamState = streamState;
     }
@@ -98,7 +103,7 @@ public class BlogAgentController {
                         TaskScheduler blogAgentHeartbeatScheduler) {
         this(service, eventService, blogAgentTaskExecutor, blogAgentSseExecutor,
                 blogAgentHeartbeatScheduler, new SecurityStateCache(), new ConnectionRegistry(),
-                new CoreHostStreamProperties(), new CoreLegacyStreamState());
+                new CoreLegacyStreamDrainRegistry(), new CoreHostStreamProperties(), new CoreLegacyStreamState());
     }
 
     BlogAgentController(BlogAgentService service,
@@ -110,7 +115,7 @@ public class BlogAgentController {
                         CoreLegacyStreamState streamState) {
         this(service, eventService, blogAgentTaskExecutor, blogAgentSseExecutor,
                 blogAgentHeartbeatScheduler, new SecurityStateCache(), new ConnectionRegistry(),
-                streamProperties, streamState);
+                new CoreLegacyStreamDrainRegistry(), streamProperties, streamState);
     }
 
     @PostMapping(value = "/{id}/run/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -157,7 +162,7 @@ public class BlogAgentController {
         long cursor = resolveCursor(lastEventId, afterEventId);
         SseEmitter emitter = createEmitter(id, response);
         SseSubscriber subscriber = new SseSubscriber(
-                connectionRegistry, streamState, id, userId, emitter);
+                connectionRegistry, legacyStreamDrainRegistry, streamState, id, userId, emitter);
         ScheduledFuture<?> heartbeat;
         try {
             heartbeat = scheduleHeartbeat(subscriber);
@@ -167,6 +172,7 @@ public class BlogAgentController {
         }
         registerSubscriberCallbacks(subscriber, heartbeat);
         connectionRegistry.register(subscriber);
+        legacyStreamDrainRegistry.register(subscriber);
         streamState.openedLegacyAgentSse();
         try {
             CompletableFuture.runAsync(
@@ -186,7 +192,7 @@ public class BlogAgentController {
                                 Consumer<String> failQueued) {
         SseEmitter emitter = createEmitter(taskId, response);
         SseSubscriber subscriber = new SseSubscriber(
-                connectionRegistry, streamState, taskId, userId, emitter);
+                connectionRegistry, legacyStreamDrainRegistry, streamState, taskId, userId, emitter);
         ScheduledFuture<?> heartbeat;
         try {
             heartbeat = scheduleHeartbeat(subscriber);
@@ -196,6 +202,7 @@ public class BlogAgentController {
         }
         registerSubscriberCallbacks(subscriber, heartbeat);
         connectionRegistry.register(subscriber);
+        legacyStreamDrainRegistry.register(subscriber);
         streamState.openedLegacyAgentSse();
         try {
             CompletableFuture.runAsync(() -> {
@@ -278,6 +285,7 @@ public class BlogAgentController {
             subscriber.subscriberOpen.set(false);
             heartbeat.cancel(false);
             connectionRegistry.unregister(subscriber);
+            legacyStreamDrainRegistry.unregister(subscriber);
             subscriber.releaseAccounting();
             log.debug("blog-agent SSE subscriber closed for task {}", subscriber.taskId);
         };
@@ -397,6 +405,7 @@ public class BlogAgentController {
 
     private void completeSubscriber(SseSubscriber subscriber) {
         connectionRegistry.unregister(subscriber);
+        legacyStreamDrainRegistry.unregister(subscriber);
         subscriber.releaseAccounting();
         if (subscriber.subscriberOpen.getAndSet(false)) {
             try {
@@ -440,6 +449,7 @@ public class BlogAgentController {
      */
     static final class SseSubscriber implements ConnectionRegistry.ConnectionHandle {
         private final ConnectionRegistry connectionRegistry;
+        private final CoreLegacyStreamDrainRegistry legacyStreamDrainRegistry;
         private final CoreLegacyStreamState streamState;
         private final Long taskId;
         private final Long userId;
@@ -450,15 +460,18 @@ public class BlogAgentController {
 
         SseSubscriber(ConnectionRegistry connectionRegistry, Long taskId, Long userId,
                       SseEmitter emitter) {
-            this(connectionRegistry, new CoreLegacyStreamState(), taskId, userId, emitter);
+            this(connectionRegistry, new CoreLegacyStreamDrainRegistry(),
+                    new CoreLegacyStreamState(), taskId, userId, emitter);
         }
 
         SseSubscriber(ConnectionRegistry connectionRegistry,
+                      CoreLegacyStreamDrainRegistry legacyStreamDrainRegistry,
                       CoreLegacyStreamState streamState,
                       Long taskId,
                       Long userId,
                       SseEmitter emitter) {
             this.connectionRegistry = connectionRegistry;
+            this.legacyStreamDrainRegistry = legacyStreamDrainRegistry;
             this.streamState = streamState;
             this.taskId = taskId;
             this.userId = userId;
@@ -481,6 +494,19 @@ public class BlogAgentController {
             if (!subscriberOpen.getAndSet(false)) return;
             heartbeatCancel();
             connectionRegistry.unregister(this);
+            legacyStreamDrainRegistry.unregister(this);
+            releaseAccounting();
+            if (ConnectionRegistry.REASON_STREAM_MIGRATION.equals(reason)) {
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name(ConnectionRegistry.SSE_EVENT_STREAM_MIGRATE)
+                            .data("{\"reason\":\"STREAM_MIGRATION\",\"reconnect\":true}"));
+                    emitter.complete();
+                } catch (IOException | IllegalStateException ignored) {
+                    // The client may have disconnected while the migration signal was sent.
+                }
+                return;
+            }
             try {
                 emitter.completeWithError(new ResponseStatusException(
                         HttpStatus.FORBIDDEN,

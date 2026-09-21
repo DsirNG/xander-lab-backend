@@ -5,6 +5,7 @@ import com.xander.lab.automation.spi.NotificationBroadcastPort;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
 import com.xander.lab.core.stream.CoreHostStreamProperties;
+import com.xander.lab.core.stream.CoreLegacyStreamDrainRegistry;
 import com.xander.lab.core.stream.CoreLegacyStreamState;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,6 +52,7 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
     /** 本实例的活跃连接注册表。 */
     private final ConnectionRegistry connectionRegistry;
     private final CoreHostStreamProperties streamProperties;
+    private final CoreLegacyStreamDrainRegistry legacyStreamDrainRegistry;
     private final CoreLegacyStreamState streamState;
     private final Map<Long, List<NotificationConnection>> subscribers = new ConcurrentHashMap<>();
     private final ScheduledExecutorService heartbeat =
@@ -65,11 +67,13 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
                               SecurityStateCache securityStateCache,
                               ConnectionRegistry connectionRegistry,
                               CoreHostStreamProperties streamProperties,
+                              CoreLegacyStreamDrainRegistry legacyStreamDrainRegistry,
                               CoreLegacyStreamState streamState) {
         this.objectMapper = objectMapper;
         this.securityStateCache = securityStateCache;
         this.connectionRegistry = connectionRegistry;
         this.streamProperties = streamProperties;
+        this.legacyStreamDrainRegistry = legacyStreamDrainRegistry;
         this.streamState = streamState;
         this.heartbeat.scheduleAtFixedRate(this::beatAll, 25, 25, TimeUnit.SECONDS);
     }
@@ -82,7 +86,16 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
      */
     BlogPlanSseService(ObjectMapper objectMapper) {
         this(objectMapper, new SecurityStateCache(), new ConnectionRegistry(),
-                new CoreHostStreamProperties(), new CoreLegacyStreamState());
+                new CoreHostStreamProperties(), new CoreLegacyStreamDrainRegistry(), new CoreLegacyStreamState());
+    }
+
+    BlogPlanSseService(ObjectMapper objectMapper,
+                       SecurityStateCache securityStateCache,
+                       ConnectionRegistry connectionRegistry,
+                       CoreHostStreamProperties streamProperties,
+                       CoreLegacyStreamState streamState) {
+        this(objectMapper, securityStateCache, connectionRegistry, streamProperties,
+                new CoreLegacyStreamDrainRegistry(), streamState);
     }
 
     /** Registers one connection and primes callbacks so per-user lists never
@@ -109,6 +122,7 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
                 subscribers.computeIfAbsent(userId, key -> new CopyOnWriteArrayList<>());
         connections.add(connection);
         connectionRegistry.register(connection);
+        legacyStreamDrainRegistry.register(connection);
         streamState.openedLegacyContentSse();
         emitter.onCompletion(() -> remove(userId, connection));
         emitter.onTimeout(() -> remove(userId, connection));
@@ -209,6 +223,7 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
     private void remove(Long userId, NotificationConnection connection) {
         boolean firstClose = connection.markClosed();
         connectionRegistry.unregister(connection);
+        legacyStreamDrainRegistry.unregister(connection);
         if (firstClose) {
             streamState.closedLegacyContentSse();
         }
@@ -257,8 +272,21 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
 
         @Override
         public void close(String reason) {
+            if (ConnectionRegistry.REASON_STREAM_MIGRATION.equals(reason)) {
+                if (!open.get()) return;
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name(ConnectionRegistry.SSE_EVENT_STREAM_MIGRATE)
+                            .data("{\"reason\":\"STREAM_MIGRATION\",\"reconnect\":true}"));
+                } catch (IOException | IllegalStateException ignored) {
+                    // The client may have disconnected while the migration signal was sent.
+                }
+                remove(userId, this);
+                return;
+            }
             if (!open.getAndSet(false)) return;
             connectionRegistry.unregister(this);
+            legacyStreamDrainRegistry.unregister(this);
             streamState.closedLegacyContentSse();
             remove(userId, this);
             try {

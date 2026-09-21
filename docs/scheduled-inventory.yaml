@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 22
+  total: 23
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -65,6 +65,13 @@ scheduled:
     logical_owner: automation
     file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java
     line: 62
+  - id: core-legacy-stream-drainer
+    class: com.xander.lab.core.stream.CoreLegacyStreamDrainer
+    method: reconcileDeadline
+    trigger: "fixedDelayString = \"${core.stream.drain-check-interval-ms:1000}\""
+    logical_owner: core
+    file: apps/core-host/src/main/java/com/xander/lab/core/stream/CoreLegacyStreamDrainer.java
+    line: 32
   - id: security-denylist-reconciler-gateway
     class: com.xander.lab.gateway.SecurityDenylistReconcilerGateway
     method: reconcile

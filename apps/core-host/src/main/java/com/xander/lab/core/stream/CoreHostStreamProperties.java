@@ -14,6 +14,9 @@ public class CoreHostStreamProperties {
     /** Stable per-process label used to evaluate drain state instance by instance. */
     private String instanceId = "unknown";
 
+    /** Unix epoch milliseconds at which Phase 3 force-drain starts; zero keeps it disabled. */
+    private long drainDeadlineAt;
+
     public boolean isDrainEnabled() {
         return drainEnabled;
     }
@@ -28,5 +31,13 @@ public class CoreHostStreamProperties {
 
     public void setInstanceId(String instanceId) {
         this.instanceId = instanceId;
+    }
+
+    public long getDrainDeadlineAt() {
+        return drainDeadlineAt;
+    }
+
+    public void setDrainDeadlineAt(long drainDeadlineAt) {
+        this.drainDeadlineAt = drainDeadlineAt;
     }
 }
