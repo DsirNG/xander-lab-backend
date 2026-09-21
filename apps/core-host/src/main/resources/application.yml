@@ -160,6 +160,13 @@ security:
     internal-api-enabled: ${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}
     internal-token: ${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}
 
+# Integration publication bridge: disabled by default and kept separate from identity's
+# security-state properties so the deployment boundary does not import identity configuration.
+integration:
+  internal:
+    api-enabled: ${INTEGRATION_INTERNAL_API_ENABLED:${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}}
+    internal-token: ${INTEGRATION_INTERNAL_TOKEN:${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}}
+
 # Disabled by default. Use a Base64-encoded 32-byte key, and keep the server token out of source control.
 mcp:
   oauth:

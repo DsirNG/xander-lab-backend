@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 264
+  total: 268
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -3004,6 +3004,74 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: integration-post-internal-integration-blog-posts-postid-sync-csdn
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/integration/blog-posts/{postId}/sync/csdn"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-integration-blog-posts-postid-sync-juejin
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/integration/blog-posts/{postId}/sync/juejin"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-platform-integration-blog-posts-postid-sync-csdn
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/platform-integration/blog-posts/{postId}/sync/csdn"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-platform-integration-blog-posts-postid-sync-juejin
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/platform-integration/blog-posts/{postId}/sync/juejin"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: integration-any-mcp-platformintegrationproxycontroller-2
     owner: integration
     old:

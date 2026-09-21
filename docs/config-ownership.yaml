@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 618
-  service_private: 542
-  secret: 64
+  total: 636
+  service_private: 552
+  secret: 72
   shared: 12
 config:
   - key: agent.conversation.compaction-enabled
@@ -814,6 +814,46 @@ config:
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: content-automation.platform-integration-base-url
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.platform-integration-connect-timeout-millis
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.platform-integration-connect-timeout-millis
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.platform-integration-internal-token
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: secret
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.platform-integration-internal-token
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: secret
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.platform-integration-max-response-bytes
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.platform-integration-max-response-bytes
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.platform-integration-read-timeout-millis
+    source: apps/content-automation/src/main/resources/application.yml
+    classification: service_private
+    owner: content-automation
+    nacos_group: DINQOR-CONTENT-AUTOMATION
+  - key: content-automation.platform-integration-read-timeout-millis
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     classification: service_private
     owner: content-automation
@@ -1731,6 +1771,36 @@ config:
   - key: platform-integration.core-base-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.core-internal-token
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.core-internal-token
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.internal-api-enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.internal-api-enabled
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.internal-token
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.internal-token
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    classification: secret
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.max-response-bytes
@@ -2901,6 +2971,26 @@ config:
   - key: gateway.security-state.request-timeout-ms
     source: apps/gateway/src/main/java/com/xander/lab/gateway/GatewaySecurityStateProperties.java
     classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: integration.internal.api-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: integration.internal.api-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/internal/application/IntegrationInternalApiProperties.java
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: integration.internal.internal-token
+    source: apps/core-host/src/main/resources/application.yml
+    classification: secret
+    owner: unassigned
+    nacos_group: COMMON
+  - key: integration.internal.internal-token
+    source: apps/core-host/src/main/java/com/xander/lab/integration/internal/application/IntegrationInternalApiProperties.java
+    classification: secret
     owner: unassigned
     nacos_group: COMMON
   - key: management.endpoint.health.group.readiness.include

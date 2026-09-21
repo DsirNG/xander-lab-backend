@@ -21,7 +21,7 @@ class ContentBlogPlanRunExecutionServiceTest {
 
         ContentBlogPlanRunExecutionService service = new ContentBlogPlanRunExecutionService(
                 jdbcTemplate, null, new ObjectMapper(), null, null, null, null, null,
-                null, null, null, null, executorProperties, schedulerProperties);
+                null, null, null, null, null, executorProperties, schedulerProperties);
 
         service.dispatchDuePlans();
 

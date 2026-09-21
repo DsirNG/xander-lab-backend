@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 861
-  leaves: 618
+  total: 881
+  leaves: 636
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -865,6 +865,26 @@ config:
     value: "${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_BASE_URL:http://localhost:30005}"
     leaf: true
     logical_owner: content-automation
+  - key: content-automation.platform-integration-internal-token
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.platform-integration-connect-timeout-millis
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_CONNECT_TIMEOUT_MILLIS:2000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.platform-integration-read-timeout-millis
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_READ_TIMEOUT_MILLIS:30000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.platform-integration-max-response-bytes
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_MAX_RESPONSE_BYTES:1048576}"
+    leaf: true
+    logical_owner: content-automation
   - key: content-automation.model-timeout-millis
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_MODEL_TIMEOUT_MILLIS:30000}"
@@ -1673,6 +1693,26 @@ config:
   - key: security.state-sync.internal-token
     source: apps/core-host/src/main/resources/application.yml
     value: "${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: unassigned
+  - key: integration
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: integration.internal
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: integration.internal.api-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${INTEGRATION_INTERNAL_API_ENABLED:${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}}"
+    leaf: true
+    logical_owner: unassigned
+  - key: integration.internal.internal-token
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${INTEGRATION_INTERNAL_TOKEN:${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}}"
     leaf: true
     logical_owner: unassigned
   - key: mcp
@@ -3330,6 +3370,21 @@ config:
     value: "${PLATFORM_INTEGRATION_CORE_BASE_URL:http://localhost:30002}"
     leaf: true
     logical_owner: integration
+  - key: platform-integration.internal-api-enabled
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_INTERNAL_API_ENABLED:false}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.internal-token
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.core-internal-token
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_CORE_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: integration
   - key: platform-integration.connect-timeout-millis
     source: apps/platform-integration/src/main/resources/application.yml
     value: "${PLATFORM_INTEGRATION_CONNECT_TIMEOUT_MILLIS:2000}"
@@ -3711,7 +3766,7 @@ config:
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
-    line: 12
+    line: 16
   - key: content-automation.platform-integration-base-url
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default>"
@@ -3719,13 +3774,41 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 11
+  - key: content-automation.platform-integration-connect-timeout-millis
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 13
+  - key: content-automation.platform-integration-internal-token
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 12
+  - key: content-automation.platform-integration-max-response-bytes
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 15
+  - key: content-automation.platform-integration-read-timeout-millis
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 14
   - key: content-automation.stream-drain-enabled
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default:none>"
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
-    line: 13
+    line: 17
   - key: content-automation.plan-executor.enabled
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentPlanExecutionProperties.java
     value: "<java-default:none>"
@@ -4153,6 +4236,20 @@ config:
     logical_owner: core
     source_kind: java-configuration-properties
     line: 23
+  - key: integration.internal.api-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/integration/internal/application/IntegrationInternalApiProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 11
+  - key: integration.internal.internal-token
+    source: apps/core-host/src/main/java/com/xander/lab/integration/internal/application/IntegrationInternalApiProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 12
   - key: mcp.csdn.enabled
     source: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/CsdnMcpProperties.java
     value: "<java-default>"
@@ -4649,7 +4746,7 @@ config:
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
-    line: 12
+    line: 15
   - key: platform-integration.core-base-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
@@ -4657,17 +4754,38 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 11
-  - key: platform-integration.max-response-bytes
+  - key: platform-integration.core-internal-token
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 14
-  - key: platform-integration.read-timeout-millis
+  - key: platform-integration.internal-api-enabled
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 12
+  - key: platform-integration.internal-token
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 13
+  - key: platform-integration.max-response-bytes
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 17
+  - key: platform-integration.read-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 16

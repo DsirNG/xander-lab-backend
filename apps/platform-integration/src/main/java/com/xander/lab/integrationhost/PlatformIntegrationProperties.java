@@ -9,6 +9,9 @@ import org.springframework.stereotype.Component;
 public class PlatformIntegrationProperties {
 
     private String coreBaseUrl = "http://localhost:30002";
+    private boolean internalApiEnabled;
+    private String internalToken = "";
+    private String coreInternalToken = "";
     private int connectTimeoutMillis = 2_000;
     private int readTimeoutMillis = 15_000;
     private int maxResponseBytes = 16 * 1024 * 1024;
@@ -19,6 +22,30 @@ public class PlatformIntegrationProperties {
 
     public void setCoreBaseUrl(String coreBaseUrl) {
         this.coreBaseUrl = coreBaseUrl;
+    }
+
+    public boolean isInternalApiEnabled() {
+        return internalApiEnabled;
+    }
+
+    public void setInternalApiEnabled(boolean internalApiEnabled) {
+        this.internalApiEnabled = internalApiEnabled;
+    }
+
+    public String getInternalToken() {
+        return internalToken;
+    }
+
+    public void setInternalToken(String internalToken) {
+        this.internalToken = internalToken;
+    }
+
+    public String getCoreInternalToken() {
+        return coreInternalToken;
+    }
+
+    public void setCoreInternalToken(String coreInternalToken) {
+        this.coreInternalToken = coreInternalToken;
     }
 
     public int getConnectTimeoutMillis() {

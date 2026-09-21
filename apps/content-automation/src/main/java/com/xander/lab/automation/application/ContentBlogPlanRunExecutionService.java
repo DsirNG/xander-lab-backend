@@ -47,8 +47,8 @@ import java.util.UUID;
  * <p>This is deliberately behind a feature gate while the old core-host executor drains. The
  * service owns the content database run row and notification side effects; the model stage is
  * still a stateless call to core-host and local task/post state stays in this deployment unit.
- * External platform synchronization is rejected explicitly until its service boundary is ready,
- * rather than silently dropping a requested sync.</p>
+ * External platform synchronization is best-effort per platform: each attempt is persisted
+ * independently after local publication, so a vendor failure never rolls back the local post.</p>
  */
 @Slf4j
 @Service
@@ -76,6 +76,7 @@ public class ContentBlogPlanRunExecutionService {
     private final BlogPlanRunReadService runReadService;
     private final ContentNotificationStreamService notificationStreamService;
     private final RecitationMaterialClient recitationMaterialClient;
+    private final ContentPlanExternalSyncService externalSyncService;
     private final TaskExecutor executor;
     private final ContentPlanExecutionProperties properties;
     private final ContentPlanSchedulerProperties schedulerProperties;
@@ -92,6 +93,7 @@ public class ContentBlogPlanRunExecutionService {
             BlogPlanRunReadService runReadService,
             ContentNotificationStreamService notificationStreamService,
             RecitationMaterialClient recitationMaterialClient,
+            ContentPlanExternalSyncService externalSyncService,
             @Qualifier("contentBlogPlanRunExecutor") TaskExecutor executor,
             ContentPlanExecutionProperties properties,
             ContentPlanSchedulerProperties schedulerProperties) {
@@ -106,6 +108,7 @@ public class ContentBlogPlanRunExecutionService {
         this.runReadService = runReadService;
         this.notificationStreamService = notificationStreamService;
         this.recitationMaterialClient = recitationMaterialClient;
+        this.externalSyncService = externalSyncService;
         this.executor = executor;
         this.properties = properties;
         this.schedulerProperties = schedulerProperties;
@@ -289,10 +292,6 @@ public class ContentBlogPlanRunExecutionService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "一次性计划不支持手动触发，将在计划时间自动执行一次");
         }
-        if (plan.autoPublish() && (plan.syncCsdn() || plan.syncJuejin())) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "站外同步执行边界尚未迁移完成，请暂时关闭站外同步");
-        }
         Long runId = createManualRun(plan);
         try {
             executor.execute(() -> execute(runId, plan));
@@ -330,7 +329,15 @@ public class ContentBlogPlanRunExecutionService {
                 BlogPostStatusUpdateRequest draft = new BlogPostStatusUpdateRequest();
                 draft.setStatus(DRAFT_STATUS);
                 blogMutationService.updateStatus(userId, post.getId(), draft);
+                finishSucceeded(runId);
+                return;
             }
+
+            // Vendor calls stay outside database transactions. Each platform records its own
+            // outcome so a partial failure never rolls back the successfully published post.
+            externalSyncService.sync(new ContentPlanExternalSyncService.ExternalSyncPlan(
+                    runId, plan.userId(), plan.id(), plan.topic(), post.getId(),
+                    plan.syncCsdn(), plan.syncJuejin()));
             finishSucceeded(runId);
         } catch (RuntimeException exception) {
             String message = limit(rootMessage(exception), 1000);
@@ -340,6 +347,7 @@ public class ContentBlogPlanRunExecutionService {
             log.warn("[BlogPlan] content-owned run={} failed: {}", runId, message);
         }
     }
+
 
     private ComplianceResult review(BlogAgentTask task) {
         if (task == null || !StringUtils.hasText(task.getContent())) {
