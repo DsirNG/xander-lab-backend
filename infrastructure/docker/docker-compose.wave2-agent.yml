@@ -48,7 +48,7 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - dinqor-wave2
+      - dinqor-runtime
 
   platform-integration:
     image: ${DINQOR_PLATFORM_INTEGRATION_IMAGE:-dinqor-platform-integration:wave2}
@@ -84,7 +84,7 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - dinqor-wave2
+      - dinqor-runtime
 
   content-automation:
     image: ${DINQOR_CONTENT_AUTOMATION_IMAGE:-dinqor-content-automation:wave2}
@@ -130,8 +130,9 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - dinqor-wave2
+      - dinqor-runtime
 
 networks:
-  dinqor-wave2:
-    name: ${DINQOR_WAVE2_NETWORK:-dinqor-wave2}
+  dinqor-runtime:
+    external: true
+    name: ${DINQOR_RUNTIME_NETWORK:-dinqor-runtime}

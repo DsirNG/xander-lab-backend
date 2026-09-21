@@ -1,9 +1,10 @@
 # V9 local verification infrastructure.
 #
-# This file intentionally starts only isolated dependencies. Application services stay in
+# This file intentionally starts only dependencies. Application services stay in
 # docker-compose.wave1.yml / docker-compose.wave2-agent.yml so migration order and service
-# ownership remain explicit. The canonical schema name is xander_lab, matching migrations/,
-# grants/ and the production Nacos JDBC defaults.
+# ownership remain explicit. All three Compose files join the same configurable runtime
+# network so service-name URLs work across Compose projects. The canonical schema name is
+# xander_lab, matching migrations/, grants/ and the production Nacos JDBC defaults.
 services:
   mysql:
     image: mysql:8.0.36
@@ -26,7 +27,7 @@ services:
     volumes:
       - dinqor-local-mysql-data:/var/lib/mysql
     networks:
-      - dinqor-local-infra
+      - dinqor-runtime
 
   redis:
     image: redis:7-alpine
@@ -43,12 +44,12 @@ services:
     volumes:
       - dinqor-local-redis-data:/data
     networks:
-      - dinqor-local-infra
+      - dinqor-runtime
 
 volumes:
   dinqor-local-mysql-data:
   dinqor-local-redis-data:
 
 networks:
-  dinqor-local-infra:
-    name: ${DINQOR_LOCAL_INFRA_NETWORK:-dinqor-local-infra}
+  dinqor-runtime:
+    name: ${DINQOR_RUNTIME_NETWORK:-dinqor-runtime}

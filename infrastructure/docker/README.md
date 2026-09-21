@@ -2,13 +2,23 @@
 
 ## Local MySQL / Redis
 
-For an isolated dependency-only environment, start
-`docker-compose.local-infra.yml` first. It creates the canonical `xander_lab` schema
-and does not start any application service:
+For a local dependency environment, start `docker-compose.local-infra.yml` first. It
+creates the canonical `xander_lab` schema and the shared `dinqor-runtime` Docker network;
+the Wave 1 and Wave 2 Compose projects join this same network so `mysql`, `redis`,
+`core-host`, `agent`, `platform-integration` and `content-automation` resolve by service
+name:
 
 ```powershell
 $env:DINQOR_LOCAL_MYSQL_ROOT_PASSWORD = "local-only-password"
 docker-compose -f infrastructure/docker/docker-compose.local-infra.yml up -d
+```
+
+Use `DINQOR_RUNTIME_NETWORK` to choose another network name, but use the same value for
+all three Compose commands. In a deployment where MySQL and Redis are managed outside
+Docker, create the external network before starting the application Compose projects:
+
+```powershell
+docker network create dinqor-runtime
 ```
 
 Run the single migration runner against `jdbc:mysql://mysql:3306/xander_lab` before
@@ -51,7 +61,9 @@ long-running application container.
 
 `docker-compose.wave1.yml` is the executable deployment template for the four Wave 1 units.
 It assumes Nacos, MySQL and Redis already exist outside this Compose project and keeps the
-historical root `docker-compose.yml` unchanged.
+historical root `docker-compose.yml` unchanged. The application services require the
+external runtime network described above; this is what allows Wave 1 and Wave 2 to be
+started as separate Compose projects while retaining service-name URLs.
 
 Copy `.env.wave1.example` to a private `.env.wave1` file and fill in the test-environment
 endpoints and separate database credentials, then run from the repo root:
@@ -59,6 +71,14 @@ endpoints and separate database credentials, then run from the repo root:
 ```bash
 docker compose --env-file .env.wave1 \
   -f infrastructure/docker/docker-compose.wave1.yml up -d --build
+```
+
+After the local dependency network and Wave 1 are ready, start the Wave 2 bootstrap with
+the same `DINQOR_RUNTIME_NETWORK` value:
+
+```bash
+docker compose --env-file .env.wave1 \
+  -f infrastructure/docker/docker-compose.wave2-agent.yml up -d --build
 ```
 
 The required database variables are `MIGRATION_DB_URL`, `MIGRATION_DB_PASSWORD`, `CORE_DB_URL`

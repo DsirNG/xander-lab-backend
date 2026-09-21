@@ -22,7 +22,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${MIGRATION_DB_USERNAME:-dinqor_migration}
       SPRING_DATASOURCE_PASSWORD: ${MIGRATION_DB_PASSWORD:?set MIGRATION_DB_PASSWORD}
     networks:
-      - dinqor-wave1
+      - dinqor-runtime
 
   core-host:
     image: ${DINQOR_CORE_IMAGE:-dinqor-core-host:wave1}
@@ -69,7 +69,7 @@ services:
       retries: 3
       start_period: 60s
     networks:
-      - dinqor-wave1
+      - dinqor-runtime
 
   gateway:
     image: ${DINQOR_GATEWAY_IMAGE:-dinqor-gateway:wave1}
@@ -111,7 +111,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - dinqor-wave1
+      - dinqor-runtime
 
   bloghtml-preview:
     image: ${DINQOR_BLOGHTML_IMAGE:-dinqor-bloghtml-preview:wave1}
@@ -139,8 +139,9 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - dinqor-wave1
+      - dinqor-runtime
 
 networks:
-  dinqor-wave1:
-    driver: bridge
+  dinqor-runtime:
+    external: true
+    name: ${DINQOR_RUNTIME_NETWORK:-dinqor-runtime}
