@@ -26,6 +26,13 @@ platform-integration:
   read-timeout-millis: ${PLATFORM_INTEGRATION_READ_TIMEOUT_MILLIS:15000}
   max-response-bytes: ${PLATFORM_INTEGRATION_MAX_RESPONSE_BYTES:16777216}
   juejin-catalog-enabled: ${PLATFORM_INTEGRATION_JUEJIN_CATALOG_ENABLED:false}
+  # The Platform authorization owner is staged independently from the compatibility bridge.
+  authorization-enabled: ${PLATFORM_INTEGRATION_AUTHORIZATION_ENABLED:false}
+  csdn:
+    selenium-url: ${CSDN_SELENIUM_URL:http://selenium:4444/wd/hub}
+    credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
+    authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:35}
+    cleanup-interval-ms: ${CSDN_AUTHORIZATION_CLEANUP_INTERVAL_MS:15000}
   # Disabled during the bridge phase; when enabled, Platform reads credential status locally.
   credential-store-enabled: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_ENABLED:false}
   credential-store-url: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_URL:}

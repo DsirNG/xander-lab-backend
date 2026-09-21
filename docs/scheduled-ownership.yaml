@@ -16,14 +16,15 @@ generated_from: docs/scheduled-inventory.yaml
 # Wave 0A 扫描结果（14 项）+ Wave 1 Gateway denylist reconciler +
 # content-automation 安全状态对账 + legacy Redis 盘点 + Refresh 表行数观测 +
 # content-automation 计划调度 drain + Agent 安全状态对账 + Core 旧流 deadline drain +
-# Agent/content 长连接 deadline drain + MySQL 可靠性证据刷新 + Content 邮件提醒调度器，共 27 项。
+# Agent/content 长连接 deadline drain + MySQL 可靠性证据刷新 + Content 邮件提醒调度器 +
+# Platform CSDN 授权清理，共 28 项。
 # 注意 `scanned` 必须等于 docs/scheduled-inventory.yaml 的 counts.total，
 # 由门禁 `inventory-integrity` 校验。
 # 两个 auth 清理任务在上一轮以 status: planned 登记；本轮实现后改为 active（不是新增条目）。
 counts:
-  scanned: 27
-  planned: 1
-  total: 27
+  scanned: 28
+  planned: 2
+  total: 28
 
 scheduled:
   # ===================== Wave 0A 实际扫描到的 9 项 =====================
@@ -151,6 +152,19 @@ scheduled:
       的会话/队列（closeExpired()），随后 dispose 本实例持有的 RemoteWebDriver（Selenium sidecar）。
       实例间不共享任何授权会话状态 → 必须 per_instance。若误填 global_once，
       N-1 个实例上的 headless Chrome 永远不会被回收（泄漏），而验收指标仍显示"不重复执行"。
+
+  - id: platform-csdn-authorization-service
+    logical_owner: integration
+    current_deployment_owner: dinqor-platform-integration
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: planned
+    scan_ref: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnAuthorizationService.java:188
+    notes: >-
+      Platform 本地 CSDN 授权 Owner 的浏览器会话清理。授权槽、队列和 RemoteWebDriver
+      都是本实例状态，不能使用 ShedLock；启用前必须先完成 Selenium sidecar、凭据表写权限、
+      CSDN_CREDENTIAL_ENCRYPTION_KEY Secret 和 Gateway 切流验证。
 
   - id: juejin-authorization-service
     logical_owner: integration

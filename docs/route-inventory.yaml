@@ -2366,7 +2366,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformAuthorizationController#disconnect"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformAuthorizationController.java
-    line: 55
+    line: 76
   - id: integration-post-publishing-platform-csdn-juejin-authorization-cancel
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2377,7 +2377,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformAuthorizationController#cancel"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformAuthorizationController.java
-    line: 43
+    line: 60
   - id: integration-post-publishing-platform-csdn-juejin-authorization-start
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2388,7 +2388,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformAuthorizationController#start"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformAuthorizationController.java
-    line: 32
+    line: 46
   - id: integration-get-publishing-platform-csdn-juejin-authorization-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
