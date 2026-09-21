@@ -139,7 +139,7 @@ Pub/Sub 由每个实例订阅；订阅丢失或 Redis 短暂不可用时，`Secu
 
 Gateway 也可以设置 `GATEWAY_SECURITY_STATE_PUBSUB_ENABLED=true`，订阅同一频道，
 把 `AccountDisabled` / `AccountEnabled` 事件应用到本实例的 JWT deny cache（与
-`SecurityEventOutboxEntry.TYPE_ACCOUNT_*` 的发件箱事件类型一致），
+`SecurityEventPubSubApi.ACCOUNT_*` 的跨服务事件契约一致；Core 领域常量只是其别名），
 在新请求到达下游前做 O(1) 快速拒绝。Gateway 当前只把 Pub/Sub 当作传播优化；
 启动快照、断线重放和增量对账由 `SecurityDenylistReconcilerGateway` 负责，
 core-host 仍是 `account_security_state` 的 SOT。
