@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 960
-  leaves: 707
+  total: 961
+  leaves: 708
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -1263,6 +1263,11 @@ config:
   - key: core.legacy.blog-content-plan-scheduler-enabled
     source: apps/core-host/src/main/resources/application.yml
     value: "${CORE_LEGACY_BLOG_CONTENT_PLAN_SCHEDULER_ENABLED:${BLOG_CONTENT_PLAN_ENABLED:false}}"
+    leaf: true
+    logical_owner: core
+  - key: core.legacy.email-reminder-scheduler-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${CORE_LEGACY_EMAIL_REMINDER_SCHEDULER_ENABLED:${EMAIL_REMINDER_ENABLED:true}}"
     leaf: true
     logical_owner: core
   - key: spring

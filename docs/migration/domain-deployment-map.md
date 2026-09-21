@@ -193,10 +193,11 @@ Core 仍保留兼容实现，方便按 §96 的顺序回滚；它不应在新服
 | `CORE_LEGACY_NOTIFICATION_STREAM_ENABLED` | 自动化通知 SSE | Content-Automation 通知流已接管并完成 Drain 验证 |
 | `CORE_LEGACY_PLATFORM_PUBLIC_ENABLED` | CSDN/Juejin 授权、同步、目录公开入口 | Platform-Integration 路由与内网桥均已验证 |
 | `CORE_LEGACY_BLOG_CONTENT_PLAN_SCHEDULER_ENABLED` | Core 旧 BlogContentPlanScheduler | Content-Automation 计划调度器已启用、空库启动验证和重复领取验证通过 |
+| `CORE_LEGACY_EMAIL_REMINDER_SCHEDULER_ENABLED` | Core 旧 EmailReminderScheduler | Content-Automation 完成邮件投递/计费适配器、空库启动与重复领取验证 |
 
-这些开关只作用于 Core 的旧公开 Controller；`/internal/**` 兼容桥和文件上传等尚未搬走的
-能力不受影响。切换时必须先完成 Gateway 路由、健康检查和连接 Drain，再把对应开关设为
-`false`，最后才执行数据库权限收窄。
+这些开关作用于 Core 的旧公开 Controller 或旧调度器；`/internal/**` 兼容桥和文件上传等尚未搬走的
+能力不受影响。邮件提醒调度器当前仍是唯一执行者，开关默认保持开启。切换时必须先完成
+新服务能力、Gateway 路由、健康检查和连接 Drain，再把对应开关设为 `false`，最后才执行数据库权限收窄。
 
 ---
 

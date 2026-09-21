@@ -86,7 +86,7 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
 ## Config keys
 
-- total keys: **960** (leaf: 707)
+- total keys: **961** (leaf: 708)
 - unassigned leaves: **72**
 
   - `management.endpoints.web.exposure.include` (apps/agent/src/main/resources/application.yml)

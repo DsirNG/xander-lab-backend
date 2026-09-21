@@ -105,7 +105,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java:62
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java:63
 
   - id: core-legacy-stream-drainer
     logical_owner: core

@@ -78,7 +78,7 @@ scheduled:
     trigger: "fixedDelayString = \"${email-reminder.poll-interval-ms:10000}\", initialDelayString = \"${email-reminder.initial-delay-ms:15000}\""
     logical_owner: automation
     file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/EmailReminderScheduler.java
-    line: 62
+    line: 63
   - id: core-legacy-stream-drainer
     class: com.xander.lab.core.stream.CoreLegacyStreamDrainer
     method: reconcileDeadline

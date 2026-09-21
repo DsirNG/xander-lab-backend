@@ -27,7 +27,8 @@ import java.util.UUID;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "email-reminder.enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "core.legacy", name = "email-reminder-scheduler-enabled",
+        havingValue = "true", matchIfMissing = true)
 public class EmailReminderScheduler {
 
     private static final String STALE_CLAIM_ERROR =
