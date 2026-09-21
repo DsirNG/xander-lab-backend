@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.automation.api.BlogPlanRunVO;
 import com.xander.lab.automation.host.ContentPlanExecutionProperties;
 import com.xander.lab.automation.infrastructure.ContentNotificationStreamService;
+import com.xander.lab.automation.infrastructure.RecitationMaterialClient;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
 import com.xander.lab.blogagent.api.BlogAgentTaskVO;
 import com.xander.lab.blogagent.application.BlogAgentPublishService;
@@ -14,6 +15,7 @@ import com.xander.lab.blogagent.application.BlogAgentTaskWriteService;
 import com.xander.lab.blogagent.domain.BlogAgentTask;
 import com.xander.lab.blogagent.infrastructure.BlogAgentModelClient;
 import com.xander.lab.core.api.BlogAgentModelContract;
+import com.xander.lab.recitation.spi.MaterialView;
 import com.xander.lab.publishing.api.BlogPostStatusUpdateRequest;
 import com.xander.lab.publishing.api.BlogPostVO;
 import com.xander.lab.publishing.application.BlogMutationService;
@@ -71,6 +73,7 @@ public class ContentBlogPlanRunExecutionService {
     private final BlogMutationService blogMutationService;
     private final BlogPlanRunReadService runReadService;
     private final ContentNotificationStreamService notificationStreamService;
+    private final RecitationMaterialClient recitationMaterialClient;
     private final TaskExecutor executor;
     private final ContentPlanExecutionProperties properties;
 
@@ -85,6 +88,7 @@ public class ContentBlogPlanRunExecutionService {
             BlogMutationService blogMutationService,
             BlogPlanRunReadService runReadService,
             ContentNotificationStreamService notificationStreamService,
+            RecitationMaterialClient recitationMaterialClient,
             @Qualifier("contentBlogPlanRunExecutor") TaskExecutor executor,
             ContentPlanExecutionProperties properties) {
         this.jdbcTemplate = jdbcTemplate;
@@ -97,6 +101,7 @@ public class ContentBlogPlanRunExecutionService {
         this.blogMutationService = blogMutationService;
         this.runReadService = runReadService;
         this.notificationStreamService = notificationStreamService;
+        this.recitationMaterialClient = recitationMaterialClient;
         this.executor = executor;
         this.properties = properties;
     }
@@ -183,11 +188,16 @@ public class ContentBlogPlanRunExecutionService {
     }
 
     private String buildInput(PlanSnapshot plan) {
-        if (plan.knowledgeMaterialId() != null) {
-            throw new IllegalStateException("知识材料执行边界尚未迁移完成");
-        }
         String topic = consumeNextTopic(plan);
         StringBuilder input = new StringBuilder(topic);
+        if (plan.knowledgeMaterialId() != null) {
+            MaterialView material = recitationMaterialClient.getMaterial(
+                    plan.userId(), plan.knowledgeMaterialId());
+            input.append("\n请优先依据以下个人知识材料进行创作；不得泄露材料之外的用户隐私：\n")
+                    .append(defaultText(material.title(), ""))
+                    .append("\n")
+                    .append(limit(material.content(), 8000));
+        }
         if (StringUtils.hasText(plan.audience())) {
             input.append("\n目标读者：").append(plan.audience());
         }
