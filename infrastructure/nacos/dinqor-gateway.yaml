@@ -34,8 +34,8 @@ gateway:
     preserve-request-header: Last-Event-ID
     websocket-upgrade: true
     response-timeout: disabled
-  # Enable together with CONTENT_AUTOMATION_PUBLISHING_CREATE_ENABLED after staging.
-  content-publishing-create-enabled: false
+  # Keep enabled together with Content-Automation's publishing-create switch.
+  content-publishing-create-enabled: true
   security-state:
     pubsub-enabled: ${GATEWAY_SECURITY_STATE_PUBSUB_ENABLED:false}
     pubsub-channel: ${GATEWAY_SECURITY_STATE_PUBSUB_CHANNEL:dinqor:security-events}

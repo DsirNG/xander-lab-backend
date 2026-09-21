@@ -23,14 +23,14 @@ security:
     internal-api-enabled: ${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}
     internal-token: ${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}
 
-# V9 §96 — legacy public handlers stay compatible by default, but can be disabled
-# only after Gateway has moved the corresponding route to its Wave 2 owner.
+# V9 §96 — extracted public handlers keep their compatibility implementations in
+# Core, while the Nacos default routes completed Wave 2 owners to the public path.
 core:
   legacy:
-    publishing-create-enabled: true
-    blogagent-stream-enabled: true
-    notification-stream-enabled: true
-    platform-public-enabled: true
+    publishing-create-enabled: false
+    blogagent-stream-enabled: false
+    notification-stream-enabled: false
+    platform-public-enabled: false
     blog-content-plan-scheduler-enabled: false
     email-reminder-scheduler-enabled: true
 

@@ -17,7 +17,7 @@ content-automation:
   core-connect-timeout-millis: ${CONTENT_AUTOMATION_CORE_CONNECT_TIMEOUT_MILLIS:2000}
   core-read-timeout-millis: ${CONTENT_AUTOMATION_CORE_READ_TIMEOUT_MILLIS:15000}
   core-max-response-bytes: ${CONTENT_AUTOMATION_CORE_MAX_RESPONSE_BYTES:1048576}
-  publishing-create-enabled: false
+  publishing-create-enabled: true
   agent-content-api-enabled: false
   agent-blogagent-api-enabled: false
   platform-integration-base-url: ${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_BASE_URL:http://dinqor-platform-integration:30005}
