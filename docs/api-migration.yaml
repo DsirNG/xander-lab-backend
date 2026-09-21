@@ -1057,13 +1057,13 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-any-notifications-events
+  - id: automation-get-notifications-events-contentnotificationstreamcontroller
     owner: automation
     old:
-      method: ANY
+      method: GET
       path: "/api/notifications/events"
     new:
-      method: ANY
+      method: GET
       path: "/api/v2/automations/notifications/events"
     clients:
       web: pending
@@ -1073,7 +1073,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: automation-get-notifications-events
+  - id: automation-get-notifications-events-blognotificationcontroller
     owner: automation
     old:
       method: GET

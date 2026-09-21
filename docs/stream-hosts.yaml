@@ -73,17 +73,21 @@ hosts:
   - id: notifications-sse
     deployment_unit: dinqor-content-automation
     routes:
-      - automation-get-notifications-events
+      - automation-get-notifications-events-contentnotificationstreamcontroller
+      - automation-get-notifications-events-blognotificationcontroller
     boundary_files:
+      - apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentNotificationStreamService.java
       - apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogPlanSseService.java
     controller_files:
+      - apps/content-automation/src/main/java/com/xander/lab/automation/api/ContentNotificationStreamController.java
       - apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
     heartbeat: "服务自持 25s 心跳线程，走同一出口校验"
     tests:
+      - apps/content-automation/src/test/java/com/xander/lab/automation/api/ContentNotificationStreamControllerTest.java
       - src/test/java/com/xander/lab/automation/infrastructure/BlogPlanSseServiceTest.java
     notes: >-
-      控制器只做转发，封禁边界实现在 BlogPlanSseService —— 所以 boundary_files
-      指的必须是 service 而不是 controller。这正是机器猜不出来、必须人工登记的信息。
+      新 content-automation 流使用本地 ContentNotificationStreamService 与
+      ConnectionRegistry；core-host 旧实现保留为 drain 兼容边界，直到旧流量归零。
 
   - id: img2three-sse
     deployment_unit: dinqor-core-host

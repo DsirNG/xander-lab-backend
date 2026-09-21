@@ -43,8 +43,7 @@ public class ContentAutomationProxyController {
     }
 
     @RequestMapping({
-            "/api/blog-plans/**",
-            "/api/notifications/events"
+            "/api/blog-plans/**"
     })
     public void proxy(HttpServletRequest request,
                       HttpServletResponse response) {

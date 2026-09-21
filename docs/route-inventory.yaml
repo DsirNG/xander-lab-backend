@@ -8,9 +8,9 @@ generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
   total: 269
-  streams: 11
+  streams: 12
   websocket: 1
-  sse: 10
+  sse: 11
   servlets: 5
 routes:
   - id: integration-any-well-known
@@ -2059,18 +2059,18 @@ routes:
     handler: "com.xander.lab.automation.api.BlogNotificationReadController#list"
     file: apps/content-automation/src/main/java/com/xander/lab/automation/api/BlogNotificationReadController.java
     line: 24
-  - id: automation-any-notifications-events
+  - id: automation-get-notifications-events-contentnotificationstreamcontroller
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
-    http_method: ANY
+    http_method: GET
     path: "/api/notifications/events"
-    stream: none
+    stream: sse
     last_event_id: false
-    handler: "com.xander.lab.automation.host.ContentAutomationProxyController#proxy"
-    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProxyController.java
-    line: 45
-  - id: automation-get-notifications-events
+    handler: "com.xander.lab.automation.api.ContentNotificationStreamController#events"
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/api/ContentNotificationStreamController.java
+    line: 26
+  - id: automation-get-notifications-events-blognotificationcontroller
     logical_owner: automation
     deployment_unit: dinqor-content-automation
     kind: controller
