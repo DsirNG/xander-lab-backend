@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 910
-  leaves: 662
+  total: 912
+  leaves: 664
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -1718,6 +1718,16 @@ config:
   - key: auth.refresh.enabled
     source: apps/core-host/src/main/resources/application.yml
     value: "${AUTH_REFRESH_ENABLED:false}"
+    leaf: true
+    logical_owner: core
+  - key: auth.refresh.access-ttl-seconds
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${AUTH_REFRESH_ACCESS_TTL_SECONDS:1800}"
+    leaf: true
+    logical_owner: core
+  - key: auth.refresh.encryption-key
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${AUTH_REFRESH_ENCRYPTION_KEY:}"
     leaf: true
     logical_owner: core
   - key: auth.refresh.security-pubsub-enabled

@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 662
-  service_private: 574
-  secret: 76
+  total: 664
+  service_private: 575
+  secret: 77
   shared: 12
 config:
   - key: agent.conversation.compaction-enabled
@@ -1164,6 +1164,11 @@ config:
     owner: core
     nacos_group: DINQOR-CORE
   - key: auth.refresh.access-ttl-seconds
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.access-ttl-seconds
     source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
     classification: service_private
     owner: core
@@ -1196,6 +1201,11 @@ config:
   - key: auth.refresh.enabled
     source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
     classification: service_private
+    owner: core
+    nacos_group: DINQOR-CORE
+  - key: auth.refresh.encryption-key
+    source: apps/core-host/src/main/resources/application.yml
+    classification: secret
     owner: core
     nacos_group: DINQOR-CORE
   - key: auth.refresh.encryption-key
