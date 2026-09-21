@@ -276,7 +276,8 @@ admin_ban_stream_disconnect_latency
 
 当前状态：`gateway_deny_cache_size`、`deny_reconcile_lag`、`security_reconcile_lag`、
 `service_security_cache_size`、`security_state_age`、`active_sse` 与 `active_ws` 等基础
-安全平面指标已接入各宿主的 Actuator/Micrometer。`admin_ban_new_request_block_latency`、
+安全平面指标已接入各宿主的 Actuator/Micrometer；其中 `active_sse` / `active_ws`
+均带 `instance` 标签，Drain 判据可以逐实例判断，不依赖聚合值。`admin_ban_new_request_block_latency`、
 `admin_ban_stream_disconnect_latency` 与 `admin_ban_propagation_latency` 现在也以
 Timer 接入并发布 P95/P99 与 Histogram；来源时间来自 `account_security_state.disabled_at`
 及 outbox/PubSub 事件的 `occurredAt`。为保留现场诊断，最近一次观测值另以

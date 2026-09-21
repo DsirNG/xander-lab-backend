@@ -2,8 +2,10 @@ package com.xander.lab.automation.infrastructure;
 
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
+import com.xander.lab.automation.host.ContentAutomationProperties;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +17,9 @@ public class ContentSecurityPlaneMetrics {
 
     public ContentSecurityPlaneMetrics(MeterRegistry meterRegistry,
                                        SecurityStateCache stateCache,
-                                       ConnectionRegistry connectionRegistry) {
+                                       ConnectionRegistry connectionRegistry,
+                                       ContentAutomationProperties streamProperties) {
+        Tags instanceTags = Tags.of("instance", instanceLabel(streamProperties.getStreamInstanceId()));
         Gauge.builder("service_security_cache_size", stateCache, SecurityStateCache::size)
                 .description("当前 content-automation 实例本地 deny cache 中的封禁账号数")
                 .register(meterRegistry);
@@ -42,10 +46,12 @@ public class ContentSecurityPlaneMetrics {
         Gauge.builder("active_sse", connectionRegistry,
                         registry -> registry.activeCountByKind(ConnectionRegistry.KIND_SSE))
                 .description("当前 content-automation 实例活跃 SSE 连接数")
+                .tags(instanceTags)
                 .register(meterRegistry);
         Gauge.builder("active_ws", connectionRegistry,
                         registry -> registry.activeCountByKind(ConnectionRegistry.KIND_WS))
                 .description("当前 content-automation 实例活跃 WebSocket 连接数")
+                .tags(instanceTags)
                 .register(meterRegistry);
 
         Timer newRequestBlockLatency = latencyTimer(meterRegistry,
@@ -80,5 +86,9 @@ public class ContentSecurityPlaneMetrics {
                 .publishPercentiles(0.95, 0.99)
                 .publishPercentileHistogram()
                 .register(meterRegistry);
+    }
+
+    private String instanceLabel(String instanceId) {
+        return instanceId == null || instanceId.isBlank() ? "unknown" : instanceId;
     }
 }

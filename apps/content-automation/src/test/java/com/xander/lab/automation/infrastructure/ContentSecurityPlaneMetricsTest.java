@@ -2,6 +2,7 @@ package com.xander.lab.automation.infrastructure;
 
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
+import com.xander.lab.automation.host.ContentAutomationProperties;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
@@ -13,7 +14,10 @@ class ContentSecurityPlaneMetricsTest {
     void registersSecurityGaugesAndRecordsBanLatency() {
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         SecurityStateCache cache = new SecurityStateCache();
-        new ContentSecurityPlaneMetrics(registry, cache, new ConnectionRegistry());
+        ConnectionRegistry connections = new ConnectionRegistry();
+        ContentAutomationProperties properties = new ContentAutomationProperties();
+        properties.setStreamInstanceId("content-a");
+        new ContentSecurityPlaneMetrics(registry, cache, connections, properties);
 
         cache.markDisabled(42L, 7L);
         cache.recordPropagationLatency(System.currentTimeMillis() - 10L);
@@ -21,6 +25,8 @@ class ContentSecurityPlaneMetricsTest {
 
         assertThat(registry.get("service_security_cache_size").gauge().value()).isEqualTo(1D);
         assertThat(registry.get("security_reconcile_cursor").gauge().value()).isZero();
+        assertThat(registry.get("active_sse").tag("instance", "content-a").gauge().value()).isZero();
+        assertThat(registry.get("active_ws").tag("instance", "content-a").gauge().value()).isZero();
         assertThat(registry.get("admin_ban_new_request_block_latency").timer().count()).isEqualTo(1L);
         assertThat(registry.get("admin_ban_propagation_latency").timer().count()).isEqualTo(1L);
         assertThat(registry.get("admin_ban_stream_disconnect_latency").timer().count()).isEqualTo(1L);

@@ -2,8 +2,10 @@ package com.xander.lab.identity.application;
 
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
+import com.xander.lab.core.stream.CoreHostStreamProperties;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 
@@ -15,7 +17,9 @@ public class SecurityPlaneMetrics {
 
     public SecurityPlaneMetrics(MeterRegistry meterRegistry,
                                 SecurityStateCache stateCache,
-                                ConnectionRegistry connectionRegistry) {
+                                ConnectionRegistry connectionRegistry,
+                                CoreHostStreamProperties streamProperties) {
+        Tags instanceTags = Tags.of("instance", instanceLabel(streamProperties.getInstanceId()));
         Gauge.builder("service_security_cache_size", stateCache,
                         cache -> cache.size())
                 .description("当前 core-host 实例本地 deny cache 中的封禁账号数")
@@ -43,10 +47,12 @@ public class SecurityPlaneMetrics {
         Gauge.builder("active_sse", connectionRegistry,
                         registry -> registry.activeCountByKind(ConnectionRegistry.KIND_SSE))
                 .description("当前 core-host 实例活跃 SSE 连接数")
+                .tags(instanceTags)
                 .register(meterRegistry);
         Gauge.builder("active_ws", connectionRegistry,
                         registry -> registry.activeCountByKind(ConnectionRegistry.KIND_WS))
                 .description("当前 core-host 实例活跃 WebSocket 连接数")
+                .tags(instanceTags)
                 .register(meterRegistry);
         Timer newRequestBlockLatency = latencyTimer(meterRegistry, "admin_ban_new_request_block_latency",
                 "封禁事件传播到 core-host 后阻止新请求的延迟分布");
@@ -80,5 +86,9 @@ public class SecurityPlaneMetrics {
                 .publishPercentiles(0.95, 0.99)
                 .publishPercentileHistogram()
                 .register(meterRegistry);
+    }
+
+    private String instanceLabel(String instanceId) {
+        return instanceId == null || instanceId.isBlank() ? "unknown" : instanceId;
     }
 }
