@@ -1251,10 +1251,10 @@ def gate_bloghtml_nginx_config() -> None:
 def gate_nacos_config_profile() -> None:
     """V9 §16 / §17: runtime services must wire the stable Nacos DataIds.
 
-    The deployment YAMLs alone are not executable configuration. Each Wave 1 service
-    therefore carries an opt-in ``nacos`` profile that imports the shared DataId and
-    exactly one service-private DataId. The default profile remains local and does not
-    contact Nacos.
+    The deployment YAMLs alone are not executable configuration. Each Wave 1 / Wave 2
+    service therefore carries an opt-in ``nacos`` profile that imports the shared DataId
+    and exactly one service-private DataId. The default profile remains local and does
+    not contact Nacos.
     """
     gate = "nacos-config-profile"
     expected = {
@@ -1262,6 +1262,13 @@ def gate_nacos_config_profile() -> None:
         "apps/gateway": ("dinqor-shared.yaml", "dinqor-gateway.yaml"),
         "apps/bloghtml-preview": (
             "dinqor-shared.yaml", "dinqor-bloghtml-preview.yaml"
+        ),
+        "apps/agent": ("dinqor-shared.yaml", "dinqor-agent.yaml"),
+        "apps/platform-integration": (
+            "dinqor-shared.yaml", "dinqor-platform-integration.yaml"
+        ),
+        "apps/content-automation": (
+            "dinqor-shared.yaml", "dinqor-content-automation.yaml"
         ),
     }
     problems: list[str] = []
@@ -1295,10 +1302,11 @@ def gate_nacos_config_profile() -> None:
             problems.append(
                 f"{module}: nacos profile must explicitly enable service discovery"
             )
+    for data_id in sorted({data_id for values in expected.values() for data_id in values}):
+        if not (REPO / "infrastructure" / "nacos" / data_id).is_file():
+            problems.append(f"infrastructure/nacos/{data_id} is missing")
     core_nacos = REPO / "infrastructure" / "nacos" / "dinqor-core.yaml"
-    if not core_nacos.is_file():
-        problems.append("infrastructure/nacos/dinqor-core.yaml is missing")
-    else:
+    if core_nacos.is_file():
         core_text = core_nacos.read_text(encoding="utf-8")
         if "mapper-locations: classpath:/mapper/*.xml" not in core_text:
             problems.append(
@@ -1313,7 +1321,7 @@ def gate_nacos_config_profile() -> None:
     if problems:
         report(gate, False, "; ".join(problems))
         return
-    report(gate, True, f"{len(expected)} Wave 1 services import shared + private DataIds")
+    report(gate, True, f"{len(expected)} Wave 1/Wave 2 services import shared + private DataIds")
 
 
 def _archived_script_problems() -> tuple[list[str], int]:

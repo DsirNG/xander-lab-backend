@@ -1,0 +1,25 @@
+# V9 §16 — service-private DataId: dinqor-platform-integration.yaml / DINQOR-PLATFORM-INTEGRATION.
+# Credentials and encryption keys stay in deployment environment variables.
+spring:
+  application:
+    name: dinqor-platform-integration
+  cloud:
+    nacos:
+      discovery:
+        enabled: true
+        group: DINQOR-PLATFORM-INTEGRATION
+        service: dinqor-platform-integration
+
+platform-integration:
+  core-base-url: ${PLATFORM_INTEGRATION_CORE_BASE_URL:http://dinqor-core-host:30002}
+  internal-api-enabled: ${PLATFORM_INTEGRATION_INTERNAL_API_ENABLED:false}
+  internal-token: ${PLATFORM_INTEGRATION_INTERNAL_TOKEN:}
+  core-internal-token: ${PLATFORM_INTEGRATION_CORE_INTERNAL_TOKEN:}
+  connect-timeout-millis: ${PLATFORM_INTEGRATION_CONNECT_TIMEOUT_MILLIS:2000}
+  read-timeout-millis: ${PLATFORM_INTEGRATION_READ_TIMEOUT_MILLIS:15000}
+  max-response-bytes: ${PLATFORM_INTEGRATION_MAX_RESPONSE_BYTES:16777216}
+  credential-store-enabled: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_ENABLED:false}
+  credential-store-url: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_URL:}
+  credential-store-username: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_USERNAME:}
+  credential-store-password: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_PASSWORD:}
+  credential-store-query-timeout-seconds: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_QUERY_TIMEOUT_SECONDS:2}

@@ -1,0 +1,19 @@
+# V9 §16 / §17 — opt-in production configuration import.
+# Local development stays on application.yml; activate this profile only when Nacos is reachable.
+spring:
+  config:
+    import:
+      - "nacos:dinqor-shared.yaml?group=COMMON"
+      - "nacos:dinqor-platform-integration.yaml?group=DINQOR-PLATFORM-INTEGRATION"
+  cloud:
+    nacos:
+      config:
+        enabled: ${NACOS_CONFIG_ENABLED:true}
+        import-check:
+          enabled: true
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DINQOR-PLATFORM-INTEGRATION}
+        file-extension: yaml
+      discovery:
+        enabled: true
