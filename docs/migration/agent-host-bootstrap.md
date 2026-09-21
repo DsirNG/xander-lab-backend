@@ -28,3 +28,8 @@ Wave 2 Compose 默认启用 Nacos Config/Discovery，必须提供 `NACOS_SERVER_
 `dinqor_agent` 账号时，可以只编译和运行单元测试；不要为了让宿主启动而给它 `root`
 或全库权限。生产仍必须先完成 V9 §95 的连接指标、重连验证和 §96 的 Drain 顺序，
 再扩大 Gateway 到 Agent 的流量比例。
+
+本地双实例冒烟（2026-09-21）已验证：`dinqor-agent` 在 `COMMON` 注册 2 个实例，
+两个实例 readiness 均为 200；第二个实例的 `agent_sse_active`、`agent_ws_active`、
+`active_sse`、`active_ws` 均带独立 `instance` 标签。该证据只覆盖服务端注册与观测，
+不替代前端 SSE/WS 迁移重连验证。

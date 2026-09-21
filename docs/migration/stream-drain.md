@@ -240,3 +240,18 @@ python scripts/migration/ci_gates.py
 Phase 4 的判据（`active = 0` 逐实例）与 §5 的指标属于 Wave 2 可观测性工作，
 接入后必须有一条断言 `instance` 标签存在性的测试 —— 否则聚合值会被
 误当成逐实例值用，而**这个错误不会让任何测试失败**。
+
+### 8.1 本地双实例冒烟证据（2026-09-21）
+
+在同一 `dinqor-runtime` 网络中，用当前构建产物启动了第二个 Agent 和第二个
+content-automation 实例，复用本地 MySQL、Redis、Nacos：
+
+| 服务 | 实例数 | readiness | Nacos 注册 | 新实例指标标签 |
+|---|---:|---:|---:|---|
+| `dinqor-agent` | 2 | 200 | `COMMON` / 2 | `agent-replica-smoke` |
+| `dinqor-content-automation` | 2 | 200 | `COMMON` / 2 | `content-replica-smoke` |
+
+新实例已实际暴露 `agent_sse_active` / `agent_ws_active`、
+`content_automation_sse_active` / `active_sse` / `active_ws`，且每个序列带
+`instance` 标签。这证明 Nacos 多实例注册和逐实例 Drain 的观测前提成立；尚未声明
+`client_reconnect_success_rate`，因为该项必须由真实客户端重连联调产生。
