@@ -7,7 +7,7 @@ spring:
     nacos:
       discovery:
         enabled: true
-        group: DINQOR-PLATFORM-INTEGRATION
+        group: ${NACOS_DISCOVERY_GROUP:COMMON}
         service: dinqor-platform-integration
 
 platform-integration:

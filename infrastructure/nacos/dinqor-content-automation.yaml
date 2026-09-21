@@ -7,7 +7,7 @@ spring:
     nacos:
       discovery:
         enabled: true
-        group: DINQOR-CONTENT-AUTOMATION
+        group: ${NACOS_DISCOVERY_GROUP:COMMON}
         service: dinqor-content-automation
 
 content-automation:

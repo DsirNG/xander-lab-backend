@@ -7,7 +7,7 @@ spring:
     nacos:
       discovery:
         enabled: true
-        group: DINQOR-BLOGHTML-PREVIEW
+        group: ${NACOS_DISCOVERY_GROUP:COMMON}
         service: dinqor-bloghtml-preview
   flyway:
     enabled: false

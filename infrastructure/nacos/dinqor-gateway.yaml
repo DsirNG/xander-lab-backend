@@ -6,8 +6,6 @@ spring:
     gateway:
       httpclient:
         connect-timeout: 5000
-        # Streaming routes must not be cut off by the normal request timeout.
-        response-timeout: -1ms
       default-filters:
         - PreserveHostHeader
       routes:
@@ -21,7 +19,7 @@ spring:
     nacos:
       discovery:
         enabled: true
-        group: DINQOR-GATEWAY
+        group: ${NACOS_DISCOVERY_GROUP:COMMON}
         service: dinqor-gateway
 
 gateway:

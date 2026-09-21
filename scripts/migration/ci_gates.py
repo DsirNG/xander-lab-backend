@@ -1215,8 +1215,8 @@ def gate_gateway_stream_proxy_config() -> None:
             if stream_proxy.get(key) != value:
                 problems.append(f"gateway.stream-proxy.{key} must be {value!r}")
     httpclient = gateway.get("httpclient", {}) if isinstance(gateway, dict) else {}
-    if httpclient.get("response-timeout") != "-1ms":
-        problems.append("spring.cloud.gateway.httpclient.response-timeout must be -1ms")
+    if isinstance(httpclient, dict) and httpclient.get("response-timeout") not in (None, ""):
+        problems.append("spring.cloud.gateway.httpclient.response-timeout must be omitted")
     if problems:
         report(gate, False, "; ".join(problems))
         return

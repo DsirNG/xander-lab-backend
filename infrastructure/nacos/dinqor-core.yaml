@@ -11,7 +11,7 @@ spring:
     nacos:
       discovery:
         enabled: true
-        group: DINQOR-CORE
+        group: ${NACOS_DISCOVERY_GROUP:COMMON}
         service: dinqor-core-host
 mybatis-plus:
   # Production service-private config must not swallow mapper XML from another jar.

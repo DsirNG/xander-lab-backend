@@ -21,3 +21,4 @@ spring:
         file-extension: yaml
       discovery:
         enabled: true
+        group: ${NACOS_DISCOVERY_GROUP:COMMON}

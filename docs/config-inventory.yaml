@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 937
-  leaves: 688
+  total: 938
+  leaves: 689
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -167,7 +167,7 @@ config:
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.group
     source: apps/agent/src/main/resources/application.yml
-    value: "${NACOS_GROUP:DINQOR-AGENT}"
+    value: "${NACOS_DISCOVERY_GROUP:COMMON}"
     leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.service
@@ -637,7 +637,7 @@ config:
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.group
     source: apps/bloghtml-preview/src/main/resources/application.yml
-    value: "${NACOS_GROUP:DINQOR-BLOGHTML-PREVIEW}"
+    value: "${NACOS_DISCOVERY_GROUP:COMMON}"
     leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.service
@@ -912,7 +912,7 @@ config:
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.group
     source: apps/content-automation/src/main/resources/application.yml
-    value: "${NACOS_GROUP:DINQOR-CONTENT-AUTOMATION}"
+    value: "${NACOS_DISCOVERY_GROUP:COMMON}"
     leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.service
@@ -1322,7 +1322,7 @@ config:
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.group
     source: apps/core-host/src/main/resources/application.yml
-    value: "${NACOS_GROUP:DINQOR-CORE}"
+    value: "${NACOS_DISCOVERY_GROUP:COMMON}"
     leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.service
@@ -3092,7 +3092,7 @@ config:
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.group
     source: apps/gateway/src/main/resources/application.yml
-    value: "${NACOS_GROUP:DINQOR-GATEWAY}"
+    value: "${NACOS_DISCOVERY_GROUP:COMMON}"
     leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.service
@@ -3265,6 +3265,11 @@ config:
     value: "${GATEWAY_CONTENT_AUTOMATION_URI:lb://dinqor-content-automation}"
     leaf: true
     logical_owner: gateway
+  - key: gateway.content-publishing-create-enabled
+    source: apps/gateway/src/main/resources/application.yml
+    value: "${GATEWAY_CONTENT_PUBLISHING_CREATE_ENABLED:false}"
+    leaf: true
+    logical_owner: unassigned
   - key: gateway.security-state
     source: apps/gateway/src/main/resources/application.yml
     value: ""
@@ -3482,7 +3487,7 @@ config:
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.group
     source: apps/platform-integration/src/main/resources/application.yml
-    value: "${NACOS_GROUP:DINQOR-PLATFORM-INTEGRATION}"
+    value: "${NACOS_DISCOVERY_GROUP:COMMON}"
     leaf: true
     logical_owner: shared
   - key: spring.cloud.nacos.discovery.service

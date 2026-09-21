@@ -83,8 +83,8 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
 
 ## Config keys
 
-- total keys: **937** (leaf: 688)
-- unassigned leaves: **65**
+- total keys: **938** (leaf: 689)
+- unassigned leaves: **66**
 
   - `management.endpoints.web.exposure.include` (apps/agent/src/main/resources/application.yml)
   - `management.endpoint.health.probes.enabled` (apps/agent/src/main/resources/application.yml)
@@ -124,6 +124,7 @@ See `docs/table-inventory.yaml`; ownership is curated in `docs/table-ownership.y
   - `management.metrics.tags.application` (apps/gateway/src/main/resources/application.yml)
   - `gateway.agent-uri` (apps/gateway/src/main/resources/application.yml)
   - `gateway.agent-ws-uri` (apps/gateway/src/main/resources/application.yml)
+  - `gateway.content-publishing-create-enabled` (apps/gateway/src/main/resources/application.yml)
   - `gateway.security-state.pubsub-enabled` (apps/gateway/src/main/resources/application.yml)
   - `gateway.security-state.pubsub-channel` (apps/gateway/src/main/resources/application.yml)
   - `gateway.security-state.reconcile-enabled` (apps/gateway/src/main/resources/application.yml)

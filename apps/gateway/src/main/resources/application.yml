@@ -22,7 +22,7 @@ spring:
         enabled: ${NACOS_DISCOVERY_ENABLED:false}
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:}
-        group: ${NACOS_GROUP:DINQOR-GATEWAY}
+        group: ${NACOS_DISCOVERY_GROUP:COMMON}
         service: ${NACOS_SERVICE_NAME:${spring.application.name}}
     gateway:
       globalcors:

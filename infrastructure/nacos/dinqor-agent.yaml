@@ -7,7 +7,7 @@ spring:
     nacos:
       discovery:
         enabled: true
-        group: DINQOR-AGENT
+        group: ${NACOS_DISCOVERY_GROUP:COMMON}
         service: dinqor-agent
 
 agent:
