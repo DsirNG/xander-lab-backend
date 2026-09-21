@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.automation.spi.NotificationBroadcastPort;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.common.security.SecurityStateCache;
+import com.xander.lab.core.stream.CoreHostStreamProperties;
+import com.xander.lab.core.stream.CoreLegacyStreamState;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -48,6 +50,8 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
     private final SecurityStateCache securityStateCache;
     /** 本实例的活跃连接注册表。 */
     private final ConnectionRegistry connectionRegistry;
+    private final CoreHostStreamProperties streamProperties;
+    private final CoreLegacyStreamState streamState;
     private final Map<Long, List<NotificationConnection>> subscribers = new ConcurrentHashMap<>();
     private final ScheduledExecutorService heartbeat =
             Executors.newSingleThreadScheduledExecutor(r -> {
@@ -59,10 +63,14 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
     @Autowired
     public BlogPlanSseService(ObjectMapper objectMapper,
                               SecurityStateCache securityStateCache,
-                              ConnectionRegistry connectionRegistry) {
+                              ConnectionRegistry connectionRegistry,
+                              CoreHostStreamProperties streamProperties,
+                              CoreLegacyStreamState streamState) {
         this.objectMapper = objectMapper;
         this.securityStateCache = securityStateCache;
         this.connectionRegistry = connectionRegistry;
+        this.streamProperties = streamProperties;
+        this.streamState = streamState;
         this.heartbeat.scheduleAtFixedRate(this::beatAll, 25, 25, TimeUnit.SECONDS);
     }
 
@@ -73,7 +81,8 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
      * （这类泄漏表现为"单独跑绿、全量跑红"）。</p>
      */
     BlogPlanSseService(ObjectMapper objectMapper) {
-        this(objectMapper, new SecurityStateCache(), new ConnectionRegistry());
+        this(objectMapper, new SecurityStateCache(), new ConnectionRegistry(),
+                new CoreHostStreamProperties(), new CoreLegacyStreamState());
     }
 
     /** Registers one connection and primes callbacks so per-user lists never
@@ -81,6 +90,10 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
     public SseEmitter subscribe(Long userId) {
         if (userId == null) {
             throw new IllegalArgumentException("SSE 连接需要已登录用户");
+        }
+        if (streamProperties.isDrainEnabled()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "旧通知流正在切换，请稍后重试");
         }
         // 入口侧校验：封禁账号不应还能建立新的通知订阅。
         // 这里抛 403 而不是返回一个立刻关闭的 emitter —— 后者会让客户端先收到 200 再断开，
@@ -96,6 +109,7 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
                 subscribers.computeIfAbsent(userId, key -> new CopyOnWriteArrayList<>());
         connections.add(connection);
         connectionRegistry.register(connection);
+        streamState.openedLegacyContentSse();
         emitter.onCompletion(() -> remove(userId, connection));
         emitter.onTimeout(() -> remove(userId, connection));
         emitter.onError(error -> remove(userId, connection));
@@ -193,8 +207,11 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
      * 摘不到的调用是重复通知，直接返回。
      */
     private void remove(Long userId, NotificationConnection connection) {
-        connection.markClosed();
+        boolean firstClose = connection.markClosed();
         connectionRegistry.unregister(connection);
+        if (firstClose) {
+            streamState.closedLegacyContentSse();
+        }
         List<NotificationConnection> connections = subscribers.get(userId);
         if (connections == null || !connections.remove(connection)) {
             return;
@@ -242,6 +259,7 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
         public void close(String reason) {
             if (!open.getAndSet(false)) return;
             connectionRegistry.unregister(this);
+            streamState.closedLegacyContentSse();
             remove(userId, this);
             try {
                 emitter.completeWithError(new ResponseStatusException(
@@ -256,8 +274,8 @@ public class BlogPlanSseService implements NotificationBroadcastPort {
             }
         }
 
-        void markClosed() {
-            open.set(false);
+        boolean markClosed() {
+            return open.getAndSet(false);
         }
 
         boolean isOpen() {

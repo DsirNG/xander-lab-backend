@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 894
-  leaves: 648
+  total: 898
+  leaves: 650
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -1145,6 +1145,21 @@ config:
     value: "30002"
     leaf: true
     logical_owner: shared
+  - key: core
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: core.stream
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: core.stream.drain-enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${CORE_STREAM_DRAIN_ENABLED:false}"
+    leaf: true
+    logical_owner: core
   - key: spring
     source: apps/core-host/src/main/resources/application.yml
     value: ""
@@ -4110,6 +4125,13 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 15
+  - key: core.stream.drain-enabled
+    source: apps/core-host/src/main/java/com/xander/lab/core/stream/CoreHostStreamProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: core
+    source_kind: java-configuration-properties
+    line: 12
   - key: auth.refresh.access-ttl-seconds
     source: apps/core-host/src/main/java/com/xander/lab/identity/application/RefreshTokenProperties.java
     value: "<java-default>"

@@ -837,7 +837,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#subscribe"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 125
+    line: 149
   - id: blogagent-post-blog-agent-tasks-id-messages-stream-blogagentstreamcontroller
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -859,7 +859,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#reviseStream"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 108
+    line: 131
   - id: blogagent-post-blog-agent-tasks-id-publish
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -903,7 +903,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#runStream"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 94
+    line: 116
   - id: bloghtml-post-blog-html-previews
     logical_owner: bloghtml
     deployment_unit: dinqor-bloghtml-preview

@@ -1,11 +1,18 @@
 package com.xander.lab.automation.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.common.security.ConnectionRegistry;
+import com.xander.lab.common.security.SecurityStateCache;
+import com.xander.lab.core.stream.CoreHostStreamProperties;
+import com.xander.lab.core.stream.CoreLegacyStreamState;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
@@ -14,6 +21,20 @@ import static org.mockito.Mockito.verify;
 class BlogPlanSseServiceTest {
 
     private final BlogPlanSseService service = new BlogPlanSseService(new ObjectMapper());
+
+    @Test
+    void drainRejectsNewLegacyNotificationStreams() {
+        CoreHostStreamProperties properties = new CoreHostStreamProperties();
+        properties.setDrainEnabled(true);
+        BlogPlanSseService draining = new BlogPlanSseService(
+                new ObjectMapper(), new SecurityStateCache(), new ConnectionRegistry(),
+                properties, new CoreLegacyStreamState());
+
+        assertThatThrownBy(() -> draining.subscribe(7L))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(exception -> ((ResponseStatusException) exception).getStatusCode())
+                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    }
 
     @Test
     void pushToUserWithNoSubscriptionIsHarmless() {

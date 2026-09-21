@@ -32,6 +32,7 @@ counts:
     - webmvc
   unclassified_sources:
     - DinQorAIApplication.java
+    - core
     - gateway
     - integrationhost
     - migration

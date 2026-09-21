@@ -190,7 +190,8 @@ deny cache event 丢失后的 reconcile
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| 5 个指标全部未接入 | 本文的 Phase 4 判据目前只能靠日志与 `ConnectionRegistry.activeCount()` 人工读；`legacy_*_active` 需要 `instance` 标签，属 Wave 2 可观测性工作 | Wave 2 |
+| 旧流存量与 drain 开关 | Core 的旧 BlogAgent / 通知 SSE 已接入逐实例 `legacy_agent_sse_active`、`legacy_content_sse_active` 和 `core_legacy_stream_drain_enabled`；指标仍需接入部署侧 instance 标签并由发布流程逐实例读取 | 代码已落地，发布侧待接入 |
+| 关闭速率与重连成功率 | `drain_connection_close_rate`、`client_reconnect_success_rate` 仍需要客户端/网关观测，不能用服务端存量指标伪造 | Wave 2 |
 | Phase 3 的「迁移/重连信号」协议未定义 | 5 分钟到点后要"主动发送迁移/重连信号"，但 SSE / WS 上用什么事件名、客户端如何响应尚未设计。当前 SSE 无应用层关闭码（见 `stream-security.md` §4.1），这个信号只能走普通事件帧 | Wave 2 设计 |
 | 无空闲超时兜底 | SSE `SseEmitter(0L)` 永不超时，WS 也没有空闲超时；Phase 3 的上限是唯一的时间边界 | 设计取舍 |
 | 逐实例判据依赖 Micrometer | 若某实例指标端点不可达，§4 的「全部实例各自为 0」无法判定 —— 此时应视为**未完成**（fail-closed），不得当作 0 | Wave 2 放行评审 |
@@ -199,8 +200,8 @@ deny cache event 丢失后的 reconcile
 
 ## 8. 怎么验证
 
-本文描述的是 Wave 2 的执行流程，**当前无代码可跑**（Wave 0A 不改部署）。
-能机器校验的部分是三份 Owner 清单的一致性：
+本文描述的是 Wave 2 的执行流程；Core 旧流已具备默认关闭的 drain 开关与单测，
+完整切换仍必须在多实例部署侧执行并观察真实连接指标。能机器校验的部分是三份 Owner 清单的一致性：
 
 ```bash
 # 表 / 调度 / 路由的 Owner 唯一性（第 10 步「验证唯一 Owner」的机器部分）

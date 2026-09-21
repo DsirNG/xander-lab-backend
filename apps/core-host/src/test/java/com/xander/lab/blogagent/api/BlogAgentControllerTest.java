@@ -4,6 +4,8 @@ import com.xander.lab.blogagent.application.BlogAgentEventService;
 import com.xander.lab.blogagent.application.BlogAgentService;
 import com.xander.lab.common.security.ConnectionRegistry;
 import com.xander.lab.auth.core.UserContext;
+import com.xander.lab.core.stream.CoreHostStreamProperties;
+import com.xander.lab.core.stream.CoreLegacyStreamState;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -36,6 +38,20 @@ import static org.mockito.Mockito.verify;
 class BlogAgentControllerTest {
     private static final String TASK_QUEUE_BUSY_MESSAGE = "博客生成助手执行队列繁忙，请稍后重试";
     private static final String SUBSCRIPTION_QUEUE_BUSY_MESSAGE = "博客生成助手事件订阅繁忙，请稍后重试";
+
+    @Test
+    void drainRejectsNewLegacyBlogAgentStreamsBeforeTouchingTheTaskService() {
+        CoreHostStreamProperties properties = new CoreHostStreamProperties();
+        properties.setDrainEnabled(true);
+        BlogAgentController controller = new BlogAgentController(
+                null, null, null, null, null, properties, new CoreLegacyStreamState());
+        UserContext.setUserId(42L);
+
+        assertThatThrownBy(() -> controller.runStream(7L, mock(HttpServletResponse.class)))
+                .isInstanceOf(ResponseStatusException.class)
+                .extracting(exception -> ((ResponseStatusException) exception).getStatusCode())
+                .isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    }
 
     @AfterEach
     void clearUserContext() {

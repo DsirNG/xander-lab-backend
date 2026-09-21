@@ -1,6 +1,10 @@
 server:
   port: 30002
 
+core:
+  stream:
+    drain-enabled: ${CORE_STREAM_DRAIN_ENABLED:false}
+
 spring:
   config:
     import: optional:application-local.yml
