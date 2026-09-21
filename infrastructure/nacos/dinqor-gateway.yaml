@@ -23,6 +23,12 @@ spring:
         service: dinqor-gateway
 
 gateway:
+  # Route destinations belong to the Gateway private DataId so a production
+  # cutover does not depend on values baked into the application jar.
+  agent-uri: ${GATEWAY_AGENT_URI:lb://dinqor-agent}
+  agent-ws-uri: ${GATEWAY_AGENT_WS_URI:lb:ws://dinqor-agent}
+  platform-integration-uri: ${GATEWAY_PLATFORM_INTEGRATION_URI:lb://dinqor-platform-integration}
+  content-automation-uri: ${GATEWAY_CONTENT_AUTOMATION_URI:lb://dinqor-content-automation}
   stream-proxy:
     preserve-response-header: X-Accel-Buffering
     preserve-request-header: Last-Event-ID

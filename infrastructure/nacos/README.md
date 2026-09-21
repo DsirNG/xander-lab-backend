@@ -18,8 +18,10 @@ separate shared group, `COMMON`, by default (`NACOS_DISCOVERY_GROUP` can overrid
 discovery in one group is required for Gateway `lb://...` routes to resolve instances registered
 by another service; changing a service's private config group must not break discovery.
 
-`dinqor-gateway.yaml` is the source of truth for the fallback route and stream proxy settings;
-there is no second checked-in gateway overlay to drift from the Nacos DataId.
+`dinqor-gateway.yaml` is the source of truth for the fallback route, split-service route
+destinations and stream proxy settings; there is no second checked-in gateway overlay to drift
+from the Nacos DataId. The Java route definitions only provide the route predicates and safe
+defaults; production destination overrides belong in this private DataId.
 The global Gateway response timeout is intentionally omitted: a negative duration causes the
 Spring Cloud Gateway proxy to return 504 for ordinary proxied requests in the Nacos profile.
 Streaming behavior is controlled by the stream-proxy settings and route-specific policy.

@@ -1190,6 +1190,20 @@ def gate_gateway_stream_proxy_config() -> None:
     )
     stream_proxy = document.get("gateway", {}).get("stream-proxy", {})
     problems: list[str] = []
+    route_targets = {
+        "agent-uri": "lb://dinqor-agent",
+        "agent-ws-uri": "lb:ws://dinqor-agent",
+        "platform-integration-uri": "lb://dinqor-platform-integration",
+        "content-automation-uri": "lb://dinqor-content-automation",
+    }
+    gateway_private = document.get("gateway", {})
+    if not isinstance(gateway_private, dict):
+        problems.append("gateway private settings are missing")
+    else:
+        for key, default in route_targets.items():
+            value = gateway_private.get(key)
+            if not isinstance(value, str) or default not in value:
+                problems.append(f"gateway.{key} must default to {default}")
     if not isinstance(fallback, dict):
         problems.append("monolith-fallback route is missing")
     else:
