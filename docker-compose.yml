@@ -1,3 +1,8 @@
+# Legacy single-container deployment only.
+#
+# The V9 refactor does not start from this file. Use
+# infrastructure/docker/docker-compose.local-infra.yml for MySQL/Redis/Nacos,
+# then the Wave 1/2 Compose files for the split services.
 version: '3.8'
 
 services:
