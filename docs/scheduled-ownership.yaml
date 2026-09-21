@@ -95,7 +95,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: planned
-    scan_ref: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentEmailReminderScheduler.java:61
+    scan_ref: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentEmailReminderScheduler.java:68
     notes: "Wave 2 邮件提醒调度器。默认关闭；启用时必须同时开启 content-automation.shedlock，先通过 Core 内网邮件/计费窄契约做空库启动与重复认领验证，再按 drain 顺序关闭 Core 旧调度器。"
 
   - id: content-automation-stream-drainer

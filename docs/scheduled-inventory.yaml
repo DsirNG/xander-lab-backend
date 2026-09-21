@@ -64,7 +64,7 @@ scheduled:
     trigger: "fixedDelayString = \"${content-automation.email-reminder-scheduler.poll-interval-ms:10000}\", initialDelayString = \"${content-automation.email-reminder-scheduler.initial-delay-ms:15000}\""
     logical_owner: automation
     file: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentEmailReminderScheduler.java
-    line: 61
+    line: 68
   - id: content-security-state-reconciler-reconcile
     class: com.xander.lab.automation.infrastructure.ContentSecurityStateReconciler
     method: reconcile
