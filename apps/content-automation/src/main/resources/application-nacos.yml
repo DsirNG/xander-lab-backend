@@ -10,7 +10,7 @@ spring:
       config:
         enabled: ${NACOS_CONFIG_ENABLED:true}
         import-check:
-          enabled: true
+          enabled: ${NACOS_CONFIG_IMPORT_CHECK_ENABLED:true}
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:}
         group: ${NACOS_GROUP:DINQOR-CONTENT-AUTOMATION}
