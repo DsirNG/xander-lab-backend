@@ -181,6 +181,22 @@ Wave 2：core-host 允许 2 实例（滚动发布需要）
 | 空目录已清理（不可提交） | 见 §2 的六个空包。Git 不跟踪空目录，所以仓库里本就没有它们，清理只影响本地工作区 | 已处理 |
 | `components` 前缀嵌套 | 见 §3，Gateway 路由 `order` 需要在 Wave 1 实际配置时验证 | Wave 1 |
 
+### Core 旧公开入口的 Wave 2 禁用开关
+
+Core 仍保留兼容实现，方便按 §96 的顺序回滚；它不应在新服务已接管后继续作为第二个
+公开 Owner。`dinqor-core.yaml` 与 Wave 1 Compose 提供以下开关，默认均为 `true`：
+
+| 环境变量 | Core 旧入口 | 关闭前置条件 |
+|---|---|---|
+| `CORE_LEGACY_PUBLISHING_CREATE_ENABLED` | `POST /api/blog/posts` | Content-Automation create 路由已启用且 readiness 通过 |
+| `CORE_LEGACY_BLOGAGENT_STREAM_ENABLED` | BlogAgent SSE | Agent/Content 新流已接管并完成 Drain 验证 |
+| `CORE_LEGACY_NOTIFICATION_STREAM_ENABLED` | 自动化通知 SSE | Content-Automation 通知流已接管并完成 Drain 验证 |
+| `CORE_LEGACY_PLATFORM_PUBLIC_ENABLED` | CSDN/Juejin 授权、同步、目录公开入口 | Platform-Integration 路由与内网桥均已验证 |
+
+这些开关只作用于 Core 的旧公开 Controller；`/internal/**` 兼容桥和文件上传等尚未搬走的
+能力不受影响。切换时必须先完成 Gateway 路由、健康检查和连接 Drain，再把对应开关设为
+`false`，最后才执行数据库权限收窄。
+
 ---
 
 ## 8. 怎么验证

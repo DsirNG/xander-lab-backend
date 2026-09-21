@@ -5,6 +5,7 @@ import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCatalogService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinCredentialService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -12,6 +13,8 @@ import org.springframework.web.bind.annotation.RestController;
 /** C-end API for manually synchronizing Juejin categories and tags catalog. */
 @RestController
 @RequestMapping("/api/publishing/juejin/catalog")
+@ConditionalOnProperty(prefix = "core.legacy", name = "platform-public-enabled",
+        havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class JuejinCatalogController {
     private final JuejinCatalogService catalogService;

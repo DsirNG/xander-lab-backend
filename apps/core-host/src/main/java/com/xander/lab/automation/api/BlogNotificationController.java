@@ -3,6 +3,7 @@ package com.xander.lab.automation.api;
 import com.xander.lab.automation.infrastructure.BlogPlanSseService;
 import com.xander.lab.auth.core.UserContext;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,6 +12,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/api/notifications")
+@ConditionalOnProperty(prefix = "core.legacy", name = "notification-stream-enabled",
+        havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class BlogNotificationController {
 

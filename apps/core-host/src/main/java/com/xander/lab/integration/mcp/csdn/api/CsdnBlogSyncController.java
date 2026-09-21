@@ -5,6 +5,7 @@ import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.api.BlogSyncResult;
 import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 /** C-end command for synchronizing one owned blog post to CSDN. */
 @RestController
 @RequestMapping("/api/blog/posts")
+@ConditionalOnProperty(prefix = "core.legacy", name = "platform-public-enabled",
+        havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class CsdnBlogSyncController {
     private final CsdnBlogSyncService service;

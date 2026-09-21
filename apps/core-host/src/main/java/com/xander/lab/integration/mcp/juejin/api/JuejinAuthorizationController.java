@@ -4,6 +4,7 @@ import com.xander.lab.common.Result;
 import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.mcp.juejin.application.JuejinAuthorizationService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,6 +14,8 @@ import org.springframework.web.bind.annotation.RestController;
 /** C-end API for connecting one user's Juejin account by QR code. */
 @RestController
 @RequestMapping("/api/publishing/juejin/authorization")
+@ConditionalOnProperty(prefix = "core.legacy", name = "platform-public-enabled",
+        havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class JuejinAuthorizationController {
     private final JuejinAuthorizationService service;

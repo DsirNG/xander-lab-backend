@@ -5,6 +5,7 @@ import com.xander.lab.auth.core.UserContext;
 import com.xander.lab.integration.api.BlogSyncResult;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,6 +18,8 @@ import java.util.Map;
 /** C-end command for synchronizing one owned blog post to Juejin. */
 @RestController
 @RequestMapping("/api/blog/posts")
+@ConditionalOnProperty(prefix = "core.legacy", name = "platform-public-enabled",
+        havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class JuejinBlogSyncController {
     private final JuejinBlogSyncService service;

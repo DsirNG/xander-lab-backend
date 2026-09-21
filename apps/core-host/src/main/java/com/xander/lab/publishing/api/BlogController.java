@@ -7,6 +7,7 @@ import com.xander.lab.publishing.api.CategoryVO;
 import com.xander.lab.publishing.api.TagVO;
 import com.xander.lab.publishing.application.BlogService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -19,6 +20,8 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/api/blog")
+@ConditionalOnProperty(prefix = "core.legacy", name = "publishing-create-enabled",
+        havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class BlogController {
 

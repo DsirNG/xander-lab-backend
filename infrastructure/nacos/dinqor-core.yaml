@@ -23,6 +23,15 @@ security:
     internal-api-enabled: ${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}
     internal-token: ${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}
 
+# V9 §96 — legacy public handlers stay compatible by default, but can be disabled
+# only after Gateway has moved the corresponding route to its Wave 2 owner.
+core:
+  legacy:
+    publishing-create-enabled: ${CORE_LEGACY_PUBLISHING_CREATE_ENABLED:true}
+    blogagent-stream-enabled: ${CORE_LEGACY_BLOGAGENT_STREAM_ENABLED:true}
+    notification-stream-enabled: ${CORE_LEGACY_NOTIFICATION_STREAM_ENABLED:true}
+    platform-public-enabled: ${CORE_LEGACY_PLATFORM_PUBLIC_ENABLED:true}
+
 mysql:
   reliability:
     enabled: ${MYSQL_RELIABILITY_ENABLED:false}

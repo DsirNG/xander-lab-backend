@@ -18,6 +18,7 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -47,6 +48,8 @@ import java.util.function.Consumer;
 @Slf4j
 @RestController
 @RequestMapping("/api/blog-agent/tasks")
+@ConditionalOnProperty(prefix = "core.legacy", name = "blogagent-stream-enabled",
+        havingValue = "true", matchIfMissing = true)
 public class BlogAgentController {
     private static final Duration HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
     private static final String TASK_QUEUE_BUSY_MESSAGE = "博客生成助手执行队列繁忙，请稍后重试";
