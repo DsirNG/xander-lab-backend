@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 25
+  total: 26
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -163,6 +163,13 @@ scheduled:
     logical_owner: knowledgebase
     file: apps/core-host/src/main/java/com/xander/lab/knowledgebase/infrastructure/KnowledgeUploadSessionReaper.java
     line: 39
+  - id: my-sql-reliability-state
+    class: com.xander.lab.operations.mysqlreliability.MySqlReliabilityState
+    method: refresh
+    trigger: "fixedDelayString = \"${mysql.reliability.refresh-interval-ms:30000}\""
+    logical_owner: operations
+    file: apps/core-host/src/main/java/com/xander/lab/operations/mysqlreliability/MySqlReliabilityState.java
+    line: 36
   - id: redis-health-monitor
     class: com.xander.lab.operations.redishealth.RedisHealthMonitor
     method: checkRedis

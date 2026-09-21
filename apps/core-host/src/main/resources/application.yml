@@ -94,6 +94,12 @@ redis-monitor:
   notify-recovery: ${REDIS_MONITOR_NOTIFY_RECOVERY:true}
   alert-retry-interval-ms: ${REDIS_MONITOR_ALERT_RETRY_INTERVAL_MS:300000}
 
+mysql:
+  reliability:
+    enabled: ${MYSQL_RELIABILITY_ENABLED:false}
+    evidence-file: ${MYSQL_RELIABILITY_EVIDENCE_FILE:}
+    refresh-interval-ms: ${MYSQL_RELIABILITY_REFRESH_INTERVAL_MS:30000}
+
 mail:
   from: ${MAIL_FROM:noreply@mail.dsircity.top}
 

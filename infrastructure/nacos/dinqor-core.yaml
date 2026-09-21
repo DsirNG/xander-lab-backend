@@ -22,3 +22,9 @@ security:
   state-sync:
     internal-api-enabled: ${SECURITY_STATE_SYNC_INTERNAL_API_ENABLED:false}
     internal-token: ${SECURITY_STATE_SYNC_INTERNAL_TOKEN:}
+
+mysql:
+  reliability:
+    enabled: ${MYSQL_RELIABILITY_ENABLED:false}
+    evidence-file: ${MYSQL_RELIABILITY_EVIDENCE_FILE:}
+    refresh-interval-ms: ${MYSQL_RELIABILITY_REFRESH_INTERVAL_MS:30000}

@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 947
-  leaves: 699
+  total: 955
+  leaves: 705
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -1620,6 +1620,31 @@ config:
     value: "${REDIS_MONITOR_ALERT_RETRY_INTERVAL_MS:300000}"
     leaf: true
     logical_owner: core
+  - key: mysql
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: mysql.reliability
+    source: apps/core-host/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: unassigned
+  - key: mysql.reliability.enabled
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${MYSQL_RELIABILITY_ENABLED:false}"
+    leaf: true
+    logical_owner: unassigned
+  - key: mysql.reliability.evidence-file
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${MYSQL_RELIABILITY_EVIDENCE_FILE:}"
+    leaf: true
+    logical_owner: unassigned
+  - key: mysql.reliability.refresh-interval-ms
+    source: apps/core-host/src/main/resources/application.yml
+    value: "${MYSQL_RELIABILITY_REFRESH_INTERVAL_MS:30000}"
+    leaf: true
+    logical_owner: unassigned
   - key: mail
     source: apps/core-host/src/main/resources/application.yml
     value: ""
@@ -4946,6 +4971,27 @@ config:
     logical_owner: knowledge
     source_kind: java-configuration-properties
     line: 31
+  - key: mysql.reliability.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/operations/mysqlreliability/MySqlReliabilityProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 11
+  - key: mysql.reliability.evidence-file
+    source: apps/core-host/src/main/java/com/xander/lab/operations/mysqlreliability/MySqlReliabilityProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 12
+  - key: mysql.reliability.refresh-interval-ms
+    source: apps/core-host/src/main/java/com/xander/lab/operations/mysqlreliability/MySqlReliabilityProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: unassigned
+    source_kind: java-configuration-properties
+    line: 13
   - key: recitation.enabled
     source: apps/core-host/src/main/java/com/xander/lab/recitation/infrastructure/RecitationProperties.java
     value: "<java-default>"

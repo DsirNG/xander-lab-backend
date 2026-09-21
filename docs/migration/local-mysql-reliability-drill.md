@@ -12,8 +12,14 @@
 ```powershell
 python scripts/migration/mysql_reliability_drill.py `
   --container dinqor-refactor-mysql `
-  --database xander_lab
+  --database xander_lab `
+  --output C:\path\to\mysql-reliability.json
 ```
+
+Core 宿主通过 `MYSQL_RELIABILITY_ENABLED=true` 与
+`MYSQL_RELIABILITY_EVIDENCE_FILE` 读取该 JSON，并暴露 `backup_success`、
+`last_backup_age`、`binlog_lag`、`restore_drill_date`；证据文件不存在或字段不可计算时
+对应值为 `-1`，`mysql_reliability_evidence_available=0`。
 
 ## 最近一次本地结果
 

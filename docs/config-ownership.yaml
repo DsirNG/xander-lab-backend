@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 699
-  service_private: 608
+  total: 705
+  service_private: 614
   secret: 79
   shared: 12
 config:
@@ -3485,6 +3485,36 @@ config:
     nacos_group: COMMON
   - key: management.virtual-pay.read-timeout-millis
     source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: mysql.reliability.enabled
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: mysql.reliability.enabled
+    source: apps/core-host/src/main/java/com/xander/lab/operations/mysqlreliability/MySqlReliabilityProperties.java
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: mysql.reliability.evidence-file
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: mysql.reliability.evidence-file
+    source: apps/core-host/src/main/java/com/xander/lab/operations/mysqlreliability/MySqlReliabilityProperties.java
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: mysql.reliability.refresh-interval-ms
+    source: apps/core-host/src/main/resources/application.yml
+    classification: service_private
+    owner: unassigned
+    nacos_group: COMMON
+  - key: mysql.reliability.refresh-interval-ms
+    source: apps/core-host/src/main/java/com/xander/lab/operations/mysqlreliability/MySqlReliabilityProperties.java
     classification: service_private
     owner: unassigned
     nacos_group: COMMON

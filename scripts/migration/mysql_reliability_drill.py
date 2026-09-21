@@ -14,6 +14,7 @@ import json
 import shlex
 import subprocess
 import uuid
+from pathlib import Path
 from typing import Sequence
 
 
@@ -107,8 +108,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--container", default="dinqor-refactor-mysql")
     parser.add_argument("--database", default="xander_lab")
+    parser.add_argument("--output", help="write the JSON evidence file for the Core metrics bridge")
     args = parser.parse_args(argv)
-    print(json.dumps(drill(args.container, args.database), ensure_ascii=False, indent=2))
+    result = drill(args.container, args.database)
+    encoded = json.dumps(result, ensure_ascii=False, indent=2) + "\n"
+    if args.output:
+        Path(args.output).write_text(encoded, encoding="utf-8")
+    print(encoded, end="")
     return 0
 
 
