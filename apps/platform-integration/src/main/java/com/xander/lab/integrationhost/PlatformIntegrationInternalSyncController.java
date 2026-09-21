@@ -89,26 +89,60 @@ public class PlatformIntegrationInternalSyncController {
                         request.juejinCategoryId(), request.juejinTagIds()));
     }
 
+    /** Forwards a CSDN idempotency lookup without contacting the external platform. */
+    @PostMapping("/{postId}/find-succeeded/csdn")
+    public ResponseEntity<BlogSyncResult> findSucceededCsdn(
+            @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String token,
+            @PathVariable Long postId,
+            @RequestBody CsdnSyncRequest request) {
+        authorize(token);
+        validatePost(postId, request.userId(), request.postId());
+        return forward("/internal/integration/blog-posts/" + postId + "/find-succeeded/csdn",
+                new CsdnSyncRequest(request.userId(), postId), true);
+    }
+
+    /** Forwards a Juejin idempotency lookup without contacting the external platform. */
+    @PostMapping("/{postId}/find-succeeded/juejin")
+    public ResponseEntity<BlogSyncResult> findSucceededJuejin(
+            @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String token,
+            @PathVariable Long postId,
+            @RequestBody CsdnSyncRequest request) {
+        authorize(token);
+        validatePost(postId, request.userId(), request.postId());
+        return forward("/internal/integration/blog-posts/" + postId + "/find-succeeded/juejin",
+                new CsdnSyncRequest(request.userId(), postId), true);
+    }
+
     private BlogSyncResult forward(String path, Object request) {
+        return forward(path, request, false).getBody();
+    }
+
+    private ResponseEntity<BlogSyncResult> forward(String path, Object request, boolean allowEmpty) {
         try {
             ResponseEntity<byte[]> response = restClient.post()
                     .uri(targetUri(path))
                     .contentType(MediaType.APPLICATION_JSON)
                     .header(INTERNAL_TOKEN_HEADER, properties.getCoreInternalToken())
                     .body(request)
-                    .exchange((clientRequest, clientResponse) -> new ResponseEntity<>(
-                            copyBounded(clientResponse.getBody(), properties.getMaxResponseBytes()),
-                            clientResponse.getStatusCode()));
+                    .exchange((clientRequest, clientResponse) -> {
+                        byte[] body = clientResponse.getStatusCode().is2xxSuccessful()
+                                ? copyBounded(clientResponse.getBody(), properties.getMaxResponseBytes())
+                                : new byte[0];
+                        return new ResponseEntity<>(body, clientResponse.getStatusCode());
+                    });
             if (!response.getStatusCode().is2xxSuccessful()) {
                 throw new ResponseStatusException(BAD_GATEWAY,
                         "平台集成服务暂时无法完成站外同步");
             }
             byte[] body = response.getBody();
             if (body == null || body.length == 0) {
+                if (allowEmpty) {
+                    return ResponseEntity.ok().build();
+                }
                 throw new ResponseStatusException(BAD_GATEWAY,
                         "平台集成服务返回了空的站外同步结果");
             }
-            return objectMapper.readValue(body, BlogSyncResult.class);
+            return ResponseEntity.ok(objectMapper.readValue(body, BlogSyncResult.class));
         } catch (ResponseStatusException exception) {
             throw exception;
         } catch (Exception exception) {

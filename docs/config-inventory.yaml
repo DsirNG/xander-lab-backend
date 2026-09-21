@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 881
-  leaves: 636
+  total: 894
+  leaves: 648
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -288,6 +288,41 @@ config:
   - key: agent.core-client.internal-token
     source: apps/agent/src/main/resources/application.yml
     value: "${AGENT_CORE_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.platform-client
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: agent
+  - key: agent.platform-client.enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_PLATFORM_CLIENT_ENABLED:false}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.platform-client.base-url
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_PLATFORM_BASE_URL:http://platform-integration:30005}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.platform-client.internal-token
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_PLATFORM_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.platform-client.connect-timeout-millis
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_PLATFORM_CONNECT_TIMEOUT_MILLIS:2000}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.platform-client.read-timeout-millis
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_PLATFORM_READ_TIMEOUT_MILLIS:30000}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.platform-client.max-response-bytes
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_PLATFORM_MAX_RESPONSE_BYTES:1048576}"
     leaf: true
     logical_owner: agent
   - key: agent.event-bus
@@ -3636,6 +3671,48 @@ config:
     line: 17
   - key: agent.model.web-search-enabled
     source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentModelProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 15
+  - key: agent.platform-client.base-url
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentPlatformClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 12
+  - key: agent.platform-client.connect-timeout-millis
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentPlatformClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 14
+  - key: agent.platform-client.enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentPlatformClientProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 11
+  - key: agent.platform-client.internal-token
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentPlatformClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 13
+  - key: agent.platform-client.max-response-bytes
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentPlatformClientProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 16
+  - key: agent.platform-client.read-timeout-millis
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentPlatformClientProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: agent

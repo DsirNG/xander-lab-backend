@@ -6,6 +6,7 @@ import com.xander.lab.integration.mcp.csdn.application.CsdnBlogSyncService;
 import com.xander.lab.integration.mcp.juejin.application.JuejinBlogSyncService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -70,6 +71,30 @@ public class InternalBlogSyncController {
         validatePost(postId, request.userId(), request.postId());
         return juejinBlogSyncService.sync(request.userId(), postId,
                 request.juejinCategoryId(), request.juejinTagIds());
+    }
+
+    /** Reads a prior CSDN success without contacting the external platform. */
+    @PostMapping("/{postId}/find-succeeded/csdn")
+    public ResponseEntity<BlogSyncResult> findSucceededCsdn(
+            @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String token,
+            @PathVariable Long postId,
+            @RequestBody CsdnSyncRequest request) {
+        authorize(token);
+        validatePost(postId, request.userId(), request.postId());
+        BlogSyncResult result = csdnBlogSyncService.findSucceeded(request.userId(), postId);
+        return result == null ? ResponseEntity.ok().build() : ResponseEntity.ok(result);
+    }
+
+    /** Reads a prior Juejin success without contacting the external platform. */
+    @PostMapping("/{postId}/find-succeeded/juejin")
+    public ResponseEntity<BlogSyncResult> findSucceededJuejin(
+            @RequestHeader(value = INTERNAL_TOKEN_HEADER, required = false) String token,
+            @PathVariable Long postId,
+            @RequestBody CsdnSyncRequest request) {
+        authorize(token);
+        validatePost(postId, request.userId(), request.postId());
+        BlogSyncResult result = juejinBlogSyncService.findSucceeded(request.userId(), postId);
+        return result == null ? ResponseEntity.ok().build() : ResponseEntity.ok(result);
     }
 
     private void authorize(String token) {

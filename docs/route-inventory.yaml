@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 273
+  total: 277
   streams: 12
   websocket: 1
   sse: 11
@@ -2917,6 +2917,28 @@ routes:
     handler: "com.xander.lab.automation.api.InternalBlogPlanTriggerController#trigger"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/InternalBlogPlanTriggerController.java
     line: 50
+  - id: integration-post-internal-integration-blog-posts-postid-find-succeeded-csdn
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/integration/blog-posts/{postId}/find-succeeded/csdn"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalBlogSyncController#findSucceededCsdn"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalBlogSyncController.java
+    line: 77
+  - id: integration-post-internal-integration-blog-posts-postid-find-succeeded-juejin
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/integration/blog-posts/{postId}/find-succeeded/juejin"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalBlogSyncController#findSucceededJuejin"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalBlogSyncController.java
+    line: 89
   - id: integration-post-internal-integration-blog-posts-postid-sync-csdn
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2927,7 +2949,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.internal.api.InternalBlogSyncController#syncCsdn"
     file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalBlogSyncController.java
-    line: 53
+    line: 54
   - id: integration-post-internal-integration-blog-posts-postid-sync-juejin
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2938,7 +2960,29 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.internal.api.InternalBlogSyncController#syncJuejin"
     file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalBlogSyncController.java
-    line: 64
+    line: 65
+  - id: integration-post-internal-platform-integration-blog-posts-postid-find-succeeded-csdn
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/platform-integration/blog-posts/{postId}/find-succeeded/csdn"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#findSucceededCsdn"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
+    line: 93
+  - id: integration-post-internal-platform-integration-blog-posts-postid-find-succeeded-juejin
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/platform-integration/blog-posts/{postId}/find-succeeded/juejin"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#findSucceededJuejin"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
+    line: 105
   - id: integration-post-internal-platform-integration-blog-posts-postid-sync-csdn
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2949,7 +2993,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#syncCsdn"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
-    line: 69
+    line: 68
   - id: integration-post-internal-platform-integration-blog-posts-postid-sync-juejin
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2960,7 +3004,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#syncJuejin"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
-    line: 81
+    line: 80
   - id: identity-get-internal-security-state-changes
     logical_owner: identity
     deployment_unit: dinqor-core-host
