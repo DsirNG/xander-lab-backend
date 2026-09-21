@@ -1884,6 +1884,55 @@ def gate_nacos_switch_ownership() -> None:
     report(gate, True, "Wave 1/Wave 2 cutover switches remain owned by private Nacos DataIds")
 
 
+def gate_nacos_completed_cutover() -> None:
+    """Ensure completed Wave 2 public owners are not accidentally dual-wired."""
+    gate = "nacos-completed-cutover"
+    paths = {
+        "core": REPO / "infrastructure" / "nacos" / "dinqor-core.yaml",
+        "gateway": REPO / "infrastructure" / "nacos" / "dinqor-gateway.yaml",
+        "content": REPO / "infrastructure" / "nacos" / "dinqor-content-automation.yaml",
+    }
+    documents: dict[str, dict] = {}
+    problems: list[str] = []
+    for name, path in paths.items():
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            problems.append(f"{path}: cannot parse Nacos YAML: {exc}")
+            continue
+        if not isinstance(document, dict):
+            problems.append(f"{path}: Nacos document must be a mapping")
+        else:
+            documents[name] = document
+
+    core_legacy = documents.get("core", {}).get("core", {}).get("legacy", {})
+    gateway = documents.get("gateway", {}).get("gateway", {})
+    content = documents.get("content", {}).get("content-automation", {})
+    expected = {
+        "core.legacy.publishing-create-enabled": (core_legacy.get(
+            "publishing-create-enabled"), False),
+        "core.legacy.blogagent-stream-enabled": (core_legacy.get(
+            "blogagent-stream-enabled"), False),
+        "core.legacy.notification-stream-enabled": (core_legacy.get(
+            "notification-stream-enabled"), False),
+        "core.legacy.platform-public-enabled": (core_legacy.get(
+            "platform-public-enabled"), False),
+        "gateway.content-publishing-create-enabled": (gateway.get(
+            "content-publishing-create-enabled"), True),
+        "content-automation.publishing-create-enabled": (content.get(
+            "publishing-create-enabled"), True),
+    }
+    for key, (actual, required) in expected.items():
+        if actual is not required:
+            problems.append(f"{key} must be {str(required).lower()}, got {actual!r}")
+
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True,
+           "completed Wave 2 public owners are enabled once in Gateway/Content and disabled in Core")
+
+
 # V9 section 80 bans the global ``classpath*:/mapper/*.xml`` swallow once services
 # are split. It is still *correct* today: there is exactly one application module,
 # so there is nothing else on the classpath for it to swallow. And changing it now
@@ -2266,6 +2315,7 @@ GATES = {
     "wave1-compose-contract": gate_wave1_compose_contract,
     "wave2-compose-nacos-contract": gate_wave2_compose_nacos_contract,
     "nacos-switch-ownership": gate_nacos_switch_ownership,
+    "nacos-completed-cutover": gate_nacos_completed_cutover,
     "mybatis-scan-scope": gate_mybatis_scan_scope,
 }
 
