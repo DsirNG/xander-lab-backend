@@ -13,6 +13,7 @@ public class ContentAutomationProperties {
     private int coreMaxResponseBytes = 1 * 1024 * 1024;
     private boolean publishingCreateEnabled;
     private boolean agentContentApiEnabled;
+    private boolean agentBlogAgentApiEnabled;
     private String platformIntegrationBaseUrl = "http://localhost:30005";
     private String platformIntegrationInternalToken = "";
     private int platformIntegrationConnectTimeoutMillis = 2_000;
@@ -78,6 +79,14 @@ public class ContentAutomationProperties {
 
     public void setAgentContentApiEnabled(boolean agentContentApiEnabled) {
         this.agentContentApiEnabled = agentContentApiEnabled;
+    }
+
+    public boolean isAgentBlogAgentApiEnabled() {
+        return agentBlogAgentApiEnabled;
+    }
+
+    public void setAgentBlogAgentApiEnabled(boolean agentBlogAgentApiEnabled) {
+        this.agentBlogAgentApiEnabled = agentBlogAgentApiEnabled;
     }
 
     public String getPlatformIntegrationBaseUrl() {

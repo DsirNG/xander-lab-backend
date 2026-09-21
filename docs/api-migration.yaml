@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 318
+  total: 323
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -1533,6 +1533,91 @@ entries:
     old:
       method: POST
       path: "/internal/agent/blog/topic-series"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: blogagent-post-internal-agent-blogagent-create
+    owner: blogagent
+    old:
+      method: POST
+      path: "/internal/agent/blogagent/create"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: blogagent-post-internal-agent-blogagent-find-published
+    owner: blogagent
+    old:
+      method: POST
+      path: "/internal/agent/blogagent/find-published"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: blogagent-post-internal-agent-blogagent-find-ready
+    owner: blogagent
+    old:
+      method: POST
+      path: "/internal/agent/blogagent/find-ready"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: blogagent-post-internal-agent-blogagent-taskid-publish
+    owner: blogagent
+    old:
+      method: POST
+      path: "/internal/agent/blogagent/{taskId}/publish"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: blogagent-post-internal-agent-blogagent-taskid-run-stream
+    owner: blogagent
+    old:
+      method: POST
+      path: "/internal/agent/blogagent/{taskId}/run/stream"
     new:
       method: POST
       path: ""

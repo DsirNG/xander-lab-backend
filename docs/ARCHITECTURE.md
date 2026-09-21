@@ -11,6 +11,8 @@ feature; deployment and database topology stay unchanged.
 - `blogagent` (migrated): generates and revises content, stores evidence and versions. During
   Wave 2, `dinqor-content-automation` owns the task/session JDBC boundary, task creation,
   non-stream execution, local publication, and the BlogAgent run/revise/event-replay SSE boundary;
+  Agent consumes the token-protected BlogAgent create/run/query/publish boundary over HTTP,
+  including the stage-event SSE stream;
   core-host exposes only the stateless model-stage compatibility API while admin-managed model
   credentials remain there. Core's old stream handlers remain as a drain-only compatibility bridge
   until their traffic reaches zero. Content-automation also maintains its own per-instance

@@ -688,6 +688,15 @@ streams:
     owner: blogagent
     stream: sse
     last_event_id: true
+  - id: blogagent-agent-internal-run-stream
+    match: {method: POST, path_pattern: /internal/agent/blogagent/*/run/stream}
+    access: excluded
+    identity_mode: none
+    token_location: header
+    owner: blogagent
+    stream: sse
+    last_event_id: false
+    note: "Agent → Content 服务间流只接受 X-DinQor-Internal-Token，不套公网 JWT；调用方在请求体显式传递已授权 userId。"
   - id: img2three-run-stream
     match: {method: POST, path_pattern: /api/img2three/tasks/*/run/stream}
     access: authenticated

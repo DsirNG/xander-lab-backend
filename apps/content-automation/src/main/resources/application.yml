@@ -43,6 +43,7 @@ content-automation:
   core-max-response-bytes: ${CONTENT_AUTOMATION_CORE_MAX_RESPONSE_BYTES:1048576}
   publishing-create-enabled: ${CONTENT_AUTOMATION_PUBLISHING_CREATE_ENABLED:false}
   agent-content-api-enabled: ${CONTENT_AUTOMATION_AGENT_CONTENT_API_ENABLED:false}
+  agent-blogagent-api-enabled: ${CONTENT_AUTOMATION_AGENT_BLOGAGENT_API_ENABLED:false}
   platform-integration-base-url: ${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_BASE_URL:http://localhost:30005}
   platform-integration-internal-token: ${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_INTERNAL_TOKEN:}
   platform-integration-connect-timeout-millis: ${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_CONNECT_TIMEOUT_MILLIS:2000}

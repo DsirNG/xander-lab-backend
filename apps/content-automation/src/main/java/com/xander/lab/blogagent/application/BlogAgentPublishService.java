@@ -70,6 +70,15 @@ public class BlogAgentPublishService {
         });
     }
 
+    /** Reads the task's published post without changing task or post state. */
+    public BlogPostVO findPublishedPost(long userId, long taskId) {
+        BlogAgentTask task = taskReadService.findOwnedTask(userId, taskId);
+        if (task == null || task.getPublishedPostId() == null) {
+            return null;
+        }
+        return privateReadService.findMine(userId, task.getPublishedPostId());
+    }
+
     private List<String> parseTags(String tagsJson) {
         try {
             return objectMapper.readValue(defaultText(tagsJson, "[]"),

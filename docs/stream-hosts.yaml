@@ -118,5 +118,8 @@ hosts:
       且封禁后不再回客户端 ping 的 pong（否则客户端会误判链路健康并继续重连）。
 
 # 已知的、暂时无边界实现的流（必须显式列出并给出理由，否则门禁失败）。
-# 为空表示当前 8 条流全部已覆盖。
-unregistered_routes: []
+# 该流是 Agent → Content 的服务间令牌连接，不是面向用户的登录态连接；
+# 它的生命周期由一次 BlogAgent 任务执行绑定，断开后由 Agent 按失败语义重试，
+# 暂不接入用户 SSE 的 ConnectionRegistry/封禁主动断开机制。
+unregistered_routes:
+  - blogagent-post-internal-agent-blogagent-taskid-run-stream

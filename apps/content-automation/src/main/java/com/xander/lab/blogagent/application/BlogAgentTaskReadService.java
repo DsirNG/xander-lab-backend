@@ -124,6 +124,12 @@ public class BlogAgentTaskReadService {
         return tasks.isEmpty() ? null : tasks.get(0);
     }
 
+    /** Returns only a ready task for the cross-service idempotency lookup. */
+    public BlogAgentTask findReadyByClientRequestId(long userId, String clientRequestId) {
+        BlogAgentTask task = findByClientRequestId(userId, clientRequestId);
+        return task != null && "ready".equals(task.getStatus()) ? task : null;
+    }
+
     private BlogAgentTask requireOwnedTask(long userId, long taskId) {
         BlogAgentTask task = findOwnedTask(userId, taskId);
         if (task == null) {

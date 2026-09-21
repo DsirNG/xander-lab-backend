@@ -7,10 +7,10 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 323
-  streams: 12
+  total: 328
+  streams: 13
   websocket: 1
-  sse: 11
+  sse: 12
   servlets: 5
 routes:
   - id: integration-any-well-known
@@ -2818,6 +2818,61 @@ routes:
     handler: "com.xander.lab.blogagent.api.AgentBlogTopicSeriesController#generate"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/AgentBlogTopicSeriesController.java
     line: 40
+  - id: blogagent-post-internal-agent-blogagent-create
+    logical_owner: blogagent
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/blogagent/create"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.blogagent.api.BlogAgentInternalController#create"
+    file: apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentInternalController.java
+    line: 62
+  - id: blogagent-post-internal-agent-blogagent-find-published
+    logical_owner: blogagent
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/blogagent/find-published"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.blogagent.api.BlogAgentInternalController#findPublished"
+    file: apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentInternalController.java
+    line: 110
+  - id: blogagent-post-internal-agent-blogagent-find-ready
+    logical_owner: blogagent
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/blogagent/find-ready"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.blogagent.api.BlogAgentInternalController#findReady"
+    file: apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentInternalController.java
+    line: 102
+  - id: blogagent-post-internal-agent-blogagent-taskid-publish
+    logical_owner: blogagent
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/blogagent/{taskId}/publish"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.blogagent.api.BlogAgentInternalController#publish"
+    file: apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentInternalController.java
+    line: 118
+  - id: blogagent-post-internal-agent-blogagent-taskid-run-stream
+    logical_owner: blogagent
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/blogagent/{taskId}/run/stream"
+    stream: sse
+    last_event_id: false
+    handler: "com.xander.lab.blogagent.api.BlogAgentInternalController#run"
+    file: apps/content-automation/src/main/java/com/xander/lab/blogagent/api/BlogAgentInternalController.java
+    line: 73
   - id: publishing-post-internal-agent-content-count-managed
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
