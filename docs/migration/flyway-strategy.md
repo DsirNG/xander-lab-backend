@@ -304,7 +304,9 @@ restore_drill_date
 而"最近一次恢复演练是什么时候"是**事件时间戳**。没有它，
 "完成至少一次 restore drill"这条要求就退化成文档里的一句话。
 
-**当前状态**：这四个指标都未接入（Wave 2 可观测性工作）。
+**当前状态**：本地 Docker 已完成一次可重复的 full backup → 临时库 restore 演练，证据见
+[`local-mysql-reliability-drill.md`](./local-mysql-reliability-drill.md)。本地实例已确认
+binlog=ON、ROW；生产连续指标接入、备份调度、告警与 replica/binlog lag 仍是 Wave 2 放行项。
 
 ---
 
@@ -314,7 +316,7 @@ restore_drill_date
 |---|---|---|
 | **真实数据库尚未执行 Flyway** | Runner 已接入构建，但 `flyway_schema_history` 仍需由部署 Job 在目标库建立 | 首次 baseline / migrate |
 | RPO/RTO 四项观测量未接入 | 见 §8.3，RPO/RTO 目前无法被监控，只能人工确认 | Wave 2 |
-| 恢复演练未做 | §61 要求"至少一次 restore drill"并记录实际 RPO/RTO | Wave 2 放行前 |
+| ~~恢复演练未做~~ | **已补本地 Docker 演练**；生产环境仍需按同一脚本语义执行并记录实际 RPO/RTO | 生产 Wave 2 放行前 |
 | GRANT 脚本未实际执行 | `migrations/grants/*.sql` 已生成，但 Wave 0A 不拆进程，所以没有账号被创建 | Wave 1 |
 | `baseline-schema.sql` 未生成 | §64 第 1 步需要线上 schema 快照用于 drift 比对，当前 `migrations/legacy/` 只有 `AUDIT.md` 与 `SHA256SUMS` | 首次 baseline 时 |
 | binlog 状态未核实 | §31 把"binlog 开启"列为前置项，当前未记录实际状态 | Wave 2 |
