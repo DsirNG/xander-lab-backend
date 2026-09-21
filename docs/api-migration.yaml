@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 309
+  total: 311
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -4574,6 +4574,40 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: publishing-post-internal-agent-publications-postid-find-succeeded-platform
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/publications/{postId}/find-succeeded/{platform}"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: publishing-post-internal-agent-publications-postid-sync-platform
+    owner: publishing
+    old:
+      method: POST
+      path: "/internal/agent/publications/{postId}/sync/{platform}"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: publishing-post-internal-content-blog-posts
     owner: publishing
     old:

@@ -76,6 +76,13 @@ agent:
     connect-timeout-millis: ${AGENT_PLATFORM_CONNECT_TIMEOUT_MILLIS:2000}
     read-timeout-millis: ${AGENT_PLATFORM_READ_TIMEOUT_MILLIS:30000}
     max-response-bytes: ${AGENT_PLATFORM_MAX_RESPONSE_BYTES:1048576}
+  content-client:
+    enabled: ${AGENT_CONTENT_CLIENT_ENABLED:false}
+    base-url: ${AGENT_CONTENT_BASE_URL:http://content-automation:30006}
+    internal-token: ${AGENT_CONTENT_INTERNAL_TOKEN:}
+    connect-timeout-millis: ${AGENT_CONTENT_CONNECT_TIMEOUT_MILLIS:2000}
+    read-timeout-millis: ${AGENT_CONTENT_READ_TIMEOUT_MILLIS:30000}
+    max-response-bytes: ${AGENT_CONTENT_MAX_RESPONSE_BYTES:1048576}
   event-bus:
     pubsub-enabled: ${AGENT_EVENT_BUS_PUBSUB_ENABLED:false}
     pubsub-channel: ${AGENT_EVENT_BUS_PUBSUB_CHANNEL:dinqor:agent-events}

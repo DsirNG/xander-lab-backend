@@ -22,6 +22,13 @@ agent:
     connect-timeout-millis: ${AGENT_PLATFORM_CONNECT_TIMEOUT_MILLIS:2000}
     read-timeout-millis: ${AGENT_PLATFORM_READ_TIMEOUT_MILLIS:30000}
     max-response-bytes: ${AGENT_PLATFORM_MAX_RESPONSE_BYTES:1048576}
+  content-client:
+    enabled: ${AGENT_CONTENT_CLIENT_ENABLED:false}
+    base-url: ${AGENT_CONTENT_BASE_URL:http://dinqor-content-automation:30006}
+    internal-token: ${AGENT_CONTENT_INTERNAL_TOKEN:}
+    connect-timeout-millis: ${AGENT_CONTENT_CONNECT_TIMEOUT_MILLIS:2000}
+    read-timeout-millis: ${AGENT_CONTENT_READ_TIMEOUT_MILLIS:30000}
+    max-response-bytes: ${AGENT_CONTENT_MAX_RESPONSE_BYTES:1048576}
   security-state:
     reconcile-enabled: ${AGENT_SECURITY_STATE_RECONCILE_ENABLED:true}
     core-host-base-url: ${AGENT_SECURITY_STATE_CORE_HOST_BASE_URL:http://dinqor-core-host:30002}

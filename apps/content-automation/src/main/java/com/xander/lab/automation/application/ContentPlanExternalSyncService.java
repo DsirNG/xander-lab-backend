@@ -3,6 +3,7 @@ package com.xander.lab.automation.application;
 import com.xander.lab.automation.infrastructure.ContentNotificationStreamService;
 import com.xander.lab.automation.infrastructure.PlatformBlogSyncClient;
 import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.publishing.application.ContentExternalPublicationService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -19,13 +20,25 @@ public class ContentPlanExternalSyncService {
     private final JdbcTemplate jdbcTemplate;
     private final PlatformBlogSyncClient platformBlogSyncClient;
     private final ContentNotificationStreamService notificationStreamService;
+    private final java.util.Optional<ContentExternalPublicationService> publicationService;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public ContentPlanExternalSyncService(JdbcTemplate jdbcTemplate,
                                           PlatformBlogSyncClient platformBlogSyncClient,
-                                          ContentNotificationStreamService notificationStreamService) {
+                                          ContentNotificationStreamService notificationStreamService,
+                                          java.util.Optional<ContentExternalPublicationService> publicationService) {
         this.jdbcTemplate = jdbcTemplate;
         this.platformBlogSyncClient = platformBlogSyncClient;
         this.notificationStreamService = notificationStreamService;
+        this.publicationService = publicationService;
+    }
+
+    /** Compatibility constructor for unit tests and the pre-ledger bridge mode. */
+    public ContentPlanExternalSyncService(JdbcTemplate jdbcTemplate,
+                                          PlatformBlogSyncClient platformBlogSyncClient,
+                                          ContentNotificationStreamService notificationStreamService) {
+        this(jdbcTemplate, platformBlogSyncClient, notificationStreamService,
+                java.util.Optional.empty());
     }
 
     /** Executes the selected platform attempts outside the caller's database transaction. */
@@ -40,7 +53,9 @@ public class ContentPlanExternalSyncService {
 
     private void syncCsdn(ExternalSyncPlan plan) {
         try {
-            BlogSyncResult result = platformBlogSyncClient.syncCsdn(plan.userId(), plan.postId());
+            BlogSyncResult result = publicationService.isPresent()
+                    ? publicationService.get().sync(plan.userId(), plan.postId(), "csdn")
+                    : platformBlogSyncClient.syncCsdn(plan.userId(), plan.postId());
             jdbcTemplate.update("""
                     UPDATE blog_plan_run
                     SET csdn_status = 'SUCCEEDED', csdn_error_code = NULL,
@@ -54,7 +69,9 @@ public class ContentPlanExternalSyncService {
 
     private void syncJuejin(ExternalSyncPlan plan) {
         try {
-            BlogSyncResult result = platformBlogSyncClient.syncJuejin(plan.userId(), plan.postId());
+            BlogSyncResult result = publicationService.isPresent()
+                    ? publicationService.get().sync(plan.userId(), plan.postId(), "juejin")
+                    : platformBlogSyncClient.syncJuejin(plan.userId(), plan.postId());
             jdbcTemplate.update("""
                     UPDATE blog_plan_run
                     SET juejin_status = 'SUCCEEDED', juejin_error_code = NULL,

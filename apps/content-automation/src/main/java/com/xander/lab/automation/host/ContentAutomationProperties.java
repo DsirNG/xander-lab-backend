@@ -17,6 +17,7 @@ public class ContentAutomationProperties {
     private int platformIntegrationConnectTimeoutMillis = 2_000;
     private int platformIntegrationReadTimeoutMillis = 30_000;
     private int platformIntegrationMaxResponseBytes = 1 * 1024 * 1024;
+    private String agentInternalToken = "";
     private int modelTimeoutMillis = 30_000;
     private boolean streamDrainEnabled;
     private String streamInstanceId = "unknown";
@@ -108,6 +109,14 @@ public class ContentAutomationProperties {
 
     public void setPlatformIntegrationMaxResponseBytes(int platformIntegrationMaxResponseBytes) {
         this.platformIntegrationMaxResponseBytes = platformIntegrationMaxResponseBytes;
+    }
+
+    public String getAgentInternalToken() {
+        return agentInternalToken;
+    }
+
+    public void setAgentInternalToken(String agentInternalToken) {
+        this.agentInternalToken = agentInternalToken;
     }
 
     public int getModelTimeoutMillis() {

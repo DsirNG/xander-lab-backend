@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 314
+  total: 316
   streams: 12
   websocket: 1
   sse: 11
@@ -2961,6 +2961,28 @@ routes:
     handler: "com.xander.lab.identity.api.AgentMediaAssetController#uploadImage"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentMediaAssetController.java
     line: 57
+  - id: publishing-post-internal-agent-publications-postid-find-succeeded-platform
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/publications/{postId}/find-succeeded/{platform}"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentExternalPublicationController#findSucceeded"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentExternalPublicationController.java
+    line: 46
+  - id: publishing-post-internal-agent-publications-postid-sync-platform
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/agent/publications/{postId}/sync/{platform}"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.ContentExternalPublicationController#sync"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/ContentExternalPublicationController.java
+    line: 34
   - id: identity-post-internal-agent-recitation-material-count
     logical_owner: identity
     deployment_unit: dinqor-core-host

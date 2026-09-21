@@ -87,8 +87,10 @@ their interrupted calls and settles proven effects. A stale `RUNNING`
 invocation is otherwise marked `UNKNOWN`, never replayed automatically.
 `publish_post` reconciles local publication and CSDN/Juejin synchronization
 only from durable records in the owning modules; it never probes a vendor or
-re-publishes to infer an outcome. A remote success that was never persisted in
-`blog_publish_record` remains `UNKNOWN`. `blog_generate` persists its
+re-publishes to infer an outcome. The Content-owned Agent publication boundary
+records CSDN/Juejin results in `blog_publish_record` before returning; a remote
+success that was never persisted by a legacy compatibility bridge remains
+`UNKNOWN`. `blog_generate` persists its
 invocation UUID as a per-user task-create key and may recover only a durable
 `ready` task; created, running, failed, or missing tasks remain `UNKNOWN` and
 are never restarted automatically. Recognized remote uncertainty (timeouts,

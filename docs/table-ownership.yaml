@@ -117,6 +117,7 @@ tables:
   - table: blog_publish_record
     logical_owner: publishing
     target_deployment_unit: dinqor-content-automation
+    notes: "ContentExternalPublicationService 负责 Agent 站外发布路径的幂等落账；旧 Core 兼容路径按切换计划保留。"
   - table: blog_tag
     logical_owner: publishing
     target_deployment_unit: dinqor-content-automation
