@@ -3,15 +3,20 @@
 ## Local MySQL / Redis
 
 For a local dependency environment, start `docker-compose.local-infra.yml` first. It
-creates the canonical `xander_lab` schema and the shared `dinqor-runtime` Docker network;
-the Wave 1 and Wave 2 Compose projects join this same network so `mysql`, `redis`,
-`core-host`, `agent`, `platform-integration` and `content-automation` resolve by service
-name:
+starts MySQL, Redis and a standalone Nacos 2.x instance, creates the `dinqor-dev` namespace,
+publishes the checked-in non-secret DataIds from `infrastructure/nacos/`, and creates the
+shared `dinqor-runtime` Docker network. The Wave 1 and Wave 2 Compose projects join this
+same network so `mysql`, `redis`, `nacos`, `core-host`, `agent`, `platform-integration` and
+`content-automation` resolve by service name:
 
 ```powershell
 $env:DINQOR_LOCAL_MYSQL_ROOT_PASSWORD = "local-only-password"
 docker-compose -f infrastructure/docker/docker-compose.local-infra.yml up -d
 ```
+
+The local Nacos console is available at `http://localhost:8848/nacos`. The local bootstrap
+uses Nacos 2.x standalone Derby storage; it is for verification only. Production Nacos must
+use the deployment's managed persistence and authentication policy.
 
 Use `DINQOR_RUNTIME_NETWORK` to choose another network name, but use the same value for
 all three Compose commands. In a deployment where MySQL and Redis are managed outside
@@ -73,7 +78,10 @@ docker compose --env-file .env.wave1 \
   -f infrastructure/docker/docker-compose.wave1.yml up -d --build
 ```
 
-After the local dependency network and Wave 1 are ready, start the Wave 2 bootstrap with
+For the local Wave 1 smoke path, point the required variables at the shared services and
+namespace (for example `NACOS_SERVER_ADDR=nacos:8848`, `NACOS_NAMESPACE=dinqor-dev`, and
+JDBC URLs using `mysql:3306`), then start Wave 1. After the local dependency network and
+Wave 1 are ready, start the Wave 2 bootstrap with
 the same `DINQOR_RUNTIME_NETWORK` value:
 
 ```bash

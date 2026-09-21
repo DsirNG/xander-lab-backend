@@ -1663,7 +1663,7 @@ def gate_dockerfile_runtime_target() -> None:
 
 
 def gate_wave1_compose_contract() -> None:
-    """V9 §92: the Wave 1 Compose template must preserve rollout boundaries."""
+    """V9 §92: Wave 1 and its local Nacos bootstrap preserve rollout boundaries."""
     gate = "wave1-compose-contract"
     path = REPO / "infrastructure" / "docker" / "docker-compose.wave1.yml"
     if not path.is_file():
@@ -1734,10 +1734,39 @@ def gate_wave1_compose_contract() -> None:
             problems.append("dinqor_migration grant must be effective in wave1")
         if "CREATE, ALTER, DROP" not in grant_text:
             problems.append("dinqor_migration grant must retain Flyway DDL privileges")
+    local_infra_path = REPO / "infrastructure" / "docker" / "docker-compose.local-infra.yml"
+    if not local_infra_path.is_file():
+        problems.append("infrastructure/docker/docker-compose.local-infra.yml is missing")
+    else:
+        try:
+            local_infra = yaml.safe_load(local_infra_path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as exc:
+            problems.append(f"local infrastructure Compose YAML is invalid: {exc}")
+            local_infra = {}
+        local_services = local_infra.get("services", {})
+        local_network = local_infra.get("networks", {}).get("dinqor-runtime", {})
+        if not isinstance(local_services, dict):
+            problems.append("local infrastructure Compose services must be a mapping")
+        else:
+            nacos = local_services.get("nacos", {})
+            config_init = local_services.get("nacos-config-init", {})
+            if not isinstance(nacos, dict) or "nacos/nacos-server:" not in str(nacos.get("image", "")):
+                problems.append("local infrastructure: standalone Nacos image is missing")
+            if not isinstance(config_init, dict):
+                problems.append("local infrastructure: nacos-config-init service is missing")
+            else:
+                dependency = config_init.get("depends_on", {}).get("nacos", {})
+                if dependency.get("condition") != "service_healthy":
+                    problems.append("local infrastructure: nacos-config-init must wait for Nacos health")
+                if not any("../nacos:/config" in str(value)
+                           for value in config_init.get("volumes", [])):
+                    problems.append("local infrastructure: Nacos DataId directory is not mounted")
+        if local_network.get("name") != "${DINQOR_RUNTIME_NETWORK:-dinqor-runtime}":
+            problems.append("local infrastructure: runtime network must be configurable as DINQOR_RUNTIME_NETWORK")
     if problems:
         report(gate, False, "; ".join(problems))
         return
-    report(gate, True, "migration-runner → core-host → gateway rollout contract is explicit")
+    report(gate, True, "migration-runner → core-host → gateway rollout and local Nacos bootstrap are explicit")
 
 
 # V9 section 80 bans the global ``classpath*:/mapper/*.xml`` swallow once services
