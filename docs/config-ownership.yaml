@@ -13,8 +13,8 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 775
-  service_private: 672
+  total: 774
+  service_private: 671
   secret: 91
   shared: 12
 config:
@@ -1250,11 +1250,6 @@ config:
     nacos_group: DINQOR-CONTENT-AUTOMATION
   - key: content-automation.security-state.request-timeout-ms
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentSecurityStateProperties.java
-    classification: service_private
-    owner: content-automation
-    nacos_group: DINQOR-CONTENT-AUTOMATION
-  - key: content-automation.shedlock.enabled
-    source: apps/content-automation/src/main/resources/application.yml
     classification: service_private
     owner: content-automation
     nacos_group: DINQOR-CONTENT-AUTOMATION

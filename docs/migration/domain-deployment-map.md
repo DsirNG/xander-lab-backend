@@ -178,8 +178,8 @@ Wave 2：core-host 允许 2 实例（滚动发布需要）
 | `bloghtml` 的 Wave 1 进程拆分 | 已落地 `apps/bloghtml-preview`，保留 Redis TTL/限流/CSP；它不持有 SSE，表归属仍由 `table-ownership.yaml` 管理 | ✅ 代码与 Wave 1 Compose/Nginx 模板已完成；生产 DNS/流量切换待执行 |
 | Platform 凭证、同步与文件读取入口 Owner | Gateway 已将 CSDN/Juejin 授权、同步、目录、下载与导出路径交给 Platform-Integration；`PlatformCredentialStatusController`、`PlatformAuthorizationController`、`PlatformJuejinCatalogController`、`PlatformBlogSyncController` 与 `PlatformFileReadController` 在凭证库/令牌开关开启后成为本地 Owner。当前无外部凭证的安全默认仍保留 Platform 兼容 Proxy，由唯一 Core 内部桥执行；CSDN/Juejin 带正文的内网同步已由 Platform 本地完成供应商写入，Content 持有发布结果，Agent 可通过受保护的 Agent→Content 边界复用 Content 账本，上传仍经既有 Proxy/OSS 兼容链路 | ✅ Wave 2 路由、CSDN/Juejin 目录/发布器本地实现与测试、授权本地生命周期/测试已落地；本地空凭证只读路径已验证返回 `NOT_AUTHORIZED`；仓库 Nacos 保留 Platform→Core 兼容回退，待注入生产 API 密钥、Selenium、凭证库授权、加密密钥与内网令牌后再关闭 Core 执行开关 |
 | Content-Automation 发文入口 Owner | `BlogCreateController` 接管 `POST /api/blog/posts`，通过显式用户身份、幂等键直接写入 Content 数据库；Agent 的文章读写契约也已迁到 Content 的受保护 `/internal/agent/content/**`，由 `ContentAgentPostService` 统一实现；BlogAgent 的创建、运行 SSE、幂等查询和发布也通过受保护 `/internal/agent/blogagent/**` 由 Content 持有；开关关闭时保留 Core 兼容回退，不产生双写 | ✅ 代码与测试已完成；仓库 Nacos 默认已将发文创建流量切到 Content，并关闭 Core 创建入口；Content 本地写入已移除 Core HTTP 桥，幂等键与封面字段均保留；Agent→Content 文章与 BlogAgent 契约均有 HTTP/SSE 适配器测试；本地临时令牌切流冒烟通过且未写入业务数据 |
-| Content-Automation 计划调度/执行器 | `ContentBlogPlanScheduler` 与 `ContentBlogPlanRunExecutionService` 负责计划触发、任务认领与执行；默认关闭，Core 旧计划调度器仍是回退执行者 | ✅ 在空库中通过 Nacos 临时开启 `plan-scheduler`、`plan-executor` 与 ShedLock 启动验证，观察到 `content-blog-plan-scheduler` 全局锁，`blog_content_plan` / `blog_plan_run` / `blog_notification` 均为 0；真实模型调用、任务执行与旧调度器 Drain 仍待切换阶段完成 |
-| Content-Automation 邮件提醒调度器 | 已迁入任务认领、重复执行保护、渲染、Core 邮件投递/计费窄契约；默认关闭，Core 旧调度器仍是回退执行者 | ✅ 代码与测试已完成；空库 + 内部令牌环境已验证 ShedLock 锁 `content-email-reminder-scheduler` 且无任务产生；真实邮件投递与旧调度器 Drain 仍待切换阶段完成 |
+| Content-Automation 计划调度/执行器 | `ContentBlogPlanScheduler` 与 `ContentBlogPlanRunExecutionService` 负责计划触发、任务认领与执行；Nacos 默认启用，Core 旧计划调度器已关闭 | ✅ 空库 + Nacos 默认配置已验证，观察到 `content-blog-plan-scheduler` 全局锁，`blog_content_plan` / `blog_plan_run` / `blog_notification` 均为 0；无计划数据时不会调用模型，真实模型任务仍需凭证后验证 |
+| Content-Automation 邮件提醒调度器 | 已迁入任务认领、重复执行保护、渲染、Core 邮件投递/计费窄契约；Nacos 默认启用，Core 旧调度器已关闭 | ✅ 空库 + Nacos 默认配置已验证 ShedLock 锁 `content-email-reminder-scheduler` 且无任务产生；无任务时不会调用 SMTP，真实邮件投递仍需凭证后验证 |
 | 空目录已清理（不可提交） | 见 §2 的六个空包。Git 不跟踪空目录，所以仓库里本就没有它们，清理只影响本地工作区 | 已处理 |
 | `components` 前缀嵌套 | 见 §3，Gateway 路由 `order` 需要在 Wave 1 实际配置时验证 | Wave 1 |
 
@@ -198,7 +198,7 @@ Core 仍保留兼容实现，方便按 §96 的顺序回滚；它不应在新服
 | `CORE_LEGACY_EMAIL_REMINDER_SCHEDULER_ENABLED` | Core 旧 EmailReminderScheduler | Content-Automation 完成邮件投递/计费适配器、空库启动与重复领取验证 |
 
 这些开关作用于 Core 的旧公开 Controller 或旧调度器；`/internal/**` 兼容桥和文件上传等尚未搬走的
-能力不受影响。邮件提醒调度器当前仍是唯一执行者，开关默认保持开启。切换时必须先完成
+能力不受影响。计划与邮件提醒的新调度器已在空库完成本地切换，Core 旧调度器默认关闭。切换时必须先完成
 新服务能力、Gateway 路由、健康检查和连接 Drain，再把对应开关设为 `false`，最后才执行数据库权限收窄。
 
 ---

@@ -32,7 +32,7 @@ core:
     notification-stream-enabled: false
     platform-public-enabled: true
     blog-content-plan-scheduler-enabled: false
-    email-reminder-scheduler-enabled: true
+    email-reminder-scheduler-enabled: false
 
 mysql:
   reliability:

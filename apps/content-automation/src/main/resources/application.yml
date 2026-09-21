@@ -62,8 +62,6 @@ content-automation:
   stream-instance-id: ${CONTENT_AUTOMATION_STREAM_INSTANCE_ID:${HOSTNAME:unknown}}
   stream-drain-deadline-at: ${CONTENT_AUTOMATION_STREAM_DRAIN_DEADLINE_AT:0}
   stream-drain-check-interval-ms: ${CONTENT_AUTOMATION_STREAM_DRAIN_CHECK_INTERVAL_MS:1000}
-  shedlock:
-    enabled: ${CONTENT_AUTOMATION_SHEDLOCK_ENABLED:false}
   plan-executor:
     enabled: ${CONTENT_AUTOMATION_PLAN_EXECUTOR_ENABLED:false}
   plan-scheduler:

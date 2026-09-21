@@ -38,18 +38,16 @@ content-automation:
   stream-instance-id: ${CONTENT_AUTOMATION_STREAM_INSTANCE_ID:${HOSTNAME:unknown}}
   stream-drain-deadline-at: ${CONTENT_AUTOMATION_STREAM_DRAIN_DEADLINE_AT:0}
   stream-drain-check-interval-ms: ${CONTENT_AUTOMATION_STREAM_DRAIN_CHECK_INTERVAL_MS:1000}
-  shedlock:
-    enabled: false
   plan-executor:
-    enabled: false
+    enabled: true
   plan-scheduler:
-    enabled: false
+    enabled: true
     batch-size: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_BATCH_SIZE:5}
     claim-timeout-ms: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_CLAIM_TIMEOUT_MS:1800000}
     poll-interval-ms: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_POLL_INTERVAL_MS:15000}
     initial-delay-ms: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_INITIAL_DELAY_MS:15000}
   email-reminder-scheduler:
-    enabled: false
+    enabled: true
     batch-size: ${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_BATCH_SIZE:20}
     claim-timeout-ms: ${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_CLAIM_TIMEOUT_MS:600000}
     max-send-attempts: ${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_MAX_SEND_ATTEMPTS:3}

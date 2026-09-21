@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 1032
-  leaves: 775
+  total: 1030
+  leaves: 774
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -1108,16 +1108,6 @@ config:
   - key: content-automation.stream-drain-check-interval-ms
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_STREAM_DRAIN_CHECK_INTERVAL_MS:1000}"
-    leaf: true
-    logical_owner: content-automation
-  - key: content-automation.shedlock
-    source: apps/content-automation/src/main/resources/application.yml
-    value: ""
-    leaf: false
-    logical_owner: content-automation
-  - key: content-automation.shedlock.enabled
-    source: apps/content-automation/src/main/resources/application.yml
-    value: "${CONTENT_AUTOMATION_SHEDLOCK_ENABLED:false}"
     leaf: true
     logical_owner: content-automation
   - key: content-automation.plan-executor
