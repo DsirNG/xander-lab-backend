@@ -92,7 +92,7 @@ scheduled:
     trigger: "initialDelay = 60_000L, fixedDelay = 3_600_000L"
     logical_owner: identity
     file: apps/core-host/src/main/java/com/xander/lab/identity/application/LegacyRedisMetrics.java
-    line: 61
+    line: 65
   - id: refresh-storage-metrics
     class: com.xander.lab.identity.application.RefreshStorageMetrics
     method: refresh

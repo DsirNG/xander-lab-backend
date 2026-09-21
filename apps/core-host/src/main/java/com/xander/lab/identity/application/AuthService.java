@@ -632,6 +632,9 @@ public class AuthService implements AccessTokenLookupPort {
         if (newRefreshProtocolEnabled()) {
             return refreshWithRotation(refreshToken);
         }
+        if (legacyRedisMetrics != null) {
+            legacyRedisMetrics.recordLegacyRefreshRequest();
+        }
         if (!jwtUtil.isValid(refreshToken) || !jwtUtil.isRefreshToken(refreshToken)) {
             throw new IllegalArgumentException("无效的 Token");
         }

@@ -183,7 +183,7 @@ scheduled:
     execution_scope: per_instance
     singleton_strategy: none
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/LegacyRedisMetrics.java:61
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/identity/application/LegacyRedisMetrics.java:65
     notes: "V9 §58/§59。每个 core-host 实例低频 SCAN 自己连接的 Redis，盘点 login:token:* 与 login:user_tokens:* 的存量；属于观测本地连接视图的 per_instance 任务，禁止全局 ShedLock。"
 
   - id: refresh-storage-metrics

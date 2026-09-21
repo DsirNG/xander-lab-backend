@@ -226,6 +226,8 @@ identity:legacy_access_active_estimate
   它是"是否还有人在签发旧 token"的开关指标；
 - `legacy_access_active_estimate`：现在由低频 SCAN 更新，签发/主动撤销事件另以
   `legacy_access_revoked_total` 留痕，便于解释盘点窗口内的变化。
+- `legacy_refresh_requests_total`：旧 JWT Refresh 分支每收到一次请求就计数；新 Refresh
+  协议不计数。T3 执行证据必须证明该计数在完整观察周期内为 0。
 
 推荐 SCAN 频率：**每 30～60 分钟**。§58 明确：只做迁移期指标，不做实时指标。
 
@@ -355,8 +357,8 @@ allowed = {
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | 五个指标 | `LegacyRedisMetrics` 已接入低频 SCAN 盘点四个存量指标；`UserAdminService.revokeSessions` 已记录 `legacy_revoke_duration` | ✅ 基础观测已完成；T1/T2/T3 仍待切流 |
-| 遗留 Access 计数器 | `legacy_access_issued_total` 与 `legacy_access_revoked_total` 已接入；T1 后前者必须停止增长 | ✅ 已完成；T1/T2/T3 仍待切流 |
-| T3 的清理脚本未写 | §57 要求显式删除两个键族，脚本尚未编写（Wave 0A 不删是对的） | T3 |
+| 遗留 Access / Refresh 计数器 | `legacy_access_issued_total`、`legacy_access_revoked_total` 与 `legacy_refresh_requests_total` 已接入；T1 后前两者必须停止新增，旧 Refresh 请求必须归零 | ✅ 基础观测已完成；T1/T2/T3 仍待切流 |
+| T3 的清理脚本 | `scripts/migration/retire_legacy_redis.py` 默认只盘点；执行模式要求三次连续零盘点、旧 Refresh 请求为 0、完整发布周期证据与双重显式确认 | ✅ 工具已完成；生产 T3 仍待切流 |
 | `allowed` 集合未随 T1/T3 收缩 | 见 §9 末尾 | T1 / T3 |
 | 无门禁校验 Set 是否有 TTL | `login:user_tokens` 无 TTL 是**当前唯一写入点**造成的。若将来有人在别处 `SADD` 一个带 TTL 的变体，门禁不会发现 | 已知（允许清单已限制写入点） |
 | `contract-changes.yaml` 的登记 | 遗留退场已登记在 `legacy-redis-user-tokens` 条目下，但 T1/T2/T3 的具体时点未登记 | T1 之前 |
@@ -368,6 +370,15 @@ allowed = {
 ```bash
 # 门禁：旧键族引用是否仍被限制在 3 个文件内
 python scripts/migration/ci_gates.py
+
+# T3 前置盘点（不会删除任何 key；只允许这两个精确键族进入报告）
+python scripts/migration/retire_legacy_redis.py
+
+# T3 执行示例：evidence.json 必须由放行评审产出，且满足脚本校验的三个条件
+python scripts/migration/retire_legacy_redis.py \
+  --execute \
+  --evidence-file evidence.json \
+  --confirm-legacy-redis-retirement
 
 # 人工：确认写入点只有一处（两个源码根都要扫）
 grep -rn "REDIS_USER_TOKENS_PREFIX" apps/core-host/src/main/java/ libs/*/src/main/java/

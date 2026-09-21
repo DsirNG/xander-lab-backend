@@ -17,10 +17,12 @@ class LegacyRedisMetricsTest {
         metrics.recordAccessIssued();
         metrics.recordAccessIssued();
         metrics.recordAccessRevoked(1L);
+        metrics.recordLegacyRefreshRequest();
         metrics.recordRevokeDuration(1_000_000L);
 
         assertThat(registry.get("legacy_access_issued_total").counter().count()).isEqualTo(2D);
         assertThat(registry.get("legacy_access_revoked_total").counter().count()).isEqualTo(1D);
+        assertThat(registry.get("legacy_refresh_requests_total").counter().count()).isEqualTo(1D);
         assertThat(registry.get("legacy_revoke_duration").timer().count()).isEqualTo(1L);
     }
 }

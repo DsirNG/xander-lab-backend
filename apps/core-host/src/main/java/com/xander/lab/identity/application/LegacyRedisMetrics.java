@@ -32,6 +32,7 @@ public class LegacyRedisMetrics {
     private final AtomicLong activeEstimate = new AtomicLong();
     private final Counter accessIssued;
     private final Counter accessRevoked;
+    private final Counter legacyRefreshRequests;
     private final Timer revokeDuration;
 
     public LegacyRedisMetrics(MeterRegistry meterRegistry, StringRedisTemplate redisTemplate) {
@@ -51,6 +52,9 @@ public class LegacyRedisMetrics {
                 .register(meterRegistry);
         accessRevoked = Counter.builder("legacy_access_revoked_total")
                 .description("迁移期主动撤销的遗留 Access 总数")
+                .register(meterRegistry);
+        legacyRefreshRequests = Counter.builder("legacy_refresh_requests_total")
+                .description("迁移期遗留 JWT Refresh 请求总数；T3 前必须归零")
                 .register(meterRegistry);
         revokeDuration = Timer.builder("legacy_revoke_duration")
                 .description("遗留 Redis 会话撤销耗时")
@@ -88,6 +92,10 @@ public class LegacyRedisMetrics {
         if (count > 0L) {
             accessRevoked.increment(count);
         }
+    }
+
+    public void recordLegacyRefreshRequest() {
+        legacyRefreshRequests.increment();
     }
 
     private static LegacySnapshot scanSnapshot(RedisConnection connection) {

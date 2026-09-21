@@ -22,6 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
@@ -118,6 +119,20 @@ class AuthServiceTest {
 
         assertThat(response.getAccessToken()).isEqualTo("access-token");
         assertThat(response.getUserInfo().getUsername()).isEqualTo("bob");
+    }
+
+    @Test
+    void legacyRefreshRequestIsCountedForT3Evidence() {
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        LegacyRedisMetrics legacyMetrics = new LegacyRedisMetrics(registry, redisTemplate);
+        AuthService legacy = new AuthService(jwtUtil, mailPort, userMapper, redisTemplate,
+                passwordEncoder, billingPort, wechatMiniAppClient, accountMergeMapper,
+                null, null, legacyMetrics);
+        when(jwtUtil.isValid("refresh-input")).thenReturn(false);
+
+        assertThatThrownBy(() -> legacy.refresh("refresh-input"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(registry.get("legacy_refresh_requests_total").counter().count()).isEqualTo(1D);
     }
 
     @Test
