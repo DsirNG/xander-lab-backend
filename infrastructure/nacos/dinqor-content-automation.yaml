@@ -16,7 +16,7 @@ content-automation:
   core-connect-timeout-millis: ${CONTENT_AUTOMATION_CORE_CONNECT_TIMEOUT_MILLIS:2000}
   core-read-timeout-millis: ${CONTENT_AUTOMATION_CORE_READ_TIMEOUT_MILLIS:15000}
   core-max-response-bytes: ${CONTENT_AUTOMATION_CORE_MAX_RESPONSE_BYTES:1048576}
-  publishing-create-enabled: ${CONTENT_AUTOMATION_PUBLISHING_CREATE_ENABLED:false}
+  publishing-create-enabled: false
   platform-integration-base-url: ${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_BASE_URL:http://dinqor-platform-integration:30005}
   platform-integration-internal-token: ${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_INTERNAL_TOKEN:}
   platform-integration-connect-timeout-millis: ${CONTENT_AUTOMATION_PLATFORM_INTEGRATION_CONNECT_TIMEOUT_MILLIS:2000}
@@ -36,17 +36,17 @@ content-automation:
   stream-drain-deadline-at: ${CONTENT_AUTOMATION_STREAM_DRAIN_DEADLINE_AT:0}
   stream-drain-check-interval-ms: ${CONTENT_AUTOMATION_STREAM_DRAIN_CHECK_INTERVAL_MS:1000}
   shedlock:
-    enabled: ${CONTENT_AUTOMATION_SHEDLOCK_ENABLED:false}
+    enabled: false
   plan-executor:
-    enabled: ${CONTENT_AUTOMATION_PLAN_EXECUTOR_ENABLED:false}
+    enabled: false
   plan-scheduler:
-    enabled: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_ENABLED:false}
+    enabled: false
     batch-size: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_BATCH_SIZE:5}
     claim-timeout-ms: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_CLAIM_TIMEOUT_MS:1800000}
     poll-interval-ms: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_POLL_INTERVAL_MS:15000}
     initial-delay-ms: ${CONTENT_AUTOMATION_PLAN_SCHEDULER_INITIAL_DELAY_MS:15000}
   email-reminder-scheduler:
-    enabled: ${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_ENABLED:false}
+    enabled: false
     batch-size: ${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_BATCH_SIZE:20}
     claim-timeout-ms: ${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_CLAIM_TIMEOUT_MS:600000}
     max-send-attempts: ${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_MAX_SEND_ATTEMPTS:3}

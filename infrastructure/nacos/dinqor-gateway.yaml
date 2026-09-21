@@ -35,7 +35,7 @@ gateway:
     websocket-upgrade: true
     response-timeout: disabled
   # Enable together with CONTENT_AUTOMATION_PUBLISHING_CREATE_ENABLED after staging.
-  content-publishing-create-enabled: ${GATEWAY_CONTENT_PUBLISHING_CREATE_ENABLED:false}
+  content-publishing-create-enabled: false
   security-state:
     pubsub-enabled: ${GATEWAY_SECURITY_STATE_PUBSUB_ENABLED:false}
     pubsub-channel: ${GATEWAY_SECURITY_STATE_PUBSUB_CHANNEL:dinqor:security-events}

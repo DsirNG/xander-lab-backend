@@ -1833,6 +1833,57 @@ def gate_wave2_compose_nacos_contract() -> None:
     report(gate, True, "Wave 2 Agent/Platform/Content default to required Nacos Config + Discovery")
 
 
+def gate_nacos_switch_ownership() -> None:
+    """Ensure cutover switches are not shadowed by Compose environment defaults."""
+    gate = "nacos-switch-ownership"
+    compose_files = {
+        "infrastructure/docker/docker-compose.wave1.yml": {
+            "core-host": (
+                "CORE_LEGACY_PUBLISHING_CREATE_ENABLED",
+                "CORE_LEGACY_BLOGAGENT_STREAM_ENABLED",
+                "CORE_LEGACY_NOTIFICATION_STREAM_ENABLED",
+                "CORE_LEGACY_PLATFORM_PUBLIC_ENABLED",
+                "CORE_LEGACY_BLOG_CONTENT_PLAN_SCHEDULER_ENABLED",
+                "CORE_LEGACY_EMAIL_REMINDER_SCHEDULER_ENABLED",
+            ),
+        },
+        "infrastructure/docker/docker-compose.wave2-agent.yml": {
+            "platform-integration": (
+                "PLATFORM_INTEGRATION_INTERNAL_API_ENABLED",
+                "PLATFORM_INTEGRATION_CREDENTIAL_STORE_ENABLED",
+                "PLATFORM_INTEGRATION_CREDENTIAL_STORE_URL",
+                "PLATFORM_INTEGRATION_CREDENTIAL_STORE_USERNAME",
+                "PLATFORM_INTEGRATION_CREDENTIAL_STORE_QUERY_TIMEOUT_SECONDS",
+            ),
+            "content-automation": (
+                "CONTENT_AUTOMATION_PLAN_EXECUTOR_ENABLED",
+                "CONTENT_AUTOMATION_PLAN_SCHEDULER_ENABLED",
+                "CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_ENABLED",
+                "CONTENT_AUTOMATION_SHEDLOCK_ENABLED",
+            ),
+        },
+    }
+    problems: list[str] = []
+    for relative_path, service_keys in compose_files.items():
+        path = REPO / relative_path
+        try:
+            document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            problems.append(f"{relative_path}: cannot parse Compose YAML: {exc}")
+            continue
+        services = document.get("services", {})
+        for service_name, keys in service_keys.items():
+            service = services.get(service_name, {})
+            environment = service.get("environment", {}) if isinstance(service, dict) else {}
+            for key in keys:
+                if isinstance(environment, dict) and key in environment:
+                    problems.append(f"{relative_path}:{service_name} shadows Nacos switch with {key}")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True, "Wave 1/Wave 2 cutover switches remain owned by private Nacos DataIds")
+
+
 # V9 section 80 bans the global ``classpath*:/mapper/*.xml`` swallow once services
 # are split. It is still *correct* today: there is exactly one application module,
 # so there is nothing else on the classpath for it to swallow. And changing it now
@@ -2214,6 +2265,7 @@ GATES = {
     "dockerfile-runtime-target": gate_dockerfile_runtime_target,
     "wave1-compose-contract": gate_wave1_compose_contract,
     "wave2-compose-nacos-contract": gate_wave2_compose_nacos_contract,
+    "nacos-switch-ownership": gate_nacos_switch_ownership,
     "mybatis-scan-scope": gate_mybatis_scan_scope,
 }
 
