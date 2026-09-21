@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 294
+  total: 303
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -2572,7 +2572,23 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-get-download-filename
+  - id: integration-get-download-filename-filecontroller
+    owner: integration
+    old:
+      method: GET
+      path: "/api/download/{filename:.+}"
+    new:
+      method: GET
+      path: "/api/v2/integrations/download/{filename:.+}"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-download-filename-platformfilereadcontroller
     owner: integration
     old:
       method: GET
@@ -2604,7 +2620,7 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-get-export-csv
+  - id: integration-get-export-csv-filecontroller
     owner: integration
     old:
       method: GET
@@ -2620,7 +2636,39 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
-  - id: integration-get-export-excel
+  - id: integration-get-export-csv-platformfilereadcontroller
+    owner: integration
+    old:
+      method: GET
+      path: "/api/export/csv"
+    new:
+      method: GET
+      path: "/api/v2/content/export/csv"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-export-excel-filecontroller
+    owner: integration
+    old:
+      method: GET
+      path: "/api/export/excel"
+    new:
+      method: GET
+      path: "/api/v2/content/export/excel"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-export-excel-platformfilereadcontroller
     owner: integration
     old:
       method: GET
@@ -3184,6 +3232,57 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-integration-files-download-filename
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/integration/files/download/{filename:.+}"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-integration-files-export-csv
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/integration/files/export/csv"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-integration-files-export-excel
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/integration/files/export/excel"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: integration-delete-internal-integration-platform-credentials-userid-csdn-authorization
     owner: integration
     old:
@@ -3395,6 +3494,57 @@ entries:
       path: "/internal/platform-integration/blog-posts/{postId}/sync/juejin"
     new:
       method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-platform-integration-files-download-filename
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/platform-integration/files/download/{filename:.+}"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-platform-integration-files-export-csv
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/platform-integration/files/export/csv"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-platform-integration-files-export-excel
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/platform-integration/files/export/excel"
+    new:
+      method: GET
       path: ""
     clients:
       web: not_applicable

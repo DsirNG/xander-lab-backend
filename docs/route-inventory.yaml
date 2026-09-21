@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 299
+  total: 308
   streams: 12
   websocket: 1
   sse: 11
@@ -1377,7 +1377,7 @@ routes:
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
     line: 51
-  - id: integration-get-download-filename
+  - id: integration-get-download-filename-filecontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1388,6 +1388,17 @@ routes:
     handler: "com.xander.lab.integration.file.FileController#downloadFile"
     file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 145
+  - id: integration-get-download-filename-platformfilereadcontroller
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/api/download/{filename:.+}"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformFileReadController#download"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformFileReadController.java
+    line: 28
   - id: automation-get-email-reminders
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -1443,7 +1454,7 @@ routes:
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
     line: 51
-  - id: integration-get-export-csv
+  - id: integration-get-export-csv-filecontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1454,7 +1465,18 @@ routes:
     handler: "com.xander.lab.integration.file.FileController#exportCsv"
     file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 183
-  - id: integration-get-export-excel
+  - id: integration-get-export-csv-platformfilereadcontroller
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/api/export/csv"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformFileReadController#exportCsv"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformFileReadController.java
+    line: 33
+  - id: integration-get-export-excel-filecontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -1465,6 +1487,17 @@ routes:
     handler: "com.xander.lab.integration.file.FileController#exportExcel"
     file: apps/core-host/src/main/java/com/xander/lab/integration/file/FileController.java
     line: 204
+  - id: integration-get-export-excel-platformfilereadcontroller
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/api/export/excel"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformFileReadController#exportExcel"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformFileReadController.java
+    line: 39
   - id: studio-get-flow-canvases-canvasid-snapshot
     logical_owner: studio
     deployment_unit: dinqor-core-host
@@ -3038,6 +3071,39 @@ routes:
     handler: "com.xander.lab.integration.internal.api.InternalBlogSyncController#syncJuejin"
     file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalBlogSyncController.java
     line: 65
+  - id: integration-get-internal-integration-files-download-filename
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/internal/integration/files/download/{filename:.+}"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalFileReadController#download"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalFileReadController.java
+    line: 48
+  - id: integration-get-internal-integration-files-export-csv
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/internal/integration/files/export/csv"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalFileReadController#exportCsv"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalFileReadController.java
+    line: 75
+  - id: integration-get-internal-integration-files-export-excel
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/internal/integration/files/export/excel"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalFileReadController#exportExcel"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalFileReadController.java
+    line: 89
   - id: integration-delete-internal-integration-platform-credentials-userid-csdn-authorization
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3181,6 +3247,39 @@ routes:
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalSyncController#syncJuejin"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalSyncController.java
     line: 80
+  - id: integration-get-internal-platform-integration-files-download-filename
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/internal/platform-integration/files/download/{filename:.+}"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalFileReadController#download"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalFileReadController.java
+    line: 65
+  - id: integration-get-internal-platform-integration-files-export-csv
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/internal/platform-integration/files/export/csv"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalFileReadController#exportCsv"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalFileReadController.java
+    line: 73
+  - id: integration-get-internal-platform-integration-files-export-excel
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/internal/platform-integration/files/export/excel"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalFileReadController#exportExcel"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalFileReadController.java
+    line: 81
   - id: integration-get-internal-platform-integration-platform-credentials-userid-csdn-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration

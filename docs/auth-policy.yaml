@@ -129,6 +129,22 @@ excluded:
     identity_mode: none
     token_location: n/a
     note: "Platform → Core 凭证状态桥，另用 X-DinQor-Internal-Token 且默认关闭，不套业务 JWT。"
+  - id: excluded-file-read-core
+    match:
+      method: ANY
+      path_prefix: /internal/integration/files/
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "Core 文件读取执行边界只接受 X-DinQor-Internal-Token，默认关闭，不套业务 JWT。"
+  - id: excluded-file-read-platform-bridge
+    match:
+      method: ANY
+      path_prefix: /internal/platform-integration/files/
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "Platform → Core 文件读取桥只接受内部令牌，默认关闭，不套业务 JWT。"
 
 # ===================== 3. 管理后台 =====================
 # 必须在公开 GET 分支之前判断。
@@ -269,14 +285,15 @@ public_get:
   - id: local-storage-download
     match: {method: GET, path_pattern: /api/download/*}
     owner: integration
-    note: "本地存储文件以不可猜测的 UUID 文件名分享（博客配图、头像需匿名展示）。"
+    note: "PlatformFileReadController 提供公开兼容入口；本地存储文件以不可猜测的 UUID 文件名分享（博客配图、头像需匿名展示），读取执行经 Core 内部令牌桥。"
   - id: export-csv
     match: {method: GET, path: /api/export/csv}
     owner: publishing
-    note: "当前返回模拟数据，供前端 download() 演示。"
+    note: "PlatformFileReadController 提供公开兼容入口，CSV 读取执行经 Core 内部令牌桥；当前返回模拟数据，供前端 download() 演示。"
   - id: export-excel
     match: {method: GET, path: /api/export/excel}
     owner: publishing
+    note: "PlatformFileReadController 提供公开兼容入口，Excel 读取执行经 Core 内部令牌桥。"
 
 # ===================== 6b. 非 /api 前缀的公开路由（显式登记，避免兜底误放） =====================
 public_non_api:
