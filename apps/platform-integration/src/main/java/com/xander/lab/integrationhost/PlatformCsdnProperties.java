@@ -10,7 +10,7 @@ public class PlatformCsdnProperties {
 
     private String baseUrl = "https://bizapi.csdn.net";
     private String apiKey = "";
-    private String webConsoleSecret = "9znpamsyl2c7cdrr9sas0le9vbc3r6ba";
+    private String webConsoleSecret = "";
     private String seleniumUrl = "http://selenium:4444/wd/hub";
     private String credentialEncryptionKey = "";
     private int authorizationTimeoutSeconds = 35;

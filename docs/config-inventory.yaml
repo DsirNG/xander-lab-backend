@@ -2107,7 +2107,7 @@ config:
     logical_owner: integration
   - key: mcp.csdn.platform.web-console-secret
     source: apps/core-host/src/main/resources/application.yml
-    value: "${CSDN_WEB_CONSOLE_SECRET:9znpamsyl2c7cdrr9sas0le9vbc3r6ba}"
+    value: "${CSDN_WEB_CONSOLE_SECRET:}"
     leaf: true
     logical_owner: integration
   - key: mcp.csdn.platform.authorization-timeout-seconds
@@ -3737,7 +3737,7 @@ config:
     logical_owner: integration
   - key: platform-integration.csdn.web-console-secret
     source: apps/platform-integration/src/main/resources/application.yml
-    value: "${CSDN_WEB_CONSOLE_SECRET:9znpamsyl2c7cdrr9sas0le9vbc3r6ba}"
+    value: "${CSDN_WEB_CONSOLE_SECRET:}"
     leaf: true
     logical_owner: integration
   - key: platform-integration.csdn.selenium-url
