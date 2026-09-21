@@ -3,6 +3,7 @@ package com.xander.lab.automation.infrastructure;
 import com.xander.lab.automation.host.ContentAutomationProperties;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -19,6 +20,7 @@ public class ContentBillingClient {
     private final RestClient restClient;
     private final ContentAutomationProperties properties;
 
+    @Autowired
     public ContentBillingClient(RestClient.Builder restClientBuilder,
                                 ContentAutomationProperties properties) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
