@@ -3,11 +3,11 @@ package com.xander.lab.automation.infrastructure;
 import com.xander.lab.automation.domain.EmailReminderMailRenderer;
 import com.xander.lab.automation.domain.EmailReminderScheduleCalculator;
 import com.xander.lab.payment.api.BillingBiz;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -33,7 +33,6 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "content-automation.email-reminder-scheduler", name = "enabled",
         havingValue = "true")
-@ConditionalOnBean(LockProvider.class)
 public class ContentEmailReminderScheduler {
 
     private static final String STALE_CLAIM_ERROR =
@@ -42,6 +41,9 @@ public class ContentEmailReminderScheduler {
     private final JdbcTemplate jdbcTemplate;
     private final ContentMailClient mailClient;
     private final ContentBillingClient billingClient;
+    /** Required so enabling this scheduler without ShedLock fails closed at startup. */
+    @SuppressWarnings("unused")
+    private final LockProvider lockProvider;
 
     @Value("${content-automation.email-reminder-scheduler.display-zone:Asia/Shanghai}")
     private String displayZone;
@@ -57,6 +59,11 @@ public class ContentEmailReminderScheduler {
 
     @Value("${content-automation.email-reminder-scheduler.retry-delay-ms:30000}")
     private long retryDelayMs;
+
+    @PostConstruct
+    void logEnabled() {
+        log.info("[EmailReminder] Content 调度器已启用，ShedLock 全局锁配置有效");
+    }
 
     @Scheduled(
             fixedDelayString = "${content-automation.email-reminder-scheduler.poll-interval-ms:10000}",
