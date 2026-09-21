@@ -176,6 +176,7 @@ Wave 2：core-host 允许 2 实例（滚动发布需要）
 |---|---|---|
 | 映射未进入机器门禁 | `deployment-unit-mapping` 已校验业务域→目标部署单元、迁移表→`migration-runner`、路由清单与流宿主之间的部署单元一致性；`scan.DEPLOYMENT_UNIT` 是 §3 的机器基线 | ✅ Wave 0B 已完成 |
 | `bloghtml` 的 Wave 1 进程拆分 | 已落地 `apps/bloghtml-preview`，保留 Redis TTL/限流/CSP；它不持有 SSE，表归属仍由 `table-ownership.yaml` 管理 | ✅ 代码与 Wave 1 Compose/Nginx 模板已完成；生产 DNS/流量切换待执行 |
+| Platform 凭证状态读 Owner | `PlatformCredentialStatusController` 在启用只读凭证库后直接提供 CSDN/掘金授权状态；未启用时仍由兼容 Proxy 转发 Core | ✅ Wave 2 代码切换已完成；凭证库开关、数据库账号与 Gateway 流量切换待执行 |
 | 空目录已清理（不可提交） | 见 §2 的六个空包。Git 不跟踪空目录，所以仓库里本就没有它们，清理只影响本地工作区 | 已处理 |
 | `components` 前缀嵌套 | 见 §3，Gateway 路由 `order` 需要在 Wave 1 实际配置时验证 | Wave 1 |
 

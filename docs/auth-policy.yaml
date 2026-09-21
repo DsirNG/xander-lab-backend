@@ -529,6 +529,10 @@ protected:
     match: {method: GET, path: /api/publishing/csdn/authorization/status}
     owner: integration
     note: "URL 前缀是 publishing，实际属于 integration（CsdnAuthorizationController）。路由必须按真实 Owner 切流。"
+  - id: platform-authorization-status-owner
+    match: {method: GET, path_pattern: /api/publishing/*/authorization/status}
+    owner: integration
+    note: "Platform 本地凭证状态 Owner 的兼容路由；仅在 credential-store-enabled=true 时启用，未启用时由 Core Proxy 保持原契约。"
   - id: csdn-authorization-start
     match: {method: POST, path: /api/publishing/csdn/authorization/start}
     owner: integration

@@ -38,18 +38,23 @@ public class PlatformCredentialStatusStore {
 
     /** Returns false on a missing row or any database failure (publishing must fail closed). */
     public boolean isAuthorized(String platform, Long userId) {
+        return status(platform, userId) == CredentialStatus.AUTHORIZED;
+    }
+
+    /**
+     * Reads the public-safe authorization state without loading or decrypting a credential.
+     * Database failures deliberately become NOT_AUTHORIZED so a publishing caller cannot
+     * mistake an unavailable credential boundary for an authorized account.
+     */
+    public CredentialStatus status(String platform, Long userId) {
         if (userId == null || userId <= 0) {
-            return false;
+            return CredentialStatus.NOT_AUTHORIZED;
         }
         String sql = switch (platform) {
-            case "csdn" -> "SELECT status FROM csdn_platform_credential "
-                    + "WHERE user_id = ? AND status = 'ACTIVE' "
-                    + "AND encrypted_cookie IS NOT NULL AND encrypted_cookie <> '' "
-                    + "AND csdn_username IS NOT NULL AND TRIM(csdn_username) <> ''";
-            case "juejin" -> "SELECT status FROM juejin_platform_credential "
-                    + "WHERE user_id = ? AND status = 'ACTIVE' "
-                    + "AND encrypted_cookie IS NOT NULL AND encrypted_cookie <> '' "
-                    + "AND juejin_username IS NOT NULL AND TRIM(juejin_username) <> ''";
+            case "csdn" -> "SELECT status, encrypted_cookie, csdn_username "
+                    + "FROM csdn_platform_credential WHERE user_id = ?";
+            case "juejin" -> "SELECT status, encrypted_cookie, juejin_username "
+                    + "FROM juejin_platform_credential WHERE user_id = ?";
             default -> throw new IllegalArgumentException("unsupported platform: " + platform);
         };
         try (Connection connection = DriverManager.getConnection(
@@ -60,13 +65,32 @@ public class PlatformCredentialStatusStore {
             statement.setQueryTimeout(Math.max(1, properties.getCredentialStoreQueryTimeoutSeconds()));
             statement.setLong(1, userId);
             try (ResultSet result = statement.executeQuery()) {
-                return result.next() && "ACTIVE".equals(result.getString(1));
+                if (!result.next()) {
+                    return CredentialStatus.NOT_AUTHORIZED;
+                }
+                if ("EXPIRED".equals(result.getString(1))) {
+                    return CredentialStatus.EXPIRED;
+                }
+                boolean complete = "ACTIVE".equals(result.getString(1))
+                        && hasText(result.getString(2))
+                        && hasText(result.getString(3));
+                return complete ? CredentialStatus.AUTHORIZED : CredentialStatus.NOT_AUTHORIZED;
             }
         } catch (SQLException exception) {
             log.warn("[PlatformCredential] status lookup fail-closed platform={} userId={} reason={}",
                     platform, userId, exception.getMessage());
-            return false;
+            return CredentialStatus.NOT_AUTHORIZED;
         }
+    }
+
+    public enum CredentialStatus {
+        AUTHORIZED,
+        EXPIRED,
+        NOT_AUTHORIZED
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private boolean blank(String value) {

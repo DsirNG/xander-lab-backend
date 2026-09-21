@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 276
+  total: 277
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -2932,6 +2932,22 @@ entries:
     new:
       method: POST
       path: "/api/v2/integrations/juejin/catalog/sync"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-get-publishing-platform-csdn-juejin-authorization-status
+    owner: integration
+    old:
+      method: GET
+      path: "/api/publishing/{platform:csdn|juejin}/authorization/status"
+    new:
+      method: GET
+      path: "/api/v2/content/publishing/{platform:csdn|juejin}/authorization/status"
     clients:
       web: pending
       miniprogram: pending

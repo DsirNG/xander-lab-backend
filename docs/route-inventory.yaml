@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 281
+  total: 282
   streams: 12
   websocket: 1
   sse: 11
@@ -2279,6 +2279,17 @@ routes:
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinCatalogController#syncCatalog"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinCatalogController.java
     line: 20
+  - id: integration-get-publishing-platform-csdn-juejin-authorization-status
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/api/publishing/{platform:csdn|juejin}/authorization/status"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformCredentialStatusController#status"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCredentialStatusController.java
+    line: 34
   - id: recitation-get-recitations-attempts-attemptid
     logical_owner: recitation
     deployment_unit: dinqor-core-host
