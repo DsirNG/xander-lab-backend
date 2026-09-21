@@ -65,6 +65,9 @@ gateway:
   agent-ws-uri: ${GATEWAY_AGENT_WS_URI:lb:ws://dinqor-agent}
   platform-integration-uri: ${GATEWAY_PLATFORM_INTEGRATION_URI:lb://dinqor-platform-integration}
   content-automation-uri: ${GATEWAY_CONTENT_AUTOMATION_URI:lb://dinqor-content-automation}
+  # Keep Core as the compatibility owner until both this switch and the
+  # Content-Automation publishing-create switch are enabled together.
+  content-publishing-create-enabled: ${GATEWAY_CONTENT_PUBLISHING_CREATE_ENABLED:false}
   security-state:
     pubsub-enabled: ${GATEWAY_SECURITY_STATE_PUBSUB_ENABLED:false}
     pubsub-channel: ${GATEWAY_SECURITY_STATE_PUBSUB_CHANNEL:dinqor:security-events}

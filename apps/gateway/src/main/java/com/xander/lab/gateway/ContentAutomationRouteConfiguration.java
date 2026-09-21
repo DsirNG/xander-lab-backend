@@ -1,6 +1,7 @@
 package com.xander.lab.gateway;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpMethod;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
@@ -14,46 +15,54 @@ public class ContentAutomationRouteConfiguration {
     RouteLocator contentAutomationRoutes(
             RouteLocatorBuilder builder,
             @Value("${gateway.content-automation-uri:lb://dinqor-content-automation}")
-            String contentAutomationUri) {
-        return builder.routes()
+            String contentAutomationUri,
+            @Value("${gateway.content-publishing-create-enabled:false}")
+            boolean publishingCreateEnabled) {
+        RouteLocatorBuilder.Builder routes = builder.routes();
+        if (publishingCreateEnabled) {
+            routes.route("content-publishing-create", route -> route
+                    .path("/api/blog/posts")
+                    .and()
+                    .method(HttpMethod.POST)
+                    .uri(contentAutomationUri));
+        }
+        return routes
                 .route("content-publishing-private-post-reads", route -> route
                         .path("/api/blog/posts/mine", "/api/blog/posts/mine/{id}")
                         .and()
-                        .method(org.springframework.http.HttpMethod.GET)
+                        .method(HttpMethod.GET)
                         .uri(contentAutomationUri))
                 .route("content-publishing-private-stats", route -> route
                         .path("/api/blog/posts/publish-status", "/api/blog/posts/publish-rhythm",
                                 "/api/blog/posts/manage-stats")
                         .and()
-                        .method(org.springframework.http.HttpMethod.GET)
+                        .method(HttpMethod.GET)
                         .uri(contentAutomationUri))
                 .route("content-publishing-private-mutations", route -> route
                         .path("/api/blog/posts/{id}", "/api/blog/posts/{id}/status",
                                 "/api/blog/posts/{id}/permanent")
                         .and()
-                        .method(org.springframework.http.HttpMethod.PUT,
-                                org.springframework.http.HttpMethod.PATCH,
-                                org.springframework.http.HttpMethod.DELETE)
+                        .method(HttpMethod.PUT, HttpMethod.PATCH, HttpMethod.DELETE)
                         .uri(contentAutomationUri))
                 .route("content-publishing-public-reads", route -> route
                         .path("/api/blog/posts", "/api/blog/posts/recent")
                         .and()
-                        .method(org.springframework.http.HttpMethod.GET)
+                        .method(HttpMethod.GET)
                         .uri(contentAutomationUri))
                 .route("content-publishing-public-detail", route -> route
                         .path("/api/blog/posts/{id}")
                         .and()
-                        .method(org.springframework.http.HttpMethod.GET)
+                        .method(HttpMethod.GET)
                         .uri(contentAutomationUri))
                 .route("content-publishing-public-taxonomy", route -> route
                         .path("/api/blog/categories", "/api/blog/tags", "/api/blog/tags/popular")
                         .and()
-                        .method(org.springframework.http.HttpMethod.GET)
+                        .method(HttpMethod.GET)
                         .uri(contentAutomationUri))
                 .route("content-publishing-public-view", route -> route
                         .path("/api/blog/posts/{id}/view")
                         .and()
-                        .method(org.springframework.http.HttpMethod.POST)
+                        .method(HttpMethod.POST)
                         .uri(contentAutomationUri))
                 .route("content-publishing-private-media-reads", route -> route
                         .path("/api/blog/media/images", "/api/blog/media/images/agent")
@@ -64,8 +73,7 @@ public class ContentAutomationRouteConfiguration {
                         .path("/api/notifications", "/api/notifications/unread-count",
                                 "/api/notifications/read-all", "/api/notifications/{id}/read")
                         .and()
-                        .method(org.springframework.http.HttpMethod.GET,
-                                org.springframework.http.HttpMethod.PATCH)
+                        .method(HttpMethod.GET, HttpMethod.PATCH)
                         .uri(contentAutomationUri))
                 .route("content-automation-cutover", route -> route
                         .path("/api/blog-agent/**", "/api/blog-plans/**", "/api/email-reminders/**",
