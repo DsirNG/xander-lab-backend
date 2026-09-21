@@ -23,7 +23,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: integration-get-well-known-oauth-authorization-server
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -1134,7 +1134,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: publishing-get-blog-posts-manage-stats
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
@@ -1354,7 +1354,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: integration-get-download-filename
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -1420,7 +1420,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: integration-get-export-csv
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -1915,7 +1915,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: integration-any-mcp-csdn
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2168,7 +2168,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: integration-delete-publishing-csdn-authorization
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2223,7 +2223,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: integration-delete-publishing-juejin-authorization
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2410,7 +2410,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: integration-post-upload-batch
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2960,7 +2960,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformIntegrationProxyController#proxy"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProxyController.java
-    line: 45
+    line: 51
   - id: agent-get-ws-agent
     logical_owner: agent
     deployment_unit: dinqor-agent

@@ -6,14 +6,17 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.util.StreamUtils;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Locale;
 import java.util.Set;
 
@@ -38,7 +41,10 @@ public class PlatformIntegrationProxyController {
 
     public PlatformIntegrationProxyController(RestClient.Builder restClientBuilder,
                                               PlatformIntegrationProperties properties) {
-        this.restClient = restClientBuilder.build();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofMillis(timeout(properties.getConnectTimeoutMillis())));
+        requestFactory.setReadTimeout(Duration.ofMillis(timeout(properties.getReadTimeoutMillis())));
+        this.restClient = restClientBuilder.requestFactory(requestFactory).build();
         this.properties = properties;
     }
 
@@ -54,9 +60,9 @@ public class PlatformIntegrationProxyController {
             "/mcp/**"
     })
     public ResponseEntity<byte[]> proxy(HttpServletRequest request,
-                                        HttpServletResponse ignoredResponse) {
+        HttpServletResponse ignoredResponse) {
         try {
-            byte[] requestBody = StreamUtils.copyToByteArray(request.getInputStream());
+            byte[] requestBody = copyBounded(request.getInputStream(), properties.getMaxResponseBytes());
             URI target = targetUri(request);
             RestClient.RequestBodySpec spec = restClient.method(HttpMethod.valueOf(request.getMethod()))
                     .uri(target);
@@ -64,7 +70,7 @@ public class PlatformIntegrationProxyController {
             ResponseEntity<byte[]> response = spec.body(requestBody).exchange((clientRequest,
                                                                                 clientResponse) ->
                     new ResponseEntity<>(
-                            StreamUtils.copyToByteArray(clientResponse.getBody()),
+                            copyBounded(clientResponse.getBody(), properties.getMaxResponseBytes()),
                             clientResponse.getHeaders(),
                             clientResponse.getStatusCode()));
             return copyResponseHeaders(response);
@@ -113,5 +119,28 @@ public class PlatformIntegrationProxyController {
             headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
         }
         return new ResponseEntity<>(response.getBody(), headers, response.getStatusCode());
+    }
+
+    private byte[] copyBounded(InputStream input, int configuredLimit) throws IOException {
+        if (input == null) {
+            return new byte[0];
+        }
+        int limit = Math.max(1, configuredLimit);
+        ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(limit, 8192));
+        byte[] buffer = new byte[8192];
+        int total = 0;
+        int read;
+        while ((read = input.read(buffer)) != -1) {
+            if (read > limit - total) {
+                throw new IOException("集成响应超过允许大小");
+            }
+            output.write(buffer, 0, read);
+            total += read;
+        }
+        return output.toByteArray();
+    }
+
+    private int timeout(int value) {
+        return Math.max(1, value);
     }
 }

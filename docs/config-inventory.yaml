@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 855
-  leaves: 612
+  total: 861
+  leaves: 618
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -3330,6 +3330,21 @@ config:
     value: "${PLATFORM_INTEGRATION_CORE_BASE_URL:http://localhost:30002}"
     leaf: true
     logical_owner: integration
+  - key: platform-integration.connect-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_CONNECT_TIMEOUT_MILLIS:2000}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.read-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_READ_TIMEOUT_MILLIS:15000}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.max-response-bytes
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${PLATFORM_INTEGRATION_MAX_RESPONSE_BYTES:16777216}"
+    leaf: true
+    logical_owner: integration
   - key: management
     source: apps/platform-integration/src/main/resources/application.yml
     value: ""
@@ -4628,6 +4643,13 @@ config:
     logical_owner: unassigned
     source_kind: java-configuration-properties
     line: 19
+  - key: platform-integration.connect-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 12
   - key: platform-integration.core-base-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
     value: "<java-default>"
@@ -4635,3 +4657,17 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 11
+  - key: platform-integration.max-response-bytes
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 14
+  - key: platform-integration.read-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 13
