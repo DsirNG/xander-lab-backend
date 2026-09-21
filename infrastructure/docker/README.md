@@ -30,6 +30,20 @@ Run the single migration runner against `jdbc:mysql://mysql:3306/xander_lab` bef
 starting business services. Do not reuse this local password in staging or production;
 service accounts and their DML-only grants come from `migrations/grants/`.
 
+If an earlier local smoke run used a legacy `dinqor` schema in the same MySQL container,
+run the local-only reconciliation helper before pointing Core at `xander_lab`:
+
+```powershell
+python scripts/migration/local_schema_cutover.py `
+  --container dinqor-refactor-mysql `
+  --apply `
+  --apply-core-grants `
+  --allow-missing-grant-tables
+```
+
+The helper is insert-only and keeps the legacy schema. It is not a production data-migration
+job; production still follows the reviewed Migration Runner and backup/rollback procedure.
+
 The root `Dockerfile` builds the full Maven reactor once and selects the executable jar at
 the runtime stage. This keeps dependency resolution and module coverage in one place while
 allowing each deployment unit to receive its own image:
