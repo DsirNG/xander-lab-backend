@@ -81,13 +81,18 @@ docker compose --env-file .env.wave1 \
 For the local Wave 1 smoke path, point the required variables at the shared services and
 namespace (for example `NACOS_SERVER_ADDR=nacos:8848`, `NACOS_NAMESPACE=dinqor-dev`, and
 JDBC URLs using `mysql:3306`), then start Wave 1. After the local dependency network and
-Wave 1 are ready, start the Wave 2 bootstrap with
-the same `DINQOR_RUNTIME_NETWORK` value:
+Wave 1 are ready, start the Wave 2 services with the same `DINQOR_RUNTIME_NETWORK` value:
 
 ```bash
 docker compose --env-file .env.wave1 \
   -f infrastructure/docker/docker-compose.wave2-agent.yml up -d --build
 ```
+
+Wave 2 Compose defaults Agent, Platform Integration and Content Automation to
+`SPRING_PROFILES_ACTIVE=nacos`, Config enabled and Discovery enabled. Each service loads
+its private DataId plus `dinqor-shared.yaml`, and registers in the shared `COMMON`
+discovery group. Override `*_NACOS_*` only for an intentional staged rollback; do not
+silently omit `NACOS_SERVER_ADDR` or `NACOS_NAMESPACE`.
 
 The required database variables are `MIGRATION_DB_URL`, `MIGRATION_DB_PASSWORD`, `CORE_DB_URL`
 and `CORE_DB_PASSWORD`; usernames default to `dinqor_migration` and `dinqor_core`. The Nacos

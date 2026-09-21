@@ -1769,6 +1769,56 @@ def gate_wave1_compose_contract() -> None:
     report(gate, True, "migration-runner → core-host → gateway rollout and local Nacos bootstrap are explicit")
 
 
+def gate_wave2_compose_nacos_contract() -> None:
+    """V9 §94: Wave 2 services must use Nacos in the deployment template by default."""
+    gate = "wave2-compose-nacos-contract"
+    path = REPO / "infrastructure" / "docker" / "docker-compose.wave2-agent.yml"
+    if not path.is_file():
+        report(gate, False, "infrastructure/docker/docker-compose.wave2-agent.yml is missing")
+        return
+    try:
+        document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        report(gate, False, f"Wave 2 Compose YAML is invalid: {exc}")
+        return
+    services = document.get("services", {})
+    expected = ("agent", "platform-integration", "content-automation")
+    problems: list[str] = []
+    if not isinstance(services, dict):
+        report(gate, False, "Wave 2 Compose services must be a mapping")
+        return
+    for service_name in expected:
+        service = services.get(service_name)
+        if not isinstance(service, dict):
+            problems.append(f"{service_name}: service is missing")
+            continue
+        environment = service.get("environment", {})
+        if not isinstance(environment, dict):
+            problems.append(f"{service_name}: environment must be a mapping")
+            continue
+        profile = str(environment.get("SPRING_PROFILES_ACTIVE", ""))
+        if not profile.endswith(":-nacos}"):
+            problems.append(f"{service_name}: SPRING_PROFILES_ACTIVE must default to nacos")
+        for key in ("NACOS_CONFIG_ENABLED", "NACOS_DISCOVERY_ENABLED"):
+            value = str(environment.get(key, ""))
+            if not value.endswith(":-true}"):
+                problems.append(f"{service_name}: {key} must default to true")
+        for key in ("NACOS_SERVER_ADDR", "NACOS_NAMESPACE"):
+            value = str(environment.get(key, ""))
+            if ":?set " not in value:
+                problems.append(f"{service_name}: {key} must be required at deploy time")
+        group = str(environment.get("NACOS_DISCOVERY_GROUP", ""))
+        if not group.endswith(":-COMMON}"):
+            problems.append(f"{service_name}: discovery group must default to COMMON")
+    network = document.get("networks", {}).get("dinqor-runtime", {})
+    if not isinstance(network, dict) or network.get("external") is not True:
+        problems.append("dinqor-runtime must remain an external shared network")
+    if problems:
+        report(gate, False, "; ".join(problems))
+        return
+    report(gate, True, "Wave 2 Agent/Platform/Content default to required Nacos Config + Discovery")
+
+
 # V9 section 80 bans the global ``classpath*:/mapper/*.xml`` swallow once services
 # are split. It is still *correct* today: there is exactly one application module,
 # so there is nothing else on the classpath for it to swallow. And changing it now
@@ -2149,6 +2199,7 @@ GATES = {
     "dockerfile-module-coverage": gate_dockerfile_module_coverage,
     "dockerfile-runtime-target": gate_dockerfile_runtime_target,
     "wave1-compose-contract": gate_wave1_compose_contract,
+    "wave2-compose-nacos-contract": gate_wave2_compose_nacos_contract,
     "mybatis-scan-scope": gate_mybatis_scan_scope,
 }
 
