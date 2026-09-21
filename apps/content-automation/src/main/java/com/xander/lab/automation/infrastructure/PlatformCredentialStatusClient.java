@@ -38,16 +38,20 @@ public class PlatformCredentialStatusClient {
         this.objectMapper = objectMapper;
     }
 
-    public boolean isAuthorized(String platform, String authorization) {
-        if (authorization == null || authorization.isBlank()) {
-            return false;
+    public boolean isAuthorized(String platform, Long userId, String authorization) {
+        if (internalConfigured()) {
+            return isAuthorizedInternally(platform, userId);
         }
-        String baseUrl = properties.getPlatformIntegrationBaseUrl();
-        if (baseUrl == null || baseUrl.isBlank()) {
+        return isAuthorizedThroughPublicApi(platform, authorization);
+    }
+
+    private boolean isAuthorizedThroughPublicApi(String platform, String authorization) {
+        if (!validPlatform(platform) || baseUrl() == null
+                || authorization == null || authorization.isBlank()) {
             return false;
         }
         try {
-            URI uri = URI.create(baseUrl.replaceAll("/+$", "")
+            URI uri = URI.create(baseUrl()
                     + "/api/publishing/" + platform + "/authorization/status");
             ResponseEntity<byte[]> response = restClient.get()
                     .uri(uri)
@@ -79,6 +83,55 @@ public class PlatformCredentialStatusClient {
                     platform, rootMessage(exception));
             return false;
         }
+    }
+
+    private boolean isAuthorizedInternally(String platform, Long userId) {
+        if (!validPlatform(platform) || userId == null || userId <= 0) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(baseUrl() + "/internal/platform-integration/platform-credentials/"
+                    + userId + "/" + platform + "/status");
+            ResponseEntity<byte[]> response = restClient.get()
+                    .uri(uri)
+                    .header("X-DinQor-Internal-Token", properties.getPlatformIntegrationInternalToken())
+                    .exchange((request, clientResponse) -> {
+                        try {
+                            return new ResponseEntity<>(
+                                    clientResponse.getStatusCode().is2xxSuccessful()
+                                            ? copyBounded(clientResponse.getBody(),
+                                            properties.getPlatformIntegrationMaxResponseBytes())
+                                            : new byte[0],
+                                    clientResponse.getStatusCode());
+                        } catch (IOException exception) {
+                            throw new IllegalStateException("平台凭证状态响应读取失败", exception);
+                        }
+                    });
+            if (!response.getStatusCode().is2xxSuccessful()
+                    || response.getBody() == null || response.getBody().length == 0) {
+                return false;
+            }
+            return objectMapper.readTree(response.getBody()).path("authorized").asBoolean(false);
+        } catch (IOException | RuntimeException exception) {
+            log.warn("[BlogPlan] internal credential status fail-soft platform={} user={} reason={}",
+                    platform, userId, rootMessage(exception));
+            return false;
+        }
+    }
+
+    private boolean internalConfigured() {
+        return baseUrl() != null
+                && properties.getPlatformIntegrationInternalToken() != null
+                && !properties.getPlatformIntegrationInternalToken().isBlank();
+    }
+
+    private String baseUrl() {
+        String baseUrl = properties.getPlatformIntegrationBaseUrl();
+        return baseUrl == null || baseUrl.isBlank() ? null : baseUrl.replaceAll("/+$", "");
+    }
+
+    private boolean validPlatform(String platform) {
+        return "csdn".equals(platform) || "juejin".equals(platform);
     }
 
     private String rootMessage(Throwable throwable) {

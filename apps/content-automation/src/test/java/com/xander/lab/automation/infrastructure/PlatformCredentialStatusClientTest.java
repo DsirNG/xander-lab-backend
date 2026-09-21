@@ -40,7 +40,7 @@ class PlatformCredentialStatusClientTest {
 
         PlatformCredentialStatusClient client = client(16 * 1024);
 
-        assertTrue(client.isAuthorized("csdn", "Bearer access-token"));
+        assertTrue(client.isAuthorized("csdn", 7L, "Bearer access-token"));
     }
 
     @Test
@@ -54,7 +54,7 @@ class PlatformCredentialStatusClientTest {
         });
         server.start();
 
-        assertFalse(client(16 * 1024).isAuthorized("juejin", "Bearer access-token"));
+        assertFalse(client(16 * 1024).isAuthorized("juejin", 7L, "Bearer access-token"));
     }
 
     @Test
@@ -68,7 +68,33 @@ class PlatformCredentialStatusClientTest {
         });
         server.start();
 
-        assertFalse(client(8).isAuthorized("csdn", "Bearer access-token"));
+        assertFalse(client(8).isAuthorized("csdn", 7L, "Bearer access-token"));
+    }
+
+    @Test
+    void usesExplicitOwnerInternalBoundaryWhenInternalTokenIsConfigured() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/internal/platform-integration/platform-credentials/7/csdn/status",
+                exchange -> {
+                    assertTrue("platform-token".equals(
+                            exchange.getRequestHeaders().getFirst("X-DinQor-Internal-Token")));
+                    byte[] response = "{\"authorized\":true}".getBytes(StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(200, response.length);
+                    exchange.getResponseBody().write(response);
+                    exchange.close();
+                });
+        server.start();
+
+        ContentAutomationProperties properties = new ContentAutomationProperties();
+        properties.setPlatformIntegrationBaseUrl("http://localhost:" + server.getAddress().getPort());
+        properties.setPlatformIntegrationInternalToken("platform-token");
+        properties.setPlatformIntegrationConnectTimeoutMillis(2_000);
+        properties.setPlatformIntegrationReadTimeoutMillis(2_000);
+        properties.setPlatformIntegrationMaxResponseBytes(16 * 1024);
+        PlatformCredentialStatusClient client = new PlatformCredentialStatusClient(
+                RestClient.builder(), properties, new ObjectMapper());
+
+        assertTrue(client.isAuthorized("csdn", 7L, null));
     }
 
     private PlatformCredentialStatusClient client(int maxResponseBytes) {

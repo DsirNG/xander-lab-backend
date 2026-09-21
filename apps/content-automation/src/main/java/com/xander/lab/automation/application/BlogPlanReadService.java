@@ -53,7 +53,7 @@ public class BlogPlanReadService {
                         safeSize,
                         offset)
                 .stream()
-                .map(plan -> enrich(plan, authorization))
+                .map(plan -> enrich(plan, userId, authorization))
                 .toList();
         return BlogContentPlansPage.builder()
                 .records(records)
@@ -73,10 +73,10 @@ public class BlogPlanReadService {
         if (records.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "定时发文计划不存在");
         }
-        return enrich(records.get(0), authorization);
+        return enrich(records.get(0), userId, authorization);
     }
 
-    private BlogContentPlanVO enrich(BlogContentPlanVO plan, String authorization) {
+    private BlogContentPlanVO enrich(BlogContentPlanVO plan, Long userId, String authorization) {
         return BlogContentPlanVO.builder()
                 .id(plan.getId())
                 .topic(plan.getTopic())
@@ -101,8 +101,8 @@ public class BlogPlanReadService {
                 .errorMessage(plan.getErrorMessage())
                 .createdAt(plan.getCreatedAt())
                 .updatedAt(plan.getUpdatedAt())
-                .csdnAuthorized(credentialStatusClient.isAuthorized("csdn", authorization))
-                .juejinAuthorized(credentialStatusClient.isAuthorized("juejin", authorization))
+                .csdnAuthorized(credentialStatusClient.isAuthorized("csdn", userId, authorization))
+                .juejinAuthorized(credentialStatusClient.isAuthorized("juejin", userId, authorization))
                 .build();
     }
 

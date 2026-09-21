@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 272
+  total: 276
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -3072,6 +3072,40 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-integration-platform-credentials-userid-csdn-status
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/integration/platform-credentials/{userId}/csdn/status"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-integration-platform-credentials-userid-juejin-status
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/integration/platform-credentials/{userId}/juejin/status"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: integration-post-internal-platform-integration-blog-posts-postid-find-succeeded-csdn
     owner: integration
     old:
@@ -3130,6 +3164,40 @@ entries:
       path: "/internal/platform-integration/blog-posts/{postId}/sync/juejin"
     new:
       method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-platform-integration-platform-credentials-userid-csdn-status
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/platform-integration/platform-credentials/{userId}/csdn/status"
+    new:
+      method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-get-internal-platform-integration-platform-credentials-userid-juejin-status
+    owner: integration
+    old:
+      method: GET
+      path: "/internal/platform-integration/platform-credentials/{userId}/juejin/status"
+    new:
+      method: GET
       path: ""
     clients:
       web: not_applicable

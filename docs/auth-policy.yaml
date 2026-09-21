@@ -113,6 +113,22 @@ excluded:
     identity_mode: none
     token_location: n/a
     note: "Gateway 不套业务 JWT；core-host 内网 API 另用 X-DinQor-Internal-Token 且默认关闭。"
+  - id: excluded-platform-credential-status-sync
+    match:
+      method: ANY
+      path_prefix: /internal/integration/platform-credentials/
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "Core 凭证状态只读内网边界，另用 X-DinQor-Internal-Token 且默认关闭，不套业务 JWT。"
+  - id: excluded-platform-credential-status-bridge
+    match:
+      method: ANY
+      path_prefix: /internal/platform-integration/platform-credentials/
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "Platform → Core 凭证状态桥，另用 X-DinQor-Internal-Token 且默认关闭，不套业务 JWT。"
 
 # ===================== 3. 管理后台 =====================
 # 必须在公开 GET 分支之前判断。
