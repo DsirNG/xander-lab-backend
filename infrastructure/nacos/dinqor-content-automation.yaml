@@ -31,8 +31,10 @@ content-automation:
     full-reconcile-interval-ms: ${CONTENT_AUTOMATION_SECURITY_STATE_FULL_RECONCILE_INTERVAL_MS:300000}
     reconcile-batch-size: ${CONTENT_AUTOMATION_SECURITY_STATE_RECONCILE_BATCH_SIZE:500}
     request-timeout-ms: ${CONTENT_AUTOMATION_SECURITY_STATE_REQUEST_TIMEOUT_MS:2000}
-  stream:
-    drain-enabled: ${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}
+  stream-drain-enabled: ${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}
+  stream-instance-id: ${CONTENT_AUTOMATION_STREAM_INSTANCE_ID:${HOSTNAME:unknown}}
+  stream-drain-deadline-at: ${CONTENT_AUTOMATION_STREAM_DRAIN_DEADLINE_AT:0}
+  stream-drain-check-interval-ms: ${CONTENT_AUTOMATION_STREAM_DRAIN_CHECK_INTERVAL_MS:1000}
   shedlock:
     enabled: ${CONTENT_AUTOMATION_SHEDLOCK_ENABLED:false}
   plan-executor:

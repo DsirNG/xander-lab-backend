@@ -165,10 +165,17 @@ public class ContentNotificationStreamService {
             }
             streamState.closed();
             try {
-                emitter.completeWithError(new ResponseStatusException(
-                        HttpStatus.FORBIDDEN,
-                        reason == null ? ConnectionRegistry.REASON_ACCOUNT_DISABLED : reason));
-            } catch (IllegalStateException ignored) {
+                if (ConnectionRegistry.REASON_STREAM_MIGRATION.equals(reason)) {
+                    emitter.send(SseEmitter.event()
+                            .name(ConnectionRegistry.SSE_EVENT_STREAM_MIGRATE)
+                            .data("{\"reason\":\"STREAM_MIGRATION\",\"reconnect\":true}"));
+                    emitter.complete();
+                } else {
+                    emitter.completeWithError(new ResponseStatusException(
+                            HttpStatus.FORBIDDEN,
+                            reason == null ? ConnectionRegistry.REASON_ACCOUNT_DISABLED : reason));
+                }
+            } catch (IOException | IllegalStateException ignored) {
                 try {
                     emitter.complete();
                 } catch (IllegalStateException ignoredAgain) {

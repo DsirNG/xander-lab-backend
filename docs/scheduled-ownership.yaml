@@ -15,14 +15,15 @@ generated_from: docs/scheduled-inventory.yaml
 
 # Wave 0A 扫描结果（14 项）+ Wave 1 Gateway denylist reconciler +
 # content-automation 安全状态对账 + legacy Redis 盘点 + Refresh 表行数观测 +
-# content-automation 计划调度 drain + Agent 安全状态对账 + Core 旧流 deadline drain，共 23 项。
+# content-automation 计划调度 drain + Agent 安全状态对账 + Core 旧流 deadline drain +
+# Agent/content 长连接 deadline drain，共 25 项。
 # 注意 `scanned` 必须等于 docs/scheduled-inventory.yaml 的 counts.total，
 # 由门禁 `inventory-integrity` 校验。
 # 两个 auth 清理任务在上一轮以 status: planned 登记；本轮实现后改为 active（不是新增条目）。
 counts:
-  scanned: 23
+  scanned: 25
   planned: 0
-  total: 23
+  total: 25
 
 scheduled:
   # ===================== Wave 0A 实际扫描到的 9 项 =====================
@@ -57,6 +58,16 @@ scheduled:
     scan_ref: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentSecurityStateReconciler.java:88
     notes: "Agent 安全状态低频全量快照兜底，修复实例离线后增量游标落后导致的永久漏同步。"
 
+  - id: agent-stream-drainer
+    logical_owner: agent
+    current_deployment_owner: dinqor-agent
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: active
+    scan_ref: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentStreamDrainer.java:33
+    notes: "Wave 2 长连接 deadline drain；每个 Agent 实例独立关闭本机 SSE/WS，禁止用跨实例聚合值替代逐实例判据。"
+
   - id: blog-content-plan-scheduler
     logical_owner: publishing
     current_deployment_owner: dinqor-core-host
@@ -76,6 +87,16 @@ scheduled:
     status: active
     scan_ref: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentBlogPlanScheduler.java:22
     notes: "Wave 2 drain 调度器。多实例由 blog_content_plan 原子认领、blog_plan_run 唯一键和租约恢复保证每个触发只执行一次；默认关闭，旧 core-host 仍是回退入口。"
+
+  - id: content-automation-stream-drainer
+    logical_owner: automation
+    current_deployment_owner: dinqor-content-automation
+    execution_mode: scheduled
+    execution_scope: per_instance
+    singleton_strategy: none
+    status: active
+    scan_ref: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationStreamDrainer.java:33
+    notes: "Wave 2 长连接 deadline drain；每个 content-automation 实例独立关闭本机 SSE，SSE 先发送 stream-migrate 再结束。"
 
   - id: email-reminder-scheduler
     logical_owner: automation

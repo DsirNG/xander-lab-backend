@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 23
+  total: 25
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -30,6 +30,20 @@ scheduled:
     logical_owner: agent
     file: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentSecurityStateReconciler.java
     line: 88
+  - id: agent-stream-drainer
+    class: com.xander.lab.agent.infrastructure.AgentStreamDrainer
+    method: reconcileDeadline
+    trigger: "fixedDelayString = \"${agent.stream.drain-check-interval-ms:1000}\""
+    logical_owner: agent
+    file: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentStreamDrainer.java
+    line: 33
+  - id: content-automation-stream-drainer
+    class: com.xander.lab.automation.host.ContentAutomationStreamDrainer
+    method: reconcileDeadline
+    trigger: "fixedDelayString = \"${content-automation.stream.drain-check-interval-ms:1000}\""
+    logical_owner: automation
+    file: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationStreamDrainer.java
+    line: 33
   - id: blog-content-plan-scheduler
     class: com.xander.lab.automation.infrastructure.BlogContentPlanScheduler
     method: dispatchDuePlans

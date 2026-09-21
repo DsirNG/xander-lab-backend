@@ -32,3 +32,6 @@ agent:
     request-timeout-ms: ${AGENT_SECURITY_STATE_REQUEST_TIMEOUT_MS:2000}
   stream:
     drain-enabled: ${AGENT_STREAM_DRAIN_ENABLED:false}
+    instance-id: ${AGENT_STREAM_INSTANCE_ID:${HOSTNAME:unknown}}
+    drain-deadline-at: ${AGENT_STREAM_DRAIN_DEADLINE_AT:0}
+    drain-check-interval-ms: ${AGENT_STREAM_DRAIN_CHECK_INTERVAL_MS:1000}

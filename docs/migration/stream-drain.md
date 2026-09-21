@@ -135,6 +135,23 @@ drain_connection_close_rate
 client_reconnect_success_rate
 ```
 
+Wave 2 新宿主同时暴露逐实例的：
+
+```text
+agent_sse_active{instance="..."}
+agent_ws_active{instance="..."}
+content_automation_sse_active{instance="..."}
+agent_stream_drain_enabled{instance="..."}
+content_automation_stream_drain_enabled{instance="..."}
+drain_connection_close_rate{instance="..."}
+```
+
+Agent 与 content-automation 的 `*_DRAIN_DEADLINE_AT` 到期后由本实例
+deadline drainer 调用 `ConnectionRegistry.closeAll(STREAM_MIGRATION)`；SSE 会先发
+`stream-migrate`，WS 使用 `1012 / STREAM_MIGRATION`，客户端必须按原游标/订阅参数重连。
+封禁仍只使用 `ACCOUNT_DISABLED` + 403/4403。计数和 deadline 都是本机状态，不能由
+跨实例聚合值替代逐实例判据。
+
 前三个是**旧进程侧**的存量计数（逐实例，见 §4）；
 后两个是**质量指标**：
 
@@ -201,6 +218,7 @@ deny cache event 丢失后的 reconcile
 | 缺口 | 影响 | 状态 |
 |---|---|---|
 | 旧流存量与 drain 开关 | Core 的旧 BlogAgent / 通知 SSE 已接入逐实例 `legacy_agent_sse_active`、`legacy_content_sse_active` 和 `core_legacy_stream_drain_enabled`；三项指标统一带 `instance` 标签，实例 ID 由 `CORE_STREAM_INSTANCE_ID`（默认回退 `HOSTNAME`）提供 | ✅ 代码、Wave 1 Compose 模板与本地运行验证已完成；生产发布流程仍需逐实例读取 |
+| 新宿主存量与 deadline | Agent SSE/WS、content-automation SSE 已接入 `instance` 标签、deadline drainer、`drain_connection_close_rate` 与 `STREAM_MIGRATION` 协议 | ✅ 代码与单测已完成；生产多实例读取和客户端联调仍待执行 |
 | 关闭速率 | Core 旧 Agent/content SSE 的 deadline drainer 已接入 `drain_connection_close_rate{instance}`，只在 Phase 3 实际关闭连接时计数 | ✅ 代码与单测已完成；生产多实例读取仍待执行 |
 | 重连成功率 | `client_reconnect_success_rate` 仍需要客户端/网关观测，不能用服务端存量指标伪造 | Wave 2 |
 | Phase 3 的「迁移/重连信号」协议 | Core 旧 SSE 已固定 `stream-migrate` 事件与 JSON 载荷；WS/新服务客户端联调仍待完成 | ✅ 服务端协议已落地；客户端联调 Wave 2 |

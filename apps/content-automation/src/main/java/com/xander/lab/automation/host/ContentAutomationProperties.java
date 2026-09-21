@@ -19,6 +19,8 @@ public class ContentAutomationProperties {
     private int platformIntegrationMaxResponseBytes = 1 * 1024 * 1024;
     private int modelTimeoutMillis = 30_000;
     private boolean streamDrainEnabled;
+    private String streamInstanceId = "unknown";
+    private long streamDrainDeadlineAt;
 
     public String getCoreBaseUrl() {
         return coreBaseUrl;
@@ -123,4 +125,21 @@ public class ContentAutomationProperties {
     public void setStreamDrainEnabled(boolean streamDrainEnabled) {
         this.streamDrainEnabled = streamDrainEnabled;
     }
+
+    public String getStreamInstanceId() {
+        return streamInstanceId;
+    }
+
+    public void setStreamInstanceId(String streamInstanceId) {
+        this.streamInstanceId = streamInstanceId;
+    }
+
+    public long getStreamDrainDeadlineAt() {
+        return streamDrainDeadlineAt;
+    }
+
+    public void setStreamDrainDeadlineAt(long streamDrainDeadlineAt) {
+        this.streamDrainDeadlineAt = streamDrainDeadlineAt;
+    }
+
 }

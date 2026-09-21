@@ -132,6 +132,22 @@ public class ConnectionRegistry {
         return closed;
     }
 
+    /**
+     * 关闭本实例上的全部连接。
+     *
+     * <p>Wave 2 drain 只针对当前部署单元，因此这里故意不做跨实例广播；
+     * 每个实例由自己的 deadline drainer 调用，逐实例指标仍然是唯一判据。</p>
+     *
+     * @return 实际调用了 close 的连接数
+     */
+    public int closeAll(String reason) {
+        int closed = 0;
+        for (Long accountId : byAccount.keySet()) {
+            closed += closeAll(accountId, reason);
+        }
+        return closed;
+    }
+
     /** 某账号当前活跃连接数。 */
     public int activeCount(Long accountId) {
         Set<ConnectionHandle> handles = byAccount.get(accountId);

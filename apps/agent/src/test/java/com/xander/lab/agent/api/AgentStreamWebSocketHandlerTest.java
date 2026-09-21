@@ -318,6 +318,37 @@ class AgentStreamWebSocketHandlerTest {
     }
 
     @Test
+    void streamDrainClosesEstablishedWsWithServiceRestartCode() throws Exception {
+        ConnectionRegistry registry = new ConnectionRegistry();
+        AgentEventService eventService = mock(AgentEventService.class);
+        when(eventService.listAfter(7L, 9L, 0L)).thenReturn(List.of());
+        AgentConversation running = new AgentConversation();
+        running.setUserId(42L);
+        running.setRunVersion(9L);
+        running.setStatus("running");
+        AgentConversationMapper conversationMapper = mock(AgentConversationMapper.class);
+        when(conversationMapper.selectById(7L)).thenReturn(running);
+        WebSocketSession wsSession = session(7L, 9L);
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            handler(eventService, new AgentEventBus(), conversationMapper,
+                    new SecurityStateCache(), registry, executor::execute, 50L)
+                    .afterConnectionEstablished(wsSession);
+
+            assertEquals(1, registry.activeCount(42L));
+            assertEquals(1, registry.closeAll(ConnectionRegistry.REASON_STREAM_MIGRATION));
+
+            verify(wsSession).close(argThat(status ->
+                    status.getCode() == CloseStatus.SERVICE_RESTARTED.getCode()
+                            && ConnectionRegistry.REASON_STREAM_MIGRATION.equals(status.getReason())));
+        } finally {
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(2, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
     void unregistersFromConnectionRegistryAfterTerminal() throws Exception {
         ConnectionRegistry registry = new ConnectionRegistry();
         AgentEventService eventService = mock(AgentEventService.class);

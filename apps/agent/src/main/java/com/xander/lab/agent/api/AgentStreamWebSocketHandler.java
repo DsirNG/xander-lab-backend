@@ -451,8 +451,15 @@ public class AgentStreamWebSocketHandler extends TextWebSocketHandler {
         public void close(String reason) {
             if (!open.getAndSet(false)) return;
             connectionRegistry.unregister(this);
-            closeQuietly(session, new CloseStatus(CLOSE_CODE_ACCOUNT_DISABLED,
-                    reason == null ? CLOSE_REASON_ACCOUNT_DISABLED : reason));
+            closeQuietly(session, closeStatus(reason));
+        }
+
+        private CloseStatus closeStatus(String reason) {
+            if (ConnectionRegistry.REASON_STREAM_MIGRATION.equals(reason)) {
+                return new CloseStatus(CloseStatus.SERVICE_RESTARTED.getCode(), reason);
+            }
+            return new CloseStatus(CLOSE_CODE_ACCOUNT_DISABLED,
+                    reason == null ? CLOSE_REASON_ACCOUNT_DISABLED : reason);
         }
 
         /** 连接自然结束（终态、客户端断开、发送失败）时摘除自己。 */

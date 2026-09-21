@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 938
-  leaves: 689
+  total: 947
+  leaves: 699
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -308,6 +308,21 @@ config:
   - key: agent.stream.drain-enabled
     source: apps/agent/src/main/resources/application.yml
     value: "${AGENT_STREAM_DRAIN_ENABLED:false}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.stream.instance-id
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_STREAM_INSTANCE_ID:${HOSTNAME:unknown}}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.stream.drain-deadline-at
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_STREAM_DRAIN_DEADLINE_AT:0}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.stream.drain-check-interval-ms
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_STREAM_DRAIN_CHECK_INTERVAL_MS:1000}"
     leaf: true
     logical_owner: agent
   - key: agent.core-client
@@ -1025,14 +1040,24 @@ config:
     value: "${CONTENT_AUTOMATION_SECURITY_STATE_REQUEST_TIMEOUT_MS:2000}"
     leaf: true
     logical_owner: content-automation
-  - key: content-automation.stream
-    source: apps/content-automation/src/main/resources/application.yml
-    value: ""
-    leaf: false
-    logical_owner: content-automation
-  - key: content-automation.stream.drain-enabled
+  - key: content-automation.stream-drain-enabled
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.stream-instance-id
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_STREAM_INSTANCE_ID:${HOSTNAME:unknown}}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.stream-drain-deadline-at
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_STREAM_DRAIN_DEADLINE_AT:0}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.stream-drain-check-interval-ms
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_STREAM_DRAIN_CHECK_INTERVAL_MS:1000}"
     leaf: true
     logical_owner: content-automation
   - key: content-automation.shedlock
@@ -3892,6 +3917,13 @@ config:
     logical_owner: agent
     source_kind: java-configuration-properties
     line: 15
+  - key: agent.stream.drain-deadline-at
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentStreamProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 18
   - key: agent.stream.drain-enabled
     source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentStreamProperties.java
     value: "<java-default:none>"
@@ -3899,6 +3931,13 @@ config:
     logical_owner: agent
     source_kind: java-configuration-properties
     line: 12
+  - key: agent.stream.instance-id
+    source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentStreamProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 15
   - key: mcp.client.connect-timeout-seconds
     source: apps/agent/src/main/java/com/xander/lab/agent/tool/mcp/McpClientProperties.java
     value: "<java-default>"
@@ -4081,6 +4120,13 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 14
+  - key: content-automation.stream-drain-deadline-at
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 23
   - key: content-automation.stream-drain-enabled
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default:none>"
@@ -4088,6 +4134,13 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 21
+  - key: content-automation.stream-instance-id
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 22
   - key: content-automation.plan-executor.enabled
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentPlanExecutionProperties.java
     value: "<java-default:none>"
