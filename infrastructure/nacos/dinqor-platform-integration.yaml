@@ -32,6 +32,10 @@ platform-integration:
     connect-timeout-millis: ${JUEJIN_CONNECT_TIMEOUT_MILLIS:10000}
     read-timeout-millis: ${JUEJIN_READ_TIMEOUT_MILLIS:30000}
     catalog-freshness-hours: 24
+    selenium-url: ${JUEJIN_SELENIUM_URL:http://selenium:4444/wd/hub}
+    authorization-timeout-seconds: ${JUEJIN_AUTHORIZATION_TIMEOUT_SECONDS:60}
+    cleanup-interval-ms: ${JUEJIN_AUTHORIZATION_CLEANUP_INTERVAL_MS:15000}
+    qr-image-selector: ${JUEJIN_QR_IMAGE_SELECTOR:.qrcode-img-wrap img.qrcode-img}
   credential-store-enabled: false
   credential-store-url: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_URL:}
   credential-store-username: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_USERNAME:}

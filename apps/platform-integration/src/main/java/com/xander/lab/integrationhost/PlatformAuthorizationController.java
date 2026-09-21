@@ -25,15 +25,26 @@ public class PlatformAuthorizationController {
     private final PlatformIntegrationInternalAuthorizationController authorizationBridge;
     private final PlatformIntegrationProperties properties;
     private final Optional<PlatformCsdnAuthorizationService> localCsdnAuthorization;
+    private final Optional<PlatformJuejinAuthorizationService> localJuejinAuthorization;
 
     @Autowired
     public PlatformAuthorizationController(
             PlatformIntegrationInternalAuthorizationController authorizationBridge,
             PlatformIntegrationProperties properties,
-            Optional<PlatformCsdnAuthorizationService> localCsdnAuthorization) {
+            Optional<PlatformCsdnAuthorizationService> localCsdnAuthorization,
+            Optional<PlatformJuejinAuthorizationService> localJuejinAuthorization) {
         this.authorizationBridge = authorizationBridge;
         this.properties = properties;
         this.localCsdnAuthorization = localCsdnAuthorization;
+        this.localJuejinAuthorization = localJuejinAuthorization;
+    }
+
+    /** Compatibility constructor for tests that stage only the CSDN owner. */
+    public PlatformAuthorizationController(
+            PlatformIntegrationInternalAuthorizationController authorizationBridge,
+            PlatformIntegrationProperties properties,
+            Optional<PlatformCsdnAuthorizationService> localCsdnAuthorization) {
+        this(authorizationBridge, properties, localCsdnAuthorization, Optional.empty());
     }
 
     /** Compatibility constructor retained for controller unit tests and bridge-only deployments. */
@@ -54,6 +65,9 @@ public class PlatformAuthorizationController {
         if ("csdn".equals(platform) && localCsdnAuthorization.isPresent()) {
             return Result.success(localCsdnAuthorization.get().start(userId));
         }
+        if ("juejin".equals(platform) && localJuejinAuthorization.isPresent()) {
+            return Result.success(localJuejinAuthorization.get().start(userId));
+        }
         return Result.success(authorizationBridge.start(properties.getInternalToken(), userId, platform));
     }
 
@@ -67,6 +81,10 @@ public class PlatformAuthorizationController {
         }
         if ("csdn".equals(platform) && localCsdnAuthorization.isPresent()) {
             localCsdnAuthorization.get().cancel(userId);
+            return Result.success(null);
+        }
+        if ("juejin".equals(platform) && localJuejinAuthorization.isPresent()) {
+            localJuejinAuthorization.get().cancel(userId);
             return Result.success(null);
         }
         authorizationBridge.cancel(properties.getInternalToken(), userId, platform);
@@ -83,6 +101,10 @@ public class PlatformAuthorizationController {
         }
         if ("csdn".equals(platform) && localCsdnAuthorization.isPresent()) {
             localCsdnAuthorization.get().disconnect(userId);
+            return Result.success(null);
+        }
+        if ("juejin".equals(platform) && localJuejinAuthorization.isPresent()) {
+            localJuejinAuthorization.get().disconnect(userId);
             return Result.success(null);
         }
         authorizationBridge.disconnect(properties.getInternalToken(), userId, platform);

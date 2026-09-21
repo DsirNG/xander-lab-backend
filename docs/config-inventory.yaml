@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 988
-  leaves: 733
+  total: 1003
+  leaves: 747
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -3695,6 +3695,61 @@ config:
     value: "${CSDN_AUTHORIZATION_CLEANUP_INTERVAL_MS:15000}"
     leaf: true
     logical_owner: integration
+  - key: platform-integration.juejin
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: integration
+  - key: platform-integration.juejin.base-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_API_BASE_URL:https://api.juejin.cn}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.default-aid
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_DEFAULT_AID:2608}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.credential-encryption-key
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_CREDENTIAL_ENCRYPTION_KEY:}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.connect-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_CONNECT_TIMEOUT_MILLIS:10000}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.read-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_READ_TIMEOUT_MILLIS:30000}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.catalog-freshness-hours
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "24"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.selenium-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_SELENIUM_URL:http://selenium:4444/wd/hub}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.authorization-timeout-seconds
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_AUTHORIZATION_TIMEOUT_SECONDS:60}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.cleanup-interval-ms
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_AUTHORIZATION_CLEANUP_INTERVAL_MS:15000}"
+    leaf: true
+    logical_owner: integration
+  - key: platform-integration.juejin.qr-image-selector
+    source: apps/platform-integration/src/main/resources/application.yml
+    value: "${JUEJIN_QR_IMAGE_SELECTOR:.qrcode-img-wrap img.qrcode-img}"
+    leaf: true
+    logical_owner: integration
   - key: platform-integration.credential-store-enabled
     source: apps/platform-integration/src/main/resources/application.yml
     value: "${PLATFORM_INTEGRATION_CREDENTIAL_STORE_ENABLED:false}"
@@ -5368,6 +5423,13 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 16
+  - key: platform-integration.juejin.authorization-timeout-seconds
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 18
   - key: platform-integration.juejin.base-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
     value: "<java-default>"
@@ -5382,6 +5444,13 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 16
+  - key: platform-integration.juejin.cleanup-interval-ms
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 19
   - key: platform-integration.juejin.connect-timeout-millis
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
     value: "<java-default>"
@@ -5403,6 +5472,13 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 12
+  - key: platform-integration.juejin.qr-image-selector
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 20
   - key: platform-integration.juejin.read-timeout-millis
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
     value: "<java-default>"
@@ -5410,3 +5486,10 @@ config:
     logical_owner: integration
     source_kind: java-configuration-properties
     line: 15
+  - key: platform-integration.juejin.selenium-url
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: integration
+    source_kind: java-configuration-properties
+    line: 17

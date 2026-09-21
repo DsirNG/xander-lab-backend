@@ -73,7 +73,9 @@ public class PlatformCredentialStatusStore {
                 }
                 boolean complete = "ACTIVE".equals(result.getString(1))
                         && hasText(result.getString(2))
-                        && hasText(result.getString(3));
+                        // Juejin profile enrichment is best effort; the encrypted session cookie
+                        // is already sufficient to establish an authorized state.
+                        && ("juejin".equals(platform) || hasText(result.getString(3)));
                 return complete ? CredentialStatus.AUTHORIZED : CredentialStatus.NOT_AUTHORIZED;
             }
         } catch (SQLException exception) {

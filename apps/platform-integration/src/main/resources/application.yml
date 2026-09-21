@@ -33,6 +33,17 @@ platform-integration:
     credential-encryption-key: ${CSDN_CREDENTIAL_ENCRYPTION_KEY:}
     authorization-timeout-seconds: ${CSDN_AUTHORIZATION_TIMEOUT_SECONDS:35}
     cleanup-interval-ms: ${CSDN_AUTHORIZATION_CLEANUP_INTERVAL_MS:15000}
+  juejin:
+    base-url: ${JUEJIN_API_BASE_URL:https://api.juejin.cn}
+    default-aid: ${JUEJIN_DEFAULT_AID:2608}
+    credential-encryption-key: ${JUEJIN_CREDENTIAL_ENCRYPTION_KEY:}
+    connect-timeout-millis: ${JUEJIN_CONNECT_TIMEOUT_MILLIS:10000}
+    read-timeout-millis: ${JUEJIN_READ_TIMEOUT_MILLIS:30000}
+    catalog-freshness-hours: 24
+    selenium-url: ${JUEJIN_SELENIUM_URL:http://selenium:4444/wd/hub}
+    authorization-timeout-seconds: ${JUEJIN_AUTHORIZATION_TIMEOUT_SECONDS:60}
+    cleanup-interval-ms: ${JUEJIN_AUTHORIZATION_CLEANUP_INTERVAL_MS:15000}
+    qr-image-selector: ${JUEJIN_QR_IMAGE_SELECTOR:.qrcode-img-wrap img.qrcode-img}
   # Disabled during the bridge phase; when enabled, Platform reads credential status locally.
   credential-store-enabled: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_ENABLED:false}
   credential-store-url: ${PLATFORM_INTEGRATION_CREDENTIAL_STORE_URL:}

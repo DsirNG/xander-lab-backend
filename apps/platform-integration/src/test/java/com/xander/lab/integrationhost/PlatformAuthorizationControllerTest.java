@@ -87,6 +87,25 @@ class PlatformAuthorizationControllerTest {
         verify(bridge, never()).disconnect("platform-token", 7L, "csdn");
     }
 
+    @Test
+    void usesPlatformOwnedJuejinAuthorizationWhenTheStagedOwnerIsPresent() {
+        PlatformIntegrationInternalAuthorizationController bridge =
+                mock(PlatformIntegrationInternalAuthorizationController.class);
+        PlatformJuejinAuthorizationService local = mock(PlatformJuejinAuthorizationService.class);
+        var expected = new PlatformJuejinAuthorizationService.AuthorizationView(
+                "PENDING", "qr", 60, null, null);
+        when(local.start(8L)).thenReturn(expected);
+
+        var controller = new PlatformAuthorizationController(bridge, properties(),
+                Optional.empty(), Optional.of(local));
+        var response = controller.start("juejin", "8");
+
+        assertThat(response.getCode()).isEqualTo(200);
+        assertThat(response.getData()).isEqualTo(expected);
+        verify(local).start(8L);
+        verify(bridge, never()).start("platform-token", 8L, "juejin");
+    }
+
     private PlatformIntegrationProperties properties() {
         PlatformIntegrationProperties properties = new PlatformIntegrationProperties();
         properties.setInternalToken("platform-token");

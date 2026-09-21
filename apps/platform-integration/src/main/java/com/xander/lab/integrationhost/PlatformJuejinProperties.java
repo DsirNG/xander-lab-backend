@@ -14,6 +14,10 @@ public class PlatformJuejinProperties {
     private int connectTimeoutMillis = 10_000;
     private int readTimeoutMillis = 30_000;
     private int catalogFreshnessHours = 24;
+    private String seleniumUrl = "http://selenium:4444/wd/hub";
+    private int authorizationTimeoutSeconds = 60;
+    private long cleanupIntervalMs = 15_000;
+    private String qrImageSelector = ".qrcode-img-wrap img.qrcode-img";
 
     public String getBaseUrl() {
         return baseUrl;
@@ -61,5 +65,37 @@ public class PlatformJuejinProperties {
 
     public void setCatalogFreshnessHours(int catalogFreshnessHours) {
         this.catalogFreshnessHours = catalogFreshnessHours;
+    }
+
+    public String getSeleniumUrl() {
+        return seleniumUrl;
+    }
+
+    public void setSeleniumUrl(String seleniumUrl) {
+        this.seleniumUrl = seleniumUrl;
+    }
+
+    public int getAuthorizationTimeoutSeconds() {
+        return authorizationTimeoutSeconds;
+    }
+
+    public void setAuthorizationTimeoutSeconds(int authorizationTimeoutSeconds) {
+        this.authorizationTimeoutSeconds = authorizationTimeoutSeconds;
+    }
+
+    public long getCleanupIntervalMs() {
+        return cleanupIntervalMs;
+    }
+
+    public void setCleanupIntervalMs(long cleanupIntervalMs) {
+        this.cleanupIntervalMs = cleanupIntervalMs;
+    }
+
+    public String getQrImageSelector() {
+        return qrImageSelector;
+    }
+
+    public void setQrImageSelector(String qrImageSelector) {
+        this.qrImageSelector = qrImageSelector;
     }
 }

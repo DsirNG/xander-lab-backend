@@ -13,9 +13,9 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 733
-  service_private: 639
-  secret: 82
+  total: 747
+  service_private: 652
+  secret: 83
   shared: 12
 config:
   - key: agent.conversation.compaction-enabled
@@ -2223,13 +2223,48 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.authorization-timeout-seconds
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.authorization-timeout-seconds
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.base-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.juejin.base-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.juejin.catalog-freshness-hours
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.catalog-freshness-hours
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.cleanup-interval-ms
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.cleanup-interval-ms
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.connect-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
@@ -2239,8 +2274,18 @@ config:
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.juejin.credential-encryption-key
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.credential-encryption-key
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
     classification: secret
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.default-aid
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.juejin.default-aid
@@ -2248,7 +2293,32 @@ config:
     classification: service_private
     owner: integration
     nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.qr-image-selector
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.qr-image-selector
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
   - key: platform-integration.juejin.read-timeout-millis
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.read-timeout-millis
+    source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.selenium-url
+    source: apps/platform-integration/src/main/resources/application.yml
+    classification: service_private
+    owner: integration
+    nacos_group: DINQOR-PLATFORM-INTEGRATION
+  - key: platform-integration.juejin.selenium-url
     source: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinProperties.java
     classification: service_private
     owner: integration

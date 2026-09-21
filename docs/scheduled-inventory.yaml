@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every @Scheduled entry point."
 counts:
-  total: 28
+  total: 29
 scheduled:
   - id: agent-tool-invocation-reconciler
     class: com.xander.lab.agent.application.AgentToolInvocationReconciler
@@ -155,7 +155,14 @@ scheduled:
     trigger: "fixedDelayString = \"${platform-integration.csdn.cleanup-interval-ms:15000}\""
     logical_owner: integration
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCsdnAuthorizationService.java
-    line: 188
+    line: 194
+  - id: platform-juejin-authorization-service
+    class: com.xander.lab.integration.host.PlatformJuejinAuthorizationService
+    method: cleanupExpiredSessions
+    trigger: "fixedDelayString = \"${platform-integration.juejin.cleanup-interval-ms:15000}\""
+    logical_owner: integration
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinAuthorizationService.java
+    line: 193
   - id: csdn-authorization-service
     class: com.xander.lab.integration.mcp.csdn.application.CsdnAuthorizationService
     method: cleanupExpiredSessions
