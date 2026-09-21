@@ -19,7 +19,8 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "blog-content-plan.enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "core.legacy", name = "blog-content-plan-scheduler-enabled",
+        havingValue = "true", matchIfMissing = true)
 public class BlogContentPlanScheduler {
 
     private static final String STALE_CLAIM_ERROR =

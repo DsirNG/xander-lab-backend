@@ -6,6 +6,8 @@ core:
     drain-enabled: ${CORE_STREAM_DRAIN_ENABLED:false}
     instance-id: ${CORE_STREAM_INSTANCE_ID:${HOSTNAME:unknown}}
     drain-deadline-at: ${CORE_STREAM_DRAIN_DEADLINE_AT:0}
+  legacy:
+    blog-content-plan-scheduler-enabled: ${CORE_LEGACY_BLOG_CONTENT_PLAN_SCHEDULER_ENABLED:${BLOG_CONTENT_PLAN_ENABLED:false}}
 
 spring:
   config:

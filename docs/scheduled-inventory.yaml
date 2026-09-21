@@ -50,7 +50,7 @@ scheduled:
     trigger: "fixedDelayString = \"${blog-content-plan.poll-interval-ms:15000}\", initialDelayString = \"${blog-content-plan.initial-delay-ms:15000}\""
     logical_owner: automation
     file: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java
-    line: 40
+    line: 41
   - id: content-blog-plan-scheduler
     class: com.xander.lab.automation.infrastructure.ContentBlogPlanScheduler
     method: dispatchDuePlans

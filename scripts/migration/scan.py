@@ -870,7 +870,7 @@ CONFIG_OWNERS = [
     (r"^blog-html\.", "bloghtml-preview"),
     (r"^blog\.|^blog-content-plan\.|^email-reminder\.", "content-automation"),
     (r"^img2three\.", "studio"),
-    (r"^core\.stream\.", "core"),
+    (r"^core\.", "core"),
     (r"^billing\.", "core"),
     (r"^wechat\.", "core"),
     (r"^mail\.|^aliyun\.|^redis-monitor\.|^app\.", "core"),

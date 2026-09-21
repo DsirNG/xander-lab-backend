@@ -1,6 +1,7 @@
 package com.xander.lab.core.host;
 
 import com.xander.lab.automation.api.BlogNotificationController;
+import com.xander.lab.automation.infrastructure.BlogContentPlanScheduler;
 import com.xander.lab.blogagent.api.BlogAgentController;
 import com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController;
 import com.xander.lab.integration.mcp.csdn.api.CsdnBlogSyncController;
@@ -38,11 +39,18 @@ class CoreLegacyWave2BoundaryTest {
     }
 
     @Test
+    void extractedContentSchedulerHasExplicitWave2DisableSwitch() {
+        assertThat(property(BlogContentPlanScheduler.class))
+                .containsExactly("core.legacy", "blog-content-plan-scheduler-enabled");
+    }
+
+    @Test
     void everySwitchDefaultsToCompatibilityMode() {
         for (Class<?> type : List.of(
                 BlogController.class,
                 BlogAgentController.class,
                 BlogNotificationController.class,
+                BlogContentPlanScheduler.class,
                 CsdnAuthorizationController.class,
                 CsdnBlogSyncController.class,
                 JuejinAuthorizationController.class,

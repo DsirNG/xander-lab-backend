@@ -75,7 +75,7 @@ scheduled:
     execution_scope: global_once
     singleton_strategy: mysql_shedlock
     status: active
-    scan_ref: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java:40
+    scan_ref: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java:41
     notes: "旧 core-host 调度器保留为 drain 回退；切换前必须先验证 content 调度器，再关闭本入口并收窄表权限。"
 
   - id: content-blog-plan-scheduler

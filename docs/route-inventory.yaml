@@ -837,7 +837,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#subscribe"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 154
+    line: 157
   - id: blogagent-post-blog-agent-tasks-id-messages-stream-blogagentstreamcontroller
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -859,7 +859,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#reviseStream"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 136
+    line: 139
   - id: blogagent-post-blog-agent-tasks-id-publish
     logical_owner: blogagent
     deployment_unit: dinqor-content-automation
@@ -903,7 +903,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.blogagent.api.BlogAgentController#runStream"
     file: apps/core-host/src/main/java/com/xander/lab/blogagent/api/BlogAgentController.java
-    line: 121
+    line: 124
   - id: bloghtml-post-blog-html-previews
     logical_owner: bloghtml
     deployment_unit: dinqor-bloghtml-preview
@@ -1134,7 +1134,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.publishing.api.BlogController#publishPost"
     file: apps/core-host/src/main/java/com/xander/lab/publishing/api/BlogController.java
-    line: 30
+    line: 33
   - id: integration-any-blog-posts-sync
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -1288,7 +1288,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnBlogSyncController#sync"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnBlogSyncController.java
-    line: 20
+    line: 23
   - id: integration-post-blog-posts-postid-sync-csdn-platformblogsynccontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -1310,7 +1310,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinBlogSyncController#sync"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinBlogSyncController.java
-    line: 30
+    line: 33
   - id: integration-post-blog-posts-postid-sync-juejin-platformblogsynccontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2146,7 +2146,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.automation.api.BlogNotificationController#events"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/BlogNotificationController.java
-    line: 19
+    line: 22
   - id: automation-patch-notifications-read-all
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -2245,7 +2245,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController#disconnect"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
-    line: 30
+    line: 33
   - id: integration-post-publishing-csdn-authorization-cancel
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2256,7 +2256,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController#cancel"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
-    line: 36
+    line: 39
   - id: integration-post-publishing-csdn-authorization-start
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2267,7 +2267,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController#start"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
-    line: 20
+    line: 23
   - id: integration-get-publishing-csdn-authorization-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2278,7 +2278,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.csdn.api.CsdnAuthorizationController#status"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/csdn/api/CsdnAuthorizationController.java
-    line: 25
+    line: 28
   - id: integration-any-publishing-juejin
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2300,7 +2300,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#disconnect"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
-    line: 30
+    line: 33
   - id: integration-post-publishing-juejin-authorization-cancel
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2311,7 +2311,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#cancel"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
-    line: 36
+    line: 39
   - id: integration-post-publishing-juejin-authorization-start
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2322,7 +2322,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#start"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
-    line: 20
+    line: 23
   - id: integration-get-publishing-juejin-authorization-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2333,7 +2333,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#status"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
-    line: 25
+    line: 28
   - id: integration-post-publishing-juejin-catalog-sync-juejincatalogcontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2344,7 +2344,7 @@ routes:
     last_event_id: false
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinCatalogController#syncCatalog"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinCatalogController.java
-    line: 20
+    line: 23
   - id: integration-post-publishing-juejin-catalog-sync-platformjuejincatalogcontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
