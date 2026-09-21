@@ -237,8 +237,9 @@ Upgrade / idle / `Last-Event-ID` / query token 透传，见 PASS 33）。
 
 | 缺口 | 影响 | 状态 |
 |---|---|---|
-| Gateway 代码 | 已建立 `apps/gateway`，包含 `monolith-fallback`、鉴权策略、TraceId 和流式代理部署配置；仍需部署窗口验证真实长连接 | ✅ 代码完成；部署待执行 |
-| Nacos 配置导入 | 三个 Wave 1 服务已提供 opt-in `nacos` profile，分别导入 `dinqor-shared.yaml` + 服务私有 DataId；默认 profile 不连接 Nacos | ✅ 代码完成；环境发布待执行 |
+| Gateway 代码 | 已建立 `apps/gateway`，包含 `monolith-fallback`、鉴权策略、TraceId 和流式代理部署配置；本地 Nacos smoke 已验证健康、Core 兼容读路由和 Agent 路由 | ✅ 代码完成；生产仍需部署窗口验证真实长连接 |
+| Nacos 配置导入 | 三个 Wave 1 服务已提供 `nacos` profile，分别导入 `dinqor-shared.yaml` + 服务私有 DataId；本地 `dinqor-dev` namespace 已实际加载并注册到 `COMMON` | ✅ 本地 Docker 已验证；生产仍需接入受管 Nacos |
+| Migration Runner | `apps/migration-runner` 使用独立 `dinqor_migration` 账号执行 Flyway；本地库已验证 9 个 migration 全部通过且 schema 为 `2026092101` | ✅ 本地 Docker 已验证；发布仍需纳入 CI/CD 阻断 |
 | 回滚阈值无自动化 | §93 的五个阈值都需要指标（Micrometer）与告警规则，Wave 2 才有 | Wave 2 |
 | 服务名三套并存 | 见 §5 的表：仓库名 / `dinqorai-backend` / `dinqor-core-host` 三个名字同时存在，没有门禁校验它们的一致性 | 已知，见 §5 |
 | Wave 1 回滚流程未定义 | §93 只给了"何时回滚"，没给"怎么回滚"（切回路由？重启旧版本？） | Wave 1 设计 |
