@@ -15,8 +15,8 @@ import java.util.function.LongConsumer;
  * <b>不做远程 Auth Service 调用</b> —— 那样会让每个请求的可用性绑在 identity 上。</p>
  *
  * <p>本类刻意放在共享内核里且<b>只依赖 JDK</b>：它不知道账号表长什么样，
- * 也不知道是谁在往里灌数据。灌数据的是 identity 的
- * {@code SecurityStateReconciler}（{@code execution_scope = per_instance}）。</p>
+ * 也不知道是谁在往里灌数据。灌数据的是各宿主自己的 security-state
+ * reconciler（{@code execution_scope = per_instance}）。</p>
  *
  * <h3>为什么每个实例各持一份，而不是共享一份</h3>
  * <p>{@code per_instance} 任务<b>不得</b>使用全局 ShedLock。加锁会让 N-1 个

@@ -84,7 +84,7 @@ management:
       show-details: never
       group:
         readiness:
-          include: readinessState
+          include: readinessState,securityPlane
   metrics:
     tags:
       application: ${spring.application.name}

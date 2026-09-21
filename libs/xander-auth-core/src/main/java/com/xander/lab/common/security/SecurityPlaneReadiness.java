@@ -12,7 +12,8 @@ package com.xander.lab.common.security;
  * {@code SecurityStateReconciler}、{@code SecurityEventOutboxPublisher}），
  * 若就绪标记长在缓存上，任何一次"顺手置位"都能让实例在缓存不完整时宣布自己就绪 ——
  * 而这正是必须禁止的失败模式（"实例启动后先接流量，再慢慢填 deny cache"）。
- * 独立成对象之后，唯一的写入者是 {@code SecurityStateBootstrap}。</p>
+ * 独立成对象之后，写入者只允许是当前宿主自己的 security-plane bootstrap
+ * 与 reconciler；普通请求和长连接代码不能顺手置位。</p>
  *
  * <h3>为什么放在共享内核</h3>
  * <p>与 {@link SecurityStateCache} 同理：Gateway（WebFlux）、core-host、agent、
@@ -49,7 +50,8 @@ public class SecurityPlaneReadiness {
     }
 
     /**
-     * 宣布就绪。只应由 {@code SecurityStateBootstrap} 在 snapshot + replay 完成后调用。
+     * 宣布就绪。只应由当前宿主的 security-plane bootstrap 在 snapshot + replay
+     * 完成后调用。
      *
      * @param epochMillis 宣布时刻；同时是 {@code security_plane_ready_at} 指标与
      *                    "启动耗时"日志的来源
@@ -63,7 +65,7 @@ public class SecurityPlaneReadiness {
     /**
      * 记录一次"未能就绪"。
      *
-     * <p>只由 {@code SecurityStateBootstrap} 在启动失败时调用。调用后实例保持
+     * <p>只由当前宿主的 security-plane bootstrap 在启动失败时调用。调用后实例保持
      * {@code NOT_READY}；配合 bootstrap 的 fail-fast 语义，该实例不会接任何流量，
      * 同时 {@code /health/ready} 会把 {@code reason} 报出来，便于运维区分
      * "启动失败" 与 "还在启动中"。</p>

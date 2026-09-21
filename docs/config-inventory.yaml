@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 912
-  leaves: 664
+  total: 927
+  leaves: 678
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -237,7 +237,7 @@ config:
     logical_owner: unassigned
   - key: management.endpoint.health.group.readiness.include
     source: apps/agent/src/main/resources/application.yml
-    value: readinessState
+    value: "readinessState,securityPlane"
     leaf: true
     logical_owner: unassigned
   - key: management.metrics
@@ -260,6 +260,46 @@ config:
     value: ""
     leaf: false
     logical_owner: unassigned
+  - key: agent.security-state
+    source: apps/agent/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: agent
+  - key: agent.security-state.reconcile-enabled
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_SECURITY_STATE_RECONCILE_ENABLED:false}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.security-state.core-host-base-url
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_SECURITY_STATE_CORE_HOST_BASE_URL:${AGENT_CORE_BASE_URL:http://localhost:30002}}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.security-state.internal-token
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_SECURITY_STATE_INTERNAL_TOKEN:${AGENT_CORE_INTERNAL_TOKEN:}}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.security-state.reconcile-interval-ms
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_SECURITY_STATE_RECONCILE_INTERVAL_MS:1500}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.security-state.full-reconcile-interval-ms
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_SECURITY_STATE_FULL_RECONCILE_INTERVAL_MS:300000}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.security-state.reconcile-batch-size
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_SECURITY_STATE_RECONCILE_BATCH_SIZE:500}"
+    leaf: true
+    logical_owner: agent
+  - key: agent.security-state.request-timeout-ms
+    source: apps/agent/src/main/resources/application.yml
+    value: "${AGENT_SECURITY_STATE_REQUEST_TIMEOUT_MS:2000}"
+    leaf: true
+    logical_owner: agent
   - key: agent.stream
     source: apps/agent/src/main/resources/application.yml
     value: ""
@@ -1117,7 +1157,7 @@ config:
     logical_owner: unassigned
   - key: management.endpoint.health.group.readiness.include
     source: apps/content-automation/src/main/resources/application.yml
-    value: readinessState
+    value: "readinessState,securityPlane"
     leaf: true
     logical_owner: unassigned
   - key: management.metrics
@@ -3570,6 +3610,55 @@ config:
     value: "${spring.application.name}"
     leaf: true
     logical_owner: unassigned
+  - key: agent.security-state.core-host-base-url
+    source: apps/agent/src/main/java/com/xander/lab/agent/host/AgentSecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 12
+  - key: agent.security-state.full-reconcile-interval-ms
+    source: apps/agent/src/main/java/com/xander/lab/agent/host/AgentSecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 15
+  - key: agent.security-state.internal-token
+    source: apps/agent/src/main/java/com/xander/lab/agent/host/AgentSecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 13
+  - key: agent.security-state.reconcile-batch-size
+    source: apps/agent/src/main/java/com/xander/lab/agent/host/AgentSecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 16
+  - key: agent.security-state.reconcile-enabled
+    source: apps/agent/src/main/java/com/xander/lab/agent/host/AgentSecurityStateProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 11
+  - key: agent.security-state.reconcile-interval-ms
+    source: apps/agent/src/main/java/com/xander/lab/agent/host/AgentSecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 14
+  - key: agent.security-state.request-timeout-ms
+    source: apps/agent/src/main/java/com/xander/lab/agent/host/AgentSecurityStateProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: agent
+    source_kind: java-configuration-properties
+    line: 17
   - key: agent.conversation.compaction-enabled
     source: apps/agent/src/main/java/com/xander/lab/agent/infrastructure/AgentConversationProperties.java
     value: "<java-default>"

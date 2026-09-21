@@ -31,10 +31,8 @@ public class SecurityPlaneConfiguration {
     /**
      * 本实例的安全平面就绪标记。
      *
-     * <p>初始态是 {@code NOT_READY}，唯一的写入者是 identity 的
-     * {@code SecurityStateBootstrap}；消费者是 {@code HealthController}
-     * 的 {@code GET /health/ready} 探针，以及 {@code SecurityStateReconciler}
-     * 的两个调度方法。</p>
+     * <p>初始态是 {@code NOT_READY}，写入者只允许是当前宿主自己的安全平面
+     * bootstrap/reconciler；消费者是宿主 readiness 探针与长连接发送边界。</p>
      */
     @Bean
     public SecurityPlaneReadiness securityPlaneReadiness() {

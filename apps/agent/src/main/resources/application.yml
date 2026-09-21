@@ -46,12 +46,20 @@ management:
       show-details: never
       group:
         readiness:
-          include: readinessState
+          include: readinessState,securityPlane
   metrics:
     tags:
       application: ${spring.application.name}
 
 agent:
+  security-state:
+    reconcile-enabled: ${AGENT_SECURITY_STATE_RECONCILE_ENABLED:false}
+    core-host-base-url: ${AGENT_SECURITY_STATE_CORE_HOST_BASE_URL:${AGENT_CORE_BASE_URL:http://localhost:30002}}
+    internal-token: ${AGENT_SECURITY_STATE_INTERNAL_TOKEN:${AGENT_CORE_INTERNAL_TOKEN:}}
+    reconcile-interval-ms: ${AGENT_SECURITY_STATE_RECONCILE_INTERVAL_MS:1500}
+    full-reconcile-interval-ms: ${AGENT_SECURITY_STATE_FULL_RECONCILE_INTERVAL_MS:300000}
+    reconcile-batch-size: ${AGENT_SECURITY_STATE_RECONCILE_BATCH_SIZE:500}
+    request-timeout-ms: ${AGENT_SECURITY_STATE_REQUEST_TIMEOUT_MS:2000}
   stream:
     drain-enabled: ${AGENT_STREAM_DRAIN_ENABLED:false}
   core-client:
