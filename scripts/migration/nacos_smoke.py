@@ -43,6 +43,16 @@ SERVICES = (
     ServiceCheck("dinqor-content-automation", 30016, 2),
 )
 
+STREAM_METRICS = (
+    ("dinqor-core-host", 30012, ("legacy_agent_sse_active", "legacy_content_sse_active")),
+    ("dinqor-agent", 30018, ("agent_sse_active", "agent_ws_active")),
+    ("dinqor-agent-replica", 30024, ("agent_sse_active", "agent_ws_active")),
+    ("dinqor-content-automation", 30016,
+     ("content_automation_sse_active", "active_sse", "active_ws")),
+    ("dinqor-content-automation-replica", 30026,
+     ("content_automation_sse_active", "active_sse", "active_ws")),
+)
+
 
 def get(base_url: str, path: str, params: dict[str, str]) -> tuple[int, bytes]:
     query = urlencode(params)
@@ -143,6 +153,20 @@ def main() -> int:
                 status == 401,
                 f"Gateway protected Platform route returned HTTP {status}, expected 401",
             )
+
+            for instance_name, metrics_port, metric_names in STREAM_METRICS:
+                status, body = get_url(f"http://localhost:{metrics_port}/actuator/prometheus")
+                require(status == 200, f"Prometheus returned HTTP {status}: {instance_name}")
+                prometheus = body.decode("utf-8", errors="replace").splitlines()
+                for metric_name in metric_names:
+                    samples = [
+                        line for line in prometheus
+                        if line.startswith(f"{metric_name}{{") and 'instance="' in line
+                    ]
+                    require(
+                        samples,
+                        f"metric is missing instance label: {instance_name}/{metric_name}",
+                    )
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"FAIL nacos-smoke: {exc}", file=sys.stderr)
         return 1

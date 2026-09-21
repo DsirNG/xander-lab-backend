@@ -253,5 +253,7 @@ content-automation 实例，复用本地 MySQL、Redis、Nacos：
 
 新实例已实际暴露 `agent_sse_active` / `agent_ws_active`、
 `content_automation_sse_active` / `active_sse` / `active_ws`，且每个序列带
-`instance` 标签。这证明 Nacos 多实例注册和逐实例 Drain 的观测前提成立；尚未声明
+`instance` 标签。`scripts/migration/nacos_smoke.py` 现在会对 Core、Agent 两个实例和
+Content 两个实例逐一检查这些序列及其 `instance` 标签。这证明 Nacos 多实例注册和逐实例
+Drain 的观测前提成立；尚未声明
 `client_reconnect_success_rate`，因为该项必须由真实客户端重连联调产生。
