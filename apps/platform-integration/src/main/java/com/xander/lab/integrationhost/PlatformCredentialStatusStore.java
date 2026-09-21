@@ -42,10 +42,14 @@ public class PlatformCredentialStatusStore {
             return false;
         }
         String sql = switch (platform) {
-            case "csdn" -> "SELECT status, encrypted_cookie, csdn_username "
-                    + "FROM csdn_platform_credential WHERE user_id = ?";
-            case "juejin" -> "SELECT status, encrypted_cookie, juejin_username "
-                    + "FROM juejin_platform_credential WHERE user_id = ?";
+            case "csdn" -> "SELECT status FROM csdn_platform_credential "
+                    + "WHERE user_id = ? AND status = 'ACTIVE' "
+                    + "AND encrypted_cookie IS NOT NULL AND encrypted_cookie <> '' "
+                    + "AND csdn_username IS NOT NULL AND TRIM(csdn_username) <> ''";
+            case "juejin" -> "SELECT status FROM juejin_platform_credential "
+                    + "WHERE user_id = ? AND status = 'ACTIVE' "
+                    + "AND encrypted_cookie IS NOT NULL AND encrypted_cookie <> '' "
+                    + "AND juejin_username IS NOT NULL AND TRIM(juejin_username) <> ''";
             default -> throw new IllegalArgumentException("unsupported platform: " + platform);
         };
         try (Connection connection = DriverManager.getConnection(
@@ -56,22 +60,13 @@ public class PlatformCredentialStatusStore {
             statement.setQueryTimeout(Math.max(1, properties.getCredentialStoreQueryTimeoutSeconds()));
             statement.setLong(1, userId);
             try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) {
-                    return false;
-                }
-                return "ACTIVE".equals(result.getString(1))
-                        && hasText(result.getString(2))
-                        && hasText(result.getString(3));
+                return result.next() && "ACTIVE".equals(result.getString(1));
             }
         } catch (SQLException exception) {
             log.warn("[PlatformCredential] status lookup fail-closed platform={} userId={} reason={}",
                     platform, userId, exception.getMessage());
             return false;
         }
-    }
-
-    private boolean hasText(String value) {
-        return value != null && !value.isBlank();
     }
 
     private boolean blank(String value) {
