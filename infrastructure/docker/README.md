@@ -88,6 +88,14 @@ docker compose --env-file .env.wave1 \
   -f infrastructure/docker/docker-compose.wave2-agent.yml up -d --build
 ```
 
+完成本地服务启动后，可用标准库脚本重复验证 Nacos 健康、`dinqor-dev` Namespace、全部
+共享/私有 DataId、服务注册和本地 readiness。默认端口对应本地 smoke 映射；如果只验证
+Nacos 本身，可追加 `--skip-readiness`：
+
+```powershell
+python scripts/migration/nacos_smoke.py
+```
+
 Wave 2 Compose defaults Agent, Platform Integration and Content Automation to
 `SPRING_PROFILES_ACTIVE=nacos`, Config enabled and Discovery enabled. Each service loads
 its private DataId plus `dinqor-shared.yaml`, and registers in the shared `COMMON`
