@@ -76,6 +76,23 @@ public class PlatformJuejinCatalogStore {
                 && tag.isAfter(LocalDateTime.now().minusHours(freshnessHours));
     }
 
+    /** Resolves a local category name without contacting Juejin. */
+    public String findCategoryId(String categoryName) {
+        if (categoryName == null || categoryName.isBlank()) {
+            return null;
+        }
+        return findId("SELECT category_id FROM juejin_category WHERE category_name = ? LIMIT 1",
+                categoryName.strip());
+    }
+
+    /** Resolves a local tag name without contacting Juejin. */
+    public String findTagId(String tagName) {
+        if (tagName == null || tagName.isBlank()) {
+            return null;
+        }
+        return findId("SELECT tag_id FROM juejin_tag WHERE tag_name = ? LIMIT 1", tagName.strip());
+    }
+
     private LocalDateTime latest(String table) {
         if (!"juejin_category".equals(table) && !"juejin_tag".equals(table)) {
             throw new IllegalArgumentException("unsupported catalog table");
@@ -88,6 +105,18 @@ public class PlatformJuejinCatalogStore {
                     ? null : result.getTimestamp(1).toLocalDateTime() : null;
         } catch (Exception exception) {
             throw new IllegalStateException("读取掘金目录新鲜度失败", exception);
+        }
+    }
+
+    private String findId(String sql, String value) {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, value);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getString(1) : null;
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("读取掘金目录失败", exception);
         }
     }
 

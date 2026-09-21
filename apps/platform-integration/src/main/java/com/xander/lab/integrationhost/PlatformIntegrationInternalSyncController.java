@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -24,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 
@@ -44,10 +46,13 @@ public class PlatformIntegrationInternalSyncController {
     private final RestClient restClient;
     private final PlatformIntegrationProperties properties;
     private final ObjectMapper objectMapper;
+    private final Optional<PlatformJuejinPublisher> juejinPublisher;
 
+    @Autowired
     public PlatformIntegrationInternalSyncController(RestClient.Builder restClientBuilder,
                                                       PlatformIntegrationProperties properties,
-                                                      ObjectMapper objectMapper) {
+                                                      ObjectMapper objectMapper,
+                                                      Optional<PlatformJuejinPublisher> juejinPublisher) {
         if (properties.getInternalToken() == null || properties.getInternalToken().isBlank()) {
             throw new IllegalStateException(
                     "platform-integration.internal-token 在启用内网站外同步 API 时不能为空");
@@ -62,6 +67,14 @@ public class PlatformIntegrationInternalSyncController {
         this.restClient = restClientBuilder.requestFactory(requestFactory).build();
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.juejinPublisher = juejinPublisher;
+    }
+
+    /** Compatibility constructor used by the Core-bridge unit tests and legacy callers. */
+    public PlatformIntegrationInternalSyncController(RestClient.Builder restClientBuilder,
+                                                      PlatformIntegrationProperties properties,
+                                                      ObjectMapper objectMapper) {
+        this(restClientBuilder, properties, objectMapper, Optional.empty());
     }
 
     /** Forwards one CSDN sync while replacing the caller token with the Core token. */
@@ -84,6 +97,17 @@ public class PlatformIntegrationInternalSyncController {
             @RequestBody JuejinSyncRequest request) {
         authorize(token);
         validatePost(postId, request.userId(), request.postId());
+        if (juejinPublisher.isPresent() && request.post() != null) {
+            BlogPostPayload post = request.post();
+            if (post.id() != null && !postId.equals(post.id())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "站外同步文章载荷非法");
+            }
+            return juejinPublisher.get().publish(new PlatformJuejinPublisher.PublishRequest(
+                    request.userId(), postId, post.title(), post.summary(), post.content(),
+                    request.juejinCategoryId(),
+                    post.categoryName(), post.coverImage(),
+                    request.juejinTagIds() == null ? post.tags() : request.juejinTagIds()));
+        }
         return forward("/internal/integration/blog-posts/" + postId + "/sync/juejin",
                 new JuejinSyncRequest(request.userId(), postId,
                         request.juejinCategoryId(), request.juejinTagIds()));
@@ -201,6 +225,16 @@ public class PlatformIntegrationInternalSyncController {
     }
 
     public record JuejinSyncRequest(Long userId, Long postId, String juejinCategoryId,
-                                    List<String> juejinTagIds) {
+                                    List<String> juejinTagIds, BlogPostPayload post) {
+        public JuejinSyncRequest(Long userId, Long postId, String juejinCategoryId,
+                                 List<String> juejinTagIds) {
+            this(userId, postId, juejinCategoryId, juejinTagIds, null);
+        }
+    }
+
+    /** Minimal content projection carried across the Content → Platform write boundary. */
+    public record BlogPostPayload(Long id, String title, String summary, String content,
+                                  String category, String categoryName, String coverImage,
+                                  List<String> tags) {
     }
 }

@@ -15,8 +15,8 @@
     <name>dinqor-platform-integration</name>
     <description>
         Wave 2 platform-integration deployment boundary. The compatibility proxy remains the
-        fallback while the Juejin catalog vertical slice is extracted behind an opt-in owner
-        switch; further vendor write extraction follows the same drain protocol.
+        fallback while the Juejin catalog and draft-publication vertical slices are extracted
+        behind opt-in owner switches; remaining vendor cutovers follow the same drain protocol.
     </description>
 
     <dependencies>

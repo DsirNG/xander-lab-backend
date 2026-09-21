@@ -3,6 +3,9 @@ package com.xander.lab.automation.infrastructure;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.automation.host.ContentAutomationProperties;
 import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.publishing.application.BlogPrivateReadService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +20,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Calls the platform-integration internal publication boundary.
@@ -33,10 +37,13 @@ public class PlatformBlogSyncClient {
     private final RestClient restClient;
     private final ContentAutomationProperties properties;
     private final ObjectMapper objectMapper;
+    private final Optional<BlogPrivateReadService> privateReadService;
 
+    @Autowired
     public PlatformBlogSyncClient(RestClient.Builder restClientBuilder,
                                   ContentAutomationProperties properties,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  Optional<BlogPrivateReadService> privateReadService) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofMillis(timeout(
                 properties.getPlatformIntegrationConnectTimeoutMillis())));
@@ -45,6 +52,14 @@ public class PlatformBlogSyncClient {
         this.restClient = restClientBuilder.requestFactory(requestFactory).build();
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.privateReadService = privateReadService;
+    }
+
+    /** Compatibility constructor for isolated client tests and the legacy bridge mode. */
+    public PlatformBlogSyncClient(RestClient.Builder restClientBuilder,
+                                  ContentAutomationProperties properties,
+                                  ObjectMapper objectMapper) {
+        this(restClientBuilder, properties, objectMapper, Optional.empty());
     }
 
     /** Publishes the local post to CSDN through platform-integration. */
@@ -54,8 +69,12 @@ public class PlatformBlogSyncClient {
 
     /** Publishes the local post to Juejin through platform-integration. */
     public BlogSyncResult syncJuejin(Long userId, Long postId) {
+        BlogPostVO post = privateReadService.map(service -> service.findMine(userId, postId)).orElse(null);
+        if (privateReadService.isPresent() && post == null) {
+            throw new IllegalArgumentException("Blog post does not exist");
+        }
         return sync("juejin", userId, postId,
-                new JuejinSyncRequest(userId, postId, null, null));
+                new JuejinSyncRequest(userId, postId, null, null, toPayload(post)));
     }
 
     private BlogSyncResult sync(String platform, Long userId, Long postId, Object request) {
@@ -132,6 +151,19 @@ public class PlatformBlogSyncClient {
     }
 
     private record JuejinSyncRequest(Long userId, Long postId, String juejinCategoryId,
-                                     List<String> juejinTagIds) {
+                                     List<String> juejinTagIds, BlogPostPayload post) {
+    }
+
+    private record BlogPostPayload(Long id, String title, String summary, String content,
+                                   String category, String categoryName, String coverImage,
+                                   List<String> tags) {
+    }
+
+    private BlogPostPayload toPayload(BlogPostVO post) {
+        if (post == null) {
+            return null;
+        }
+        return new BlogPostPayload(post.getId(), post.getTitle(), post.getSummary(), post.getContent(),
+                post.getCategory(), post.getCategoryName(), post.getCoverImage(), post.getTags());
     }
 }

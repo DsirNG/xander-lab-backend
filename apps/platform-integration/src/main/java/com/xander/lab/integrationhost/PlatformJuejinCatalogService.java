@@ -77,4 +77,18 @@ public class PlatformJuejinCatalogService {
     public boolean isFresh() {
         return store.isFresh(properties.getCatalogFreshnessHours());
     }
+
+    /** Resolves a category name to the local Juejin id, with the documented default fallback. */
+    public String resolveCategoryId(String categoryName) {
+        if (categoryName != null && categoryName.matches("\\d+")) {
+            return categoryName;
+        }
+        String resolved = store.findCategoryId(categoryName);
+        return resolved == null ? String.valueOf(DEFAULT_CATEGORY_ID) : resolved;
+    }
+
+    /** Resolves a tag name to a local Juejin id when the catalog projection contains one. */
+    public String resolveTagId(String tagName) {
+        return store.findTagId(tagName);
+    }
 }

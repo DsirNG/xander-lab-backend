@@ -10,9 +10,15 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class PlatformIntegrationInternalSyncControllerTest {
 
@@ -62,6 +68,29 @@ class PlatformIntegrationInternalSyncControllerTest {
                         new PlatformIntegrationInternalSyncController.CsdnSyncRequest(7L, 42L)));
 
         assertEquals(404, exception.getStatusCode().value());
+    }
+
+    @Test
+    void publishesLocallyWhenContentPayloadAndPlatformOwnerAreAvailable() {
+        PlatformJuejinPublisher publisher = mock(PlatformJuejinPublisher.class);
+        BlogSyncResult expected = new BlogSyncResult(
+                "juejin", "article-42", "https://juejin.cn/post/article-42");
+        when(publisher.publish(any(PlatformJuejinPublisher.PublishRequest.class))).thenReturn(expected);
+        PlatformIntegrationProperties properties = new PlatformIntegrationProperties();
+        properties.setInternalToken("content-token");
+        properties.setCoreInternalToken("core-token");
+        properties.setCoreBaseUrl("http://127.0.0.1:1");
+        PlatformIntegrationInternalSyncController controller = new PlatformIntegrationInternalSyncController(
+                RestClient.builder(), properties, new ObjectMapper(), Optional.of(publisher));
+
+        BlogSyncResult actual = controller.syncJuejin("content-token", 42L,
+                new PlatformIntegrationInternalSyncController.JuejinSyncRequest(
+                        7L, 42L, null, null,
+                        new PlatformIntegrationInternalSyncController.BlogPostPayload(
+                                42L, "标题", "摘要", "正文", "frontend", "前端", "", List.of("Java"))));
+
+        assertEquals(expected, actual);
+        verify(publisher).publish(any(PlatformJuejinPublisher.PublishRequest.class));
     }
 
     private PlatformIntegrationInternalSyncController controller() {

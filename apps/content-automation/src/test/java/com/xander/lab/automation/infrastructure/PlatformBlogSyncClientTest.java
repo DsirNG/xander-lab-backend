@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
 import com.xander.lab.automation.host.ContentAutomationProperties;
 import com.xander.lab.integration.api.BlogSyncResult;
+import com.xander.lab.publishing.api.BlogPostVO;
+import com.xander.lab.publishing.application.BlogPrivateReadService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
@@ -11,6 +13,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -72,6 +76,39 @@ class PlatformBlogSyncClientTest {
                 () -> client.syncCsdn(7L, 42L));
 
         assertEquals(502, exception.getStatusCode().value());
+    }
+
+    @Test
+    void carriesOwnedJuejinArticleProjectionToPlatform() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/internal/platform-integration/blog-posts/42/sync/juejin", exchange -> {
+            String request = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            org.junit.jupiter.api.Assertions.assertTrue(request.contains("\"title\":\"标题\""));
+            org.junit.jupiter.api.Assertions.assertTrue(request.contains("\"content\":\"正文\""));
+            org.junit.jupiter.api.Assertions.assertTrue(request.contains("\"categoryName\":\"前端\""));
+            byte[] response = "{\"platform\":\"juejin\",\"externalId\":\"article-1\",\"url\":\"https://juejin.cn/post/article-1\"}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+        });
+        server.start();
+
+        BlogPostVO post = new BlogPostVO();
+        post.setId(42L);
+        post.setTitle("标题");
+        post.setContent("正文");
+        post.setCategoryName("前端");
+        post.setTags(List.of("Java"));
+        BlogPrivateReadService readService = org.mockito.Mockito.mock(BlogPrivateReadService.class);
+        org.mockito.Mockito.when(readService.findMine(7L, 42L)).thenReturn(post);
+        PlatformBlogSyncClient client = new PlatformBlogSyncClient(
+                RestClient.builder(), properties(16 * 1024), new ObjectMapper(),
+                Optional.of(readService));
+
+        BlogSyncResult result = client.syncJuejin(7L, 42L);
+
+        assertEquals("article-1", result.externalId());
     }
 
     private ContentAutomationProperties properties(int maxResponseBytes) {

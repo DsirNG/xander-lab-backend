@@ -1,6 +1,9 @@
 package com.xander.lab.agent.infrastructure;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostPort;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.xander.lab.integration.api.BlogSyncResult;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
@@ -17,6 +20,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
+import java.util.Optional;
 
 import static org.springframework.http.HttpStatus.BAD_GATEWAY;
 
@@ -35,10 +39,13 @@ public class AgentPlatformBlogSyncClient {
     private final RestClient restClient;
     private final AgentPlatformClientProperties properties;
     private final ObjectMapper objectMapper;
+    private final Optional<ContentPostPort> contentPostPort;
 
+    @Autowired
     public AgentPlatformBlogSyncClient(RestClient.Builder builder,
                                        AgentPlatformClientProperties properties,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       Optional<ContentPostPort> contentPostPort) {
         if (properties.getBaseUrl() == null || properties.getBaseUrl().isBlank()) {
             throw new IllegalStateException("agent.platform-client.base-url 在启用 platform-client 时不能为空");
         }
@@ -51,6 +58,14 @@ public class AgentPlatformBlogSyncClient {
         this.restClient = builder.requestFactory(requestFactory).build();
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.contentPostPort = contentPostPort;
+    }
+
+    /** Compatibility constructor for isolated client tests and legacy Agent deployments. */
+    public AgentPlatformBlogSyncClient(RestClient.Builder builder,
+                                       AgentPlatformClientProperties properties,
+                                       ObjectMapper objectMapper) {
+        this(builder, properties, objectMapper, Optional.empty());
     }
 
     public BlogSyncResult syncCsdn(Long userId, Long postId) {
@@ -60,8 +75,13 @@ public class AgentPlatformBlogSyncClient {
 
     public BlogSyncResult syncJuejin(Long userId, Long postId,
                                      String juejinCategoryId, List<String> juejinTagIds) {
+        ContentPost post = contentPostPort.map(port -> port.findOwned(userId, postId)).orElse(null);
+        if (contentPostPort.isPresent() && post == null) {
+            throw new IllegalArgumentException("Blog post does not exist");
+        }
         return post("/internal/platform-integration/blog-posts/" + postId + "/sync/juejin",
-                new JuejinRequest(userId, postId, juejinCategoryId, juejinTagIds), false);
+                new JuejinRequest(userId, postId, juejinCategoryId, juejinTagIds,
+                        toPayload(post)), false);
     }
 
     public BlogSyncResult findSucceededCsdn(Long userId, Long postId) {
@@ -152,6 +172,19 @@ public class AgentPlatformBlogSyncClient {
     }
 
     private record JuejinRequest(Long userId, Long postId, String juejinCategoryId,
-                                 List<String> juejinTagIds) {
+                                 List<String> juejinTagIds, BlogPostPayload post) {
+    }
+
+    private record BlogPostPayload(Long id, String title, String summary, String content,
+                                   String category, String categoryName, String coverImage,
+                                   List<String> tags) {
+    }
+
+    private BlogPostPayload toPayload(ContentPost post) {
+        if (post == null) {
+            return null;
+        }
+        return new BlogPostPayload(post.id(), post.title(), post.summary(), post.content(),
+                post.category(), post.categoryName(), post.coverImage(), post.tags());
     }
 }

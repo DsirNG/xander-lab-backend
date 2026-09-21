@@ -113,6 +113,50 @@ public class PlatformJuejinCredentialStore {
         }
     }
 
+    /** Returns the decrypted active browser context to the vendor adapter only. */
+    public PlatformJuejinClient.Credential requireCredential(Long userId) {
+        if (userId == null || userId <= 0) {
+            throw new IllegalArgumentException("凭证属主参数非法");
+        }
+        String status = null;
+        String encrypted = null;
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement(SELECT)) {
+            statement.setQueryTimeout(queryTimeout());
+            statement.setLong(1, userId);
+            try (ResultSet result = statement.executeQuery()) {
+                if (result.next()) {
+                    status = result.getString(1);
+                    encrypted = result.getString(2);
+                }
+            }
+        } catch (Exception exception) {
+            throw new IllegalStateException("读取掘金授权失败", exception);
+        }
+        if (!"ACTIVE".equals(status) || !hasText(encrypted)) {
+            throw new IllegalStateException("Juejin authorization is required");
+        }
+        try {
+            return decrypt(encrypted);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Unable to read Juejin authorization", exception);
+        }
+    }
+
+    /** Moves only an active row to EXPIRED after a provider-authentication failure. */
+    public void markExpired(Long userId) {
+        try (Connection connection = connection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "UPDATE juejin_platform_credential SET status = 'EXPIRED' "
+                             + "WHERE user_id = ? AND status = 'ACTIVE'")) {
+            statement.setLong(1, userId);
+            statement.executeUpdate();
+        } catch (Exception exception) {
+            log.warn("[PlatformCredential] failed to mark Juejin credential expired userId={} reason={}",
+                    userId, exception.getMessage());
+        }
+    }
+
     /** Deletes the user's Juejin credential after an explicit disconnect command. */
     public void delete(Long userId) {
         if (userId == null || userId <= 0) {
@@ -146,6 +190,19 @@ public class PlatformJuejinCredentialStore {
         return Base64.getEncoder().encodeToString(iv) + "."
                 + Base64.getEncoder().encodeToString(cipher.doFinal(
                 objectMapper.writeValueAsString(credential).getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private PlatformJuejinClient.Credential decrypt(String value) throws Exception {
+        String[] parts = value.split("\\.", 2);
+        if (parts.length != 2) {
+            throw new IllegalArgumentException("invalid encrypted credential");
+        }
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+        cipher.init(Cipher.DECRYPT_MODE, key,
+                new GCMParameterSpec(128, Base64.getDecoder().decode(parts[0])));
+        String plaintext = new String(cipher.doFinal(
+                Base64.getDecoder().decode(parts[1])), StandardCharsets.UTF_8);
+        return objectMapper.readValue(plaintext, PlatformJuejinClient.Credential.class);
     }
 
     private boolean hasText(String value) {
