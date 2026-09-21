@@ -429,7 +429,7 @@ protected:
   - id: juejin-catalog-sync
     match: {method: POST, path: /api/publishing/juejin/catalog/sync}
     owner: integration
-    note: "URL 前缀是 publishing，实际属于 integration（JuejinCatalogController）。"
+    note: "Platform 接管公开入口；兼容期经 token-protected Core 内部边界读取显式用户凭证并刷新共享目录。"
   - id: recitation-all
     match: {method: [GET, POST, PUT, DELETE], path_prefix: /api/recitations/}
     owner: recitation

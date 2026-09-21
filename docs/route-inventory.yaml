@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 296
+  total: 299
   streams: 12
   websocket: 1
   sse: 11
@@ -2290,7 +2290,7 @@ routes:
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinAuthorizationController#status"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinAuthorizationController.java
     line: 25
-  - id: integration-post-publishing-juejin-catalog-sync
+  - id: integration-post-publishing-juejin-catalog-sync-juejincatalogcontroller
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
     kind: controller
@@ -2301,6 +2301,17 @@ routes:
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinCatalogController#syncCatalog"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinCatalogController.java
     line: 20
+  - id: integration-post-publishing-juejin-catalog-sync-platformjuejincatalogcontroller
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/api/publishing/juejin/catalog/sync"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformJuejinCatalogController#sync"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformJuejinCatalogController.java
+    line: 30
   - id: integration-delete-publishing-platform-csdn-juejin-authorization
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3104,6 +3115,17 @@ routes:
     handler: "com.xander.lab.integration.internal.api.InternalPlatformAuthorizationController#juejinStart"
     file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalPlatformAuthorizationController.java
     line: 59
+  - id: integration-post-internal-integration-platform-credentials-userid-juejin-catalog-sync
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/integration/platform-credentials/{userId}/juejin/catalog/sync"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalJuejinCatalogController#sync"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalJuejinCatalogController.java
+    line: 43
   - id: integration-get-internal-integration-platform-credentials-userid-juejin-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3170,6 +3192,17 @@ routes:
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalCredentialController#csdnStatus"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalCredentialController.java
     line: 67
+  - id: integration-post-internal-platform-integration-platform-credentials-userid-juejin-catalog-sync
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/platform-integration/platform-credentials/{userId}/juejin/catalog/sync"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalCatalogController#sync"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalCatalogController.java
+    line: 52
   - id: integration-get-internal-platform-integration-platform-credentials-userid-juejin-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
