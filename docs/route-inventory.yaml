@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 284
+  total: 296
   streams: 12
   websocket: 1
   sse: 11
@@ -2301,6 +2301,39 @@ routes:
     handler: "com.xander.lab.integration.mcp.juejin.api.JuejinCatalogController#syncCatalog"
     file: apps/core-host/src/main/java/com/xander/lab/integration/mcp/juejin/api/JuejinCatalogController.java
     line: 20
+  - id: integration-delete-publishing-platform-csdn-juejin-authorization
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: DELETE
+    path: "/api/publishing/{platform:csdn|juejin}/authorization"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformAuthorizationController#disconnect"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformAuthorizationController.java
+    line: 55
+  - id: integration-post-publishing-platform-csdn-juejin-authorization-cancel
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/api/publishing/{platform:csdn|juejin}/authorization/cancel"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformAuthorizationController#cancel"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformAuthorizationController.java
+    line: 43
+  - id: integration-post-publishing-platform-csdn-juejin-authorization-start
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/api/publishing/{platform:csdn|juejin}/authorization/start"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformAuthorizationController#start"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformAuthorizationController.java
+    line: 32
   - id: integration-get-publishing-platform-csdn-juejin-authorization-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2994,6 +3027,39 @@ routes:
     handler: "com.xander.lab.integration.internal.api.InternalBlogSyncController#syncJuejin"
     file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalBlogSyncController.java
     line: 65
+  - id: integration-delete-internal-integration-platform-credentials-userid-csdn-authorization
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: DELETE
+    path: "/internal/integration/platform-credentials/{userId}/csdn/authorization"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalPlatformAuthorizationController#csdnDisconnect"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalPlatformAuthorizationController.java
+    line: 86
+  - id: integration-post-internal-integration-platform-credentials-userid-csdn-authorization-cancel
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/integration/platform-credentials/{userId}/csdn/authorization/cancel"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalPlatformAuthorizationController#csdnCancel"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalPlatformAuthorizationController.java
+    line: 68
+  - id: integration-post-internal-integration-platform-credentials-userid-csdn-authorization-start
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/integration/platform-credentials/{userId}/csdn/authorization/start"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalPlatformAuthorizationController#csdnStart"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalPlatformAuthorizationController.java
+    line: 50
   - id: integration-get-internal-integration-platform-credentials-userid-csdn-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3005,6 +3071,39 @@ routes:
     handler: "com.xander.lab.integration.internal.api.InternalPlatformCredentialStatusController#csdnStatus"
     file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalPlatformCredentialStatusController.java
     line: 43
+  - id: integration-delete-internal-integration-platform-credentials-userid-juejin-authorization
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: DELETE
+    path: "/internal/integration/platform-credentials/{userId}/juejin/authorization"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalPlatformAuthorizationController#juejinDisconnect"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalPlatformAuthorizationController.java
+    line: 95
+  - id: integration-post-internal-integration-platform-credentials-userid-juejin-authorization-cancel
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/integration/platform-credentials/{userId}/juejin/authorization/cancel"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalPlatformAuthorizationController#juejinCancel"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalPlatformAuthorizationController.java
+    line: 77
+  - id: integration-post-internal-integration-platform-credentials-userid-juejin-authorization-start
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/integration/platform-credentials/{userId}/juejin/authorization/start"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalPlatformAuthorizationController#juejinStart"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalPlatformAuthorizationController.java
+    line: 59
   - id: integration-get-internal-integration-platform-credentials-userid-juejin-status
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -3082,6 +3181,39 @@ routes:
     handler: "com.xander.lab.integration.host.PlatformIntegrationInternalCredentialController#juejinStatus"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalCredentialController.java
     line: 79
+  - id: integration-delete-internal-platform-integration-platform-credentials-userid-platform-csdn-juejin-authorization
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: DELETE
+    path: "/internal/platform-integration/platform-credentials/{userId}/{platform:csdn|juejin}/authorization"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalAuthorizationController#disconnect"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalAuthorizationController.java
+    line: 81
+  - id: integration-post-internal-platform-integration-platform-credentials-userid-platform-csdn-juejin-authorization-cancel
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/platform-integration/platform-credentials/{userId}/{platform:csdn|juejin}/authorization/cancel"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalAuthorizationController#cancel"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalAuthorizationController.java
+    line: 71
+  - id: integration-post-internal-platform-integration-platform-credentials-userid-platform-csdn-juejin-authorization-start
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/platform-integration/platform-credentials/{userId}/{platform:csdn|juejin}/authorization/start"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformIntegrationInternalAuthorizationController#start"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformIntegrationInternalAuthorizationController.java
+    line: 61
   - id: identity-get-internal-security-state-changes
     logical_owner: identity
     deployment_unit: dinqor-core-host

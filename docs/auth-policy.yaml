@@ -536,24 +536,30 @@ protected:
   - id: csdn-authorization-start
     match: {method: POST, path: /api/publishing/csdn/authorization/start}
     owner: integration
+    note: "Platform 接管公开入口；兼容期通过唯一 Core 内部授权执行桥启动 Selenium，会话与凭证状态仍由 Core 执行端维护。"
   - id: csdn-authorization-cancel
     match: {method: POST, path: /api/publishing/csdn/authorization/cancel}
     owner: integration
+    note: "Platform 接管公开入口；命令经 token-protected Core 内部授权边界执行。"
   - id: csdn-authorization-revoke
     match: {method: DELETE, path: /api/publishing/csdn/authorization}
     owner: integration
+    note: "Platform 接管公开入口；命令经 token-protected Core 内部授权边界执行。"
   - id: juejin-authorization-status
     match: {method: GET, path: /api/publishing/juejin/authorization/status}
     owner: integration
   - id: juejin-authorization-start
     match: {method: POST, path: /api/publishing/juejin/authorization/start}
     owner: integration
+    note: "Platform 接管公开入口；兼容期通过唯一 Core 内部授权执行桥启动 Selenium，会话与凭证状态仍由 Core 执行端维护。"
   - id: juejin-authorization-cancel
     match: {method: POST, path: /api/publishing/juejin/authorization/cancel}
     owner: integration
+    note: "Platform 接管公开入口；命令经 token-protected Core 内部授权边界执行。"
   - id: juejin-authorization-revoke
     match: {method: DELETE, path: /api/publishing/juejin/authorization}
     owner: integration
+    note: "Platform 接管公开入口；命令经 token-protected Core 内部授权边界执行。"
   - id: points-balance
     match: {method: GET, path: /api/points}
     owner: billing

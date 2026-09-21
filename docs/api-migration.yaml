@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 279
+  total: 291
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -2972,6 +2972,54 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: integration-delete-publishing-platform-csdn-juejin-authorization
+    owner: integration
+    old:
+      method: DELETE
+      path: "/api/publishing/{platform:csdn|juejin}/authorization"
+    new:
+      method: DELETE
+      path: "/api/v2/content/publishing/{platform:csdn|juejin}/authorization"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-publishing-platform-csdn-juejin-authorization-cancel
+    owner: integration
+    old:
+      method: POST
+      path: "/api/publishing/{platform:csdn|juejin}/authorization/cancel"
+    new:
+      method: POST
+      path: "/api/v2/content/publishing/{platform:csdn|juejin}/authorization/cancel"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: integration-post-publishing-platform-csdn-juejin-authorization-start
+    owner: integration
+    old:
+      method: POST
+      path: "/api/publishing/{platform:csdn|juejin}/authorization/start"
+    new:
+      method: POST
+      path: "/api/v2/content/publishing/{platform:csdn|juejin}/authorization/start"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: integration-get-publishing-platform-csdn-juejin-authorization-status
     owner: integration
     old:
@@ -3120,6 +3168,57 @@ entries:
       v2_enabled: false
     status: no_v2_target
     note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-delete-internal-integration-platform-credentials-userid-csdn-authorization
+    owner: integration
+    old:
+      method: DELETE
+      path: "/internal/integration/platform-credentials/{userId}/csdn/authorization"
+    new:
+      method: DELETE
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-integration-platform-credentials-userid-csdn-authorization-cancel
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/integration/platform-credentials/{userId}/csdn/authorization/cancel"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-integration-platform-credentials-userid-csdn-authorization-start
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/integration/platform-credentials/{userId}/csdn/authorization/start"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: integration-get-internal-integration-platform-credentials-userid-csdn-status
     owner: integration
     old:
@@ -3127,6 +3226,57 @@ entries:
       path: "/internal/integration/platform-credentials/{userId}/csdn/status"
     new:
       method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-delete-internal-integration-platform-credentials-userid-juejin-authorization
+    owner: integration
+    old:
+      method: DELETE
+      path: "/internal/integration/platform-credentials/{userId}/juejin/authorization"
+    new:
+      method: DELETE
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-integration-platform-credentials-userid-juejin-authorization-cancel
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/integration/platform-credentials/{userId}/juejin/authorization/cancel"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-integration-platform-credentials-userid-juejin-authorization-start
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/integration/platform-credentials/{userId}/juejin/authorization/start"
+    new:
+      method: POST
       path: ""
     clients:
       web: not_applicable
@@ -3246,6 +3396,57 @@ entries:
       path: "/internal/platform-integration/platform-credentials/{userId}/juejin/status"
     new:
       method: GET
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-delete-internal-platform-integration-platform-credentials-userid-platform-csdn-juejin-authorization
+    owner: integration
+    old:
+      method: DELETE
+      path: "/internal/platform-integration/platform-credentials/{userId}/{platform:csdn|juejin}/authorization"
+    new:
+      method: DELETE
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-platform-integration-platform-credentials-userid-platform-csdn-juejin-authorization-cancel
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/platform-integration/platform-credentials/{userId}/{platform:csdn|juejin}/authorization/cancel"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-platform-integration-platform-credentials-userid-platform-csdn-juejin-authorization-start
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/platform-integration/platform-credentials/{userId}/{platform:csdn|juejin}/authorization/start"
+    new:
+      method: POST
       path: ""
     clients:
       web: not_applicable
