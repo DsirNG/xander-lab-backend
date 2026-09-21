@@ -18,6 +18,8 @@ class JwtUtilTest {
         ReflectionTestUtils.setField(jwtUtil, "secret", "test-secret-key-that-is-at-least-32-bytes-long");
         ReflectionTestUtils.setField(jwtUtil, "accessTokenExpire", 60_000L);
         ReflectionTestUtils.setField(jwtUtil, "refreshTokenExpire", 120_000L);
+        ReflectionTestUtils.setField(jwtUtil, "refreshProtocolEnabled", false);
+        ReflectionTestUtils.setField(jwtUtil, "refreshAccessTtlSeconds", 1_800L);
     }
 
     @Test
@@ -39,6 +41,19 @@ class JwtUtilTest {
         assertThat(jwtUtil.isValid(token)).isTrue();
         assertThat(jwtUtil.isRefreshToken(token)).isTrue();
         assertThat(jwtUtil.getSubject(token)).isEqualTo("7");
+    }
+
+    @Test
+    void enabledRefreshProtocolUsesShortAccessTtl() {
+        ReflectionTestUtils.setField(jwtUtil, "refreshProtocolEnabled", true);
+        ReflectionTestUtils.setField(jwtUtil, "refreshAccessTtlSeconds", 1_800L);
+
+        assertThat(jwtUtil.getAccessTokenExpire()).isEqualTo(1_800_000L);
+        String token = jwtUtil.generateAccessToken("42", Map.of("type", "access"));
+
+        long lifetime = jwtUtil.parseToken(token).getExpiration().getTime()
+                - jwtUtil.parseToken(token).getIssuedAt().getTime();
+        assertThat(lifetime).isEqualTo(1_800_000L);
     }
 
     @Test

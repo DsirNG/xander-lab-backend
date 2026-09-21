@@ -306,6 +306,8 @@ enabled = true   → 新协议生效（切流是 Wave 2 的事，§94）
 
 当前接入状态：`AuthService` 已把登录签发、`/api/auth/refresh` 轮换、logout 的
 当前 Session 撤销，以及 Core Host 的“JWT + 本地 deny cache”Access 校验接到这个开关；
+开关打开时 `JwtUtil` 会实际采用 `auth.refresh.access-ttl-seconds`（默认 30 分钟），
+不会继续沿用旧协议的 7 天 Access TTL；
 Gateway 另有可选的 Redis Pub/Sub → 本地 deny cache 新请求快路径，以及受内部令牌保护的
 core-host 快照/增量对账，默认仍关闭。开启前必须完成客户端错误分类、
 多标签页协调、Access TTL 与数据库恢复演练，不能把“代码已接入”当成“生产已切流”。

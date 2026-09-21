@@ -19,7 +19,8 @@ import java.util.UUID;
  * 对应前端 axios 封装中的 Token 自动携带 & 无感刷新机制
  *
  * <pre>
- * Access Token  有效期：7 天（前端自动刷新）
+ * Access Token  旧协议有效期：7 天（前端自动刷新）；新 Refresh 协议由
+ * {@code auth.refresh.access-ttl-seconds} 控制，默认 30 分钟
  * Refresh Token 有效期：30 天
  * </pre>
  */
@@ -30,9 +31,17 @@ public class JwtUtil {
     @Value("${jwt.secret:}")
     private String secret;
 
-    /** Access Token 有效期（毫秒），默认 7 天 */
+    /** 旧协议 Access Token 有效期（毫秒），默认 7 天。 */
     @Value("${jwt.access-token-expire:604800000}")
     private long accessTokenExpire;
+
+    /** 新 Refresh 协议开关；打开时 Access TTL 必须切到短窗口。 */
+    @Value("${auth.refresh.enabled:false}")
+    private boolean refreshProtocolEnabled;
+
+    /** 新 Refresh 协议 Access Token 有效期（秒），默认 30 分钟。 */
+    @Value("${auth.refresh.access-ttl-seconds:1800}")
+    private long refreshAccessTtlSeconds;
 
     /** Refresh Token 有效期（毫秒），默认 7 天 */
     @Value("${jwt.refresh-token-expire:604800000}")
@@ -67,7 +76,7 @@ public class JwtUtil {
      * @return JWT 字符串
      */
     public String generateAccessToken(String subject, Map<String, Object> claims) {
-        return buildToken(subject, claims, accessTokenExpire);
+        return buildToken(subject, claims, effectiveAccessTokenExpire());
     }
 
     /**
@@ -155,10 +164,14 @@ public class JwtUtil {
     }
 
     public long getAccessTokenExpire() {
-        return accessTokenExpire;
+        return effectiveAccessTokenExpire();
     }
 
     public long getRefreshTokenExpire() {
         return refreshTokenExpire;
+    }
+
+    private long effectiveAccessTokenExpire() {
+        return refreshProtocolEnabled ? refreshAccessTtlSeconds * 1000L : accessTokenExpire;
     }
 }
