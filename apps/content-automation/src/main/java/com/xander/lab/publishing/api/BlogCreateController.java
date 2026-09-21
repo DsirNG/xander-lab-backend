@@ -19,7 +19,12 @@ public class BlogCreateController {
 
     private final ContentBlogCreateClient client;
 
-    public BlogCreateController(ContentBlogCreateClient client) {
+    public BlogCreateController(ContentBlogCreateClient client, ContentAutomationProperties properties) {
+        if (properties.isPublishingCreateEnabled()
+                && (properties.getCoreInternalToken() == null || properties.getCoreInternalToken().isBlank())) {
+            throw new IllegalStateException(
+                    "content-automation.core-internal-token 不能为空：发文入口启用时必须配置 Core 内网令牌");
+        }
         this.client = client;
     }
 

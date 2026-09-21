@@ -177,7 +177,7 @@ Wave 2：core-host 允许 2 实例（滚动发布需要）
 | 映射未进入机器门禁 | `deployment-unit-mapping` 已校验业务域→目标部署单元、迁移表→`migration-runner`、路由清单与流宿主之间的部署单元一致性；`scan.DEPLOYMENT_UNIT` 是 §3 的机器基线 | ✅ Wave 0B 已完成 |
 | `bloghtml` 的 Wave 1 进程拆分 | 已落地 `apps/bloghtml-preview`，保留 Redis TTL/限流/CSP；它不持有 SSE，表归属仍由 `table-ownership.yaml` 管理 | ✅ 代码与 Wave 1 Compose/Nginx 模板已完成；生产 DNS/流量切换待执行 |
 | Platform 凭证、同步与文件读取入口 Owner | `PlatformCredentialStatusController` 直接提供授权状态；`PlatformAuthorizationController` 接管 CSDN/Juejin 授权启动、取消、断开；`PlatformJuejinCatalogController` 接管目录同步；`PlatformBlogSyncController` 接管公开同步入口；`PlatformFileReadController` 接管下载与 CSV/Excel 读取。兼容期实际 Selenium 授权、目录落库、供应商写入与文件读取分别经唯一 Core 内部桥执行，不形成双写；上传仍经既有 Proxy/OSS 兼容链路；开关关闭时保留 Proxy 回退 | ✅ Wave 2 公开入口切换已完成；凭证库、内网令牌与 Gateway 流量切换待执行 |
-| Content-Automation 发文入口 Owner | `BlogCreateController` 接管 `POST /api/blog/posts`，通过显式用户身份、幂等键和 Core 内部令牌边界执行；开关关闭时保留 Core `BlogController` 回退，不产生双写 | ✅ 代码与测试已完成；内部令牌配置、开关开启及 Gateway 流量切换待执行 |
+| Content-Automation 发文入口 Owner | `BlogCreateController` 接管 `POST /api/blog/posts`，通过显式用户身份、幂等键和 Core 内部令牌边界执行；开关关闭时保留 Core `BlogController` 回退，不产生双写 | ✅ 代码与测试已完成；本地 Nacos 临时令牌 + Gateway → Content 切流冒烟通过且未写入业务数据；生产 Secret/Gateway 实际切换待执行 |
 | Content-Automation 邮件提醒调度器 | 已迁入任务认领、重复执行保护、渲染、Core 邮件投递/计费窄契约；默认关闭，Core 旧调度器仍是回退执行者 | ✅ 代码与测试已完成；需在空库/内部令牌环境验证后，再按 Drain 顺序切换 |
 | 空目录已清理（不可提交） | 见 §2 的六个空包。Git 不跟踪空目录，所以仓库里本就没有它们，清理只影响本地工作区 | 已处理 |
 | `components` 前缀嵌套 | 见 §3，Gateway 路由 `order` 需要在 Wave 1 实际配置时验证 | Wave 1 |

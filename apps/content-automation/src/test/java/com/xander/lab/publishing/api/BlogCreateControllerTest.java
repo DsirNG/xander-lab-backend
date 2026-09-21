@@ -1,10 +1,12 @@
 package com.xander.lab.publishing.api;
 
+import com.xander.lab.automation.host.ContentAutomationProperties;
 import com.xander.lab.common.Result;
 import com.xander.lab.publishing.infrastructure.ContentBlogCreateClient;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -15,7 +17,7 @@ class BlogCreateControllerTest {
     @Test
     void requiresGatewayIdentityBeforeCallingCore() {
         ContentBlogCreateClient client = mock(ContentBlogCreateClient.class);
-        BlogCreateController controller = new BlogCreateController(client);
+        BlogCreateController controller = new BlogCreateController(client, properties());
         BlogPostDTO request = new BlogPostDTO();
         request.setTitle("title");
         request.setContent("content");
@@ -32,12 +34,27 @@ class BlogCreateControllerTest {
         post.setId(42L);
         when(client.create(eq(7L), any(BlogPostDTO.class), eq(false), eq("request-1")))
                 .thenReturn(post);
-        BlogCreateController controller = new BlogCreateController(client);
+        BlogCreateController controller = new BlogCreateController(client, properties());
 
         Result<BlogPostVO> result = controller.create("7", "request-1", request());
 
         assertThat(result.getCode()).isEqualTo(200);
         assertThat(result.getData()).isSameAs(post);
+    }
+
+    @Test
+    void refusesToStartWhenPublishingIsEnabledWithoutCoreToken() {
+        ContentAutomationProperties properties = properties();
+        properties.setPublishingCreateEnabled(true);
+
+        assertThatThrownBy(
+                        () -> new BlogCreateController(mock(ContentBlogCreateClient.class), properties))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("core-internal-token");
+    }
+
+    private ContentAutomationProperties properties() {
+        return new ContentAutomationProperties();
     }
 
     private BlogPostDTO request() {
