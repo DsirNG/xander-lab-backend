@@ -295,6 +295,26 @@ Timer 接入并发布 P95/P99 与 Histogram；来源时间来自 `account_securi
 | `Img2ThreeController` 无心跳 | 见 §6，该流在无业务事件时完全依赖手段 A；连接注册、封禁关闭与发送边界已有 `Img2ThreeControllerTest` 覆盖 | 设计取舍；测试已补 |
 | `contract-changes.yaml` 的 `security-plane-fail-closed` | §28.2 的 stale fail-closed 与 §103 互相否定（security plane 与 refresh 表同库），Wave 2 放行评审前必须二选一 | 待对齐 |
 
+## 8.1 本地安全平面 staging 证据（2026-09-21）
+
+使用隔离的 `dinqor-runtime` 网络和临时部署侧内部令牌启动了一个 Core 安全状态 API
+实例，以及 Agent、Content-Automation、Gateway 各一个启用 reconciler 的实例：
+
+| 宿主 | 本地 smoke 端口 | readiness | 对账结果 |
+|---|---:|---:|---|
+| `dinqor-core-host` | 30032 | 200 | `/internal/security-state` Bootstrap 成功 |
+| `dinqor-agent` | 30034 | 200 | 连续采样无对账错误 |
+| `dinqor-content-automation` | 30036 | 200 | 连续采样无对账错误 |
+| `dinqor-gateway` | 30037 | 200 | 连续采样无对账错误 |
+
+三类从属宿主对 Core 的安全状态请求均返回 HTTP 200，并暴露了 `security_state_age`、
+`last_successful_security_sync_at`、逐实例 `active_sse` / `active_ws` 指标。此次 staging
+还修复并验证了空增量批次：没有新变更时只推进不超过 watermark 的 cursor，不再把正常空批次
+误报成“cursor 未推进”并每 1.5 秒重复告警。
+
+该证据证明的是后端安全平面对账和 readiness，不等同于生产密钥、Gateway 流量切换或客户端
+重连验收；内部令牌仍必须由部署 Secret 注入，不能写进 Nacos 明文。
+
 ---
 
 ## 9. 怎么验证

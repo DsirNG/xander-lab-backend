@@ -74,6 +74,24 @@ class AgentSecurityStateReconcilerTest {
         assertThat(closed).isTrue();
     }
 
+    @Test
+    void emptyIncrementalBatchAdvancesWatermarkWithoutReportingFailure() {
+        AgentSecurityStateClient client = mock(AgentSecurityStateClient.class);
+        SecurityStateCache cache = new SecurityStateCache();
+        SecurityPlaneReadiness readiness = new SecurityPlaneReadiness();
+        AgentSecurityStateReconciler reconciler = new AgentSecurityStateReconciler(
+                client, properties(), cache, new ConnectionRegistry(), readiness);
+        when(client.snapshot()).thenReturn(new SecurityStateSyncApi.Snapshot(List.of(), 0L));
+        when(client.changes(0L, 500)).thenReturn(new SecurityStateSyncApi.Changes(List.of(), 0L));
+        reconciler.run(null);
+
+        when(client.changes(0L, 500)).thenReturn(new SecurityStateSyncApi.Changes(List.of(), 7L));
+        reconciler.reconcile();
+
+        assertThat(cache.lastSeenSeq()).isEqualTo(7L);
+        assertThat(readiness.isReady()).isTrue();
+    }
+
     private static AgentSecurityStateProperties properties() {
         AgentSecurityStateProperties properties = new AgentSecurityStateProperties();
         properties.setReconcileEnabled(true);

@@ -116,7 +116,13 @@ public class SecurityDenylistReconcilerGateway implements ApplicationRunner {
     }
 
     private void applyChanges(SecurityStateSyncApi.Changes changes) {
-        applyChanges(stateCache.lastSeenSeq(), changes);
+        long cursor = stateCache.lastSeenSeq();
+        stateCache.markSourceWatermark(changes.watermark());
+        if (changes.changes().isEmpty()) {
+            stateCache.advanceCursor(Math.max(cursor, changes.watermark()));
+            return;
+        }
+        applyChanges(cursor, changes);
     }
 
     private long applyChanges(long cursor, SecurityStateSyncApi.Changes changes) {

@@ -33,3 +33,8 @@ Wave 2 Compose 默认启用 Nacos Config/Discovery，必须提供 `NACOS_SERVER_
 两个实例 readiness 均为 200；第二个实例的 `agent_sse_active`、`agent_ws_active`、
 `active_sse`、`active_ws` 均带独立 `instance` 标签。该证据只覆盖服务端注册与观测，
 不替代前端 SSE/WS 迁移重连验证。
+
+同日的安全平面 staging 还以临时内部令牌启动了 Agent reconciler：Core 安全状态 API、
+Agent、Content-Automation、Gateway readiness 均为 200，Agent 对 Core 的快照/增量请求返回
+200，连续采样没有 `cursor 未推进` 或对账失败日志。部署时仍须把该令牌作为 Secret 注入，
+不能放进 Nacos 明文。

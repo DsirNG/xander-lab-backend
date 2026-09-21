@@ -74,6 +74,24 @@ class ContentSecurityStateReconcilerTest {
         assertThat(closed).isTrue();
     }
 
+    @Test
+    void emptyIncrementalBatchAdvancesWatermarkWithoutReportingFailure() {
+        ContentSecurityStateClient client = mock(ContentSecurityStateClient.class);
+        SecurityStateCache cache = new SecurityStateCache();
+        SecurityPlaneReadiness readiness = new SecurityPlaneReadiness();
+        ContentSecurityStateReconciler reconciler = new ContentSecurityStateReconciler(
+                client, properties(), cache, new ConnectionRegistry(), readiness);
+        when(client.snapshot()).thenReturn(new SecurityStateSyncApi.Snapshot(List.of(), 0L));
+        when(client.changes(0L, 500)).thenReturn(new SecurityStateSyncApi.Changes(List.of(), 0L));
+        reconciler.run(null);
+
+        when(client.changes(0L, 500)).thenReturn(new SecurityStateSyncApi.Changes(List.of(), 7L));
+        reconciler.reconcile();
+
+        assertThat(cache.lastSeenSeq()).isEqualTo(7L);
+        assertThat(readiness.isReady()).isTrue();
+    }
+
     private static ContentSecurityStateProperties properties() {
         ContentSecurityStateProperties properties = new ContentSecurityStateProperties();
         properties.setReconcileEnabled(true);
