@@ -14,14 +14,15 @@
 generated_from: docs/scheduled-inventory.yaml
 
 # Wave 0A 扫描结果（14 项）+ Wave 1 Gateway denylist reconciler +
-# content-automation 安全状态对账 + legacy Redis 盘点 + Refresh 表行数观测，共 19 项。
+# content-automation 安全状态对账 + legacy Redis 盘点 + Refresh 表行数观测 +
+# content-automation 计划调度 drain，共 20 项。
 # 注意 `scanned` 必须等于 docs/scheduled-inventory.yaml 的 counts.total，
 # 由门禁 `inventory-integrity` 校验。
 # 两个 auth 清理任务在上一轮以 status: planned 登记；本轮实现后改为 active（不是新增条目）。
 counts:
-  scanned: 19
+  scanned: 20
   planned: 0
-  total: 19
+  total: 20
 
 scheduled:
   # ===================== Wave 0A 实际扫描到的 9 项 =====================
@@ -44,7 +45,17 @@ scheduled:
     singleton_strategy: mysql_shedlock
     status: active
     scan_ref: apps/core-host/src/main/java/com/xander/lab/automation/infrastructure/BlogContentPlanScheduler.java:40
-    notes: "现网为单实例，靠 DB 原子领取保证恰好一次。多实例前必须补齐互斥。"
+    notes: "旧 core-host 调度器保留为 drain 回退；切换前必须先验证 content 调度器，再关闭本入口并收窄表权限。"
+
+  - id: content-blog-plan-scheduler
+    logical_owner: publishing
+    current_deployment_owner: dinqor-content-automation
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_atomic_claim
+    status: active
+    scan_ref: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentBlogPlanScheduler.java:22
+    notes: "Wave 2 drain 调度器。多实例由 blog_content_plan 原子认领、blog_plan_run 唯一键和租约恢复保证每个触发只执行一次；默认关闭，旧 core-host 仍是回退入口。"
 
   - id: email-reminder-scheduler
     logical_owner: automation

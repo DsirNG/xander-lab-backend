@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.automation.api.BlogPlanRunVO;
+import com.xander.lab.automation.domain.ContentPlanScheduleCalculator;
 import com.xander.lab.automation.host.ContentPlanExecutionProperties;
+import com.xander.lab.automation.host.ContentPlanSchedulerProperties;
 import com.xander.lab.automation.infrastructure.ContentNotificationStreamService;
 import com.xander.lab.automation.infrastructure.RecitationMaterialClient;
 import com.xander.lab.blogagent.api.BlogAgentTaskCreateRequest;
@@ -76,6 +78,7 @@ public class ContentBlogPlanRunExecutionService {
     private final RecitationMaterialClient recitationMaterialClient;
     private final TaskExecutor executor;
     private final ContentPlanExecutionProperties properties;
+    private final ContentPlanSchedulerProperties schedulerProperties;
 
     public ContentBlogPlanRunExecutionService(
             JdbcTemplate jdbcTemplate,
@@ -90,7 +93,8 @@ public class ContentBlogPlanRunExecutionService {
             ContentNotificationStreamService notificationStreamService,
             RecitationMaterialClient recitationMaterialClient,
             @Qualifier("contentBlogPlanRunExecutor") TaskExecutor executor,
-            ContentPlanExecutionProperties properties) {
+            ContentPlanExecutionProperties properties,
+            ContentPlanSchedulerProperties schedulerProperties) {
         this.jdbcTemplate = jdbcTemplate;
         this.transactionTemplate = transactionTemplate;
         this.objectMapper = objectMapper;
@@ -104,10 +108,174 @@ public class ContentBlogPlanRunExecutionService {
         this.recitationMaterialClient = recitationMaterialClient;
         this.executor = executor;
         this.properties = properties;
+        this.schedulerProperties = schedulerProperties;
     }
 
     public boolean enabled() {
         return properties.isEnabled();
+    }
+
+    /** Polls due plans, recovers stale claims, and enqueues bounded background runs. */
+    public void dispatchDuePlans() {
+        if (!properties.isEnabled() || !schedulerProperties.isEnabled()) {
+            return;
+        }
+        recoverStaleClaims();
+        List<Long> planIds = jdbcTemplate.query(
+                "SELECT id FROM blog_content_plan WHERE status = 'ACTIVE' "
+                        + "AND deleted_at IS NULL AND next_run_at <= CURRENT_TIMESTAMP(3) "
+                        + "ORDER BY next_run_at ASC, id ASC LIMIT ?",
+                (rs, rowNum) -> rs.getLong("id"),
+                Math.max(1, schedulerProperties.getBatchSize()));
+        for (Long planId : planIds) {
+            try {
+                dispatchScheduled(planId);
+            } catch (RuntimeException exception) {
+                log.warn("[BlogPlan] content dispatch failed for plan={}: {}",
+                        planId, rootMessage(exception));
+            }
+        }
+    }
+
+    private void dispatchScheduled(Long planId) {
+        ScheduledClaim claim = claimScheduledPlan(planId);
+        if (claim == null) {
+            return;
+        }
+        if (!claim.created()) {
+            recoverDuplicateClaim(claim.plan(), claim.processingToken());
+            return;
+        }
+        try {
+            executor.execute(() -> {
+                try {
+                    execute(claim.runId(), claim.plan());
+                    completeScheduledPlan(claim.plan(), claim.runId(), claim.processingToken());
+                } catch (RuntimeException exception) {
+                    failRun(claim.runId(), stageOf(claim.runId()), rootMessage(exception));
+                    completeScheduledPlan(claim.plan(), claim.runId(), claim.processingToken());
+                    log.warn("[BlogPlan] content scheduled run={} failed: {}",
+                            claim.runId(), rootMessage(exception));
+                }
+            });
+        } catch (RuntimeException exception) {
+            failRun(claim.runId(), STAGE_GENERATE, rootMessage(exception));
+            completeScheduledPlan(claim.plan(), claim.runId(), claim.processingToken());
+            throw exception;
+        }
+    }
+
+    private ScheduledClaim claimScheduledPlan(Long planId) {
+        String token = UUID.randomUUID().toString();
+        return transactionTemplate.execute(status -> {
+            int claimed = jdbcTemplate.update("""
+                    UPDATE blog_content_plan
+                    SET status = 'RUNNING', processing_token = ?, claimed_at = CURRENT_TIMESTAMP(3),
+                        error_message = NULL
+                    WHERE id = ? AND deleted_at IS NULL AND status = 'ACTIVE'
+                      AND next_run_at <= CURRENT_TIMESTAMP(3)
+                    """, token, planId);
+            if (claimed != 1) {
+                return null;
+            }
+            List<PlanSnapshot> rows = jdbcTemplate.query(
+                    planSelect() + " WHERE id = ? AND deleted_at IS NULL",
+                    this::mapPlan, planId);
+            if (rows.isEmpty()) {
+                throw new IllegalStateException("认领后的内容计划不存在：" + planId);
+            }
+            PlanSnapshot plan = rows.get(0);
+            Instant scheduledAt = plan.nextRunAt() == null ? Instant.now() : plan.nextRunAt();
+            int inserted = jdbcTemplate.update("""
+                    INSERT IGNORE INTO blog_plan_run (
+                        plan_id, scheduled_at, trigger_type, status,
+                        csdn_status, juejin_status, processing_token, claimed_at, started_at
+                    ) VALUES (?, ?, 'SCHEDULED', 'GENERATING', ?, ?, ?, CURRENT_TIMESTAMP(3),
+                              CURRENT_TIMESTAMP(3))
+                    """, plan.id(), java.sql.Timestamp.from(scheduledAt),
+                    plan.syncCsdn() ? "PENDING" : "UNSET",
+                    plan.syncJuejin() ? "PENDING" : "UNSET", token);
+            Long runId = jdbcTemplate.query(
+                    "SELECT id FROM blog_plan_run WHERE plan_id = ? AND scheduled_at = ?",
+                    (rs, rowNum) -> rs.getLong("id"), plan.id(),
+                    java.sql.Timestamp.from(scheduledAt)).stream().findFirst().orElse(null);
+            if (runId == null) {
+                throw new IllegalStateException("创建计划执行记录失败");
+            }
+            return new ScheduledClaim(plan, runId, inserted == 1, token);
+        });
+    }
+
+    private void recoverDuplicateClaim(PlanSnapshot plan, String token) {
+        String message = "同一次触发已存在执行记录，已跳过";
+        if (plan.runOnce()) {
+            failPlan(plan, token, message);
+        } else {
+            recoverPlan(plan, token, nextRun(plan, Instant.now()), message);
+        }
+    }
+
+    private void completeScheduledPlan(PlanSnapshot plan, Long runId, String token) {
+        RunTerminal run = jdbcTemplate.query(
+                "SELECT status, error_message, review_reason, scheduled_at "
+                        + "FROM blog_plan_run WHERE id = ?",
+                (rs, rowNum) -> new RunTerminal(rs.getString("status"),
+                        rs.getString("error_message"), rs.getString("review_reason"),
+                        toInstant(rs, "scheduled_at")), runId).stream().findFirst().orElse(null);
+        if (run == null) {
+            throw new IllegalStateException("计划执行记录不存在：" + runId);
+        }
+        if (plan.runOnce()) {
+            if (STATUS_SUCCEEDED.equals(run.status())) {
+                jdbcTemplate.update("""
+                        UPDATE blog_content_plan
+                        SET status = 'FINISHED', next_run_at = NULL, last_run_at = ?,
+                            processing_token = NULL, claimed_at = NULL, error_message = NULL
+                        WHERE id = ? AND status = 'RUNNING' AND processing_token = ?
+                        """, timestamp(run.scheduledAt()), plan.id(), token);
+            } else {
+                failPlan(plan, token, terminalError(run));
+            }
+            return;
+        }
+        recoverPlan(plan, token, nextRun(plan, Instant.now()), null,
+                run.scheduledAt());
+    }
+
+    private void recoverStaleClaims() {
+        List<PlanSnapshot> stale = jdbcTemplate.query("""
+                SELECT id, user_id, topic, audience, tone, schedule_type, scheduled_date,
+                       ai_option, knowledge_material_id, auto_publish, timezone, trigger_time,
+                       trigger_times_json, topics_json, next_topic_index, sync_csdn, sync_juejin,
+                       run_once, next_run_at, processing_token, status
+                FROM blog_content_plan
+                WHERE status = 'RUNNING' AND deleted_at IS NULL
+                  AND claimed_at < TIMESTAMPADD(MICROSECOND, -( ? * 1000), CURRENT_TIMESTAMP(3))
+                ORDER BY claimed_at ASC LIMIT ?
+                """, this::mapPlan,
+                Math.max(1L, schedulerProperties.getClaimTimeoutMs()),
+                Math.max(1, schedulerProperties.getBatchSize()));
+        for (PlanSnapshot plan : stale) {
+            String message = plan.runOnce()
+                    ? "执行进程意外中断，本次触发未完成，计划已标记失败"
+                    : "执行进程意外中断，本次触发已跳过并顺延到下一周期";
+            if (plan.runOnce() && hasSucceededRun(plan.id())) {
+                jdbcTemplate.update("""
+                        UPDATE blog_content_plan
+                        SET status = 'FINISHED', next_run_at = NULL, last_run_at = ?,
+                            processing_token = NULL, claimed_at = NULL, error_message = NULL
+                        WHERE id = ? AND status = 'RUNNING' AND processing_token = ?
+                        """, timestamp(plan.nextRunAt()), plan.id(), plan.processingToken());
+                continue;
+            }
+            if (plan.runOnce()) {
+                failPlan(plan, plan.processingToken(), message);
+            } else {
+                recoverPlan(plan, plan.processingToken(), nextRun(plan, Instant.now()), message);
+            }
+            failInFlightRuns(plan.id(), message);
+            log.warn("[BlogPlan] recovered stale content plan={}", plan.id());
+        }
     }
 
     /** Creates and asynchronously executes one user-triggered run. */
@@ -276,17 +444,23 @@ public class ContentBlogPlanRunExecutionService {
     }
 
     private PlanSnapshot requireOwnedPlan(Long userId, Long planId) {
-        List<PlanSnapshot> plans = jdbcTemplate.query("""
-                SELECT id, user_id, topic, audience, tone, ai_option, knowledge_material_id,
-                       auto_publish, topics_json, next_topic_index, sync_csdn, sync_juejin,
-                       run_once, status
-                FROM blog_content_plan
-                WHERE id = ? AND user_id = ? AND deleted_at IS NULL
-                """, this::mapPlan, planId, userId);
+        List<PlanSnapshot> plans = jdbcTemplate.query(
+                planSelect() + " WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+                this::mapPlan, planId, userId);
         if (plans.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "定时发文计划不存在");
         }
         return plans.get(0);
+    }
+
+    private String planSelect() {
+        return """
+                SELECT id, user_id, topic, audience, tone, schedule_type, scheduled_date,
+                       ai_option, knowledge_material_id, auto_publish, timezone, trigger_time,
+                       trigger_times_json, topics_json, next_topic_index, sync_csdn, sync_juejin,
+                       run_once, next_run_at, processing_token, status
+                FROM blog_content_plan
+                """;
     }
 
     private PlanSnapshot mapPlan(ResultSet rs, int rowNum) throws SQLException {
@@ -296,15 +470,87 @@ public class ContentBlogPlanRunExecutionService {
                 rs.getString("topic"),
                 rs.getString("audience"),
                 rs.getString("tone"),
+                defaultText(rs.getString("schedule_type"), "DAILY"),
+                rs.getDate("scheduled_date") == null
+                        ? null : rs.getDate("scheduled_date").toLocalDate(),
                 rs.getString("ai_option"),
                 rs.getObject("knowledge_material_id", Long.class),
                 toBoolean(rs, "auto_publish"),
+                rs.getString("timezone"),
+                rs.getString("trigger_time"),
+                rs.getString("trigger_times_json"),
                 rs.getString("topics_json"),
                 rs.getObject("next_topic_index", Integer.class),
                 toBoolean(rs, "sync_csdn"),
                 toBoolean(rs, "sync_juejin"),
                 toBoolean(rs, "run_once"),
+                toInstant(rs, "next_run_at"),
+                rs.getString("processing_token"),
                 rs.getString("status"));
+    }
+
+    private Instant nextRun(PlanSnapshot plan, Instant reference) {
+        return ContentPlanScheduleCalculator.nextRun(plan.scheduleType(), plan.timezone(),
+                parseTriggerTimes(plan.triggerTimesJson()), plan.triggerTime(),
+                plan.scheduledDate(), reference);
+    }
+
+    private void recoverPlan(PlanSnapshot plan, String token, Instant nextRun, String message) {
+        recoverPlan(plan, token, nextRun, message, null);
+    }
+
+    private void recoverPlan(PlanSnapshot plan, String token, Instant nextRun, String message,
+                             Instant lastRunAt) {
+        jdbcTemplate.update("""
+                UPDATE blog_content_plan
+                SET status = 'ACTIVE', next_run_at = ?, last_run_at = COALESCE(?, last_run_at),
+                    processing_token = NULL, claimed_at = NULL, error_message = ?
+                WHERE id = ? AND deleted_at IS NULL AND status = 'RUNNING'
+                  AND processing_token = ?
+                """, timestamp(nextRun), timestamp(lastRunAt), message, plan.id(), token);
+    }
+
+    private void failPlan(PlanSnapshot plan, String token, String message) {
+        jdbcTemplate.update("""
+                UPDATE blog_content_plan
+                SET status = 'FAILED', next_run_at = NULL, last_run_at = COALESCE(?, last_run_at),
+                    processing_token = NULL, claimed_at = NULL, error_message = ?
+                WHERE id = ? AND deleted_at IS NULL AND status = 'RUNNING'
+                  AND processing_token = ?
+                """, timestamp(plan.nextRunAt()), message, plan.id(), token);
+        failInFlightRuns(plan.id(), message);
+    }
+
+    private void failInFlightRuns(Long planId, String message) {
+        jdbcTemplate.update("""
+                UPDATE blog_plan_run
+                SET status = 'FAILED', stage_error = 'stale', error_message = ?,
+                    finished_at = CURRENT_TIMESTAMP(3)
+                WHERE plan_id = ? AND status IN ('GENERATING', 'REVIEWING', 'PUBLISHING')
+                """, limit(message, 1000), planId);
+    }
+
+    private boolean hasSucceededRun(Long planId) {
+        Number value = jdbcTemplate.queryForObject("""
+                SELECT EXISTS(
+                    SELECT 1 FROM blog_plan_run WHERE plan_id = ? AND status = 'SUCCEEDED'
+                )
+                """, Number.class, planId);
+        return value != null && value.intValue() != 0;
+    }
+
+    private String terminalError(RunTerminal run) {
+        if (StringUtils.hasText(run.errorMessage())) {
+            return run.errorMessage();
+        }
+        if (STATUS_REVIEW_REJECTED.equals(run.status()) && StringUtils.hasText(run.reviewReason())) {
+            return run.reviewReason();
+        }
+        return "计划执行失败";
+    }
+
+    private java.sql.Timestamp timestamp(Instant value) {
+        return java.sql.Timestamp.from(value == null ? Instant.now() : value);
     }
 
     private void updateRun(Long runId, String status, String stage, String message) {
@@ -390,6 +636,20 @@ public class ContentBlogPlanRunExecutionService {
                 ? booleanValue : ((Number) value).intValue() != 0;
     }
 
+    private Instant toInstant(ResultSet rs, String column) throws SQLException {
+        java.sql.Timestamp value = rs.getTimestamp(column);
+        return value == null ? null : value.toInstant();
+    }
+
+    private List<String> parseTriggerTimes(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() { });
+        } catch (Exception exception) {
+            throw new IllegalStateException("计划触发时间数据损坏", exception);
+        }
+    }
+
     private void requireUser(Long userId) {
         if (userId == null || userId <= 0) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "未登录或登录已过期");
@@ -412,14 +672,25 @@ public class ContentBlogPlanRunExecutionService {
     }
 
     private record PlanSnapshot(Long id, Long userId, String topic, String audience, String tone,
+                                String scheduleType, java.time.LocalDate scheduledDate,
                                 String aiOption, Long knowledgeMaterialId, boolean autoPublish,
+                                String timezone, String triggerTime, String triggerTimesJson,
                                 String topicsJson, Integer nextTopicIndex, boolean syncCsdn,
-                                boolean syncJuejin, boolean runOnce, String status) {
+                                boolean syncJuejin, boolean runOnce, Instant nextRunAt,
+                                String processingToken, String status) {
     }
 
     private record QueueState(String topicsJson, Integer nextTopicIndex, String topic) {
     }
 
     private record ComplianceResult(boolean pass, String reason) {
+    }
+
+    private record ScheduledClaim(PlanSnapshot plan, Long runId, boolean created,
+                                  String processingToken) {
+    }
+
+    private record RunTerminal(String status, String errorMessage, String reviewReason,
+                               Instant scheduledAt) {
     }
 }

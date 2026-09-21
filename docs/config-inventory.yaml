@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 842
-  leaves: 601
+  total: 855
+  leaves: 612
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -920,6 +920,16 @@ config:
     value: "${CONTENT_AUTOMATION_STREAM_DRAIN_ENABLED:false}"
     leaf: true
     logical_owner: content-automation
+  - key: content-automation.shedlock
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: content-automation
+  - key: content-automation.shedlock.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_SHEDLOCK_ENABLED:false}"
+    leaf: true
+    logical_owner: content-automation
   - key: content-automation.plan-executor
     source: apps/content-automation/src/main/resources/application.yml
     value: ""
@@ -928,6 +938,36 @@ config:
   - key: content-automation.plan-executor.enabled
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_PLAN_EXECUTOR_ENABLED:false}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.plan-scheduler
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: content-automation
+  - key: content-automation.plan-scheduler.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLAN_SCHEDULER_ENABLED:false}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.plan-scheduler.batch-size
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLAN_SCHEDULER_BATCH_SIZE:5}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.plan-scheduler.claim-timeout-ms
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLAN_SCHEDULER_CLAIM_TIMEOUT_MS:1800000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.plan-scheduler.poll-interval-ms
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLAN_SCHEDULER_POLL_INTERVAL_MS:15000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.plan-scheduler.initial-delay-ms
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PLAN_SCHEDULER_INITIAL_DELAY_MS:15000}"
     leaf: true
     logical_owner: content-automation
   - key: blog-content-plan
@@ -3678,6 +3718,41 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 9
+  - key: content-automation.plan-scheduler.batch-size
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentPlanSchedulerProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 10
+  - key: content-automation.plan-scheduler.claim-timeout-ms
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentPlanSchedulerProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 11
+  - key: content-automation.plan-scheduler.enabled
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentPlanSchedulerProperties.java
+    value: "<java-default:none>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 9
+  - key: content-automation.plan-scheduler.initial-delay-ms
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentPlanSchedulerProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 13
+  - key: content-automation.plan-scheduler.poll-interval-ms
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentPlanSchedulerProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 12
   - key: content-automation.security-state.core-host-base-url
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentSecurityStateProperties.java
     value: "<java-default>"
