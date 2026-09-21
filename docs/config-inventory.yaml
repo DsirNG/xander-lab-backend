@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 929
-  leaves: 680
+  total: 937
+  leaves: 688
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -933,6 +933,26 @@ config:
   - key: content-automation.core-internal-token
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_CORE_INTERNAL_TOKEN:}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.core-connect-timeout-millis
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_CORE_CONNECT_TIMEOUT_MILLIS:2000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.core-read-timeout-millis
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_CORE_READ_TIMEOUT_MILLIS:15000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.core-max-response-bytes
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_CORE_MAX_RESPONSE_BYTES:1048576}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.publishing-create-enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_PUBLISHING_CREATE_ENABLED:false}"
     leaf: true
     logical_owner: content-automation
   - key: content-automation.platform-integration-base-url
@@ -3979,6 +3999,13 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 9
+  - key: content-automation.core-connect-timeout-millis
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 11
   - key: content-automation.core-internal-token
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default>"
@@ -3986,44 +4013,65 @@ config:
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 10
-  - key: content-automation.model-timeout-millis
-    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: content-automation
-    source_kind: java-configuration-properties
-    line: 16
-  - key: content-automation.platform-integration-base-url
-    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
-    value: "<java-default>"
-    leaf: true
-    logical_owner: content-automation
-    source_kind: java-configuration-properties
-    line: 11
-  - key: content-automation.platform-integration-connect-timeout-millis
+  - key: content-automation.core-max-response-bytes
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 13
-  - key: content-automation.platform-integration-internal-token
+  - key: content-automation.core-read-timeout-millis
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 12
-  - key: content-automation.platform-integration-max-response-bytes
+  - key: content-automation.model-timeout-millis
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 20
+  - key: content-automation.platform-integration-base-url
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default>"
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
     line: 15
+  - key: content-automation.platform-integration-connect-timeout-millis
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 17
+  - key: content-automation.platform-integration-internal-token
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 16
+  - key: content-automation.platform-integration-max-response-bytes
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 19
   - key: content-automation.platform-integration-read-timeout-millis
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
     value: "<java-default>"
+    leaf: true
+    logical_owner: content-automation
+    source_kind: java-configuration-properties
+    line: 18
+  - key: content-automation.publishing-create-enabled
+    source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentAutomationProperties.java
+    value: "<java-default:none>"
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
@@ -4034,7 +4082,7 @@ config:
     leaf: true
     logical_owner: content-automation
     source_kind: java-configuration-properties
-    line: 17
+    line: 21
   - key: content-automation.plan-executor.enabled
     source: apps/content-automation/src/main/java/com/xander/lab/automation/host/ContentPlanExecutionProperties.java
     value: "<java-default:none>"

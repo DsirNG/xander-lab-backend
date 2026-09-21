@@ -13,6 +13,7 @@ import com.xander.lab.publishing.api.CategoryVO;
 import com.xander.lab.publishing.api.TagVO;
 import com.xander.lab.common.PageData;
 import com.xander.lab.content.api.ContentPost;
+import com.xander.lab.content.api.ContentPostCreationPort;
 import com.xander.lab.content.api.ContentPostInput;
 import com.xander.lab.content.api.ContentPostPage;
 import com.xander.lab.content.api.ContentPostPort;
@@ -63,7 +64,7 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class BlogService implements ContentPostPort {
+public class BlogService implements ContentPostPort, ContentPostCreationPort {
     /** 见 {@link ContentPostStatus}：三个常量现在是契约词表的别名，不是副本。 */
     public static final int STATUS_DRAFT = ContentPostStatus.DRAFT;
     public static final int STATUS_PUBLISHED = ContentPostStatus.PUBLISHED;
@@ -180,6 +181,25 @@ public class BlogService implements ContentPostPort {
         return toContract(createBlog(userId, input, publish, null));
     }
 
+    /** Creates a post for the token-protected content-automation compatibility boundary. */
+    @Transactional
+    public BlogPostVO createBlog(Long userId, ContentPostInput input, boolean publish,
+                                 String requestId) {
+        requireUser(userId);
+        if (input == null || input.title() == null || input.title().isBlank()
+                || input.content() == null || input.content().isBlank()) {
+            throw new IllegalArgumentException("标题和正文不能为空");
+        }
+        return createBlogInternal(userId, input, publish, requestId);
+    }
+
+    @Override
+    @Transactional
+    public ContentPost createIdempotent(Long userId, ContentPostInput input, boolean publish,
+                                        String requestId) {
+        return toContract(createBlog(userId, input, publish, requestId));
+    }
+
     /**
      * 创建的核心：身份由参数传入，不读 {@code UserContext}。
      *
@@ -187,7 +207,8 @@ public class BlogService implements ContentPostPort {
      * {@code AuthInterceptor}，而端口不能这么假定：跨进程后没有那层兜底，而写出一篇
      * {@code user_id = NULL} 的文章是任何归属查询都捞不回来的数据。</p>
      */
-    private BlogPostVO createBlog(Long userId, ContentPostInput input, boolean publish, String requestId) {
+    private BlogPostVO createBlogInternal(Long userId, ContentPostInput input, boolean publish,
+                                          String requestId) {
         String requestKey = publish && requestId != null && !requestId.isBlank()
                 ? PUBLISH_REQUEST_PREFIX + userId + ":" + requestId.trim() : null;
         if (requestKey != null) {

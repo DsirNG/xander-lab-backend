@@ -8,6 +8,10 @@ public class ContentAutomationProperties {
 
     private String coreBaseUrl = "http://localhost:30002";
     private String coreInternalToken = "";
+    private int coreConnectTimeoutMillis = 2_000;
+    private int coreReadTimeoutMillis = 15_000;
+    private int coreMaxResponseBytes = 1 * 1024 * 1024;
+    private boolean publishingCreateEnabled;
     private String platformIntegrationBaseUrl = "http://localhost:30005";
     private String platformIntegrationInternalToken = "";
     private int platformIntegrationConnectTimeoutMillis = 2_000;
@@ -30,6 +34,38 @@ public class ContentAutomationProperties {
 
     public void setCoreInternalToken(String coreInternalToken) {
         this.coreInternalToken = coreInternalToken;
+    }
+
+    public int getCoreConnectTimeoutMillis() {
+        return coreConnectTimeoutMillis;
+    }
+
+    public void setCoreConnectTimeoutMillis(int coreConnectTimeoutMillis) {
+        this.coreConnectTimeoutMillis = coreConnectTimeoutMillis;
+    }
+
+    public int getCoreReadTimeoutMillis() {
+        return coreReadTimeoutMillis;
+    }
+
+    public void setCoreReadTimeoutMillis(int coreReadTimeoutMillis) {
+        this.coreReadTimeoutMillis = coreReadTimeoutMillis;
+    }
+
+    public int getCoreMaxResponseBytes() {
+        return coreMaxResponseBytes;
+    }
+
+    public void setCoreMaxResponseBytes(int coreMaxResponseBytes) {
+        this.coreMaxResponseBytes = coreMaxResponseBytes;
+    }
+
+    public boolean isPublishingCreateEnabled() {
+        return publishingCreateEnabled;
+    }
+
+    public void setPublishingCreateEnabled(boolean publishingCreateEnabled) {
+        this.publishingCreateEnabled = publishingCreateEnabled;
     }
 
     public String getPlatformIntegrationBaseUrl() {

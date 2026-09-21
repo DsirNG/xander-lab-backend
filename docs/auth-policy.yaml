@@ -145,6 +145,14 @@ excluded:
     identity_mode: none
     token_location: n/a
     note: "Platform → Core 文件读取桥只接受内部令牌，默认关闭，不套业务 JWT。"
+  - id: excluded-content-publishing-create
+    match:
+      method: ANY
+      path_prefix: /internal/content/blog-posts/
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "Content-Automation → Core 发文执行边界只接受 X-DinQor-Internal-Token，默认关闭，不套业务 JWT。"
 
 # ===================== 3. 管理后台 =====================
 # 必须在公开 GET 分支之前判断。
@@ -354,6 +362,7 @@ protected:
   - id: blog-post-create
     match: {method: POST, path: /api/blog/posts}
     owner: publishing
+    note: "Content-Automation 已提供可控公开入口；开关关闭时由 Core 旧入口继续兼容。"
   - id: blog-post-update
     match: {method: PUT, path_pattern: /api/blog/posts/*}
     owner: publishing

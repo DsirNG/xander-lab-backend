@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 308
+  total: 310
   streams: 12
   websocket: 1
   sse: 11
@@ -1113,7 +1113,18 @@ routes:
     handler: "com.xander.lab.publishing.api.BlogPublicController#list"
     file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogPublicController.java
     line: 25
-  - id: publishing-post-blog-posts
+  - id: publishing-post-blog-posts-blogcreatecontroller
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/api/blog/posts"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.BlogCreateController#create"
+    file: apps/content-automation/src/main/java/com/xander/lab/publishing/api/BlogCreateController.java
+    line: 26
+  - id: publishing-post-blog-posts-blogcontroller
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
     kind: controller
@@ -3027,6 +3038,17 @@ routes:
     handler: "com.xander.lab.automation.api.InternalBlogPlanTriggerController#trigger"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/InternalBlogPlanTriggerController.java
     line: 50
+  - id: publishing-post-internal-content-blog-posts
+    logical_owner: publishing
+    deployment_unit: dinqor-content-automation
+    kind: controller
+    http_method: POST
+    path: "/internal/content/blog-posts"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.publishing.api.InternalBlogPostCreateController#create"
+    file: apps/core-host/src/main/java/com/xander/lab/publishing/api/InternalBlogPostCreateController.java
+    line: 42
   - id: integration-post-internal-integration-blog-posts-postid-find-succeeded-csdn
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
