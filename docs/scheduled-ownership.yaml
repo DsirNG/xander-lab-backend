@@ -16,14 +16,14 @@ generated_from: docs/scheduled-inventory.yaml
 # Wave 0A 扫描结果（14 项）+ Wave 1 Gateway denylist reconciler +
 # content-automation 安全状态对账 + legacy Redis 盘点 + Refresh 表行数观测 +
 # content-automation 计划调度 drain + Agent 安全状态对账 + Core 旧流 deadline drain +
-# Agent/content 长连接 deadline drain + MySQL 可靠性证据刷新，共 26 项。
+# Agent/content 长连接 deadline drain + MySQL 可靠性证据刷新 + Content 邮件提醒调度器，共 27 项。
 # 注意 `scanned` 必须等于 docs/scheduled-inventory.yaml 的 counts.total，
 # 由门禁 `inventory-integrity` 校验。
 # 两个 auth 清理任务在上一轮以 status: planned 登记；本轮实现后改为 active（不是新增条目）。
 counts:
-  scanned: 26
-  planned: 0
-  total: 26
+  scanned: 27
+  planned: 1
+  total: 27
 
 scheduled:
   # ===================== Wave 0A 实际扫描到的 9 项 =====================
@@ -87,6 +87,16 @@ scheduled:
     status: active
     scan_ref: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentBlogPlanScheduler.java:22
     notes: "Wave 2 drain 调度器。多实例由 blog_content_plan 原子认领、blog_plan_run 唯一键和租约恢复保证每个触发只执行一次；默认关闭，旧 core-host 仍是回退入口。"
+
+  - id: content-email-reminder-scheduler
+    logical_owner: automation
+    current_deployment_owner: dinqor-content-automation
+    execution_mode: scheduled
+    execution_scope: global_once
+    singleton_strategy: mysql_shedlock
+    status: planned
+    scan_ref: apps/content-automation/src/main/java/com/xander/lab/automation/infrastructure/ContentEmailReminderScheduler.java:61
+    notes: "Wave 2 邮件提醒调度器。默认关闭；启用时必须同时开启 content-automation.shedlock，先通过 Core 内网邮件/计费窄契约做空库启动与重复认领验证，再按 drain 顺序关闭 Core 旧调度器。"
 
   - id: content-automation-stream-drainer
     logical_owner: automation

@@ -47,6 +47,11 @@
         </dependency>
         <dependency>
             <groupId>com.xander</groupId>
+            <artifactId>payment-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.xander</groupId>
             <artifactId>recitation-api</artifactId>
             <version>${project.version}</version>
         </dependency>

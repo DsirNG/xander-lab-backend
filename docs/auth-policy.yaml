@@ -153,6 +153,22 @@ excluded:
     identity_mode: none
     token_location: n/a
     note: "Content-Automation → Core 发文执行边界只接受 X-DinQor-Internal-Token，默认关闭，不套业务 JWT。"
+  - id: excluded-content-automation-mail
+    match:
+      method: ANY
+      path_prefix: /internal/automation/mail/
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "Content-Automation → Core 已渲染邮件投递边界只接受 X-DinQor-Internal-Token，默认关闭，不套业务 JWT。"
+  - id: excluded-content-automation-billing
+    match:
+      method: ANY
+      path_prefix: /internal/automation/billing/
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "Content-Automation → Core 邮件提醒一口价计费边界只接受 X-DinQor-Internal-Token，默认关闭，不套业务 JWT。"
 
 # ===================== 3. 管理后台 =====================
 # 必须在公开 GET 分支之前判断。

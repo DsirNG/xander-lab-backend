@@ -7,8 +7,8 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set of every configuration key in application.yml and every field declared by @ConfigurationProperties."
 counts:
-  total: 961
-  leaves: 708
+  total: 970
+  leaves: 716
 config:
   - key: server
     source: apps/agent/src/main/resources/application.yml
@@ -1108,6 +1108,51 @@ config:
   - key: content-automation.plan-scheduler.initial-delay-ms
     source: apps/content-automation/src/main/resources/application.yml
     value: "${CONTENT_AUTOMATION_PLAN_SCHEDULER_INITIAL_DELAY_MS:15000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler
+    source: apps/content-automation/src/main/resources/application.yml
+    value: ""
+    leaf: false
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler.enabled
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_ENABLED:false}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler.batch-size
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_BATCH_SIZE:20}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler.claim-timeout-ms
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_CLAIM_TIMEOUT_MS:600000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler.max-send-attempts
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_MAX_SEND_ATTEMPTS:3}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler.retry-delay-ms
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_RETRY_DELAY_MS:30000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler.poll-interval-ms
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_POLL_INTERVAL_MS:10000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler.initial-delay-ms
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_EMAIL_REMINDER_SCHEDULER_INITIAL_DELAY_MS:15000}"
+    leaf: true
+    logical_owner: content-automation
+  - key: content-automation.email-reminder-scheduler.display-zone
+    source: apps/content-automation/src/main/resources/application.yml
+    value: "${CONTENT_AUTOMATION_EMAIL_REMINDER_DISPLAY_ZONE:Asia/Shanghai}"
     leaf: true
     logical_owner: content-automation
   - key: blog-content-plan

@@ -14,7 +14,7 @@
 
 generated_by: scripts/migration/scan.py
 counts:
-  total: 305
+  total: 309
 entries:
   - id: admin-get-admin-feature-model-configs
     owner: admin
@@ -3164,6 +3164,74 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: integration-post-internal-automation-billing-charge-flat
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/automation/billing/charge-flat"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-automation-billing-flat-points
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/automation/billing/flat-points"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-automation-mail-html
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/automation/mail/html"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
+  - id: integration-post-internal-automation-mail-simple
+    owner: integration
+    old:
+      method: POST
+      path: "/internal/automation/mail/simple"
+    new:
+      method: POST
+      path: ""
+    clients:
+      web: not_applicable
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: no_v2_target
+    note: "协议端点 / 健康检查 / 非 /api 页面路由，不纳入 v2 业务 API。"
   - id: integration-post-internal-integration-blog-posts-postid-find-succeeded-csdn
     owner: integration
     old:

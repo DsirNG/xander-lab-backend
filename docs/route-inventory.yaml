@@ -7,7 +7,7 @@
 generated_by: scripts/migration/scan.py
 note: "Machine-owned key set. Do not hand-edit; re-run the scanner."
 counts:
-  total: 310
+  total: 314
   streams: 12
   websocket: 1
   sse: 11
@@ -3027,6 +3027,28 @@ routes:
     handler: "com.xander.lab.identity.api.AgentRecitationController#recordQuiz"
     file: apps/core-host/src/main/java/com/xander/lab/identity/api/AgentRecitationController.java
     line: 89
+  - id: integration-post-internal-automation-billing-charge-flat
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/automation/billing/charge-flat"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalAutomationBillingController#chargeFlat"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalAutomationBillingController.java
+    line: 48
+  - id: integration-post-internal-automation-billing-flat-points
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/automation/billing/flat-points"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalAutomationBillingController#flatPoints"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalAutomationBillingController.java
+    line: 38
   - id: automation-post-internal-automation-blog-plans-id-trigger
     logical_owner: automation
     deployment_unit: dinqor-content-automation
@@ -3038,6 +3060,28 @@ routes:
     handler: "com.xander.lab.automation.api.InternalBlogPlanTriggerController#trigger"
     file: apps/core-host/src/main/java/com/xander/lab/automation/api/InternalBlogPlanTriggerController.java
     line: 50
+  - id: integration-post-internal-automation-mail-html
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/automation/mail/html"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalAutomationMailController#sendHtml"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalAutomationMailController.java
+    line: 48
+  - id: integration-post-internal-automation-mail-simple
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: POST
+    path: "/internal/automation/mail/simple"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.internal.api.InternalAutomationMailController#sendSimple"
+    file: apps/core-host/src/main/java/com/xander/lab/integration/internal/api/InternalAutomationMailController.java
+    line: 40
   - id: publishing-post-internal-content-blog-posts
     logical_owner: publishing
     deployment_unit: dinqor-content-automation
