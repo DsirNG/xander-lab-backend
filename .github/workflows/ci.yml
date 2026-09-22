@@ -5,18 +5,26 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: backend-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    name: Build and test (Java 17)
+  quality:
+    name: Quality gates and tests (Java 17)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -25,17 +33,59 @@ jobs:
           java-version: "17"
           cache: maven
 
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Refresh migration inventories
+        run: python scripts/migration/scan.py
+
+      - name: Reject stale generated inventories
+        run: git diff --exit-code -- docs
+
+      - name: Run migration and architecture gates
+        run: python scripts/migration/ci_gates.py
+
       - name: Build and test
         run: mvn --batch-mode --no-transfer-progress verify
 
+  container:
+    name: Build core-host container
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Initialize public runtime submodule
+        shell: bash
+        run: |
+          git -c url."https://github.com/".insteadOf="git@github.com:" \
+            submodule update --init --recursive --depth 1
+
+      - name: Build core-host image
+        run: >-
+          docker build --pull
+          --build-arg APP_MODULE=apps/core-host
+          --build-arg APP_PORT=30002
+          --tag dinqor-ci:core-host .
+
   deploy:
     name: Deploy to production
-    needs: build
+    needs: [quality, container]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    environment:
+      name: production
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     concurrency:
       group: production-deploy
-      cancel-in-progress: true
+      cancel-in-progress: false
 
     steps:
       - name: Configure SSH
@@ -43,6 +93,9 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
+          set -euo pipefail
+          test -n "$DEPLOY_SSH_KEY" || { echo "DEPLOY_SSH_KEY is not configured" >&2; exit 1; }
+          test -n "$DEPLOY_KNOWN_HOSTS" || { echo "DEPLOY_KNOWN_HOSTS is not configured" >&2; exit 1; }
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
@@ -55,18 +108,33 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SHA: ${{ github.sha }}
         run: |
-          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=20 "$DEPLOY_USER@$DEPLOY_HOST" "
-            set -euo pipefail
-            cd '$DEPLOY_PATH'
-            git fetch --prune origin master
-            git checkout --force master
-            git reset --hard '${{ github.sha }}'
-            git submodule sync --recursive
-            if ! git -C plugins/img2threejs rev-parse --verify HEAD >/dev/null 2>&1; then
-              git submodule deinit -f -- plugins/img2threejs || true
-              rm -rf plugins/img2threejs .git/modules/plugins/img2threejs
-            fi
-            git submodule update --init --recursive --depth 1
-            bash scripts/deploy.sh
-          "
+          set -euo pipefail
+          test -n "$DEPLOY_HOST" || { echo "DEPLOY_HOST is not configured" >&2; exit 1; }
+          test -n "$DEPLOY_PATH" || { echo "DEPLOY_PATH is not configured" >&2; exit 1; }
+          test -n "$DEPLOY_USER" || { echo "DEPLOY_USER is not configured" >&2; exit 1; }
+
+          # Base64 keeps user-controlled path data out of the remote shell command line.
+          deploy_path_b64="$(printf '%s' "$DEPLOY_PATH" | base64 -w0)"
+          deploy_sha_b64="$(printf '%s' "$DEPLOY_SHA" | base64 -w0)"
+          ssh -i ~/.ssh/id_ed25519 \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ServerAliveInterval=30 \
+            -o ServerAliveCountMax=20 \
+            "$DEPLOY_USER@$DEPLOY_HOST" bash -s -- "$deploy_path_b64" "$deploy_sha_b64" <<'REMOTE'
+          set -euo pipefail
+          deploy_path="$(printf '%s' "$1" | base64 -d)"
+          deploy_sha="$(printf '%s' "$2" | base64 -d)"
+          cd -- "$deploy_path"
+          git fetch --prune origin master
+          git checkout --force master
+          git reset --hard "$deploy_sha"
+          git submodule sync --recursive
+          if ! git -C plugins/img2threejs rev-parse --verify HEAD >/dev/null 2>&1; then
+            git submodule deinit -f -- plugins/img2threejs || true
+          fi
+          git submodule update --init --recursive --depth 1
+          bash scripts/deploy.sh
+          REMOTE
