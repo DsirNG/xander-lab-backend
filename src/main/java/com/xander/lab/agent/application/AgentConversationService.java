@@ -14,6 +14,9 @@ import com.xander.lab.agent.domain.AgentMemory;
 import com.xander.lab.agent.domain.AgentMessage;
 import com.xander.lab.agent.domain.AgentPlanItem;
 import com.xander.lab.agent.domain.AgentAttachment;
+import com.xander.lab.agent.domain.RunBudget;
+import com.xander.lab.agent.domain.RunUsage;
+import com.xander.lab.agent.domain.AgentRun;
 import com.xander.lab.agent.domain.AgentStep;
 import com.xander.lab.agent.domain.AgentToolInvocation;
 import com.xander.lab.agent.infrastructure.AgentConversationMapper;
@@ -49,8 +52,7 @@ import java.util.function.Consumer;
  * 工具结果作为观察回灌，直到模型认为完成或步数预算耗尽。
  *
  * <p>这一层承载"像智能体而不像工作流"的几个关键点：完整工具表每轮都交给模型（不按关键词预筛）、
- * 任务计划与长期记忆作为会话状态注入每一步、收口前过一道确定性自检，
- * 自检不通过就把批评意见回灌让它自己纠偏。</p>
+ * 任务计划与长期记忆作为会话状态注入每一步、每一步的决策与工具调用都落成可恢复的日志。</p>
  */
 @Slf4j
 @Service
@@ -91,6 +93,7 @@ public class AgentConversationService {
     private final AgentTurnCoordinator turnCoordinator;
     private final AgentSkillCatalog skillCatalog;
     private final AgentCompactionService compactionService;
+    private final RunBudgetGuard runBudgetGuard;
 
     @Autowired
     public AgentConversationService(AgentConversationMapper conversationMapper, AgentMessageMapper messageMapper,
@@ -104,7 +107,8 @@ public class AgentConversationService {
                                      AgentRequestAssembler requestAssembler,
                                      AgentRunLifecycle runLifecycle, AgentEventProjector eventProjector,
                                      AgentTurnCoordinator turnCoordinator, AgentSkillCatalog skillCatalog,
-                                     AgentCompactionService compactionService) {
+                                     AgentCompactionService compactionService,
+                                     RunBudgetGuard runBudgetGuard) {
         this.conversationMapper = conversationMapper;
         this.messageMapper = messageMapper;
         this.modelClient = modelClient;
@@ -124,6 +128,7 @@ public class AgentConversationService {
         this.turnCoordinator = turnCoordinator;
         this.skillCatalog = skillCatalog;
         this.compactionService = compactionService;
+        this.runBudgetGuard = runBudgetGuard;
     }
 
     /** Compatibility constructor retained for focused loop tests and embedded callers. */
@@ -149,7 +154,11 @@ public class AgentConversationService {
                  AgentSkillCatalog.empty(),
                  new AgentCompactionService(modelClient, properties,
                          new AgentEventProjector(conversationMapper, messageMapper, eventService,
-                                 transactionTemplate)));
+                                 transactionTemplate)),
+                 // 兼容构造器走的是"没有执行日志"的旧路径，预算快照也就无处可存。
+                 // 传一个真实的 guard 而不是 null：配置里默认开启的 maxToolCalls 仍然要在这些
+                 // 测试路径上生效，否则这里测出来的行为和线上不是同一套。
+                 new RunBudgetGuard());
     }
 
     /**
@@ -194,8 +203,11 @@ public class AgentConversationService {
         String storedKind = answers.isPresent() ? "quiz_answer" : "message";
         return transactionTemplate.execute(status -> {
             long runVersion = runLifecycle.claim(conversationId, userId);
-            executionJournal.startRun(conversationId, userId, runVersion);
-            // 新一轮诉求开始：上一轮的计划已经收口或作废，留着只会污染这一轮的自检。
+            // 预算在这里**冻结**：折算成快照写进 agent_run.budget_json，之后整个 Run 只读它。
+            // 运行期改配置不该让一个跑了一半的 Run 突然换判定标准，否则"这次为什么超预算"无法复现。
+            executionJournal.startRun(conversationId, userId, runVersion,
+                    runBudgetGuard.budgetFrom(properties));
+            // 新一轮诉求开始：上一轮的计划已经收口或作废，留着会污染这一轮的提示词。
             planService.clear(conversationId, userId);
             saveMessage(conversationId, "user", storedKind, null, storedMessage,
                     serializeAttachments(attachments));
@@ -268,8 +280,13 @@ public class AgentConversationService {
         try {
             JsonNode arguments = objectMapper.readTree(invocation.getArgumentsJson());
             progress.checkCancellation();
+            // 副作用边界标记：放在取消检查之后，是为了"确实要发了"才标——若取消已经请求，
+            // 上面的 checkCancellation 会抛出，我们根本不会发，也就不该留下 DISPATCHED。
+            // 这条路径绕开了 AgentToolExecutionPipeline，所以管道里那一处标记覆盖不到它；
+            // 两处都标是必需的，漏掉任何一处，该路径上的崩溃都会被当成"没越过边界"而静默终结。
+            executionJournal.markEffectDispatched(invocation);
             JsonNode result = tool.execute(new AgentToolContext(userId, conversationId, runVersion,
-                    invocation.getInvocationId()), arguments, progress);
+                    invocation.getInvocationId(), invocation.getEffectId()), arguments, progress);
             progress.flushToolDelta();
             executionJournal.completeInvocation(invocation, result);
             saveActiveToolMessage(conversationId, userId, runVersion, "tool_result", invocation.getToolName(),
@@ -352,8 +369,25 @@ public class AgentConversationService {
         log.info("agent turn started conversation={} run={} toolCount={} skillCatalog={} memoryInjected={}",
                 conversationId, runVersion, allowedTools.size(), skillOffer.skills().size(),
                 !memoryContext.isEmpty());
-        int maxSteps = Math.max(1, properties.getMaxSteps());
+        // 预算从 Run 上读回来——claim 那一刻冻结的快照，不是现读配置。
+        // 运行期改配置不该让一个跑了一半的 Run 突然换判定标准，否则"这次为什么超预算"无法复现。
+        // 读不到快照（本迁移之前创建的 Run）才退回当前配置。
+        RunBudget budget = executionJournal.loadBudget(conversationId, runVersion)
+                .orElseGet(() -> runBudgetGuard.budgetFrom(properties));
+        int maxSteps = Math.max(1, budget.maxSteps());
         int nextStepNo = executionJournal.nextStepNo(conversationId, runVersion);
+        // 预算判定从 for 条件搬进循环体（见下方注释）。循环条件退出会把"预算耗尽"做成隐式终态：
+        // "为什么停"塌成一句文案，前端也拿不到结构化终态。
+        //
+        // 这里先处理其中最尖的那一种：审批恰好落在最后一步。那条调用已经被执行并落库
+        // （resumeApprovedInvocation），但 nextStepNo 已经越过 maxSteps，循环体一次都不进，
+        // 用户看到的是"步数已达上限"，而实际上他批准的操作已经执行完了。
+        // 所以"进入时就已超预算"且确实有一条已成功却没被模型看到的调用时，额外给一步收口。
+        // 自然耗尽（nextStepNo 仍在预算内）不命中这条，行为不变。
+        boolean enteredPastBudget = nextStepNo > maxSteps;
+        boolean needsClosingStep = enteredPastBudget
+                && executionJournal.hasSettledInvocationInLatestStep(conversationId, runVersion);
+        int lastAllowedStep = needsClosingStep ? nextStepNo : maxSteps;
         int failures = 0;
         JsonNode lastError = null;
         // 会话行在一步之内不会被别人改写；只有本轮的 plan_tasks 工具会动它，
@@ -364,13 +398,32 @@ public class AgentConversationService {
         executionJournal.usageBeforeStep(conversationId, runVersion, nextStepNo)
                 .ifPresent(carried -> usage.addPersisted(carried.usage(), carried.model()));
 
-        for (int step = nextStepNo; step <= maxSteps; step++) {
+        // for 的更新子句保留（而不是 while + 手动 step++）：循环体里有多处 continue，
+        // 那些 continue 依赖更新子句递增步号；换成 while 会让它们原地死循环。
+        // 条件子句留空、改由循环体顶部显式判定，是为了让"预算耗尽"成为一条能命名、
+        // 能断言、能单独打日志的出口，而不是循环条件的副作用。
+        for (int step = nextStepNo; ; step++) {
+            // 收口补步：审批落在最后一步时步数必然已越界，但那条已批准的调用确实执行完了。
+            // 不给模型一步把结果说清楚，用户会把"做完了"读成"没做"从而重发——
+            // 而重发是一条新的 invocation，下游幂等键对不上，会真的执行第二遍。
+            // 这一步因此豁免**步数**判定（其余维度照判），且只豁免一次。
+            boolean closingStep = needsClosingStep && step == nextStepNo;
+            // 检查点 1：步开始前。步数、工具调用数、活跃时长、token/金额都在这里判。
+            // 时长必须在"发起下一次远程调用之前"判——事后判只能止损，不能阻止。
+            //
+            // 步数以**循环自己的计数器**为准（`step - 1`），不取数据库的 max(step_no)：
+            // 两者正常一致，但循环计数器才是"已经尝试了几步"的定义，而库里那一列在
+            // "某一步没写全"时会偏小，而预算是用来限制的——偏小意味着允许超出。
+            RunUsage used = executionJournal.loadUsage(conversationId, runVersion).withSteps(step - 1);
+            RunBudgetGuard.Verdict verdict = runBudgetGuard.check(budget,
+                    closingStep ? used.withSteps(0) : used);
+            if (verdict.exhausted()) {
+                return finalizeBudgetExhausted(conversationId, userId, runVersion, usage,
+                        verdict.reason(), used, step, closingStep, listener);
+            }
             // 用户取消请求优先于模型调用，工具执行结束后下一轮即退出。
             if (runLifecycle.isCancellationRequested(conversationId, userId, runVersion)) {
-                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
-                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
-                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, runVersion, usage, listener);
+                return stopTurn(conversationId, userId, runVersion, usage, listener);
             }
             // 每一步重新读计划：智能体上一步可能刚改写过它，这是会话状态而不是一次性输入。
             // 但只有会写计划的工具改动过它才需要重新查库——否则整个 runLoop 每步都在
@@ -395,7 +448,7 @@ public class AgentConversationService {
                 // 技能正文，它得把那几条接回来，否则模型下一步照着的是一份被摘要过的规则。
                 AgentStepRequest request = requestAssembler.assemble(new AgentRequestAssemblyInput(
                         conversationId, userId, runVersion, step, compacted.messages(), plan, memoryContext,
-                        lastError, null, allowedTools, maxSteps - step + 1, deepThinking, skillOffer, history));
+                        lastError, allowedTools, lastAllowedStep - step + 1, deepThinking, skillOffer, history));
                 long modelStartedNanos = System.nanoTime();
                 AnswerProgress answerProgress = new AnswerProgress(
                         conversationId, userId, runVersion, listener,
@@ -412,18 +465,12 @@ public class AgentConversationService {
                         conversationId, runVersion, step,
                         elapsedMillis(modelStartedNanos), decision.path("done").asBoolean(false));
             } catch (CancellationException exception) {
-                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
-                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
-                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, runVersion, usage, listener);
+                return stopTurn(conversationId, userId, runVersion, usage, listener);
             } catch (RuntimeException exception) {
                 throw exception;
             }
             if (runLifecycle.isCancellationRequested(conversationId, userId, runVersion)) {
-                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
-                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
-                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, runVersion, usage, listener);
+                return stopTurn(conversationId, userId, runVersion, usage, listener);
             }
 
             // thought 是实时推给用户的一行进度，不是模型的内部推理；
@@ -465,6 +512,22 @@ public class AgentConversationService {
             }
 
             List<AgentToolCall> calls = actionPlan.calls();
+            // 检查点 2：工具批次执行前，按 calls.size() **预扣**。
+            //
+            // 预扣而不是后扣：后扣的话"余额判定"与"真实执行"之间存在窗口，一个批次可以合法地
+            // 带着 3 次余额执行 4 次调用，于是"上限 60 次"实际能跑到 63 次。宁可在边界上少跑
+            // 一次，也不能越界——闸门的价值就在于它是硬上界。
+            //
+            // 这一步不查库：直接复用检查点 1 那份 `used`。批次内部用量还没产生，
+            // 唯一的增量就是即将执行的调用条数。
+            if (!calls.isEmpty()) {
+                RunBudgetGuard.Verdict toolVerdict = runBudgetGuard.check(budget, used, calls.size());
+                if (toolVerdict.exhausted()) {
+                    return finalizeBudgetExhausted(conversationId, userId, runVersion, usage,
+                            toolVerdict.reason(), used.withToolCalls(used.toolCalls() + calls.size()),
+                            step, false, listener);
+                }
+            }
             List<ToolProgress> progresses = new ArrayList<>(calls.size());
             for (AgentToolCall call : calls) {
                 progresses.add(new ToolProgress(conversationId, userId, runVersion, call.toolName(), listener, usage));
@@ -551,7 +614,6 @@ public class AgentConversationService {
                 eventService.deliver(approvalEvent, listener);
                 return requireOwned(conversationId, userId);
             } catch (CancellationException exception) {
-                String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
                 for (int index = 0; index < calls.size(); index++) {
                     AgentToolCall call = calls.get(index);
                     ToolProgress progress = progresses.get(index);
@@ -573,9 +635,7 @@ public class AgentConversationService {
                                     .put("error", "已停止"), invocationId),
                             listener);
                 }
-                saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
-                appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
-                return finalizeReady(conversationId, userId, runVersion, usage, listener);
+                return stopTurn(conversationId, userId, runVersion, usage, listener);
             } catch (Exception e) {
                 log.error("agent tool execution failed conversationId={} userId={} runVersion={} phase=tool.execute tools={} exceptionType={} message={}",
                         conversationId, userId, runVersion,
@@ -610,12 +670,70 @@ public class AgentConversationService {
                 lastError = errorNode;
             }
         }
+    }
 
-        String exhausted = "这一步的推理步数已达上限，为避免资源消耗我先在这里暂停。"
-                + "你可以继续补充信息或换一个更具体的需求。";
+    /**
+     * 预算耗尽的显式出口。
+     *
+     * <p>它取代了原先"for 条件自然退出 + 循环后面一段文案"的隐式终态。显式化的收益是：
+     * 出口只有一处、能命名、能单独断言、能在日志里带上"到底哪一项耗尽"，前端也能拿到
+     * 一个结构化的终态而不是一条普通 answer。</p>
+     *
+     * <p><b>文案按耗尽项分开，不是按"预算"统一一句。</b>用户能处理的是"步数用完了，
+     * 继续说一句就行"，而不是"你超预算了"；把六种原因塌成一句话，用户唯一能做的就是重发，
+     * 而重发在"步数用完"下是对的、在"积分用完"下毫无用处。</p>
+     *
+     * <p>{@code closingStep} 为真时是"审批恰好落在最后一步"那一格：用户批准的那条调用
+     * <b>已经执行完了</b>，只是后续推理步数也用尽。说"步数已达上限"会让他以为操作没做，
+     * 于是重发一次——而那次重发是一条新的 invocation，下游幂等键对不上，会真的执行第二遍。</p>
+     */
+    private AgentConversation finalizeBudgetExhausted(Long conversationId, Long userId, long runVersion,
+                                                      UsageAccumulator usage, RunBudgetGuard.Reason reason,
+                                                      RunUsage used, int nextStep, boolean closingStep,
+                                                      Consumer<AgentEvent> listener) {
+        String exhausted = budgetMessage(reason, closingStep);
         saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, exhausted);
         appendActive(conversationId, userId, runVersion, "answer", exhausted, listener);
-        return finalizeReady(conversationId, userId, runVersion, usage, listener);
+        log.warn("agent budget exhausted conversation={} run={} reason={} nextStep={} steps={}"
+                        + " toolCalls={} tokens={} milliPoints={} activeMs={} closingStep={}",
+                conversationId, runVersion, reason, nextStep, used.steps(), used.toolCalls(),
+                used.totalTokens(), used.milliPoints(),
+                used.activeDuration() == null ? 0L : used.activeDuration().toMillis(), closingStep);
+        // 走 BUDGET_EXHAUSTED 而不是 COMPLETED：这一轮不是"做完了"，投影成 budget_exhausted
+        // 前端才能提示"因预算暂停、可以继续"。它不在 claim() 的拒绝名单里，用户直接说下一句就能接着走。
+        TerminalTransition terminal = runLifecycle.exhaustBudget(conversationId, userId, runVersion);
+        chargeTurnQuietly(conversationId, userId, runVersion, usage);
+        eventService.deliver(terminal.event(), listener);
+        return terminal.conversation();
+    }
+
+    /**
+     * 耗尽项 → 用户可读的一句话。
+     *
+     * <p>每一句都只说**用户下一步能做什么**，不解释内部机制：用户不需要知道有 maxSteps
+     * 这个东西，他需要知道"继续说一句就能接着走"。</p>
+     */
+    private static String budgetMessage(RunBudgetGuard.Reason reason, boolean closingStep) {
+        if (reason == RunBudgetGuard.Reason.MAX_STEPS) {
+            return closingStep
+                    ? "你批准的操作已经执行完成，但后续的推理步数也到上限了，我先在这里暂停。"
+                            + "你可以继续对话，让我基于已经执行的结果接着说明。"
+                    : "这一步的推理步数已达上限，为避免资源消耗我先在这里暂停。"
+                            + "你可以继续补充信息或换一个更具体的需求。";
+        }
+        return switch (reason) {
+            case MAX_TOOL_CALLS -> "本轮的工具调用次数已达上限，我先在这里暂停。"
+                    + "已完成的调用结果都还在，你可以继续对话让我接着处理。";
+            case MAX_ACTIVE_DURATION -> "本轮的执行时长已达上限，我先在这里暂停。"
+                    + "等待你确认的时间不计入这个时长，所以继续对话就能接着走。";
+            case MAX_TOTAL_TOKENS, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS -> "本轮消耗的模型用量已达上限，"
+                    + "我先在这里暂停。已完成的步骤都保留了，继续对话可以接着收口。";
+            case MAX_MILLI_POINTS -> "本轮消耗的积分已达上限，我先在这里暂停。"
+                    + "已完成的步骤都保留了，充值或继续对话后可以接着收口。";
+            // MAX_STEPS 在上面单独处理（它有两套文案）；这里兜底是防御性的，
+            // 新增枚举值时会编译不过，而不是静默走到一个空字符串。
+            case MAX_STEPS -> "本轮预算已用尽，我先在这里暂停。你可以继续对话让我接着处理。";
+        };
     }
 
     private JsonNode progressPayload(String tool, String invocationId, String message) {
@@ -651,6 +769,32 @@ public class AgentConversationService {
     }
 
     /**
+     * 用户请求停止的收口。
+     *
+     * <p>四个取消检查点（循环顶部、模型调用抛 {@link CancellationException}、模型调用返回后、
+     * 工具批次中）走同一段收口。以前它们各自复制四行、且都走 {@link #finalizeReady}——
+     * 于是"用户按了停止"在 {@code agent_run.status} 里被记成 {@code COMPLETED}，
+     * 与"模型正常做完"无法区分，审计时分不出这两种收口。</p>
+     *
+     * <p>投影上取消仍是 {@code ready}，所以前端契约不变：用户按完停止，下一步就是继续说话。</p>
+     */
+    private AgentConversation stopTurn(Long conversationId, Long userId, long runVersion,
+                                       UsageAccumulator usage, Consumer<AgentEvent> listener) {
+        String stopped = "好的，已停止当前任务。你可以继续说新的需求。";
+        saveActiveMessage(conversationId, userId, runVersion, "assistant", "answer", null, stopped);
+        appendActive(conversationId, userId, runVersion, "answer", stopped, listener);
+        return finalizeCancelled(conversationId, userId, runVersion, usage, listener);
+    }
+
+    private AgentConversation finalizeCancelled(Long conversationId, Long userId, long runVersion,
+                                                UsageAccumulator usage, Consumer<AgentEvent> onEvent) {
+        TerminalTransition terminal = runLifecycle.cancel(conversationId, userId, runVersion);
+        chargeTurnQuietly(conversationId, userId, runVersion, usage);
+        eventService.deliver(terminal.event(), onEvent);
+        return terminal.conversation();
+    }
+
+    /**
      * 这一轮的计费。
      *
      * <p>计费是"成功哨点"上的动作，不是成功的前提：模型已经答完、消息也已经落库，
@@ -678,6 +822,35 @@ public class AgentConversationService {
     /** 请求停止当前正在执行的一轮；会话空闲时幂等返回。 */
     public AgentConversation cancel(Long conversationId, Long userId) {
         return runLifecycle.requestCancellation(conversationId, userId);
+    }
+
+    /**
+     * 用户主动要求"继续"一个可恢复的执行。
+     *
+     * <p>这是 {@link #cancel} 的语义镜像：`cancel` 让一轮停下来，`resume` 让它接着走。
+     * 与 reaper 的自动恢复**共用同一个** {@code runLifecycle.resume()}，所以 R-1（同代次重入）/
+     * R-2（只有可恢复态能继续）/ R-3（复用 `intent_epoch`）三条规则只写一遍——
+     * 两条入口各写一套的话，"用户点继续"与"调度器重试"迟早对"什么算同一件事"产生分歧。</p>
+     *
+     * <p><b>本方法只改状态，不派活。</b>调用方必须紧接着把这一轮交回工作线程池（见
+     * {@code AgentConversationController#resume}）。只调它的话，会话会停在 {@code running}
+     * 而没有任何人在执行——用户看到"正在生成"却永远等不到结果，只能等 reaper 按租约超时再收一次。
+     * 那比不恢复更糟，所以这个职责分离在两端都写明了。</p>
+     *
+     * @return 恢复后的会话（状态已是 {@code running}），供前端直接刷新
+     * @throws AgentRunNotResumableException 当前执行不处于可恢复态，或执行记录不存在（HTTP 409）
+     */
+    public AgentConversation resume(Long conversationId, Long userId) {
+        AgentConversation conversation = requireOwned(conversationId, userId);
+        long runVersion = conversation.getRunVersion() == null ? 0L : conversation.getRunVersion();
+        // 端点上只有会话 id，而 resume() 要的是 run id，所以先按 (会话, 代次) 取当前执行记录。
+        // 取错的风险由两道守卫挡住：这里的组合有唯一键保证至多一行，而 resume() 内部还会再校验
+        // 一次"会话的 run_version 与这条 Run 一致"，所以不可能恢复到一个已被顶替的旧执行上。
+        AgentRun run = executionJournal.findCurrentRun(conversationId, runVersion)
+                .orElseThrow(() -> new AgentRunNotResumableException(conversationId, runVersion,
+                        "执行记录不存在"));
+        runLifecycle.resume(conversationId, userId, run.getId());
+        return requireOwned(conversationId, userId);
     }
 
     private AgentEvent markFailed(Long conversationId, Long userId, long runVersion, String errorMessage) {

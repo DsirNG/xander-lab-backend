@@ -65,7 +65,9 @@ public class BlogGenerationTool implements AgentTool {
         }
         BlogAgentTaskCreateRequest request = new BlogAgentTaskCreateRequest();
         request.setInput(input);
-        request.setClientRequestId(context.invocationId());
+        // 用逻辑副作用身份而不是 invocationId：模型重新发起同一个调用时，前者不变，
+        // 于是下游 UNIQUE (user_id, client_request_id) 命中，不会真的建出第二个任务。
+        request.setClientRequestId(context.idempotencyKey());
         var task = blogAgentService.create(context.userId(), request);
         onProgress.onProgress("收到，开始处理你的主题…");
         BlogAgentTaskVO result = blogAgentService.runStream(task.getId(), context.userId(), (event, data) -> {
@@ -82,8 +84,10 @@ public class BlogGenerationTool implements AgentTool {
 
     @Override
     public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
-        if (!StringUtils.hasText(context.invocationId())) return Optional.empty();
-        var task = blogAgentService.findReadyTaskByClientRequestId(context.userId(), context.invocationId());
+        // 必须用**当初写出去的那个键**去找，也就是 idempotencyKey()。用别的键会查不到任何东西，
+        // 而"查不到"在这里的含义是"远端确实没有"，于是这条 UNKNOWN 会被当成"没写成"。
+        if (!StringUtils.hasText(context.idempotencyKey())) return Optional.empty();
+        var task = blogAgentService.findReadyTaskByClientRequestId(context.userId(), context.idempotencyKey());
         return task == null ? Optional.empty() : Optional.of(outcome(task));
     }
 

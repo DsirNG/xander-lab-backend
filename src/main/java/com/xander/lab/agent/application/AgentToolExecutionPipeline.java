@@ -1,6 +1,7 @@
 package com.xander.lab.agent.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.xander.lab.agent.domain.AgentRun;
 import com.xander.lab.agent.domain.AgentStep;
 import com.xander.lab.agent.domain.AgentToolInvocation;
 import jakarta.annotation.PreDestroy;
@@ -40,18 +41,26 @@ public class AgentToolExecutionPipeline {
     private final AgentToolRegistry toolRegistry;
     private final AgentExecutionJournal executionJournal;
     private final AgentApprovalService approvalService;
+    /** 为 {@code null} 时本类不铸造副作用身份（聚焦测试与不支持副作用的部署）。 */
+    private final AgentEffectService effectService;
     private volatile ExecutorService batchExecutor;
 
     public AgentToolExecutionPipeline(AgentToolRegistry toolRegistry, AgentExecutionJournal executionJournal) {
-        this(toolRegistry, executionJournal, null);
+        this(toolRegistry, executionJournal, null, null);
+    }
+
+    public AgentToolExecutionPipeline(AgentToolRegistry toolRegistry, AgentExecutionJournal executionJournal,
+                                      AgentApprovalService approvalService) {
+        this(toolRegistry, executionJournal, approvalService, null);
     }
 
     @Autowired
     public AgentToolExecutionPipeline(AgentToolRegistry toolRegistry, AgentExecutionJournal executionJournal,
-                                      AgentApprovalService approvalService) {
+                                      AgentApprovalService approvalService, AgentEffectService effectService) {
         this.toolRegistry = toolRegistry;
         this.executionJournal = executionJournal;
         this.approvalService = approvalService;
+        this.effectService = effectService;
     }
 
     /** Compatibility factory for focused legacy loop tests without journal persistence. */
@@ -123,11 +132,21 @@ public class AgentToolExecutionPipeline {
             tools.add(tool);
         }
 
+        // 第 1.5 段：副作用身份要读 Run 的 intent_epoch，所以一批读一次而不是每个调用读一次。
+        // 只有批次里存在非只读工具时才读——纯只读批次不该为一件它不需要的事多一次数据库往返。
+        AgentRun run = null;
+        for (AgentTool tool : tools) {
+            if (!tool.readOnly()) {
+                run = executionJournal.findRun(step.getRunId()).orElse(null);
+                break;
+            }
+        }
+
         // 第 2 段：按序开单。
         List<AgentToolInvocation> invocations = new ArrayList<>(calls.size());
-        List<String> invocationIds = new ArrayList<>(calls.size());
         for (int index = 0; index < calls.size(); index++) {
             AgentToolCall call = calls.get(index);
+            AgentTool tool = tools.get(index);
             progressListeners.get(index).checkCancellation();
             String invocationId = UUID.randomUUID().toString();
             // 身份必须在这里就交给监听器，而不是等到执行：工具一开跑就可能推进度，
@@ -137,10 +156,15 @@ public class AgentToolExecutionPipeline {
                     executionJournal.startInvocation(step, invocationId, call.toolName(), call.args());
             onStarted.accept(call, invocationId);
 
+            // 副作用身份也在执行之前落库：工具要拿它当下游幂等键，而"这一次调用属于哪个业务动作"
+            // 必须在写请求发出之前就已经是一个持久事实，否则崩溃后没人能回答"它到底写了没有"。
+            String effectId = resolveEffect(run, tool, step, call, userId, conversationId);
+            if (effectId != null) executionJournal.attachEffect(invocation, effectId);
+
             // 单个调用的审批就在开单之后停下，主循环接住这个异常去挂起整轮。
             // 这里挂起不会留下"半批已开单"：多调用批次含审批的情形在第 1 段已经整批拒绝，
             // 所以走到这一步的批次必然只有这一个调用。
-            var approvalReason = tools.get(index).approvalReason(call.args());
+            var approvalReason = tool.approvalReason(call.args());
             if (approvalReason.isPresent()) {
                 if (approvalService == null) {
                     throw new IllegalStateException("当前执行环境未配置工具审批服务");
@@ -152,14 +176,13 @@ public class AgentToolExecutionPipeline {
             }
 
             invocations.add(invocation);
-            invocationIds.add(invocationId);
         }
 
         // 第 3 段：执行。并发只在调用方判定"整批只读且无审批"时才会传 true。
         List<Outcome> outcomes = concurrent
-                ? runConcurrently(calls, tools, userId, conversationId, runVersion, invocationIds,
+                ? runConcurrently(calls, tools, userId, conversationId, runVersion, invocations,
                         progressListeners, emissionLock)
-                : runSequentially(calls, tools, userId, conversationId, runVersion, invocationIds,
+                : runSequentially(calls, tools, userId, conversationId, runVersion, invocations,
                         progressListeners, emissionLock);
 
         // 第 4 段：按序收口。取消留到最后再抛，保证每条 invocation 都已结算。
@@ -168,7 +191,7 @@ public class AgentToolExecutionPipeline {
         for (int index = 0; index < calls.size(); index++) {
             AgentToolCall call = calls.get(index);
             AgentToolInvocation invocation = invocations.get(index);
-            String invocationId = invocationIds.get(index);
+            String invocationId = invocation.getInvocationId();
             Outcome outcome = outcomes.get(index);
             if (outcome.failure() instanceof CancellationException cancelled) {
                 executionJournal.cancelInvocation(invocation);
@@ -196,12 +219,12 @@ public class AgentToolExecutionPipeline {
 
     private List<Outcome> runSequentially(List<AgentToolCall> calls, List<AgentTool> tools, Long userId,
                                           Long conversationId, long runVersion,
-                                          List<String> invocationIds,
+                                          List<AgentToolInvocation> invocations,
                                           List<AgentTool.ProgressListener> progressListeners, Object lock) {
         List<Outcome> outcomes = new ArrayList<>(calls.size());
         for (int index = 0; index < calls.size(); index++) {
             outcomes.add(invoke(calls.get(index), tools.get(index), userId, conversationId, runVersion,
-                    invocationIds.get(index),
+                    invocations.get(index),
                     new SerializedProgress(progressListeners.get(index), lock)));
         }
         return outcomes;
@@ -209,13 +232,13 @@ public class AgentToolExecutionPipeline {
 
     private List<Outcome> runConcurrently(List<AgentToolCall> calls, List<AgentTool> tools, Long userId,
                                           Long conversationId, long runVersion,
-                                          List<String> invocationIds,
+                                          List<AgentToolInvocation> invocations,
                                           List<AgentTool.ProgressListener> progressListeners, Object lock) {
         List<Future<Outcome>> futures = new ArrayList<>(calls.size());
         for (int index = 0; index < calls.size(); index++) {
             final int slot = index;
             futures.add(batchExecutor().submit(() -> invoke(calls.get(slot), tools.get(slot), userId, conversationId,
-                    runVersion, invocationIds.get(slot),
+                    runVersion, invocations.get(slot),
                     new SerializedProgress(progressListeners.get(slot), lock))));
         }
         List<Outcome> outcomes = new ArrayList<>(calls.size());
@@ -234,18 +257,55 @@ public class AgentToolExecutionPipeline {
         return outcomes;
     }
 
-    /** 跑一个工具体，把异常收敛成 {@link Outcome}，绝不向调用方抛出。 */
+    /**
+     * 跑一个工具体，把异常收敛成 {@link Outcome}，绝不向调用方抛出。
+     *
+     * <p><b>{@code markEffectDispatched} 必须紧贴在 {@code tool.execute} 之前</b>——这是
+     * 副作用边界上唯一真正的"从这一刻起可能已在远端生效"的时刻。标记写在发送之前，
+     * 崩在两者之间只会留下一个假 {@code DISPATCHED}（多一次无谓对账，安全方向）；
+     * 反过来写则会漏掉一次真实写入（要命方向）。</p>
+     *
+     * <p>这里是两个执行点之一；另一个是审批恢复路径
+     * （{@code AgentConversationService#resumeApprovedInvocation}），它直接执行那条已批准的
+     * 调用、**绕开了本管道**，所以那边必须自己标一次。少标一处的后果只在崩溃时才显形：
+     * 那条路径上的写入会被崩溃收口当成"没越过边界"而静默终结。</p>
+     *
+     * <p>标记放在 {@code try} 内是有意的：它一旦抛（例如库不可用），说明这次副作用无法被
+     * 持久记录，此时**不该**再执行工具——宁可报一次失败，也不做一个记不下来的写。
+     * 同时这也守住了本方法"绝不抛出"的契约，并发批次里的异常不会从 {@code Future} 漏出去
+     * 打断整批。</p>
+     */
     private Outcome invoke(AgentToolCall call, AgentTool tool, Long userId, Long conversationId, long runVersion,
-                           String invocationId, AgentTool.ProgressListener progress) {
+                           AgentToolInvocation invocation, AgentTool.ProgressListener progress) {
         try {
+            executionJournal.markEffectDispatched(invocation);
             JsonNode result = tool.execute(
-                    new AgentToolContext(userId, conversationId, runVersion, invocationId), call.args(), progress);
+                    new AgentToolContext(userId, conversationId, runVersion,
+                            invocation.getInvocationId(), invocation.getEffectId()),
+                    call.args(), progress);
             return new Outcome(result, null);
         } catch (CancellationException exception) {
             return Outcome.cancelled();
         } catch (Exception exception) {
             return new Outcome(null, exception);
         }
+    }
+
+    /**
+     * 解析这次调用所属的逻辑副作用。
+     *
+     * <p>只读工具**不建 Effect**——这是 {@link AgentTool#readOnly()} 的第二个、也是更重要的用途：
+     * 它原本只表示"并发安全"，现在同时回答"这次调用要不要有业务幂等身份"。两者是同一个事实的
+     * 两种说法（只读就没有副作用，也就没有需要幂等的动作）。</p>
+     *
+     * <p>返回 {@code null} 表示这次调用没有副作用身份（只读、或 Run 迁移前没有 {@code intent_epoch}）。
+     * 那种情况下工具会退回用 {@code invocationId} 做幂等键，也就是 B6 之前的行为。</p>
+     */
+    private String resolveEffect(AgentRun run, AgentTool tool, AgentStep step, AgentToolCall call,
+                                 Long userId, Long conversationId) {
+        if (effectService == null || run == null || tool.readOnly()) return null;
+        int stepNo = step.getStepNo() == null ? 0 : step.getStepNo();
+        return effectService.resolveEffect(userId, conversationId, run, stepNo, call.toolName(), call.args());
     }
 
     /**

@@ -68,8 +68,12 @@ public class AgentToolInvocationReconciler {
         }
         try {
             JsonNode arguments = objectMapper.readTree(invocation.getArgumentsJson());
+            // 对账必须用**当初写出去的那个键**去找远端记录，也就是 effectId。
+            // 用 invocationId 会找不到任何东西——那个键只有第一次物理调用用过，而这一行恰恰是
+            // "调用断了、结果未知"的那一条，它可能已经被重试过若干次。
             Optional<JsonNode> result = tool.reconcile(new AgentToolContext(
-                    run.getUserId(), run.getConversationId(), run.getRunVersion(), invocation.getInvocationId()),
+                    run.getUserId(), run.getConversationId(), run.getRunVersion(),
+                    invocation.getInvocationId(), invocation.getEffectId()),
                     arguments);
             result.ifPresent(value -> executionJournal.reconcileInvocation(invocation, value));
         } catch (Exception exception) {

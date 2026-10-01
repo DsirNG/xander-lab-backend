@@ -71,6 +71,43 @@ public class BuiltinAgentSkills {
                 "当前是计划或提醒任务：明确时间、时区和目标；创建或修改计划属于持久化副作用。");
     }
 
+    @Bean
+    AgentSkill visualContentSkill() {
+        return skill("visual-content",
+                "生成或完善配图、封面和知识视觉内容的做法：先确认用途、受众、构图和文字，再决定生成图片还是交付可编辑素材。"
+                        + "用户要配图、封面、插图或视觉化表达时读它。",
+                Set.of("image_generate", "image_resend", "query_knowledge", "create_knowledge", "emit_artifact"),
+                "当前是视觉内容任务：先确认图片用于封面、文章插图还是独立素材，保留用户要求的主体、风格、构图和文字。"
+                        + "生成图片时把关键要求写进 prompt；生成后说明素材已经保存的位置。"
+                        + "如果用户需要可继续编辑的图表、交互页面或多文件示例，使用 emit_artifact 交付完整文件；"
+                        + "简单问答或一段短代码不要为了形式调用交付工具。"
+                        + "不要把图片生成能力承诺成已启用的外部服务，先根据工具结果报告成功或失败。");
+    }
+
+    @Bean
+    AgentSkill imagegenSkill() {
+        return skill("imagegen",
+                "使用图像生成能力创建或编辑项目图片；需要新图片、局部编辑、透明背景或参考图时读取。",
+                Set.of("image_generate", "image_resend"),
+                "Use the image generation tool when the user asks to make or edit a raster image for the project. "
+                        + "Preserve the requested subject, composition, text, and edit invariants. "
+                        + "Inspect the result before reporting it and save project-bound assets in the project workspace. "
+                        + "Do not replace existing assets unless the user explicitly requests replacement.");
+    }
+
+    @Bean
+    AgentSkill interactiveArtifactSkill() {
+        return skill("interactive-artifact",
+                "制作可运行的交互式图表、演示页面或数据探索素材的做法：先确定输入、交互和交付边界，再交付完整文件。"
+                        + "用户要可视化、交互演示、数据探索器或可下载网页时读它。",
+                Set.of("query_knowledge", "query_posts", "emit_artifact"),
+                "当前是交互式交付任务：先明确数据来源、主要观察目标和需要的交互；"
+                        + "能用现有数据就不要编造事实，数据不足时明确标注示例数据。"
+                        + "交付时给出可直接运行的完整文件、入口和运行提示；文件之间有依赖时一起交付。"
+                        + "保持键盘可用、文本可读和移动端基本可用。"
+                        + "用户只要解释概念或查看一个短例子时，直接在回复中回答，不要创建交付卡。");
+    }
+
     private AgentSkill skill(String id, String description, Set<String> tools, String instructions) {
         return new DefaultSkill(id, "1", description, tools, instructions);
     }

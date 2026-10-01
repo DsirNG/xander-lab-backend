@@ -659,8 +659,10 @@ class AgentConversationServiceTest {
         // 同一份负载既落库也进流，并且入口自动落在能直接打开的 html 上。
         assertThat(card.get()).contains("server.js").contains("public/index.html")
                 .contains("\"entry\":\"public/index.html\"");
-        // 已经交付过了，收口时不必再被自检拦一轮。
+        // 交付卡已经落库，这一轮到此为止：恰好两次决策（交付 + 收口），不再有额外的自检回合。
         verify(modelClient, org.mockito.Mockito.times(2)).decideNextStepStream(any(), any(), any(), any());
+        // 自检机制已退役（max-reflections 与 critique 参数链一并删除），这条断言现在恒成立；
+        // 保留它是为了在有人重新引入"额外一轮"时立刻失败——真正兜底的是上面的 times(2)。
         verify(messageMapper, org.mockito.Mockito.never()).insertForActiveRun(
                 argThatMessage("assistant", "reflection", null), eq(42L), eq(1L));
     }
@@ -998,7 +1000,7 @@ class AgentConversationServiceTest {
     }
 
     @Test
-    void aToolFailureDoesNotCauseAnAutomaticCritiqueRound() {
+    void aToolFailureIsFedBackAndTheTurnStillEndsWithAnAnswer() {
         stubTransactions();
         ObjectNode failing = decisionNode(false, "调用工具", "failing_tool", null);
         ObjectNode hides = decisionNode(true, "", null, null);
@@ -1239,6 +1241,9 @@ class AgentConversationServiceTest {
     void leaseSchedulerRejectionFailsTheClaimedRunBeforeRemoteWork() {
         stubTransactions();
         when(conversationMapper.update(any(), any())).thenReturn(1);
+        // 终态迁移现在会先读一次会话（见 AgentRunLifecycle.terminalTransition）：它要把投影后的
+        // 会话对象返回给调用方，而不是凭空拼一个只有状态的壳。生产路径上这一行必然存在。
+        when(conversationMapper.selectById(7L)).thenReturn(conversation("running"));
         org.mockito.Mockito.doThrow(new java.util.concurrent.RejectedExecutionException("shutdown"))
                 .when(agentLeaseRenewer).scheduleAtFixedRate(
                         any(Runnable.class), any(Long.class), any(Long.class), any());
@@ -1525,7 +1530,8 @@ class AgentConversationServiceTest {
                 memoryService, quizService, journal,
                 AgentRequestAssembler.legacy(approvalRegistry, properties, planService, quizService, objectMapper),
                 lifecycle, projector, coordinator, AgentSkillCatalog.empty(),
-                new AgentCompactionService(modelClient, properties, projector));
+                new AgentCompactionService(modelClient, properties, projector),
+                new RunBudgetGuard());
     }
 
     private ObjectNode decisionNode(boolean done, String thought, String tool, String input) {

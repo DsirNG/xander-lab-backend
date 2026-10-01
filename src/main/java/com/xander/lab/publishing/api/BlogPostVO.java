@@ -75,6 +75,9 @@ public class BlogPostVO {
     /** Whether this post has a successful Juejin publication record. */
     private Boolean juejinSynced;
 
+    /** Whether this post has a successful WeChat official-account draft record. */
+    private Boolean wechatSynced;
+
     /**
      * 将 tagsRaw 拆分为 tags 列表
      * 在 Service 层调用

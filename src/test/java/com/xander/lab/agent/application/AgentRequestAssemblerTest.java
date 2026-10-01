@@ -44,7 +44,7 @@ class AgentRequestAssemblerTest {
 
         AgentStepRequest request = assembler.assemble(new AgentRequestAssemblyInput(
                 7L, 42L, 3L, 2, messages, List.of(new AgentPlanItem("收集资料", "PENDING", "")),
-                "用户喜欢简洁答案", null, null, Set.of("publish_post", "query_posts"), 4, false));
+                "用户喜欢简洁答案", null, Set.of("publish_post", "query_posts"), 4, false));
 
         assertThat(request.context()).contains("private draft request").doesNotContain("first message outside window");
         assertThat(request.attachments()).extracting(AgentAttachment::url)
@@ -70,7 +70,7 @@ class AgentRequestAssemblerTest {
 
         AgentStepRequest request = assembler.assemble(new AgentRequestAssemblyInput(
                 7L, 42L, 3L, 1, List.of(message(1L, "user", "message", "Explain this in English", List.of())),
-                List.of(), "", null, null, Set.of("query_posts"), 4, false));
+                List.of(), "", null, Set.of("query_posts"), 4, false));
 
         assertThat(request.context())
                 .contains("使用用户当前诉求所使用的自然语言回复")
@@ -97,7 +97,7 @@ class AgentRequestAssemblerTest {
         String context = assembler.assemble(new AgentRequestAssemblyInput(
                 7L, 42L, 3L, 2, messages, List.of(new AgentPlanItem("收集资料", "PENDING", "")),
                 "用户喜欢简洁答案", JsonNodeFactory.instance.objectNode().put("error", "超时"),
-                "结论缺少工具结果支撑", Set.of("query_posts"), 4, false)).context();
+                Set.of("query_posts"), 4, false)).context();
 
         assertThat(context.indexOf("帮我整理这批笔记"))
                 .isLessThan(context.indexOf("用户喜欢简洁答案"));
@@ -105,8 +105,9 @@ class AgentRequestAssemblerTest {
                 .isLessThan(context.indexOf("1. [PENDING] 收集资料"));
         assertThat(context.indexOf("1. [PENDING] 收集资料"))
                 .isLessThan(context.indexOf("【最近一次工具失败】"));
-        assertThat(context.indexOf("【最近一次工具失败】"))
-                .isLessThan(context.indexOf("【自检结果】"));
+        // 这里曾经还断言"【自检结果】排在失败回灌之后"。自检机制已退役
+        // （max-reflections 与 critique 参数链一并删除），这段易变状态里只剩记忆、计划与失败回灌。
+        assertThat(context).doesNotContain("【自检结果】");
     }
 
     /** 同一轮里改写任务计划，不应该动到它前面那一大段对话记录的字节。 */
@@ -236,7 +237,7 @@ class AgentRequestAssemblerTest {
         AgentMessage latest = message(10L, "user", "message", "继续", List.of());
 
         AgentStepRequest request = assembler.assemble(new AgentRequestAssemblyInput(
-                7L, 42L, 3L, 2, List.of(checkpoint, latest), List.of(), "", null, null,
+                7L, 42L, 3L, 2, List.of(checkpoint, latest), List.of(), "", null,
                 Set.of("query_posts"), 4, false, null, List.of(loaded, checkpoint, latest)));
 
         assertThat(request.context()).contains(body).contains("检查点：目标是复盘上周");
@@ -286,7 +287,7 @@ class AgentRequestAssemblerTest {
 
         AgentStepRequest request = assembler.assemble(new AgentRequestAssemblyInput(
                 7L, 42L, 3L, 2, List.of(message(1L, "user", "message", "帮我写一篇博客", List.of())),
-                List.of(), "", null, null, Set.of("query_posts"), 4, false, offer));
+                List.of(), "", null, Set.of("query_posts"), 4, false, offer));
 
         assertThat(request.toolDescriptions()).contains("<available_skills>").contains("blog-writing");
         assertThat(request.context()).doesNotContain("<available_skills>");
@@ -338,7 +339,7 @@ class AgentRequestAssemblerTest {
         List<AgentPlanItem> plan = planTitle == null ? List.of()
                 : List.of(new AgentPlanItem(planTitle, planStatus, ""));
         return new AgentRequestAssemblyInput(7L, 42L, 3L, 2, messages, plan,
-                "用户喜欢简洁答案", null, null, Set.of("query_posts"), 4, false);
+                "用户喜欢简洁答案", null, Set.of("query_posts"), 4, false);
     }
 
     private AgentMessage message(Long id, String role, String kind, String content,

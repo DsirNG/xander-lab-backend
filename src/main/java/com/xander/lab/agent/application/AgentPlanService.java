@@ -91,7 +91,7 @@ public class AgentPlanService {
         return builder.toString();
     }
 
-    /** 计划中尚未收口的步骤，反思门禁用它判断"是否真的做完了"。 */
+    /** 计划中尚未收口的步骤，{@code plan_tasks} 用它给模型"下一步做哪个"的提示。 */
     public List<AgentPlanItem> unfinished(List<AgentPlanItem> items) {
         return items.stream().filter(item -> !item.settled()).toList();
     }

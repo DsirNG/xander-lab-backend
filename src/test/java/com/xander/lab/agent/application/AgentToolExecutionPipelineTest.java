@@ -2,6 +2,7 @@ package com.xander.lab.agent.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.xander.lab.agent.domain.AgentRun;
 import com.xander.lab.agent.domain.AgentStep;
 import com.xander.lab.agent.domain.AgentToolInvocation;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -379,6 +381,294 @@ class AgentToolExecutionPipelineTest {
         verify(journal, never()).markInvocationUnknown(any(), any());
     }
 
+    // ---- 副作用身份（Effect）接线 ----
+
+    /**
+     * 只读工具不建 Effect，幂等键退回 {@code invocationId}。
+     *
+     * <p>{@code readOnly()} 的第二个、也是更重要的用途就在这里：它原本只表示"并发安全"，
+     * 现在同时回答"这次调用要不要有业务幂等身份"。两者是同一个事实的两种说法——
+     * 只读就没有副作用，也就没有需要幂等的动作。若不按它分流，每次 {@code query_posts}
+     * 都会铸一个 Effect，而那个键永远没有下游在等它。</p>
+     */
+    @Test
+    void aReadOnlyToolGetsNoEffectAndKeysOnItsInvocationId() {
+        AtomicReference<AgentToolContext> seen = new AtomicReference<>();
+        AgentTool tool = recordingTool("query_posts", true, seen);
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        when(journal.startInvocation(any(), any(), any(), any())).thenReturn(invocation());
+        AgentEffectService effects = mock(AgentEffectService.class);
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(
+                new AgentToolRegistry(List.of(tool)), journal, null, effects);
+
+        executeOne(pipeline, Set.of("query_posts"), "query_posts", JsonNodeFactory.instance.objectNode());
+
+        verify(effects, never()).resolveEffect(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(),
+                any(), any());
+        verify(journal, never()).attachEffect(any(), any());
+        assertThat(seen.get().hasEffect()).isFalse();
+        assertThat(seen.get().idempotencyKey()).isEqualTo(seen.get().invocationId());
+    }
+
+    /**
+     * 写工具拿到 Effect，并且**下游幂等键取的是 effectId 而不是 invocationId**。
+     *
+     * <p>这正是 B6 要修的那件事：{@code invocationId} 每次调用都是新 UUID，模型看到 {@code cancelled}
+     * 后重新发起同一个调用会带一个新键，下游 {@code UNIQUE (user_id, client_request_id)} 不命中，
+     * 于是真会执行第二次。{@code effectId} 跨多次调用不变，重试因此被下游认成同一件事。</p>
+     */
+    @Test
+    void aWriteToolKeysItsDownstreamCallOnTheEffectNotTheInvocation() {
+        AtomicReference<AgentToolContext> seen = new AtomicReference<>();
+        AgentTool tool = recordingTool("publish_post", false, seen);
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        AgentToolInvocation invocation = invocation();
+        when(journal.startInvocation(any(), any(), any(), any())).thenReturn(invocation);
+        stubAttachEffectSyncingMemory(journal);
+        AgentEffectService effects = mock(AgentEffectService.class);
+        AgentRun run = runWithEpoch();
+        when(journal.findRun(any())).thenReturn(java.util.Optional.of(run));
+        when(effects.resolveEffect(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any(), any()))
+                .thenReturn("effect-1");
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(
+                new AgentToolRegistry(List.of(tool)), journal, null, effects);
+
+        executeOne(pipeline, Set.of("publish_post"), "publish_post", JsonNodeFactory.instance.objectNode());
+
+        verify(journal).attachEffect(invocation, "effect-1");
+        assertThat(seen.get().hasEffect()).isTrue();
+        assertThat(seen.get().effectId()).isEqualTo("effect-1");
+        assertThat(seen.get().idempotencyKey()).isEqualTo("effect-1");
+        // 两个身份没有被合并：effect 是下游幂等键，invocation 仍是日志里的配对键。
+        assertThat(seen.get().invocationId()).isNotEqualTo("effect-1");
+    }
+
+    /**
+     * Effect 必须在工具开跑**之前**就已经是持久事实。
+     *
+     * <p>反过来的话，崩溃窗口里没人能回答"它到底写了没有"——下游可能已经按这个键写了，
+     * 而本地还没有任何记录提到过这个键。所以这里断的是时序，不是"有没有调用"。</p>
+     */
+    @Test
+    void theEffectIsAttachedBeforeTheToolRuns() {
+        AtomicReference<Boolean> attachedWhenExecuting = new AtomicReference<>();
+        java.util.concurrent.atomic.AtomicBoolean attached = new java.util.concurrent.atomic.AtomicBoolean();
+        AgentTool tool = new AgentTool() {
+            @Override public String name() { return "publish_post"; }
+            @Override public String description() { return "publish"; }
+            @Override public boolean readOnly() { return false; }
+            @Override public JsonNode parametersSchema() { return JsonNodeFactory.instance.objectNode(); }
+            @Override public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+                attachedWhenExecuting.set(attached.get());
+                return JsonNodeFactory.instance.objectNode().put("ok", true);
+            }
+        };
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        when(journal.startInvocation(any(), any(), any(), any())).thenReturn(invocation());
+        org.mockito.Mockito.doAnswer(invocationOnMock -> {
+            attached.set(true);
+            return null;
+        }).when(journal).attachEffect(any(), any());
+        AgentEffectService effects = mock(AgentEffectService.class);
+        when(journal.findRun(any())).thenReturn(java.util.Optional.of(runWithEpoch()));
+        when(effects.resolveEffect(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any(), any()))
+                .thenReturn("effect-1");
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(
+                new AgentToolRegistry(List.of(tool)), journal, null, effects);
+
+        executeOne(pipeline, Set.of("publish_post"), "publish_post", JsonNodeFactory.instance.objectNode());
+
+        assertThat(attachedWhenExecuting.get()).isTrue();
+    }
+
+    /**
+     * 副作用边界标记必须写在把请求交给工具**之前**。
+     *
+     * <p>顺序不能反：崩在"标记"与"发送"之间只会留下一个假 {@code DISPATCHED}（多一次无谓对账，
+     * 安全方向）；反过来则会漏掉一次真实写入——那条写入会被崩溃收口当成"没越过边界"而静默终结，
+     * 用户重发就是第二次写（要命方向）。所以这里断的是时序，不是"有没有调用"。</p>
+     *
+     * <p>这是两个执行点之一；审批恢复那条路绕开了本管道，由
+     * {@code AgentConversationServiceTest} 单独守。</p>
+     */
+    @Test
+    void theDispatchMarkIsWrittenBeforeTheToolRuns() {
+        java.util.concurrent.atomic.AtomicBoolean dispatched = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicBoolean dispatchedWhenExecuting =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        AgentTool tool = new AgentTool() {
+            @Override public String name() { return "publish_post"; }
+            @Override public String description() { return "publish"; }
+            @Override public boolean readOnly() { return false; }
+            @Override public JsonNode parametersSchema() { return JsonNodeFactory.instance.objectNode(); }
+            @Override public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+                dispatchedWhenExecuting.set(dispatched.get());
+                return JsonNodeFactory.instance.objectNode().put("ok", true);
+            }
+        };
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        AgentToolInvocation invocation = invocation();
+        when(journal.startInvocation(any(), any(), any(), any())).thenReturn(invocation);
+        org.mockito.Mockito.doAnswer(ignored -> {
+            dispatched.set(true);
+            return null;
+        }).when(journal).markEffectDispatched(any());
+        AgentEffectService effects = mock(AgentEffectService.class);
+        when(journal.findRun(any())).thenReturn(java.util.Optional.of(runWithEpoch()));
+        when(effects.resolveEffect(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any(), any()))
+                .thenReturn("effect-1");
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(
+                new AgentToolRegistry(List.of(tool)), journal, null, effects);
+
+        executeOne(pipeline, Set.of("publish_post"), "publish_post", JsonNodeFactory.instance.objectNode());
+
+        assertThat(dispatchedWhenExecuting.get()).isTrue();
+        verify(journal).markEffectDispatched(invocation);
+    }
+
+    /**
+     * 迁移前的 Run 没有周期标识，写工具退回 {@code invocationId}。
+     *
+     * <p>退回是刻意的：没有周期就界不定"同一件事"的范围，凭猜测编一个会把两件不同的事合并。
+     * 退回虽然恢复了"重试带新键"的老问题，但那是**已知**的、而且只影响迁移前就存在的那些 Run；
+     * 猜错周期则是把用户的两个动作合成一个，更难发现。</p>
+     */
+    @Test
+    void aWriteToolInARunWithoutAnEpochFallsBackToItsInvocationId() {
+        AtomicReference<AgentToolContext> seen = new AtomicReference<>();
+        AgentTool tool = recordingTool("publish_post", false, seen);
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        when(journal.startInvocation(any(), any(), any(), any())).thenReturn(invocation());
+        AgentEffectService effects = mock(AgentEffectService.class);
+        AgentRun run = new AgentRun();
+        run.setId(17L);
+        run.setIntentEpoch(null);
+        when(journal.findRun(any())).thenReturn(java.util.Optional.of(run));
+        when(effects.resolveEffect(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any(), any()))
+                .thenReturn(null);
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(
+                new AgentToolRegistry(List.of(tool)), journal, null, effects);
+
+        executeOne(pipeline, Set.of("publish_post"), "publish_post", JsonNodeFactory.instance.objectNode());
+
+        verify(journal, never()).attachEffect(any(), any());
+        assertThat(seen.get().hasEffect()).isFalse();
+        assertThat(seen.get().idempotencyKey()).isEqualTo(seen.get().invocationId());
+    }
+
+    /**
+     * 一批只读调用**一次都不读 Run**。
+     *
+     * <p>纯只读批次不需要周期标识，为一件它用不上的事多一次数据库往返是白花的。这条同时是
+     * "第 1.5 段为什么放在整批而不是每个调用"的守卫。</p>
+     */
+    @Test
+    void aReadOnlyBatchNeverReadsTheRun() {
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        AgentToolExecutionPipeline pipeline =
+                batchPipeline(List.of("query_knowledge", "query_posts"), null, journal);
+
+        pipeline.executeBatch(new AgentStep(), 42L, 7L, 3L,
+                Set.of("query_knowledge", "query_posts"),
+                List.of(call("query_knowledge"), call("query_posts")),
+                List.of(noop(), noop()), (call, invocationId) -> { }, false);
+
+        verify(journal, never()).findRun(any());
+    }
+
+    /**
+     * 一批写调用只读**一次** Run，而不是每个调用读一次。
+     *
+     * <p>身份解析要读 {@code intent_epoch}，而同一批里的所有调用属于同一个 Run——每个调用各读一次
+     * 是同一行数据读 N 遍。这个用例钉住那个优化没有被后来的改动悄悄退回去。</p>
+     */
+    @Test
+    void aWriteBatchReadsTheRunOnlyOnce() {
+        AtomicReference<AgentToolContext> first = new AtomicReference<>();
+        AtomicReference<AgentToolContext> second = new AtomicReference<>();
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        when(journal.startInvocation(any(), any(), any(), any())).thenReturn(invocation());
+        AgentEffectService effects = mock(AgentEffectService.class);
+        when(journal.findRun(any())).thenReturn(java.util.Optional.of(runWithEpoch()));
+        when(effects.resolveEffect(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any(), any()))
+                .thenReturn("effect-1");
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(
+                new AgentToolRegistry(List.of(recordingTool("publish_post", false, first),
+                        recordingTool("email_reminder", false, second))), journal, null, effects);
+        AgentStep step = new AgentStep();
+        step.setRunId(17L);
+
+        pipeline.executeBatch(step, 42L, 7L, 3L, Set.of("publish_post", "email_reminder"),
+                List.of(call("publish_post"), call("email_reminder")),
+                List.of(noop(), noop()), (call, invocationId) -> { }, false);
+
+        verify(journal, org.mockito.Mockito.times(1)).findRun(any());
+    }
+
+    /**
+     * 日志配对键仍然是 {@code invocationId}，不是 {@code effectId}。
+     *
+     * <p>这两层身份各有各的用途，**合并它们是本批最容易犯的错**：前端按 {@code invocationId} 把
+     * tool_progress / tool_result 配到对应的工具卡上，而 {@code effectId} 是给下游去重用的。
+     * 用 effectId 当配对键的话，同一个 Effect 的两次调用会在界面上画成同一张卡——第二次的输出
+     * 覆盖第一次，用户看不到"重试过"这件事。</p>
+     */
+    @Test
+    void theExecutedCallStillReportsItsInvocationIdAsTheLogPairingKey() {
+        AgentExecutionJournal journal = mock(AgentExecutionJournal.class);
+        // 桩要忠实：真实的 startInvocation 会把**传进来的** invocationId 落到实体上，
+        // 而管道现在从实体读回它来当日志配对键。所以这里用传入值造返回值，
+        // 而不是返回一个 invocationId 为空的壳——后者会让断言读到 null，测的却是桩的失真。
+        List<String> startedIds = new ArrayList<>();
+        org.mockito.Mockito.doAnswer(invocationOnMock -> {
+            String startedId = invocationOnMock.getArgument(1);
+            startedIds.add(startedId);
+            return invocation(startedId);
+        }).when(journal).startInvocation(any(), any(), any(), any());
+        AgentEffectService effects = mock(AgentEffectService.class);
+        when(journal.findRun(any())).thenReturn(java.util.Optional.of(runWithEpoch()));
+        when(effects.resolveEffect(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any(), any()))
+                .thenReturn("effect-1");
+        AgentToolExecutionPipeline pipeline = new AgentToolExecutionPipeline(
+                new AgentToolRegistry(List.of(recordingTool("publish_post", false,
+                        new AtomicReference<>()))), journal, null, effects);
+
+        List<ExecutedToolCall> results = executeOne(pipeline, Set.of("publish_post"), "publish_post",
+                JsonNodeFactory.instance.objectNode());
+
+        assertThat(startedIds).hasSize(1);
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).invocationId()).isEqualTo(startedIds.get(0));
+        assertThat(results.get(0).invocationId()).isNotEqualTo("effect-1");
+    }
+
+    /** 记录它收到的调用上下文，用于断言"工具看到的幂等键是哪一个"。 */
+    private AgentTool recordingTool(String name, boolean readOnly, AtomicReference<AgentToolContext> seen) {
+        return new AgentTool() {
+            @Override public String name() { return name; }
+            @Override public String description() { return name; }
+            @Override public boolean readOnly() { return readOnly; }
+            @Override public JsonNode parametersSchema() { return JsonNodeFactory.instance.objectNode(); }
+            @Override public JsonNode execute(Long userId, JsonNode args, ProgressListener onProgress) {
+                return JsonNodeFactory.instance.objectNode().put("ok", true);
+            }
+            @Override public JsonNode execute(AgentToolContext context, JsonNode args,
+                                               ProgressListener onProgress) {
+                seen.set(context);
+                return JsonNodeFactory.instance.objectNode().put("ok", true);
+            }
+        };
+    }
+
+    private AgentRun runWithEpoch() {
+        AgentRun run = new AgentRun();
+        run.setId(17L);
+        run.setConversationId(7L);
+        run.setUserId(42L);
+        run.setIntentEpoch("6f1c0a44-1f0e-4a3c-9a2f-6b7c1d2e3f40");
+        return run;
+    }
+
     private AgentToolExecutionPipeline batchPipeline(List<String> toolNames, Map<String, RuntimeException> failures,
                                                     AgentExecutionJournal journal) {
         List<AgentTool> tools = new ArrayList<>();
@@ -418,9 +708,35 @@ class AgentToolExecutionPipelineTest {
     }
 
     private AgentToolInvocation invocation() {
+        return invocation("invocation-12");
+    }
+
+    /**
+     * 一个**忠实于真实 {@code startInvocation} 返回值**的桩。
+     *
+     * <p>{@code invocationId} 必须写上：管道现在从**实体**上读它来构造工具上下文与日志配对键，
+     * 而不是自己另存一份（原来那个 {@code CallIdentity} 记录就是那份副本）。真实实现里
+     * {@code startInvocation} 会把传入的 id 落到实体上，所以桩不写它就会让工具看到 {@code null}
+     * ——那是桩不真实，不是实现错。</p>
+     */
+    private AgentToolInvocation invocation(String invocationId) {
         AgentToolInvocation invocation = new AgentToolInvocation();
         invocation.setId(12L);
+        invocation.setInvocationId(invocationId);
+        invocation.setStatus(AgentToolInvocation.STATUS_RUNNING);
         return invocation;
+    }
+
+    /**
+     * 让 journal 的桩忠实于真实实现：{@code attachEffect} 除了落库，还会把 {@code effectId}
+     * **写回内存对象**（真实实现里有专门的测试钉住这条契约）。管道随后从实体上读回它交给工具，
+     * 所以桩不写回的话，工具会看到 {@code null}。
+     */
+    private static void stubAttachEffectSyncingMemory(AgentExecutionJournal journal) {
+        org.mockito.Mockito.doAnswer(call -> {
+            call.getArgument(0, AgentToolInvocation.class).setEffectId(call.getArgument(1));
+            return null;
+        }).when(journal).attachEffect(any(), any());
     }
 
     private AgentToolCall call(String toolName) {

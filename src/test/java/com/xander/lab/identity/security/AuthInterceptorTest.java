@@ -203,6 +203,38 @@ class AuthInterceptorTest {
         assertThat(response.getStatus()).isEqualTo(401);
     }
 
+    /**
+     * {@code POST /{id}/resume} 必须登录。
+     *
+     * <p>它没有单独的登记项——覆盖它的是 {@code POST:/api/agent/conversations/*}，而那个 `/*`
+     * 是**前缀**通配（任意深度）。这条用例把"前缀通配确实覆盖到了子路径"钉成事实：
+     * 一旦有人把 `matchPath` 改成"只匹配一层"（那是个很自然的收敛），会话子路径会集体变成
+     * 依赖末尾兜底，而 {@code resume} 会成为一个可以匿名触发他人会话执行的入口。
+     * 同类子路径（messages/stream、events）也各有一条，理由相同。</p>
+     */
+    @Test
+    void agentConversationResumeRequiresAuthentication() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/agent/conversations/9/resume");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+    }
+
+    @Test
+    void agentConversationResumeAcceptsValidToken() {
+        MockHttpServletRequest request = new MockHttpServletRequest(
+                "POST", "/api/agent/conversations/9/resume");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        request.addHeader("Authorization", "Bearer valid-token");
+        when(authService.validateAccessToken("valid-token")).thenReturn(true);
+        when(jwtUtil.getSubject("valid-token")).thenReturn("42");
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(UserContext.getUserId()).isEqualTo(42L);
+    }
+
     @Test
     void readRoutesStayPublicWithoutToken() {
         MockHttpServletRequest menuRequest = new MockHttpServletRequest("GET", "/api/components/menu");

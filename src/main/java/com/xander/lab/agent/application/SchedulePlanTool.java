@@ -119,7 +119,7 @@ public class SchedulePlanTool implements AgentTool {
         if (args.path("syncJuejin").isBoolean()) {
             request.setSyncJuejin(args.path("syncJuejin").asBoolean());
         }
-        request.setClientRequestId(context.invocationId());
+        request.setClientRequestId(context.idempotencyKey());
         onProgress.onProgress("正在创建定时发文计划…");
         BlogContentPlanVO plan = planService.create(context.userId(), request);
 
@@ -128,10 +128,11 @@ public class SchedulePlanTool implements AgentTool {
 
     @Override
     public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
-        if (!StringUtils.hasText(context.invocationId())) {
+        // 必须用**当初写出去的那个键**去找，也就是 idempotencyKey()。
+        if (!StringUtils.hasText(context.idempotencyKey())) {
             return Optional.empty();
         }
-        BlogContentPlanVO plan = planService.findByClientRequestId(context.userId(), context.invocationId());
+        BlogContentPlanVO plan = planService.findByClientRequestId(context.userId(), context.idempotencyKey());
         return plan == null ? Optional.empty() : Optional.of(toOutcome(plan));
     }
 

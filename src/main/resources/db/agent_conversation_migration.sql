@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS `agent_conversation` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '会话主键',
   `user_id` BIGINT NOT NULL COMMENT '所属用户ID，关联 sys_user.id',
   `title` VARCHAR(120) NOT NULL COMMENT '会话标题，取自首条用户输入摘要',
-  `status` VARCHAR(16) NOT NULL DEFAULT 'ready' COMMENT '会话状态：ready空闲可对话/running一轮执行中/awaiting_approval等待用户审批/failed',
+  `status` VARCHAR(24) NOT NULL DEFAULT 'ready' COMMENT '会话状态（agent_run.status 的投影，供前端契约与 claim 前置条件使用）：ready可开始新一轮/running一轮执行中/awaiting_approval等待用户审批/paused用户主动暂停/interrupted持有者进程消失可继续/budget_exhausted预算耗尽可继续/failed执行失败；COMPLETED 与 CANCELLED 都投影为 ready',
   `error_message` VARCHAR(1000) NULL COMMENT '最近一轮失败原因',
   `run_version` BIGINT NOT NULL DEFAULT 0 COMMENT '当前执行代次；每次成功领取新一轮后递增，用于拒绝旧工作线程迟到写入',
   `cancel_requested` TINYINT NOT NULL DEFAULT 0 COMMENT '用户取消请求标记：0=未请求，1=执行中轮询到后立即停止；新一轮执行开始时复位',

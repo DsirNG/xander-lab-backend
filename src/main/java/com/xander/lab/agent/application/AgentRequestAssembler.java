@@ -71,7 +71,7 @@ public class AgentRequestAssembler {
         List<String> toolNames = input.allowedTools().stream().sorted().toList();
         String toolDescriptions = toolRegistry.describeToolSurface(input.allowedTools(), skillCatalog(input));
         List<AgentInputTurn> turns = renderTurns(recent, playbooks, input.plan(), input.memoryContext(),
-                input.lastError(), input.critique());
+                input.lastError());
         String schemaHash = sha256(toolDescriptions);
         String modelRoute = "agent-config:" + defaultText(modelProperties.getModel(), "unconfigured");
         List<Long> messageIds = recent.stream().map(AgentMessage::getId)
@@ -102,7 +102,7 @@ public class AgentRequestAssembler {
      *
      * <p>反过来的写法（早先就是这样）把长期记忆和任务计划放在最前面：
      * 模型中途调一次 plan_tasks 改了计划，整段对话记录的字节位置就全部后移，
-     * 这一轮剩下每一步的提示词都得从头算。所以计划、失败回灌、自检批评
+     * 这一轮剩下每一步的提示词都得从头算。所以计划、失败回灌
      * 这些一轮之内会变的东西，全部收在最后那一轮 user 里。</p>
      *
      * <p>剩下的一处不稳定是有意留的：最新一条工具结果给 4000 字符预算、更早的给 800，
@@ -111,14 +111,14 @@ public class AgentRequestAssembler {
      */
     private List<AgentInputTurn> renderTurns(List<AgentMessage> recent, List<AgentMessage> playbooks,
                                              List<AgentPlanItem> plan, String memoryContext,
-                                             JsonNode lastError, String critique) {
+                                             JsonNode lastError) {
         int lastToolResultIndex = lastToolResultIndex(recent);
         List<AgentInputTurn> turns = new ArrayList<>();
         for (int index = 0; index < recent.size(); index++) {
             AgentMessage message = recent.get(index);
             turns.add(renderMessage(message, index == lastToolResultIndex, isSameMessage(playbooks, message)));
         }
-        turns.add(AgentInputTurn.user(renderVolatileTail(plan, memoryContext, lastError, critique)));
+        turns.add(AgentInputTurn.user(renderVolatileTail(plan, memoryContext, lastError)));
         return AgentInputTurn.merged(turns);
     }
 
@@ -135,6 +135,10 @@ public class AgentRequestAssembler {
     private AgentInputTurn renderMessage(AgentMessage message, boolean latestToolResult, boolean playbook) {
         String content = switch (message.getKind()) {
             case "thought" -> "（思考：）" + message.getContent();
+            // 服务端已经不再生产 reflection 消息（自检循环已退役，max-reflections 也已删除），
+            // 但历史会话里真实存在 kind=reflection 的行。这个分支只负责把那些旧消息渲染出来：
+            // 删掉它不会报错，只会让它们落到 default、丢掉"这是自检"的语义。
+            // 数据库列注释与迁移契约测试同样依赖这个取值继续存在，所以这里保留是有意的。
             case "reflection" -> "（自检：）" + message.getContent();
             case "tool_call" -> "（调用了工具）" + message.getContent();
             case "tool_result" -> "【工具结果】" + compactJson(message.getContent(),
@@ -219,7 +223,7 @@ public class AgentRequestAssembler {
 
     /** 一轮之内会变的会话状态，全部收在最后一轮 user 里，前面的对话记录因此保持字节稳定。 */
     private String renderVolatileTail(List<AgentPlanItem> plan, String memoryContext,
-                                      JsonNode lastError, String critique) {
+                                      JsonNode lastError) {
         StringBuilder builder = new StringBuilder();
         if (StringUtils.hasText(memoryContext)) {
             builder.append("以下是你对这位用户的长期记忆（跨会话有效，可直接使用；与用户当前说法冲突时以用户当前说法为准）：\n")
@@ -232,9 +236,6 @@ public class AgentRequestAssembler {
         }
         if (lastError != null) {
             builder.append("【最近一次工具失败】").append(lastError).append("\n\n");
-        }
-        if (StringUtils.hasText(critique)) {
-            builder.append("【自检结果】").append(critique).append("\n\n");
         }
         // 早先这里还注入过一段"当前激活的 Skill 规则"：服务端按关键词猜出技能，把它的正文
         // 塞进每一轮。猜错时模型被一份不相干的规则牵着走，而且这段文本随用户话题变化，
@@ -411,7 +412,6 @@ record AgentRequestAssemblyInput(
         List<AgentPlanItem> plan,
         String memoryContext,
         JsonNode lastError,
-        String critique,
         Set<String> allowedTools,
         int remainingSteps,
         boolean deepThinking,
@@ -431,18 +431,18 @@ record AgentRequestAssemblyInput(
     /** Compatibility constructor for callers created before playbooks outlived the context window. */
     AgentRequestAssemblyInput(Long conversationId, Long userId, long runVersion, int stepNo,
                               List<AgentMessage> messages, List<AgentPlanItem> plan, String memoryContext,
-                              JsonNode lastError, String critique, Set<String> allowedTools,
+                              JsonNode lastError, Set<String> allowedTools,
                               int remainingSteps, boolean deepThinking, AgentSkillOffer skillOffer) {
         this(conversationId, userId, runVersion, stepNo, messages, plan, memoryContext, lastError,
-                critique, allowedTools, remainingSteps, deepThinking, skillOffer, List.of());
+                allowedTools, remainingSteps, deepThinking, skillOffer, List.of());
     }
 
     /** Compatibility constructor for callers created before the skill catalog became explicit. */
     AgentRequestAssemblyInput(Long conversationId, Long userId, long runVersion, int stepNo,
                               List<AgentMessage> messages, List<AgentPlanItem> plan, String memoryContext,
-                              JsonNode lastError, String critique, Set<String> allowedTools,
+                              JsonNode lastError, Set<String> allowedTools,
                               int remainingSteps, boolean deepThinking) {
         this(conversationId, userId, runVersion, stepNo, messages, plan, memoryContext, lastError,
-                critique, allowedTools, remainingSteps, deepThinking, null, List.of());
+                allowedTools, remainingSteps, deepThinking, null, List.of());
     }
 }

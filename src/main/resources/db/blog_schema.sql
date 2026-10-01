@@ -121,37 +121,37 @@ INSERT INTO `blog_post` (`id`, `title`, `summary`, `content`, `category_id`, `au
 (2, '前端性能优化实战指南',
  '从网络请求、资源加载、代码执行等多个维度，详细介绍前端性能优化的策略和实践技巧。包含 Web Vitals 指标分析和工具使用。',
  '性能优化是前端开发中不可或缺的一环...',
- 'frontend', 'DinQorAI', '15 min', 890, 1, '2026-02-05'),
+ 'frontend', 'DinQorAI', '15 min', NULL, 890, 1, '2026-02-05'),
 
 (3, 'TypeScript 高级类型体操',
  '通过一系列实战案例，讲解 TypeScript 中的高级类型特性，如条件类型、映射类型、模板字面量类型等。适合有一定 TS 基础的开发者。',
  'TypeScript 的类型系统非常强大...',
- 'frontend', 'DinQorAI', '20 min', 1500, 1, '2026-02-01'),
+ 'frontend', 'DinQorAI', '20 min', NULL, 1500, 1, '2026-02-01'),
 
 (4, 'CSS Grid 布局完全指南',
  '全面解析 CSS Grid 布局的各个属性和概念，助你轻松掌握现代网页布局利器。包含大量图解和实战布局案例。',
  'CSS Grid 是最强大的 CSS 布局系统...',
- 'frontend', 'DinQorAI', '12 min', 600, 1, '2026-01-28'),
+ 'frontend', 'DinQorAI', '12 min', NULL, 600, 1, '2026-01-28'),
 
 (5, 'Node.js 事件循环详解',
  '深入剖析 Node.js 事件循环机制，理解宏任务、微任务以及各个阶段的执行顺序。对比浏览器事件循环的异同。',
  '事件循环是 Node.js 异步非阻塞 I/O 的核心...',
- 'backend', 'DinQorAI', '18 min', 950, 1, '2026-01-25'),
+ 'backend', 'DinQorAI', '18 min', NULL, 950, 1, '2026-01-25'),
 
 (6, 'Docker 容器化部署最佳实践',
  '从 Dockerfile 编写优化到多阶段构建，再到 Docker Compose 编排，手把手教你如何高效容器化你的应用。',
  'Docker 改变了软件交付的方式...',
- 'devops', 'DinQorAI', '14 min', 780, 1, '2026-01-20'),
+ 'devops', 'DinQorAI', '14 min', NULL, 780, 1, '2026-01-20'),
 
 (7, '微前端架构设计与落地',
  '探讨微前端架构的几种主流实现方案（qiankun, micro-app, webpack5 module federation），以及在大型项目中的落地经验。',
  '随着前端项目规模的扩大，微前端成为了一种趋势...',
- 'architecture', 'DinQorAI', '25 min', 2100, 1, '2026-01-15'),
+ 'architecture', 'DinQorAI', '25 min', NULL, 2100, 1, '2026-01-15'),
 
 (8, '程序员的职业规划思考',
  '技术专家还是管理路线？大厂螺丝钉还是创业公司多面手？分享一些关于技术人职业发展的思考和建议。',
  '职业规划是一个持续的过程...',
- 'career', 'DinQorAI', '8 min', 3200, 1, '2026-01-10');
+ 'career', 'DinQorAI', '8 min', NULL, 3200, 1, '2026-01-10');
 
 -- 文章-标签关联（tag id 对应上面 INSERT 的顺序）
 INSERT INTO `blog_post_tag` (`post_id`, `tag_id`) VALUES

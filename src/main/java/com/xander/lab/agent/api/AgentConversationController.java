@@ -133,6 +133,44 @@ public class AgentConversationController {
         return Result.success(service.cancel(id, UserContext.getUserId()));
     }
 
+    /**
+     * 用户主动"继续"一个可恢复的执行（{@code interrupted} / {@code budget_exhausted} /
+     * {@code paused} / {@code awaiting_approval}）。
+     *
+     * <p>与 {@code /{id}/cancel} 互为镜像：那个让一轮停下来，这个让它接着走。走的是 reaper
+     * 自动恢复用的同一条 {@code resume()}，所以"什么算同一件事"只有一套规则。</p>
+     *
+     * <p><b>为什么恢复之后必须在这里派活。</b>{@code service.resume()} 只把状态推回 {@code running}
+     * 并清掉陈旧的停止请求，它不执行任何东西。只改状态的话，会话会停在 {@code running} 而无人执行，
+     * 用户看到"正在生成"却永远等不到结果——所以提交失败时必须按 503 收口并把这一轮标记为失败，
+     * 不能留下一个"看起来在跑、其实没人跑"的会话。</p>
+     *
+     * @return 恢复后的会话；状态不可恢复或记录缺失时 409，工作线程池拒绝时 503
+     */
+    @PostMapping("/{id}/resume")
+    public Result<AgentConversation> resume(@PathVariable Long id) {
+        Long userId = UserContext.getUserId();
+        AgentConversation resumed = service.resume(id, userId);
+        long runVersion = resumed.getRunVersion() == null ? 0L : resumed.getRunVersion();
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    // 恢复没有新的用户输入，所以 message 传 null：这一轮接着原来的意图走。
+                    service.executeClaimedTurn(id, userId, runVersion, null, false, event -> {
+                    });
+                } catch (Exception exception) {
+                    // executeClaimedTurn persists and delivers the durable error event.
+                    log.debug("agent resumed turn ended exceptionally for conversation {}", id);
+                }
+            }, agentTaskExecutor);
+        } catch (RuntimeException exception) {
+            service.failClaimedTurn(id, userId, runVersion, "智能体执行队列繁忙，请稍后重试");
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE, "智能体执行队列繁忙，请稍后重试", exception);
+        }
+        return Result.success(resumed);
+    }
+
     /** Lists durable approval requests so reloads never lose a pending high-impact action. */
     @GetMapping("/{id}/approvals")
     public Result<List<com.xander.lab.agent.domain.AgentApproval>> approvals(@PathVariable Long id) {

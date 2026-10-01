@@ -255,8 +255,19 @@ public class BillingService {
         accountMapper.deleteById(fromUserId);
     }
 
-    /** 按单价折算毫分：单价为「毫分 / 每 1K token」，tokens×milli 即毫分，四舍五入后至少 1 毫分。 */
-    private long tokenToPoints(ModelUsage usage, String model) {
+    /**
+     * 按 token 与模型单价折算毫分，**不落库、不扣费、不取整下限**。
+     *
+     * <p>给预算判定用：它要回答的是"照这个势头下去会不会超"，而不是"账上扣了多少"。
+     * 与 {@link #tokenToPoints} 共用同一段价格逻辑是有意的——两处各写一份的话，
+     * 单价规则一改就会只改一处，于是"预算显示还剩 100 分"和"实际扣了 300 分"同时成立，
+     * 而没人能判断哪个是对的。</p>
+     *
+     * <p>不做 {@code max(1, ...)} 的取整下限：那个下限是**计费**的语义（一次调用至少扣 1 毫分），
+     * 用在估算上会让一次零用量的调用也贡献 1 毫分，预算被无声地提前耗尽。</p>
+     */
+    public long estimateMilliPoints(ModelUsage usage, String model) {
+        if (usage == null || usage.isEmpty()) return 0L;
         BillingProperties.Price price = resolvePrice(model);
         long input = Math.max(0L, usage.inputTokens());
         long output = Math.max(0L, usage.outputTokens());
@@ -265,7 +276,12 @@ public class BillingService {
         double milliPoints = uncachedInput / 1000.0 * price.getInputMilliPer1kToken()
                 + output / 1000.0 * price.getOutputMilliPer1kToken()
                 + cached / 1000.0 * price.getCachedMilliPer1kToken();
-        return Math.max(1L, Math.round(milliPoints));
+        return Math.round(milliPoints);
+    }
+
+    /** 按单价折算毫分：单价为「毫分 / 每 1K token」，tokens×milli 即毫分，四舍五入后至少 1 毫分。 */
+    private long tokenToPoints(ModelUsage usage, String model) {
+        return Math.max(1L, estimateMilliPoints(usage, model));
     }
 
     /**

@@ -50,6 +50,10 @@ public class AuthInterceptor implements HandlerInterceptor {
             "POST:/api/agent/conversations",
             "GET:/api/agent/conversations",
             "GET:/api/agent/conversations/*",
+            // 注意 matchPath 的 `/*` 是**前缀**通配（任意深度），所以这一条同时覆盖
+            // /{id}/resume、/{id}/messages、/{id}/approvals/... 等全部子路径——
+            // 新增子路径不需要在这里再加一行，也不要以为漏登记了（这个匹配器也表达不了
+            // "只匹配一层"）。子路径的鉴权由 AuthInterceptorTest 逐个钉住。
             "POST:/api/agent/conversations/*",
             // 撤销分享链接同样属于私有写操作，需显式登记而非依赖兜底。
             "DELETE:/api/agent/conversations/*",
@@ -103,6 +107,12 @@ public class AuthInterceptor implements HandlerInterceptor {
             "POST:/api/publishing/juejin/authorization/start",
             "POST:/api/publishing/juejin/authorization/cancel",
             "DELETE:/api/publishing/juejin/authorization",
+            // 微信公众号配置、连接测试和文章同步均属于当前用户的私有写操作。
+            "GET:/api/publishing/wechat/authorization/status",
+            "POST:/api/publishing/wechat/authorization",
+            "POST:/api/publishing/wechat/authorization/test",
+            "DELETE:/api/publishing/wechat/authorization",
+            "POST:/api/blog/posts/*/sync/wechat",
             // 积分余额与流水为私有数据，必须登录后才能读取。
             "GET:/api/points",
             "GET:/api/points/ledger",

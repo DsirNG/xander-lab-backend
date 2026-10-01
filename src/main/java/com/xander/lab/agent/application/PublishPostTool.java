@@ -91,6 +91,15 @@ public class PublishPostTool implements AgentTool {
         return Optional.of("将文章发布到 " + platform + "，可能公开内容并触发平台操作");
     }
 
+    /**
+     * 对账靠**业务结果本身**（本站文章是否已发布、目标平台是否有成功记录），而不是靠幂等键。
+     *
+     * <p>这是三个写工具里唯一不需要 {@code context.idempotencyKey()} 的一个：发布动作的产出
+     * 就是"某个文章 id 在某个平台上发布成功"，这个事实可以用文章 id 稳定地查回来，无论当初
+     * 是第几次物理调用写出去的。{@code BlogGenerationTool}/{@code EmailReminderTool}/
+     * {@code SchedulePlanTool} 的产出没有这样一个现成的业务主键，只能靠当初写出去的键去找，
+     * 所以它们必须用 {@code idempotencyKey()}。这里用文章 id 反而是更可靠的对账锚点。</p>
+     */
     @Override
     public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
         long taskId = args.path("taskId").asLong(-1L);

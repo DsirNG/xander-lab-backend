@@ -12,12 +12,17 @@ import java.util.List;
 
 /**
  * One persisted turn inside an agent conversation. {@code kind} distinguishes
- * user input (message), assistant thinking (thought), self-critique
- * (reflection), tool invocation (tool_call), tool outcome (tool_result), the
+ * user input (message), assistant thinking (thought), tool invocation
+ * (tool_call), tool outcome (tool_result), the
  * final assistant answer (answer), the agent task plan (plan), an answer card the assistant handed the user
  * (quiz), the user's submission on that card (quiz_answer) and a code deliverable
  * handed to the user (artifact). Content of tool records, quiz cards and
  * artifacts is JSON.
+ *
+ * <p>{@code kind=reflection} 属于已退役的自检机制，服务端不再生产，但它仍是
+ * {@code agent_message.kind} 的合法取值——历史会话里存在这样的行，所以渲染层保留了
+ * 对应分支（见 {@code AgentRequestAssembler#renderMessage}）。不要因为"没有生产者"
+ * 就把它从值域里删掉。</p>
  */
 @Data
 @TableName("agent_message")

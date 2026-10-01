@@ -21,6 +21,7 @@
         <result property="status"       column="status"/>
         <result property="csdnSynced"   column="csdnSynced"/>
         <result property="juejinSynced" column="juejinSynced"/>
+        <result property="wechatSynced" column="wechatSynced"/>
         <result property="tagsRaw"      column="tagsRaw"/>
     </resultMap>
 
@@ -48,6 +49,7 @@
                 p.status,
                 EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'csdn' AND r.status = 'SUCCEEDED') AS csdnSynced,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'juejin' AND r.status = 'SUCCEEDED') AS juejinSynced,
+               EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'wechat' AND r.status = 'SUCCEEDED') AS wechatSynced,
                 GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
                  LEFT JOIN blog_category c ON c.id = p.category_id
@@ -101,6 +103,7 @@
                p.status,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'csdn' AND r.status = 'SUCCEEDED') AS csdnSynced,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'juejin' AND r.status = 'SUCCEEDED') AS juejinSynced,
+               EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'wechat' AND r.status = 'SUCCEEDED') AS wechatSynced,
                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
                  LEFT JOIN blog_category c ON c.id = p.category_id
@@ -133,6 +136,7 @@
                p.status,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'csdn' AND r.status = 'SUCCEEDED') AS csdnSynced,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'juejin' AND r.status = 'SUCCEEDED') AS juejinSynced,
+               EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'wechat' AND r.status = 'SUCCEEDED') AS wechatSynced,
                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
                  LEFT JOIN blog_category c ON c.id = p.category_id
@@ -164,6 +168,7 @@
                p.status,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'csdn' AND r.status = 'SUCCEEDED') AS csdnSynced,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'juejin' AND r.status = 'SUCCEEDED') AS juejinSynced,
+               EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'wechat' AND r.status = 'SUCCEEDED') AS wechatSynced,
                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
                  LEFT JOIN blog_category c ON c.id = p.category_id
@@ -194,6 +199,7 @@
                p.status,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'csdn' AND r.status = 'SUCCEEDED') AS csdnSynced,
                EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'juejin' AND r.status = 'SUCCEEDED') AS juejinSynced,
+               EXISTS (SELECT 1 FROM blog_publish_record r WHERE r.task_id = -p.id AND r.platform = 'wechat' AND r.status = 'SUCCEEDED') AS wechatSynced,
                GROUP_CONCAT(t.name ORDER BY t.name SEPARATOR ',') AS tagsRaw
         FROM blog_post p
                  LEFT JOIN blog_category c ON c.id = p.category_id

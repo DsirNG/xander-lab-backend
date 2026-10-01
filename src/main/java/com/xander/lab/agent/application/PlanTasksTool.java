@@ -13,7 +13,7 @@ import java.util.List;
  * Planner：让智能体把多步任务写成自己的待办清单，并在推进过程中改写它。
  *
  * <p>这是"自主安排"的落点。计划不是给用户看的装饰，而是会话状态：
- * 每一步推理都会重新读到它，反思门禁也用它判断本轮是否真的收口。</p>
+ * 每一步推理都会重新读到它，所以模型改一次计划，后面每一步看到的都是新的。</p>
  */
 @Component
 public class PlanTasksTool implements AgentTool {

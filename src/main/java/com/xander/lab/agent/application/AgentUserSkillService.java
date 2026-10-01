@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xander.lab.agent.api.AgentSkillRequest;
 import com.xander.lab.agent.api.AgentToolOption;
+import com.xander.lab.agent.api.AgentSkillView;
 import com.xander.lab.agent.domain.AgentUserSkill;
 import com.xander.lab.agent.infrastructure.AgentUserSkillMapper;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,21 @@ public class AgentUserSkillService {
     @Transactional(readOnly = true)
     public List<AgentUserSkill> listActive(Long userId) {
         return catalog.allActiveUserSkills(userId);
+    }
+
+    /** Returns built-in and user Skills for the client picker without exposing database entities. */
+    @Transactional(readOnly = true)
+    public List<AgentSkillView> listCatalog(Long userId) {
+        return catalog.entries(userId).stream().map(skill -> new AgentSkillView(
+                skill.id(),
+                skill.id(),
+                skill.id(),
+                skill.description(),
+                skill.instructions(),
+                skill.version(),
+                skill.builtin() ? "builtin" : "user",
+                skill.toolNames().stream().sorted().toList()
+        )).toList();
     }
 
     /**

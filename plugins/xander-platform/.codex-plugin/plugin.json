@@ -1,0 +1,18 @@
+{
+  "name": "xander-platform",
+  "version": "0.1.0",
+  "description": "First-party Codex workflows for the DinQorAI platform agent and visual deliverables.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Xander Platform",
+    "shortDescription": "Use DinQorAI agent and visual workflows.",
+    "longDescription": "Routes platform agent runtime changes and visual or interactive deliverables through repository-specific rules without copying Codex-only runtimes.",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": "Use $xander-platform-agent or $xander-platform-visuals for this DinQorAI request."
+  }
+}

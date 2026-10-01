@@ -22,6 +22,10 @@ public class AgentSkillController {
     private final AgentUserSkillService service;
     public AgentSkillController(AgentUserSkillService service) { this.service = service; }
     @GetMapping public Result<List<AgentUserSkill>> list() { return Result.success(service.listActive(UserContext.getUserId())); }
+    /** Built-in and user Skills exposed to the desktop plugin picker and preview. */
+    @GetMapping("/catalog") public Result<List<AgentSkillView>> catalog() {
+        return Result.success(service.listCatalog(UserContext.getUserId()));
+    }
     /** 可写进技能的已注册工具，供编排界面提供选择（只读，不含 schema）。 */
     @GetMapping("/tools") public Result<List<AgentToolOption>> listTools() { return Result.success(service.listToolOptions(UserContext.getUserId())); }
     @PostMapping public Result<AgentUserSkill> create(@Valid @RequestBody AgentSkillRequest request) { return Result.success(service.create(UserContext.getUserId(), request)); }

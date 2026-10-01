@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS `blog_publish_record` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '发布记录主键',
   `task_id` BIGINT NOT NULL COMMENT '博客 Agent 任务 ID',
   `user_id` BIGINT NOT NULL COMMENT '所属用户 ID',
-  `platform` VARCHAR(32) NOT NULL COMMENT '发布平台：local/csdn 等',
+  `platform` VARCHAR(32) NOT NULL COMMENT '发布平台：local/csdn/juejin/wechat 等',
   `external_id` VARCHAR(128) NULL COMMENT '平台文章 ID',
   `url` VARCHAR(1000) NULL COMMENT '平台文章 URL',
   `status` VARCHAR(16) NOT NULL COMMENT '状态：PENDING/SUCCEEDED/FAILED',

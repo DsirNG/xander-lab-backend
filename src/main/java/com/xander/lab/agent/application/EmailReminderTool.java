@@ -125,7 +125,7 @@ public class EmailReminderTool implements AgentTool {
         if (StringUtils.hasText(scheduledAt)) {
             request.setScheduledAt(OffsetDateTime.parse(scheduledAt));
         }
-        request.setClientRequestId(context.invocationId());
+        request.setClientRequestId(context.idempotencyKey());
         onProgress.onProgress("正在创建定时邮件提醒…");
         EmailReminderTaskVO task = emailReminderService.create(context.userId(), request);
 
@@ -134,11 +134,12 @@ public class EmailReminderTool implements AgentTool {
 
     @Override
     public Optional<JsonNode> reconcile(AgentToolContext context, JsonNode args) {
-        if (!StringUtils.hasText(context.invocationId())) {
+        // 必须用**当初写出去的那个键**去找，也就是 idempotencyKey()。
+        if (!StringUtils.hasText(context.idempotencyKey())) {
             return Optional.empty();
         }
         EmailReminderTaskVO task = emailReminderService.findByClientRequestId(
-                context.userId(), context.invocationId());
+                context.userId(), context.idempotencyKey());
         return task == null ? Optional.empty() : Optional.of(toOutcome(task));
     }
 

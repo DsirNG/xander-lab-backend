@@ -208,6 +208,13 @@ wechat:
     read-timeout-millis: ${WECHAT_MINI_READ_TIMEOUT_MILLIS:5000}
     # 二维码使用的版本：develop（开发版）、trial（体验版）、release（正式版）
     env-version: ${WECHAT_MINI_ENV_VERSION:trial}
+  # First-version per-user official-account publisher. Disabled until the migration and key are configured.
+  official:
+    enabled: ${WECHAT_OFFICIAL_ENABLED:false}
+    api-base-url: ${WECHAT_OFFICIAL_API_BASE_URL:https://api.weixin.qq.com}
+    credential-encryption-key: ${WECHAT_OFFICIAL_CREDENTIAL_ENCRYPTION_KEY:${WECHAT_CREDENTIAL_ENCRYPTION_KEY:}}
+    connect-timeout-millis: ${WECHAT_OFFICIAL_CONNECT_TIMEOUT_MILLIS:5000}
+    read-timeout-millis: ${WECHAT_OFFICIAL_READ_TIMEOUT_MILLIS:15000}
   # OfferID、AppKey、开关与商品由管理台加密入库；消息 Token 仍来自服务器环境变量。
   virtual-pay:
     message-token: ${WECHAT_VIRTUAL_PAY_MESSAGE_TOKEN:}

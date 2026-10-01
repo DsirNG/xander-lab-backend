@@ -16,7 +16,19 @@ public class AgentConversation {
     private Long id;
     private Long userId;
     private String title;
-    /** 会话状态：ready/failed 可继续对话，running 正在执行，awaiting_approval 等待用户决定。 */
+    /**
+     * 会话状态——**权威状态 {@link AgentRun#getStatus()} 的投影**，不是可以就地拼的字符串。
+     *
+     * <p>取值就是 {@link AgentRunStatusProjection} 里那 7 个：{@code ready} / {@code running} /
+     * {@code awaiting_approval} / {@code paused} / {@code interrupted} / {@code budget_exhausted} /
+     * {@code failed}。它是**前端契约**，同时被 {@code claim()} 的条件更新、租约续期、
+     * 取消轮询当作前置条件读，所以写入只能经 {@code AgentRunStatusProjection.of(...)} 算出来，
+     * 不要在本类之外手写字面量。</p>
+     *
+     * <p>投影不是单射：{@code COMPLETED} 与 {@code CANCELLED} 都投影成 {@code ready}
+     * （"模型做完了"和"我按了停止"对用户来说是同一个后续动作），想知道真实原因要读
+     * {@code agent_run.status}。</p>
+     */
     private String status;
     private String errorMessage;
     /** 当前执行代次；每次成功 claim 后递增，用于隔离旧 worker 的迟到写入。 */
