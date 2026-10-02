@@ -13,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -124,13 +125,19 @@ public class McpOAuthClientService {
 
     private JsonNode getProtectedMetadata(String endpoint) {
         URI uri = URI.create(endpoint);
-        String metadataUrl = uri.getScheme() + "://" + uri.getAuthority()
-                + "/.well-known/oauth-protected-resource?resource=" + enc(endpoint);
-        return getJson(metadataUrl);
+        URI metadataUri = UriComponentsBuilder.newInstance()
+                .scheme(uri.getScheme()).host(uri.getHost()).port(uri.getPort())
+                .path("/.well-known/oauth-protected-resource")
+                .queryParam("resource", endpoint).build().toUri();
+        return getJson(metadataUri);
     }
 
     private JsonNode getJson(String url) {
-        return RestClient.create().get().uri(url).retrieve().body(JsonNode.class);
+        return getJson(URI.create(url));
+    }
+
+    private JsonNode getJson(URI uri) {
+        return RestClient.create().get().uri(uri).retrieve().body(JsonNode.class);
     }
 
     private AgentMcpServer require(Long id, long ownerUserId) {
