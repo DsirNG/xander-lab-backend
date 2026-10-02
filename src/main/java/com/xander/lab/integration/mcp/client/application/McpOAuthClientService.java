@@ -13,6 +13,8 @@ import org.springframework.http.MediaType;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
@@ -54,10 +56,18 @@ public class McpOAuthClientService {
         }
 
         String redirectUri = properties.getOauthRedirectUri();
-        JsonNode registration = RestClient.create().post().uri(registrationEndpoint)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(Map.of("client_name", properties.getOauthClientName(), "redirect_uris", List.of(redirectUri)))
-                .retrieve().body(JsonNode.class);
+        JsonNode registration;
+        try {
+            registration = RestClient.create().post().uri(registrationEndpoint)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("client_name", properties.getOauthClientName(), "redirect_uris", List.of(redirectUri)))
+                    .retrieve().body(JsonNode.class);
+        } catch (RestClientResponseException exception) {
+            throw new IllegalArgumentException("远端 MCP OAuth 客户端注册失败（HTTP "
+                    + exception.getStatusCode().value() + "）");
+        } catch (RestClientException exception) {
+            throw new IllegalArgumentException("无法连接远端 MCP OAuth 注册服务");
+        }
         String clientId = registration == null ? null : registration.path("client_id").asText(null);
         if (clientId == null) throw new IllegalStateException("远端 MCP OAuth 客户端注册失败");
 
@@ -137,7 +147,14 @@ public class McpOAuthClientService {
     }
 
     private JsonNode getJson(URI uri) {
-        return RestClient.create().get().uri(uri).retrieve().body(JsonNode.class);
+        try {
+            return RestClient.create().get().uri(uri).retrieve().body(JsonNode.class);
+        } catch (RestClientResponseException exception) {
+            throw new IllegalArgumentException("远端 MCP OAuth 元数据请求失败（HTTP "
+                    + exception.getStatusCode().value() + "）");
+        } catch (RestClientException exception) {
+            throw new IllegalArgumentException("无法连接远端 MCP OAuth 元数据服务");
+        }
     }
 
     private AgentMcpServer require(Long id, long ownerUserId) {
