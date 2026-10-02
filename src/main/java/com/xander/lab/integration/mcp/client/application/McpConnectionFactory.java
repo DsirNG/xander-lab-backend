@@ -12,6 +12,7 @@ import com.xander.lab.integration.mcp.client.infrastructure.McpEndpointGuard;
 import com.xander.lab.integration.mcp.client.infrastructure.McpHeaderCipher;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
+import io.modelcontextprotocol.client.transport.McpHttpClientTransportAuthorizationException;
 import io.modelcontextprotocol.client.transport.HttpClientStreamableHttpTransport;
 import io.modelcontextprotocol.client.transport.customizer.McpSyncHttpClientRequestCustomizer;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -133,6 +134,9 @@ public class McpConnectionFactory {
             client.initialize();
         } catch (RuntimeException exception) {
             closeQuietly(client);
+            if (exception instanceof McpHttpClientTransportAuthorizationException) {
+                throw new IllegalStateException("远端 MCP 要求 OAuth 授权，请先完成授权后再测试", exception);
+            }
             throw new IllegalStateException("连接远端 MCP 服务器失败：" + safeMessage(exception), exception);
         }
         return client;
