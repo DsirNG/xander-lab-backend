@@ -168,7 +168,7 @@ mcp:
     max-tools-per-server: ${MCP_CLIENT_MAX_TOOLS_PER_SERVER:50}
     max-description-length: ${MCP_CLIENT_MAX_DESCRIPTION_LENGTH:400}
     max-result-length: ${MCP_CLIENT_MAX_RESULT_LENGTH:8000}
-    oauth-redirect-uri: ${MCP_CLIENT_OAUTH_REDIRECT_URI:http://localhost:3000/workspace/plugins}
+    oauth-redirect-uri: ${MCP_CLIENT_OAUTH_REDIRECT_URI:${MCP_OAUTH_CONSENT_BASE_URL:http://localhost:3000}/workspace/plugins}
     oauth-client-name: ${MCP_CLIENT_OAUTH_CLIENT_NAME:DinQorAI Workspace}
     oauth-state-ttl-seconds: ${MCP_CLIENT_OAUTH_STATE_TTL_SECONDS:600}
 
