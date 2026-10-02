@@ -122,7 +122,7 @@ mcp:
   oauth:
     enabled: ${MCP_OAUTH_ENABLED:false}
     public-base-url: ${MCP_PUBLIC_BASE_URL:http://localhost:30002}
-    consent-base-url: ${MCP_OAUTH_CONSENT_BASE_URL:http://localhost:3000}
+    consent-base-url: ${MCP_OAUTH_CONSENT_BASE_URL:${MCP_PUBLIC_BASE_URL:http://localhost:3000}}
     authorization-request-ttl-seconds: ${MCP_OAUTH_AUTHORIZATION_REQUEST_TTL_SECONDS:600}
     authorization-code-ttl-seconds: ${MCP_OAUTH_AUTHORIZATION_CODE_TTL_SECONDS:300}
     access-token-ttl-seconds: ${MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS:3600}
