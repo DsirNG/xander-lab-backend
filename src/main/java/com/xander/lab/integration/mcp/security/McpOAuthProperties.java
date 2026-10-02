@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 public class McpOAuthProperties {
     private boolean enabled = false;
     private String publicBaseUrl = "http://localhost:30002";
+    /** Browser origin that hosts the logged-in consent UI; separate from the API issuer for local development. */
+    private String consentBaseUrl = "http://localhost:3000";
     private int authorizationRequestTtlSeconds = 600;
     private int authorizationCodeTtlSeconds = 300;
     private int accessTokenTtlSeconds = 3600;

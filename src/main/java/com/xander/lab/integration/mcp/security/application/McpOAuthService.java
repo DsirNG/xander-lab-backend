@@ -111,7 +111,7 @@ public class McpOAuthService {
         redisTemplate.opsForValue().set(AUTHORIZATION_REQUEST_PREFIX + requestId, write(request),
                 properties.getAuthorizationRequestTtlSeconds(), TimeUnit.SECONDS);
         return new AuthorizationStart(requestId, client.getClientName(), scopes,
-                properties.getPublicBaseUrl() + "/profile?mcpOAuthRequest=" + url(requestId));
+                properties.getConsentBaseUrl() + "/workspace?mcpOAuthRequest=" + url(requestId));
     }
 
     /** Returns the pending consent details only to an already authenticated DinQorAI user. */

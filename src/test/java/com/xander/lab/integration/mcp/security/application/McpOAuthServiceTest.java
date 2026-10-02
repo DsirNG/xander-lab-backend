@@ -244,6 +244,7 @@ class McpOAuthServiceTest {
     @Test
     void startAuthorizationAcceptsScopeEnforcedByResource() {
         when(properties.getPublicBaseUrl()).thenReturn(BASE_URL);
+        when(properties.getConsentBaseUrl()).thenReturn("http://localhost:3000");
         ValueOperations<String, String> ops = org.mockito.Mockito.mock(ValueOperations.class);
         when(redisTemplate.opsForValue()).thenReturn(ops);
 
@@ -252,7 +253,7 @@ class McpOAuthServiceTest {
                 "challenge-AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLLMMMM", "S256", BASE_URL + "/api/mcp");
 
         assertEquals(Set.of("blog:read", "blog:write"), start.scopes());
-        assertTrue(start.consentUrl().startsWith(BASE_URL + "/profile?mcpOAuthRequest="));
+        assertTrue(start.consentUrl().startsWith("http://localhost:3000/workspace?mcpOAuthRequest="));
     }
 
     @Test
