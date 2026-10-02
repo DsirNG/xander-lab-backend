@@ -42,6 +42,13 @@ public class McpClientProperties {
      */
     private int maxResultLength = 8000;
 
+    /** 本地 OAuth 回调地址；必须与动态注册时的 redirect_uri 完全一致。 */
+    private String oauthRedirectUri = "http://localhost:3000/workspace/plugins";
+
+    private String oauthClientName = "DinQorAI Workspace";
+
+    private int oauthStateTtlSeconds = 600;
+
     /**
      * 工具名总长度上限。
      *
