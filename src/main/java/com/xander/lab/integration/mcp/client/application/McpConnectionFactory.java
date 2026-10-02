@@ -146,7 +146,7 @@ public class McpConnectionFactory {
                     headerCipher.decrypt(encrypted), new TypeReference<LinkedHashMap<String, String>>() { });
             return headers == null ? Map.of() : headers;
         } catch (Exception exception) {
-            throw new IllegalStateException("MCP 服务器请求头密文无法解析", exception);
+            throw new IllegalStateException("MCP 服务器认证请求头无法解密，请重新编辑并保存认证请求头", exception);
         }
     }
 
