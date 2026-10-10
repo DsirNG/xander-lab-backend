@@ -1,0 +1,287 @@
+import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
+import test from "node:test";
+import gatewayWorker from "../.test-build/index.js";
+
+const secret = "gateway-local-test-secret-with-at-least-32-bytes";
+
+function encode(value) {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function signToken({ subject = 17, role = "USER" } = {}) {
+  const header = encode({ alg: "HS256", typ: "JWT" });
+  const payload = encode({
+    sub: String(subject),
+    exp: Math.floor(Date.now() / 1000) + 600,
+    type: "access",
+    role,
+    jti: "jwt-id-17",
+    sid: "session-17",
+  });
+  const message = `${header}.${payload}`;
+  const signature = createHmac("sha256", secret).update(message).digest("base64url");
+  return `${message}.${signature}`;
+}
+
+function environment() {
+  return {
+    JWT_SECRET: secret,
+    CORS_ALLOWED_ORIGINS: "https://app.example",
+    CORE_SERVICE_URL: "https://core.example",
+    CORE_SERVICE_TOKEN: "core-internal-secret",
+    AGENT_SERVICE_URL: "https://agent.example",
+    AGENT_SERVICE_TOKEN: "agent-internal-secret",
+    PLATFORM_INTEGRATION_SERVICE_URL: "https://integration.example",
+    PLATFORM_INTEGRATION_SERVICE_TOKEN: "integration-internal-secret",
+    CONTENT_AUTOMATION_SERVICE_URL: "https://content.example",
+    CONTENT_AUTOMATION_SERVICE_TOKEN: "content-internal-secret",
+    BLOGHTML_PREVIEW_SERVICE_URL: "https://preview.example",
+    BLOGHTML_PREVIEW_SERVICE_TOKEN: "preview-internal-secret",
+    KNOWLEDGE_SERVICE_URL: "https://knowledge.example",
+    KNOWLEDGE_SERVICE_TOKEN: "knowledge-internal-secret",
+    PAYMENT_SERVICE_URL: "https://payment.example",
+    PAYMENT_SERVICE_TOKEN: "payment-internal-secret",
+  };
+}
+
+async function withFetch(mockFetch, action) {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = mockFetch;
+  try {
+    return await action();
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+function asRequest(input, init) {
+  return input instanceof Request ? input : new Request(input, init);
+}
+
+function authResolverResponse(userId = 17) {
+  return new Response(JSON.stringify({ userId }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+test("public routes strip forged identity and propagate safe correlation and CORS headers", async () => {
+  let forwarded;
+  await withFetch(async (input) => {
+    forwarded = input;
+    return new Response("ok", { status: 200 });
+  }, async () => {
+    const request = new Request("https://gateway.example/api/blog/posts", {
+      headers: {
+        origin: "https://app.example",
+        "x-user-id": "999",
+        "x-user-role": "ADMIN",
+        "x-auth-jti": "forged",
+        "x-dinqor-service-token": "forged",
+        "x-forwarded-for": "203.0.113.8",
+        "x-trace-id": "trace-safe.1",
+      },
+    });
+    const response = await gatewayWorker.fetch(request, environment());
+
+    assert.equal(response.status, 200);
+    assert.equal(forwarded.url, "https://content.example/api/blog/posts");
+    assert.equal(forwarded.headers.get("x-user-id"), null);
+    assert.equal(forwarded.headers.get("x-user-role"), null);
+    assert.equal(forwarded.headers.get("x-auth-jti"), null);
+    assert.equal(forwarded.headers.get("x-forwarded-for"), null);
+    assert.equal(forwarded.headers.get("x-dinqor-service-token"), "content-internal-secret");
+    assert.equal(forwarded.headers.get("x-trace-id"), "trace-safe.1");
+    assert.match(forwarded.headers.get("x-request-id"), /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
+    assert.equal(response.headers.get("x-trace-id"), "trace-safe.1");
+    assert.equal(response.headers.get("access-control-allow-origin"), "https://app.example");
+    assert.equal(response.headers.get("access-control-allow-credentials"), "true");
+  });
+});
+
+test("private writes reject anonymous requests before reaching a service", async () => {
+  let upstreamCalled = false;
+  await withFetch(async () => {
+    upstreamCalled = true;
+    return new Response("unexpected");
+  }, async () => {
+    const response = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/blog/posts", { method: "POST" }),
+      environment(),
+    );
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), {
+      code: 401,
+      message: "未登录或登录已过期",
+      data: null,
+    });
+    assert.equal(upstreamCalled, false);
+  });
+});
+
+test("authenticated private requests resolve active identity and replace forged headers", async () => {
+  const token = signToken();
+  const calls = [];
+  await withFetch(async (input, init) => {
+    const request = asRequest(input, init);
+    calls.push(request);
+    if (request.url === "https://core.example/internal/agent/auth/resolve") {
+      assert.equal(request.headers.get("x-dinqor-service-token"), "core-internal-secret");
+      assert.deepEqual(await request.json(), { accessToken: token });
+      return authResolverResponse();
+    }
+    return new Response("created", { status: 201 });
+  }, async () => {
+    const request = new Request("https://gateway.example/api/blog/posts", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "x-user-id": "999",
+        "x-user-role": "ADMIN",
+        "x-auth-jti": "forged",
+      },
+      body: "{}",
+    });
+    const response = await gatewayWorker.fetch(request, environment());
+
+    assert.equal(response.status, 201);
+    assert.equal(calls.length, 2);
+    const forwarded = calls[1];
+    assert.equal(forwarded.headers.get("x-user-id"), "17");
+    assert.equal(forwarded.headers.get("x-user-role"), "USER");
+    assert.equal(forwarded.headers.get("x-auth-jti"), "jwt-id-17");
+    assert.equal(forwarded.headers.get("x-auth-sid"), "session-17");
+    assert.equal(forwarded.headers.get("x-dinqor-service-token"), "content-internal-secret");
+  });
+});
+
+test("admin routes reject authenticated non-admin users", async () => {
+  const token = signToken({ role: "USER" });
+  let upstreamCalled = false;
+  await withFetch(async (input, init) => {
+    const request = asRequest(input, init);
+    if (request.url === "https://core.example/internal/agent/auth/resolve") {
+      return authResolverResponse();
+    }
+    upstreamCalled = true;
+    return new Response("unexpected");
+  }, async () => {
+    const response = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/admin/users", {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      environment(),
+    );
+    assert.equal(response.status, 403);
+    assert.equal(upstreamCalled, false);
+  });
+});
+
+test("websocket policy accepts a query token and retains it for the upstream handshake", async () => {
+  const token = signToken();
+  let forwarded;
+  await withFetch(async (input, init) => {
+    const request = asRequest(input, init);
+    if (request.url === "https://core.example/internal/agent/auth/resolve") {
+      return authResolverResponse();
+    }
+    forwarded = request;
+    return new Response("handshake accepted");
+  }, async () => {
+    const response = await gatewayWorker.fetch(
+      new Request(`https://gateway.example/ws/agent?token=${encodeURIComponent(token)}`),
+      environment(),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(forwarded.url, `https://agent.example/ws/agent?token=${encodeURIComponent(token)}`);
+    assert.equal(forwarded.headers.get("x-user-id"), "17");
+    assert.equal(forwarded.headers.get("x-dinqor-service-token"), "agent-internal-secret");
+  });
+});
+
+test("CORS preflight is answered at the Gateway and disallowed origins are rejected", async () => {
+  let upstreamCalled = false;
+  await withFetch(async () => {
+    upstreamCalled = true;
+    return new Response("unexpected");
+  }, async () => {
+    const preflight = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/blog/posts", {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://app.example",
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "authorization,content-type",
+        },
+      }),
+      environment(),
+    );
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-methods"), "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    assert.equal(preflight.headers.get("access-control-allow-headers"), "authorization,content-type");
+
+    const rejected = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/blog/posts", {
+        headers: { origin: "https://attacker.example" },
+      }),
+      environment(),
+    );
+    assert.equal(rejected.status, 403);
+    assert.equal(upstreamCalled, false);
+  });
+});
+
+test("optional public writes continue anonymously when the bearer token is invalid", async () => {
+  let forwarded;
+  await withFetch(async (input) => {
+    forwarded = input;
+    return new Response("counted", { status: 200 });
+  }, async () => {
+    const response = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/blog/posts/81/view", {
+        method: "POST",
+        headers: {
+          authorization: "Bearer invalid-token",
+          "x-user-id": "999",
+        },
+      }),
+      environment(),
+    );
+    assert.equal(response.status, 200);
+    assert.equal(forwarded.headers.get("x-user-id"), null);
+    assert.equal(forwarded.headers.get("authorization"), "Bearer invalid-token");
+  });
+});
+
+test("coarse rate limiting keys requests by route and authenticated user or edge IP", async () => {
+  let rateKey;
+  let upstreamCalled = false;
+  const env = {
+    ...environment(),
+    GATEWAY_RATE_LIMIT_ENABLED: "true",
+    GATEWAY_RATE_LIMITER: {
+      async limit({ key }) {
+        rateKey = key;
+        return { success: false };
+      },
+    },
+  };
+  await withFetch(async () => {
+    upstreamCalled = true;
+    return new Response("unexpected");
+  }, async () => {
+    const response = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/auth/login", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "198.51.100.25" },
+        body: "{}",
+      }),
+      env,
+    );
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get("retry-after"), "60");
+    assert.equal(rateKey, "core:POST:/api/auth/login:198.51.100.25");
+    assert.equal(upstreamCalled, false);
+  });
+});

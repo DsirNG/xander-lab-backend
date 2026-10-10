@@ -1,0 +1,18 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dinqor-content-automation",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-10",
+  "secrets": {
+    "required": ["INTERNAL_SERVICE_TOKEN", "PLATFORM_INTEGRATION_SERVICE_TOKEN", "CORE_SERVICE_TOKEN"]
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "dev": { "port": 8791 },
+  "observability": { "enabled": true },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "dinqor-content-automation-local",
+    "database_id": "00000000-0000-0000-0000-000000000104",
+    "migrations_dir": "migrations"
+  }]
+}

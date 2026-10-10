@@ -1,0 +1,12 @@
+node_modules/
+.wrangler/
+.dev.vars
+wrangler.local.jsonc
+services/*/.wrangler.local-*.jsonc
+.test-build/
+worker-configuration.d.ts
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+# Knowledge is explicitly outside the Cloudflare migration target.
+services/knowledge/

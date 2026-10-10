@@ -1,0 +1,28 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dinqor-platform-integration",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-10",
+  "secrets": { "required": ["INTERNAL_SERVICE_TOKEN", "CONTENT_AUTOMATION_SERVICE_TOKEN", "CORE_SERVICE_TOKEN", "RESEND_API_KEY", "PLATFORM_CREDENTIAL_ENCRYPTION_KEY", "PLATFORM_CSDN_API_KEY", "PLATFORM_CSDN_WEB_CONSOLE_SECRET", "ALIYUN_OSS_ACCESS_KEY_ID", "ALIYUN_OSS_ACCESS_KEY_SECRET"] },
+  "dev": { "port": 8790 },
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true },
+  "vars": {
+    "MAIL_FROM": "noreply@mail.dsircity.top",
+    "JUEJIN_CATALOG_FRESHNESS_HOURS": "24",
+    "MCP_BLOG_ENABLED": "false",
+    "MCP_CSDN_ENABLED": "false",
+    "MCP_DUAL_ENABLED": "false",
+    "MCP_JUEJIN_ENABLED": "false",
+    "MCP_OAUTH_ENABLED": "false",
+    "MCP_OAUTH_PUBLIC_BASE_URL": "http://localhost:8790",
+    "PLATFORM_OSS_PREFIX": "platform-files",
+    "PLATFORM_FILE_ACCESS_URL": "/api/download"
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "dinqor-platform-integration-local",
+    "database_id": "00000000-0000-0000-0000-000000000103",
+    "migrations_dir": "migrations"
+  }]
+}

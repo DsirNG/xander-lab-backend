@@ -1,0 +1,23 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dinqor-payment",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-10",
+  "secrets": {
+    "required": [
+      "INTERNAL_SERVICE_TOKEN",
+      "PAYMENT_SETTINGS_ENCRYPTION_KEY",
+      "CORE_SERVICE_URL",
+      "CORE_SERVICE_TOKEN",
+      "WECHAT_VIRTUAL_PAY_MESSAGE_TOKEN"
+    ]
+  },
+  "dev": { "port": 8794 },
+  "observability": { "enabled": true },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "dinqor-payment-local",
+    "database_id": "00000000-0000-0000-0000-000000000107",
+    "migrations_dir": "migrations"
+  }]
+}

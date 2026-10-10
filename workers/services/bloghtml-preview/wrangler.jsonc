@@ -1,0 +1,25 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dinqor-bloghtml-preview",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-10",
+  "dev": { "port": 8792 },
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["*/15 * * * *"] },
+  "vars": {
+    "BLOG_HTML_PREVIEW_STORAGE_MODE": "oss",
+    "BLOG_HTML_PREVIEW_PAGE_URL_PATTERN": "https://%s.blogHTML.dinqor.cn/raw",
+    "BLOG_HTML_PREVIEW_FRAME_ANCESTORS": "https://dinqor.cn",
+    "BLOG_HTML_PREVIEW_TTL_SECONDS": "1800",
+    "BLOG_HTML_PREVIEW_MAX_CODE_BYTES": "262144",
+    "BLOG_HTML_PREVIEW_RATE_LIMIT_MAX_REQUESTS": "10",
+    "BLOG_HTML_PREVIEW_RATE_LIMIT_WINDOW_SECONDS": "60",
+    "BLOG_HTML_PREVIEW_OSS_PREFIX": "blog-html-preview"
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "dinqor-bloghtml-preview-local",
+    "database_id": "00000000-0000-0000-0000-000000000105",
+    "migrations_dir": "migrations"
+  }]
+}

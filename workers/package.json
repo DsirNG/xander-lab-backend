@@ -1,0 +1,31 @@
+{
+  "name": "@dinqor/workers",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "smoke:agent": "node scripts/smoke-agent.mjs",
+    "smoke:agent-approvals": "node scripts/smoke-agent-approvals.mjs",
+    "smoke:payment": "node scripts/smoke-payment.mjs",
+    "smoke:platform": "node scripts/smoke-platform.mjs",
+    "smoke:publication": "node scripts/smoke-publication.mjs",
+    "smoke:preview": "node scripts/smoke-preview.mjs",
+    "smoke:core-recitation": "node scripts/smoke-core-recitation.mjs",
+    "smoke:core-refresh": "node scripts/smoke-core-refresh.mjs",
+    "generate:routes": "node scripts/generate-routes.mjs",
+    "typecheck": "pnpm --filter @dinqor/gateway-worker run typecheck && pnpm --filter @dinqor/core-worker run typecheck && pnpm --filter @dinqor/agent-worker run typecheck && pnpm --filter @dinqor/payment-worker run typecheck && pnpm --filter @dinqor/platform-integration-worker run typecheck && pnpm --filter @dinqor/content-automation-worker run typecheck && pnpm --filter @dinqor/bloghtml-preview-worker run typecheck",
+    "check": "pnpm generate:routes -- --check && pnpm --filter @dinqor/gateway-worker test && pnpm --filter @dinqor/core-worker test && pnpm --filter @dinqor/agent-worker test && pnpm --filter @dinqor/payment-worker test && pnpm --filter @dinqor/platform-integration-worker test && pnpm --filter @dinqor/content-automation-worker test && pnpm --filter @dinqor/bloghtml-preview-worker test && pnpm typecheck",
+    "deploy:gateway": "pnpm --filter @dinqor/gateway-worker deploy",
+    "deploy:core": "pnpm --filter @dinqor/core-worker deploy",
+    "deploy:agent": "pnpm --filter @dinqor/agent-worker deploy",
+    "deploy:payment": "pnpm --filter @dinqor/payment-worker deploy",
+    "deploy:integration": "pnpm --filter @dinqor/platform-integration-worker deploy",
+    "deploy:content": "pnpm --filter @dinqor/content-automation-worker deploy",
+    "deploy:preview": "pnpm --filter @dinqor/bloghtml-preview-worker deploy"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "wrangler": "4.149.0",
+    "yaml": "2.9.1"
+  }
+}

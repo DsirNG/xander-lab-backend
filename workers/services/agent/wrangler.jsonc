@@ -1,0 +1,25 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dinqor-agent",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-10",
+  "secrets": {
+    "required": [
+      "JWT_SECRET",
+      "INTERNAL_SERVICE_TOKEN",
+      "CORE_SERVICE_URL",
+      "CORE_SERVICE_TOKEN",
+      "CONTENT_AUTOMATION_SERVICE_URL",
+      "CONTENT_AUTOMATION_SERVICE_TOKEN"
+    ]
+  },
+  "vars": { "AGENT_OSS_OBJECT_PREFIX": "agent-attachments", "AGENT_MCP_CLIENT_ENABLED": "false" },
+  "dev": { "port": 8789 },
+  "observability": { "enabled": true },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "dinqor-agent-local",
+    "database_id": "00000000-0000-0000-0000-000000000102",
+    "migrations_dir": "migrations"
+  }]
+}

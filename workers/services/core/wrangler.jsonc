@@ -1,0 +1,36 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dinqor-core",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-10",
+  "secrets": {
+    "required": [
+      "JWT_SECRET",
+      "AUTH_PASSWORD_PEPPER",
+      "INTERNAL_SERVICE_TOKEN",
+      "UPSTASH_REDIS_REST_URL",
+      "UPSTASH_REDIS_REST_TOKEN",
+      "PLATFORM_INTEGRATION_SERVICE_TOKEN",
+      "CONTENT_AUTOMATION_SERVICE_TOKEN"
+    ]
+  },
+  "dev": { "port": 8788 },
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["*/1 * * * *"] },
+  "vars": {
+    "JWT_REFRESH_TTL_SECONDS": "604800",
+    "AUTH_REFRESH_PROTOCOL_ENABLED": "false",
+    "ADMIN_MODEL_GATEWAY_ENABLED": "false",
+    "RECITATION_ENABLED": "false",
+    "RECITATION_MAX_AUDIO_BYTES": "20971520",
+    "RECITATION_WORKER_BATCH_SIZE": "10",
+    "RECITATION_STALE_CLAIM_SECONDS": "120",
+    "RECITATION_OSS_OBJECT_PREFIX": "recitations"
+  },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "dinqor-core-local",
+    "database_id": "00000000-0000-0000-0000-000000000101",
+    "migrations_dir": "migrations"
+  }]
+}

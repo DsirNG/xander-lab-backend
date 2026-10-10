@@ -1,0 +1,12 @@
+{
+  "name": "@dinqor/bloghtml-preview-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "test": "tsc --noEmit false --declaration false --outDir .test-build -p tsconfig.json && node --test tests/*.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": { "@dinqor/worker-runtime": "workspace:*" }
+}

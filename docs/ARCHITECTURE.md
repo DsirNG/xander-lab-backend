@@ -1,7 +1,36 @@
 # Backend Architecture
 
-The backend remains a modular monolith. Business capabilities are grouped by
-feature; deployment and database topology stay unchanged.
+The current backend runtime remains Java/Spring Boot, with business capabilities
+grouped by feature and existing MySQL/Redis deployment topology. The proposed
+Cloudflare Workers + D1 target is documented separately in
+[`migration/cloudflare-workers-d1-plan.md`](./migration/cloudflare-workers-d1-plan.md);
+that target has a local seven-Worker runtime, public content reads, Agent
+conversation APIs including approval-gated publication, plan and email-reminder
+operations, and initial Core flows on D1, but is not a
+production replacement. The Worker target has no Redis dependency. Keep
+current-state ownership below distinct from the Worker deployment boundaries
+until each service is migrated and cut over. The Worker route inventory has
+been reviewed against the seven dispatchers, and cross-service contracts have
+local regression coverage; account-specific data transfer, provider checks,
+and production cutover remain. Content Automation now creates
+owner-scoped blog posts with D1 idempotency; article bodies over 256 KiB are
+stored in Alibaba OSS and D1 keeps only their object key.
+
+The Worker target follows Controller → Service → Interface → Mapper: HTTP
+controllers validate and map transport data, services own use cases, interfaces
+define D1 and service-call ports, and mappers implement D1 or remote adapters.
+Core's active-token, account/password, profile-update, profile-overview,
+administrator user-management, model-provider, feature-model, credential, and
+virtual-pay settings and billing slices follow this structure. Core billing
+reads and writes now go through `BillingService` and `D1BillingMapper`.
+QR login follows the same layers through `QrLoginService`, a Redis state mapper,
+and the WeChat QR provider mapper; WeChat code exchange, verification mail, and
+Content notification diagnostics also use remote-contract mappers. Login,
+registration, password recovery, profile, session, QR, WeChat, and Agent-auth
+routes now live in dedicated controllers; WeChat account-binding decisions use
+`WechatAccountBindingService`. The Core composition entry delegates persistence
+and remote calls to mappers and has no direct D1 queries or fetches. Core's
+route inventory and cross-service contracts have local regression coverage.
 
 ## Business Modules
 

@@ -1,0 +1,13 @@
+packages:
+  - "services/gateway"
+  - "services/core"
+  - "services/agent"
+  - "services/payment"
+  - "services/platform-integration"
+  - "services/content-automation"
+  - "services/bloghtml-preview"
+  - "packages/*"
+
+allowBuilds:
+  esbuild: true
+  workerd: true
