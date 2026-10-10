@@ -1,8 +1,10 @@
 import type { PlatformPublicationPort, BlogSyncResult } from "../interfaces/external-publication.js";
+import { fetchWithServiceBinding, type WorkerServiceBinding } from "@dinqor/worker-runtime";
 
 export interface PlatformPublicationEnvironment {
   PLATFORM_INTEGRATION_SERVICE_URL?: string;
   PLATFORM_INTEGRATION_SERVICE_TOKEN?: string;
+  PLATFORM_INTEGRATION_SERVICE?: WorkerServiceBinding;
 }
 
 export class PlatformPublicationError extends Error {
@@ -87,7 +89,7 @@ export class PlatformIntegrationPublicationMapper implements PlatformPublication
 
     let response: Response;
     try {
-      response = await fetch(endpoint, {
+      response = await fetchWithServiceBinding(this.env.PLATFORM_INTEGRATION_SERVICE, endpoint, {
         method: "POST",
         headers: { "content-type": "application/json", "x-dinqor-service-token": token },
         body: JSON.stringify({

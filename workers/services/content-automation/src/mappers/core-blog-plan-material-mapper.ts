@@ -1,8 +1,10 @@
 import type { BlogPlanMaterialPort, OwnedMaterialResult } from "../interfaces/blog-plan-material-port.js";
+import { fetchWithServiceBinding, type WorkerServiceBinding } from "@dinqor/worker-runtime";
 
 export interface CoreBlogPlanMaterialEnvironment {
   CORE_SERVICE_URL?: string;
   CORE_SERVICE_TOKEN?: string;
+  CORE_SERVICE?: WorkerServiceBinding;
 }
 
 export class CoreBlogPlanMaterialMapper implements BlogPlanMaterialPort {
@@ -20,7 +22,8 @@ export class CoreBlogPlanMaterialMapper implements BlogPlanMaterialPort {
   async getOwned(userId: number, materialId: number): Promise<{ title: string; content: string } | null> {
     if (!this.env.CORE_SERVICE_URL || !this.env.CORE_SERVICE_TOKEN) throw new Error("Core material service is not configured");
     try {
-      const response = await fetch(new URL("/internal/agent/recitation/material/get", this.env.CORE_SERVICE_URL), {
+      const response = await fetchWithServiceBinding(this.env.CORE_SERVICE,
+        new URL("/internal/agent/recitation/material/get", this.env.CORE_SERVICE_URL), {
         method: "POST",
         headers: {
           "content-type": "application/json",

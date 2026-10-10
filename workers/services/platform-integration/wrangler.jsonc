@@ -19,6 +19,10 @@
     "PLATFORM_OSS_PREFIX": "platform-files",
     "PLATFORM_FILE_ACCESS_URL": "/api/download"
   },
+  "services": [
+    { "binding": "CORE_SERVICE", "service": "dinqor-core" },
+    { "binding": "CONTENT_AUTOMATION_SERVICE", "service": "dinqor-content-automation" }
+  ],
   "d1_databases": [{
     "binding": "DB",
     "database_name": "dinqor-platform-integration-local",

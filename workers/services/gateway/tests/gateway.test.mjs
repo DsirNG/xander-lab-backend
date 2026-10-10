@@ -100,6 +100,31 @@ test("public routes strip forged identity and propagate safe correlation and COR
   });
 });
 
+test("same-account service bindings forward Gateway requests with the internal service token", async () => {
+  let forwarded;
+  const env = {
+    ...environment(),
+    CORE_SERVICE: {
+      async fetch(request) {
+        forwarded = request;
+        return new Response(JSON.stringify({ code: 200, message: "success", data: false }), {
+          headers: { "content-type": "application/json" },
+        });
+      },
+    },
+  };
+
+  const response = await gatewayWorker.fetch(
+    new Request("https://gateway.example/api/auth/validate"),
+    env,
+  );
+
+  assert.equal(response.status, 200);
+  assert.equal(forwarded.url, "https://core.example/api/auth/validate");
+  assert.equal(forwarded.headers.get("x-dinqor-service-token"), "core-internal-secret");
+  assert.deepEqual(await response.json(), { code: 200, message: "success", data: false });
+});
+
 test("private writes reject anonymous requests before reaching a service", async () => {
   let upstreamCalled = false;
   await withFetch(async () => {

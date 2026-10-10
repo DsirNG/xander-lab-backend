@@ -13,6 +13,9 @@
     ]
   },
   "dev": { "port": 8794 },
+  "services": [
+    { "binding": "CORE_SERVICE", "service": "dinqor-core" }
+  ],
   "observability": { "enabled": true },
   "d1_databases": [{
     "binding": "DB",

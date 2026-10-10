@@ -1,8 +1,10 @@
 import type { AgentPublicationPort, AgentPublicationResult } from "../interfaces/agent-publication-port.js";
+import { fetchWithServiceBinding, type WorkerServiceBinding } from "@dinqor/worker-runtime";
 
 export interface ContentAgentPublicationEnvironment {
   CONTENT_AUTOMATION_SERVICE_URL?: string;
   CONTENT_AUTOMATION_SERVICE_TOKEN?: string;
+  CONTENT_AUTOMATION_SERVICE?: WorkerServiceBinding;
 }
 
 const MAX_RESPONSE_BYTES = 16 * 1024;
@@ -86,7 +88,7 @@ export class ContentAgentPublicationMapper implements AgentPublicationPort {
 
     let response: Response;
     try {
-      response = await fetch(endpoint, {
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, endpoint, {
         method: "POST",
         headers: { "content-type": "application/json", "x-dinqor-service-token": token },
         body: JSON.stringify({ userId, postId }),

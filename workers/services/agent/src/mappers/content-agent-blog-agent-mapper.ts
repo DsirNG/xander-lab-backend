@@ -1,4 +1,5 @@
 import type { AgentBlogAgentPort, AgentBlogTaskSummary } from "../interfaces/agent-blog-agent-port.js";
+import { fetchWithServiceBinding } from "@dinqor/worker-runtime";
 import type { ContentAgentPublicationEnvironment } from "./content-agent-publication-mapper.js";
 
 const MAX_JSON_BYTES = 64 * 1024;
@@ -73,7 +74,7 @@ export class ContentAgentBlogAgentMapper implements AgentBlogAgentPort {
     const { endpoint, token } = this.configuration(`/internal/agent/blogagent/${taskId}/run-stream`);
     let response: Response;
     try {
-      response = await fetch(endpoint, {
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, endpoint, {
         method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream",
           "x-dinqor-service-token": token },
         body: JSON.stringify({ userId }), redirect: "manual", signal,
@@ -121,7 +122,7 @@ export class ContentAgentBlogAgentMapper implements AgentBlogAgentPort {
     const { endpoint, token } = this.configuration(path);
     let response: Response;
     try {
-      response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json",
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, endpoint, { method: "POST", headers: { "content-type": "application/json",
         "x-dinqor-service-token": token }, body: JSON.stringify(body), redirect: "manual",
         signal: AbortSignal.timeout(30_000) });
     } catch { throw new AgentBlogAgentError(503, "Content BlogAgent service is unavailable"); }

@@ -1,6 +1,7 @@
 import type { PlatformEnvironment } from "../interfaces/platform-environment.js";
 import type { PlatformMcpBlogPort, PlatformMcpPublicationPort } from "../interfaces/platform-mcp-ports.js";
 import { PlatformMcpPortError } from "../interfaces/platform-mcp-ports.js";
+import { fetchWithServiceBinding } from "@dinqor/worker-runtime";
 
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024 + 64 * 1024;
 
@@ -58,11 +59,11 @@ export class ContentMcpMapper implements PlatformMcpBlogPort, PlatformMcpPublica
     }
     let response: Response;
     try {
-      response = await this.fetcher(url, {
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, url, {
         method: "POST",
         headers: { "content-type": "application/json", "x-dinqor-service-token": token },
         body: JSON.stringify(body), redirect: "manual", signal: AbortSignal.timeout(timeoutMs),
-      });
+      }, this.fetcher);
     } catch { throw new PlatformMcpPortError(503, "Content service is temporarily unavailable"); }
     const payload = await readJsonWithinLimit(response);
     if (!response.ok) {
@@ -102,10 +103,10 @@ export class CoreMcpBillingMapper {
     }
     let response: Response;
     try {
-      response = await this.fetcher(url, {
+      response = await fetchWithServiceBinding(this.env.CORE_SERVICE, url, {
         method: "POST", headers: { "content-type": "application/json", "x-dinqor-service-token": token },
         body: JSON.stringify(body), redirect: "manual", signal: AbortSignal.timeout(10_000),
-      });
+      }, this.fetcher);
     } catch { throw new PlatformMcpPortError(503, "Core billing service is temporarily unavailable"); }
     const payload = await readJsonWithinLimit(response);
     if (!response.ok || !isObject(payload) || payload.code !== 200) {

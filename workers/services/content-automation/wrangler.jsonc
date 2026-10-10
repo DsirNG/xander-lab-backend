@@ -7,6 +7,10 @@
     "required": ["INTERNAL_SERVICE_TOKEN", "PLATFORM_INTEGRATION_SERVICE_TOKEN", "CORE_SERVICE_TOKEN"]
   },
   "triggers": { "crons": ["* * * * *"] },
+  "services": [
+    { "binding": "CORE_SERVICE", "service": "dinqor-core" },
+    { "binding": "PLATFORM_INTEGRATION_SERVICE", "service": "dinqor-platform-integration" }
+  ],
   "dev": { "port": 8791 },
   "observability": { "enabled": true },
   "d1_databases": [{

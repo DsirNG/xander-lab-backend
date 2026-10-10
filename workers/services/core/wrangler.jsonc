@@ -8,8 +8,6 @@
       "JWT_SECRET",
       "AUTH_PASSWORD_PEPPER",
       "INTERNAL_SERVICE_TOKEN",
-      "UPSTASH_REDIS_REST_URL",
-      "UPSTASH_REDIS_REST_TOKEN",
       "PLATFORM_INTEGRATION_SERVICE_TOKEN",
       "CONTENT_AUTOMATION_SERVICE_TOKEN"
     ]
@@ -27,6 +25,10 @@
     "RECITATION_STALE_CLAIM_SECONDS": "120",
     "RECITATION_OSS_OBJECT_PREFIX": "recitations"
   },
+  "services": [
+    { "binding": "PLATFORM_INTEGRATION_SERVICE", "service": "dinqor-platform-integration" },
+    { "binding": "CONTENT_AUTOMATION_SERVICE", "service": "dinqor-content-automation" }
+  ],
   "d1_databases": [{
     "binding": "DB",
     "database_name": "dinqor-core-local",

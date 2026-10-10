@@ -1,8 +1,10 @@
 import type { BlogPlanModelPort, BlogPlanModelResponse, BlogPlanModelStage } from "../interfaces/blog-plan-model-port.js";
+import { fetchWithServiceBinding, type WorkerServiceBinding } from "@dinqor/worker-runtime";
 
 export interface CoreBlogPlanModelEnvironment {
   CORE_SERVICE_URL?: string;
   CORE_SERVICE_TOKEN?: string;
+  CORE_SERVICE?: WorkerServiceBinding;
 }
 
 export class CoreBlogPlanModelMapper implements BlogPlanModelPort {
@@ -52,7 +54,7 @@ export class CoreBlogPlanModelMapper implements BlogPlanModelPort {
     if (!this.env.CORE_SERVICE_URL || !this.env.CORE_SERVICE_TOKEN) {
       throw new Error("Core service is not configured");
     }
-    const response = await fetch(new URL(path, this.env.CORE_SERVICE_URL), {
+    const response = await fetchWithServiceBinding(this.env.CORE_SERVICE, new URL(path, this.env.CORE_SERVICE_URL), {
       method: "POST",
       headers: { "content-type": "application/json", "x-dinqor-service-token": this.env.CORE_SERVICE_TOKEN },
       body: JSON.stringify(body),

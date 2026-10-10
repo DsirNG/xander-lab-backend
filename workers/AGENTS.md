@@ -11,8 +11,10 @@ cut over.
   logic; Interfaces define persistence and cross-service ports; Mappers contain
   D1 queries and remote-contract adapters. Keep route entry points thin.
 - A service owns its D1 data. Never query another service's D1 or add a
-  cross-service foreign key. Use versioned HTTPS contracts and idempotent
-  requests/events across service boundaries.
+  cross-service foreign key. Use versioned service-authenticated HTTP
+  contracts and idempotent requests/events across service boundaries. Use
+  same-account service bindings for internal calls; retain HTTPS service URL
+  fallbacks when services are intentionally split across Cloudflare accounts.
 - Use Workers Web APIs. Do not assume a Node.js filesystem, TCP socket, or JVM
   runtime exists inside a Worker.
 - Keep binary files and large generated content in Alibaba OSS. D1 stores

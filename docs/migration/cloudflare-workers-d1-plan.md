@@ -19,10 +19,13 @@ The local seven-Worker stack and isolated D1 databases are in `workers/`.
   bodies.
 - Initial deployable count: seven Workers (one API Gateway and six business
   services). Six services own a D1 database; the Gateway is stateless.
-- Deployment topology: every Worker is independently deployable to its own
-  Cloudflare account. Do not depend on same-account Service Bindings; use
-  versioned HTTPS contracts and service-to-service authentication so the same
-  topology works when several Workers share an account.
+- Deployment topology: each Worker owns its D1 database and can be deployed
+  independently. Within one Cloudflare account, service bindings carry the
+  same versioned, service-authenticated HTTP contracts because Workers cannot
+  call sibling `workers.dev` endpoints directly. If services are split across
+  accounts, omit the same-account binding and use the configured HTTPS service
+  URL fallback with the same service token. Keep account IDs and D1 IDs in
+  deployment-specific configuration, never in the repository.
 - Studio and Components are out of scope and are not part of the target.
 - Nacos is not part of the Worker target. Service endpoints are deployment
   configuration, and service discovery is not performed through database
@@ -430,11 +433,13 @@ that shares users. Existing BCrypt hashes intentionally do not verify in the
 new Worker; the reset flow is the migration path.
 
 For local password/code flows, provide `AUTH_PASSWORD_PEPPER` (at least 32
-bytes), `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, and
-`RESEND_API_KEY` in the environment before `pnpm dev`. The local stack script
-forwards them through generated, ignored `.dev.vars` files and removes those
-files when the stack stops; it does not persist a generated password pepper,
-because local D1 data must keep using the same pepper across restarts.
+bytes), `RESEND_API_KEY`, and the Upstash REST URL/token when those shared Redis
+features are needed. Upstash credentials are optional for deploying Core, but
+verification-code and Redis-backed auth-limit flows stay unavailable until both
+values are configured. The local stack script forwards provided values through
+generated, ignored `.dev.vars` files and removes those files when the stack
+stops; it does not persist a generated password pepper, because local D1 data
+must keep using the same pepper across restarts.
 
 ## Migration sequence
 

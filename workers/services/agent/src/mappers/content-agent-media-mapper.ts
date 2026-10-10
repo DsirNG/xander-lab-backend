@@ -1,6 +1,7 @@
 import type { AgentEnvironment } from "../interfaces/agent-environment.js";
 import type { AgentMediaAssetPort } from "../interfaces/agent-media-asset-port.js";
 import type { AgentImageAsset, AgentImageMediaPort } from "../interfaces/agent-image-media-port.js";
+import { fetchWithServiceBinding } from "@dinqor/worker-runtime";
 
 function internalEndpoint(baseUrl: string | undefined, path: string): URL {
   if (!baseUrl) throw new Error("Content media contract is not configured");
@@ -22,7 +23,7 @@ export class ContentAgentMediaMapper implements AgentMediaAssetPort, AgentImageM
     new Uint8Array(body).set(bytes);
     let response: Response;
     try {
-      response = await fetch(internalEndpoint(this.env.CONTENT_AUTOMATION_SERVICE_URL,
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, internalEndpoint(this.env.CONTENT_AUTOMATION_SERVICE_URL,
         "/internal/content/media/upload-image"), {
         method: "POST",
         headers: {
@@ -49,7 +50,7 @@ export class ContentAgentMediaMapper implements AgentMediaAssetPort, AgentImageM
     if (!this.env.CONTENT_AUTOMATION_SERVICE_TOKEN) throw new Error("Content media contract is not configured");
     let response: Response;
     try {
-      response = await fetch(internalEndpoint(this.env.CONTENT_AUTOMATION_SERVICE_URL,
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, internalEndpoint(this.env.CONTENT_AUTOMATION_SERVICE_URL,
         "/internal/content/media/delete-owned"), {
         method: "POST",
         headers: { "content-type": "application/json", "x-dinqor-service-token": this.env.CONTENT_AUTOMATION_SERVICE_TOKEN },
@@ -73,7 +74,7 @@ export class ContentAgentMediaMapper implements AgentMediaAssetPort, AgentImageM
     new Uint8Array(body).set(bytes);
     let response: Response;
     try {
-      response = await fetch(internalEndpoint(this.env.CONTENT_AUTOMATION_SERVICE_URL,
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, internalEndpoint(this.env.CONTENT_AUTOMATION_SERVICE_URL,
         "/internal/content/media/record-generated"), {
         method: "POST",
         headers: {
@@ -109,7 +110,7 @@ export class ContentAgentMediaMapper implements AgentMediaAssetPort, AgentImageM
     if (!this.env.CONTENT_AUTOMATION_SERVICE_TOKEN) throw new Error("Content media contract is not configured");
     let response: Response;
     try {
-      response = await fetch(internalEndpoint(this.env.CONTENT_AUTOMATION_SERVICE_URL,
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, internalEndpoint(this.env.CONTENT_AUTOMATION_SERVICE_URL,
         "/internal/content/media/find-owned"), {
         method: "POST",
         headers: { "content-type": "application/json", "x-dinqor-service-token": this.env.CONTENT_AUTOMATION_SERVICE_TOKEN },

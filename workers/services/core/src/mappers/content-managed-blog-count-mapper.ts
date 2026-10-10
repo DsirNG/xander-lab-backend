@@ -1,8 +1,10 @@
 import type { ManagedBlogCountRepository, ManagedBlogCountResult } from "../interfaces/managed-blog-count.js";
+import { fetchWithServiceBinding, type WorkerServiceBinding } from "@dinqor/worker-runtime";
 
 export interface ContentManagedBlogCountEnvironment {
   CONTENT_AUTOMATION_SERVICE_URL?: string;
   CONTENT_AUTOMATION_SERVICE_TOKEN?: string;
+  CONTENT_AUTOMATION_SERVICE?: WorkerServiceBinding;
 }
 
 export class ContentManagedBlogCountMapper implements ManagedBlogCountRepository {
@@ -17,7 +19,7 @@ export class ContentManagedBlogCountMapper implements ManagedBlogCountRepository
         "/internal/content/profile/managed-count",
         this.env.CONTENT_AUTOMATION_SERVICE_URL,
       );
-      const response = await fetch(endpoint, {
+      const response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, endpoint, {
         method: "POST",
         headers: {
           "content-type": "application/json",

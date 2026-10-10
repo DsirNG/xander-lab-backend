@@ -3,7 +3,9 @@ import {
   healthResponse,
   readyResponse,
   verifyAccessToken,
+  fetchWithServiceBinding,
   type AccessTokenClaims,
+  type WorkerServiceBinding,
 } from "@dinqor/worker-runtime";
 import { ACCESS_POLICY } from "./access-policy.generated.js";
 import { ROUTES } from "./routes.generated.js";
@@ -25,16 +27,22 @@ interface GatewayEnvironment {
   };
   CORE_SERVICE_URL?: string;
   CORE_SERVICE_TOKEN?: string;
+  CORE_SERVICE?: WorkerServiceBinding;
   AGENT_SERVICE_URL?: string;
   AGENT_SERVICE_TOKEN?: string;
+  AGENT_SERVICE?: WorkerServiceBinding;
   PLATFORM_INTEGRATION_SERVICE_URL?: string;
   PLATFORM_INTEGRATION_SERVICE_TOKEN?: string;
+  PLATFORM_INTEGRATION_SERVICE?: WorkerServiceBinding;
   CONTENT_AUTOMATION_SERVICE_URL?: string;
   CONTENT_AUTOMATION_SERVICE_TOKEN?: string;
+  CONTENT_AUTOMATION_SERVICE?: WorkerServiceBinding;
   BLOGHTML_PREVIEW_SERVICE_URL?: string;
   BLOGHTML_PREVIEW_SERVICE_TOKEN?: string;
+  BLOGHTML_PREVIEW_SERVICE?: WorkerServiceBinding;
   PAYMENT_SERVICE_URL?: string;
   PAYMENT_SERVICE_TOKEN?: string;
+  PAYMENT_SERVICE?: WorkerServiceBinding;
 }
 
 interface Route {
@@ -215,17 +223,17 @@ function accessDecision(method: string, path: string): AccessDecision {
 function destination(service: ServiceName, env: GatewayEnvironment) {
   switch (service) {
     case "core":
-      return [env.CORE_SERVICE_URL, env.CORE_SERVICE_TOKEN] as const;
+      return [env.CORE_SERVICE_URL, env.CORE_SERVICE_TOKEN, env.CORE_SERVICE] as const;
     case "agent":
-      return [env.AGENT_SERVICE_URL, env.AGENT_SERVICE_TOKEN] as const;
+      return [env.AGENT_SERVICE_URL, env.AGENT_SERVICE_TOKEN, env.AGENT_SERVICE] as const;
     case "platform-integration":
-      return [env.PLATFORM_INTEGRATION_SERVICE_URL, env.PLATFORM_INTEGRATION_SERVICE_TOKEN] as const;
+      return [env.PLATFORM_INTEGRATION_SERVICE_URL, env.PLATFORM_INTEGRATION_SERVICE_TOKEN, env.PLATFORM_INTEGRATION_SERVICE] as const;
     case "content-automation":
-      return [env.CONTENT_AUTOMATION_SERVICE_URL, env.CONTENT_AUTOMATION_SERVICE_TOKEN] as const;
+      return [env.CONTENT_AUTOMATION_SERVICE_URL, env.CONTENT_AUTOMATION_SERVICE_TOKEN, env.CONTENT_AUTOMATION_SERVICE] as const;
     case "bloghtml-preview":
-      return [env.BLOGHTML_PREVIEW_SERVICE_URL, env.BLOGHTML_PREVIEW_SERVICE_TOKEN] as const;
+      return [env.BLOGHTML_PREVIEW_SERVICE_URL, env.BLOGHTML_PREVIEW_SERVICE_TOKEN, env.BLOGHTML_PREVIEW_SERVICE] as const;
     case "payment":
-      return [env.PAYMENT_SERVICE_URL, env.PAYMENT_SERVICE_TOKEN] as const;
+      return [env.PAYMENT_SERVICE_URL, env.PAYMENT_SERVICE_TOKEN, env.PAYMENT_SERVICE] as const;
   }
 }
 
@@ -275,13 +283,13 @@ async function resolveActiveIdentity(
   identity: UserIdentity,
   env: GatewayEnvironment,
 ): Promise<AuthResolution> {
-  const [coreUrl, coreToken] = destination("core", env);
+  const [coreUrl, coreToken, coreBinding] = destination("core", env);
   const baseUrl = serviceBaseUrl(coreUrl);
-  if (!baseUrl || !coreToken) return "unavailable";
+  if ((!baseUrl && !coreBinding) || !coreToken) return "unavailable";
 
   try {
-    const endpoint = new URL("/internal/agent/auth/resolve", baseUrl);
-    const response = await fetch(endpoint, {
+    const endpoint = new URL("/internal/agent/auth/resolve", baseUrl ?? "https://core.internal");
+    const response = await fetchWithServiceBinding(coreBinding, endpoint, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -481,13 +489,13 @@ export default {
     const identity = await authorize(request, route, accessDecision(request.method, url.pathname), env);
     if (identity instanceof Response) return finish(identity);
 
-    const [serviceUrl, serviceToken] = destination(route.service, env);
+    const [serviceUrl, serviceToken, serviceBinding] = destination(route.service, env);
     const baseUrl = serviceBaseUrl(serviceUrl);
-    if (!baseUrl || !serviceToken) {
+    if ((!baseUrl && !serviceBinding) || !serviceToken) {
       return finish(apiError(503, `Service ${route.service} is not configured`));
     }
 
-    const upstreamUrl = new URL(`${url.pathname}${url.search}`, baseUrl);
+    const upstreamUrl = new URL(`${url.pathname}${url.search}`, baseUrl ?? `https://${route.service}.internal`);
     try {
       const upstreamRequest = new Request(upstreamUrl, request);
       removeUntrustedHeaders(upstreamRequest.headers);
@@ -497,7 +505,7 @@ export default {
       const edgeClientIp = request.headers.get("cf-connecting-ip");
       if (edgeClientIp) upstreamRequest.headers.set("x-dinqor-client-ip", edgeClientIp);
       upstreamRequest.headers.set("x-dinqor-service-token", serviceToken);
-      return finish(await fetch(upstreamRequest));
+      return finish(await fetchWithServiceBinding(serviceBinding, upstreamRequest));
     } catch {
       return finish(apiError(502, `Service ${route.service} is unavailable`));
     }

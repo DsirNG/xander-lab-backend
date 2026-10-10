@@ -190,6 +190,12 @@ async function localConfigFor(service) {
   const config = JSON.parse(await readFile(sourcePath, "utf8"));
   let needsLocalConfig = false;
 
+  // The local stack intentionally uses its explicit localhost URLs; service bindings are for same-account production calls.
+  if (config.services?.length) {
+    delete config.services;
+    needsLocalConfig = true;
+  }
+
   if (service.name === "gateway") {
     const serviceUrls = Object.fromEntries(services.slice(1).map((target) => {
       const key = target.name.toUpperCase().replaceAll("-", "_");

@@ -1,4 +1,4 @@
-import type { D1Binding, ServiceEnvironment } from "@dinqor/worker-runtime";
+import type { D1Binding, ServiceEnvironment, WorkerServiceBinding } from "@dinqor/worker-runtime";
 
 export interface ContentEnvironment extends ServiceEnvironment {
   DB: D1Binding;
@@ -12,9 +12,11 @@ export interface ContentEnvironment extends ServiceEnvironment {
   ALIYUN_OSS_ACCESS_KEY_SECRET?: string;
   PLATFORM_INTEGRATION_SERVICE_URL?: string;
   PLATFORM_INTEGRATION_SERVICE_TOKEN?: string;
+  PLATFORM_INTEGRATION_SERVICE?: WorkerServiceBinding;
   MAIL_FROM?: string;
   EMAIL_REMINDER_MINIMUM_LEAD_SECONDS?: string;
   EMAIL_REMINDER_DISPLAY_ZONE?: string;
   CORE_SERVICE_URL?: string;
   CORE_SERVICE_TOKEN?: string;
+  CORE_SERVICE?: WorkerServiceBinding;
 }

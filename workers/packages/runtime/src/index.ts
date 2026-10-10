@@ -170,6 +170,23 @@ export interface D1Binding {
   batch(statements: D1PreparedStatement[]): Promise<D1Result[]>;
 }
 
+/** HTTP entrypoint exposed by a Cloudflare service binding. */
+export interface WorkerServiceBinding {
+  fetch(request: Request): Promise<Response>;
+}
+
+/** Uses a same-account service binding when present and keeps HTTPS as the cross-account fallback. */
+export function fetchWithServiceBinding(
+  binding: WorkerServiceBinding | undefined,
+  input: string | URL | Request,
+  init?: RequestInit,
+  fallback: typeof fetch = fetch,
+): Promise<Response> {
+  if (!binding) return fallback(input, init);
+  const request = input instanceof Request ? input : new Request(input, init);
+  return binding.fetch(request);
+}
+
 export interface D1PreparedStatement {
   bind(...values: (string | number | null)[]): D1PreparedStatement;
   first<T = Record<string, unknown>>(columnName?: string): Promise<T | null>;

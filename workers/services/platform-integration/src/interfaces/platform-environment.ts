@@ -1,4 +1,4 @@
-import type { D1Binding, ServiceEnvironment } from "@dinqor/worker-runtime";
+import type { D1Binding, ServiceEnvironment, WorkerServiceBinding } from "@dinqor/worker-runtime";
 import type { McpOAuthEnvironment } from "./mcp-oauth-environment.js";
 
 export interface PlatformEnvironment extends ServiceEnvironment, McpOAuthEnvironment {
@@ -9,8 +9,10 @@ export interface PlatformEnvironment extends ServiceEnvironment, McpOAuthEnviron
   PLATFORM_JUEJIN_AUTHORIZATION_TIMEOUT_SECONDS?: string;
   CONTENT_AUTOMATION_SERVICE_URL?: string;
   CONTENT_AUTOMATION_SERVICE_TOKEN?: string;
+  CONTENT_AUTOMATION_SERVICE?: WorkerServiceBinding;
   CORE_SERVICE_URL?: string;
   CORE_SERVICE_TOKEN?: string;
+  CORE_SERVICE?: WorkerServiceBinding;
   MCP_BLOG_ENABLED?: string;
   MCP_CSDN_ENABLED?: string;
   MCP_DUAL_ENABLED?: string;

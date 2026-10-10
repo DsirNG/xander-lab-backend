@@ -14,6 +14,10 @@
     ]
   },
   "vars": { "AGENT_OSS_OBJECT_PREFIX": "agent-attachments", "AGENT_MCP_CLIENT_ENABLED": "false" },
+  "services": [
+    { "binding": "CORE_SERVICE", "service": "dinqor-core" },
+    { "binding": "CONTENT_AUTOMATION_SERVICE", "service": "dinqor-content-automation" }
+  ],
   "dev": { "port": 8789 },
   "observability": { "enabled": true },
   "d1_databases": [{

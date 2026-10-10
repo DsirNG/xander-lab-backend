@@ -2,10 +2,12 @@ import type {
   ContentNotificationBroadcastRepository,
   NotificationBroadcastResult,
 } from "../interfaces/content-notification-broadcast-repository.js";
+import { fetchWithServiceBinding, type WorkerServiceBinding } from "@dinqor/worker-runtime";
 
 export interface ContentNotificationBroadcastEnvironment {
   CONTENT_AUTOMATION_SERVICE_URL?: string;
   CONTENT_AUTOMATION_SERVICE_TOKEN?: string;
+  CONTENT_AUTOMATION_SERVICE?: WorkerServiceBinding;
 }
 
 export class ContentNotificationBroadcastMapper implements ContentNotificationBroadcastRepository {
@@ -20,7 +22,7 @@ export class ContentNotificationBroadcastMapper implements ContentNotificationBr
         "/internal/content/notifications/test-broadcast",
         this.env.CONTENT_AUTOMATION_SERVICE_URL,
       );
-      const response = await fetch(endpoint, {
+      const response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, endpoint, {
         method: "POST",
         headers: { "x-dinqor-service-token": this.env.CONTENT_AUTOMATION_SERVICE_TOKEN },
         signal: AbortSignal.timeout(5_000),

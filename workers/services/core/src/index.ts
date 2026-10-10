@@ -4,6 +4,7 @@ import {
   jsonResponse,
   type D1Binding,
   type ServiceEnvironment,
+  type WorkerServiceBinding,
 } from "@dinqor/worker-runtime";
 import { signJwtToken } from "./auth.js";
 import { handleAdminSettingsRequest } from "./admin.js";
@@ -95,8 +96,10 @@ interface CoreEnvironment extends ServiceEnvironment {
   UPSTASH_REDIS_REST_TOKEN?: string;
   PLATFORM_INTEGRATION_SERVICE_URL?: string;
   PLATFORM_INTEGRATION_SERVICE_TOKEN?: string;
+  PLATFORM_INTEGRATION_SERVICE?: WorkerServiceBinding;
   CONTENT_AUTOMATION_SERVICE_URL?: string;
   CONTENT_AUTOMATION_SERVICE_TOKEN?: string;
+  CONTENT_AUTOMATION_SERVICE?: WorkerServiceBinding;
   WECHAT_MINIAPP_APP_ID?: string;
   WECHAT_MINIAPP_APP_SECRET?: string;
   WECHAT_MINIAPP_LOGIN_PAGE?: string;

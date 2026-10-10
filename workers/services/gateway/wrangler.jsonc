@@ -18,6 +18,14 @@
     "CORS_ALLOWED_ORIGINS": "https://dinqor.cn",
     "GATEWAY_RATE_LIMIT_ENABLED": "true"
   },
+  "services": [
+    { "binding": "CORE_SERVICE", "service": "dinqor-core" },
+    { "binding": "AGENT_SERVICE", "service": "dinqor-agent" },
+    { "binding": "PAYMENT_SERVICE", "service": "dinqor-payment" },
+    { "binding": "PLATFORM_INTEGRATION_SERVICE", "service": "dinqor-platform-integration" },
+    { "binding": "CONTENT_AUTOMATION_SERVICE", "service": "dinqor-content-automation" },
+    { "binding": "BLOGHTML_PREVIEW_SERVICE", "service": "dinqor-bloghtml-preview" }
+  ],
   "ratelimits": [
     {
       "name": "GATEWAY_RATE_LIMITER",

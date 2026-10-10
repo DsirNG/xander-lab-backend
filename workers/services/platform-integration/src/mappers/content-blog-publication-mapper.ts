@@ -1,5 +1,6 @@
 import type { PlatformEnvironment } from "../interfaces/platform-environment.js";
 import { PlatformBlogSyncError, type PlatformBlogSyncPort } from "../interfaces/platform-blog-sync.js";
+import { fetchWithServiceBinding } from "@dinqor/worker-runtime";
 
 const MAX_RESPONSE_BYTES = 16 * 1024;
 
@@ -25,7 +26,7 @@ export class ContentBlogPublicationMapper implements PlatformBlogSyncPort {
 
     let response: Response;
     try {
-      response = await this.fetcher(url, {
+      response = await fetchWithServiceBinding(this.env.CONTENT_AUTOMATION_SERVICE, url, {
         method: "POST",
         headers: { "content-type": "application/json", "x-dinqor-service-token": token },
         body: JSON.stringify({
@@ -38,7 +39,7 @@ export class ContentBlogPublicationMapper implements PlatformBlogSyncPort {
         }),
         redirect: "manual",
         signal: AbortSignal.timeout(30_000),
-      });
+      }, this.fetcher);
     } catch {
       throw new PlatformBlogSyncError(503, "站外同步结果暂不可确认");
     }
