@@ -26,6 +26,10 @@ The local seven-Worker stack and isolated D1 databases are in `workers/`.
   accounts, omit the same-account binding and use the configured HTTPS service
   URL fallback with the same service token. Keep account IDs and D1 IDs in
   deployment-specific configuration, never in the repository.
+- Public entrypoint: expose Gateway at the configured custom domain. Core,
+  Agent, Payment, Platform Integration, Content Automation, and BlogHTML Preview
+  are reached through Gateway's service bindings; BlogHTML Preview remains
+  available through Gateway's `/blog-html` routes.
 - Studio and Components are out of scope and are not part of the target.
 - Nacos is not part of the Worker target. Service endpoints are deployment
   configuration, and service discovery is not performed through database

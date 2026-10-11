@@ -1,6 +1,7 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "dinqor-gateway",
+  "workers_dev": true,
   "main": "src/index.ts",
   "compatibility_date": "2026-10-10",
   "secrets": {
@@ -15,9 +16,12 @@
     ]
   },
   "vars": {
-    "CORS_ALLOWED_ORIGINS": "https://dinqor.cn",
+    "CORS_ALLOWED_ORIGINS": "https://dinqor.cn,https://xiaodongding.dpdns.org",
     "GATEWAY_RATE_LIMIT_ENABLED": "true"
   },
+  "routes": [
+    { "pattern": "api.xiaodongding.dpdns.org", "custom_domain": true }
+  ],
   "services": [
     { "binding": "CORE_SERVICE", "service": "dinqor-core" },
     { "binding": "AGENT_SERVICE", "service": "dinqor-agent" },
