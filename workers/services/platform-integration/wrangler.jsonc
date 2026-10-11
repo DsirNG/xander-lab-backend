@@ -8,7 +8,7 @@
   "triggers": { "crons": ["* * * * *"] },
   "observability": { "enabled": true },
   "vars": {
-    "MAIL_FROM": "noreply@mail.dsircity.top",
+    "MAIL_FROM": "noreply@mail.dinqor.cn",
     "JUEJIN_CATALOG_FRESHNESS_HOURS": "24",
     "MCP_BLOG_ENABLED": "false",
     "MCP_CSDN_ENABLED": "false",
