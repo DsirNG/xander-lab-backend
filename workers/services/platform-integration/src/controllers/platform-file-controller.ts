@@ -3,6 +3,7 @@ import type { PlatformEnvironment } from "../interfaces/platform-environment.js"
 import { PlatformFileError, PlatformFileService } from "../services/platform-file-service.js";
 
 const MAX_MULTIPART_REQUEST_BYTES = 51 * 1024 * 1024;
+const PUBLIC_IMAGE_PREFIX = "/api/public/files/";
 
 function success(data: unknown): Response {
   return jsonResponse({ code: 200, message: "success", data });
@@ -37,24 +38,70 @@ function encodedFilename(filename: string): string {
     `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
 }
 
-function contentDisposition(filename: string): string {
+function contentDisposition(filename: string, disposition = "attachment"): string {
   const fallback = filename.replace(/[^\x20-\x7e]|["\\]/g, "_");
-  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodedFilename(filename)}`;
+  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodedFilename(filename)}`;
 }
 
-async function downloadResponse(storedName: string, service: PlatformFileService): Promise<Response> {
+async function downloadResponse(storedName: string, service: PlatformFileService, inline = false): Promise<Response> {
   const result = await service.download(storedName);
   if (!result) return new Response(null, { status: 404 });
+  const disposition = inline && result.asset.contentType.toLowerCase().startsWith("image/")
+    ? "inline" : "attachment";
   return new Response(result.object.body, {
     status: 200,
     headers: {
       "content-type": result.asset.contentType,
       "content-length": String(result.asset.byteSize),
-      "content-disposition": contentDisposition(result.asset.originalName),
+      "content-disposition": contentDisposition(result.asset.originalName, disposition),
       "cache-control": "public, max-age=31536000, immutable",
       "x-content-type-options": "nosniff",
     },
   });
+}
+
+function clientUploadUrl(request: Request, upload: { url: string; contentType: string; storedName: string }) {
+  const url = new URL(upload.url, request.url);
+  if (upload.contentType.toLowerCase().startsWith("image/")) {
+    url.pathname = `${PUBLIC_IMAGE_PREFIX}${encodeURIComponent(upload.storedName)}`;
+    url.search = "";
+  }
+  return { ...upload, url: url.toString() };
+}
+
+/** Serves only registered image assets through a browser-readable public URL. */
+export async function handlePublicPlatformImageRequest(
+  request: Request,
+  service: PlatformFileService,
+): Promise<Response | null> {
+  const url = new URL(request.url);
+  if (request.method !== "GET") return null;
+  const publicImagePath = url.pathname.startsWith(PUBLIC_IMAGE_PREFIX);
+  const legacyInlinePath = url.pathname.startsWith("/api/download/")
+    && url.searchParams.get("inline") === "1";
+  if (!publicImagePath && !legacyInlinePath) return null;
+  const prefix = publicImagePath ? PUBLIC_IMAGE_PREFIX : "/api/download/";
+  const storedName = url.pathname.slice(prefix.length);
+  if (!storedName || storedName.includes("/")) return new Response(null, { status: 404 });
+
+  try {
+    const result = await service.downloadPublicImage(storedName);
+    if (!result) return new Response(null, { status: 404 });
+    return new Response(result.object.body, {
+      status: 200,
+      headers: {
+        "access-control-allow-origin": "*",
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-disposition": contentDisposition(result.asset.originalName, "inline"),
+        "content-length": String(result.asset.byteSize),
+        "content-type": result.asset.contentType,
+        "cross-origin-resource-policy": "cross-origin",
+        "x-content-type-options": "nosniff",
+      },
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
 const INTERNAL_FILE_PREFIXES = [
@@ -93,7 +140,8 @@ export async function handlePlatformFileRequest(
       const files = data.getAll("files");
       if (files.some((file) => !(file instanceof File))) return apiError(400, "批量上传请求格式不正确");
       try {
-        return success(await service.uploadBatch(owner, files as File[]));
+        const uploaded = await service.uploadBatch(owner, files as File[]);
+        return success(uploaded.map((file) => clientUploadUrl(request, file)));
       } catch (error) {
         return errorResponse(error);
       }
@@ -105,7 +153,8 @@ export async function handlePlatformFileRequest(
       : data.get("type") === "avatar" ? "avatar"
         : data.get("type") === "video" ? "video" : "photo";
     try {
-      return success(await service.upload(owner, file, category));
+      const uploaded = await service.upload(owner, file, category);
+      return success(clientUploadUrl(request, uploaded));
     } catch (error) {
       return errorResponse(error);
     }
@@ -123,7 +172,7 @@ export async function handlePlatformFileRequest(
     }
     if (!storedName || storedName.includes("/")) return apiError(400, "非法的文件路径");
     try {
-      return await downloadResponse(storedName, service);
+      return await downloadResponse(storedName, service, url.searchParams.get("inline") === "1");
     } catch (error) {
       return errorResponse(error);
     }

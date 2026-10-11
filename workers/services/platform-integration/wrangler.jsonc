@@ -18,6 +18,10 @@
     "MCP_JUEJIN_ENABLED": "false",
     "MCP_OAUTH_ENABLED": "false",
     "MCP_OAUTH_PUBLIC_BASE_URL": "http://localhost:8790",
+    "ALIYUN_OSS_BUCKET": "dinqor",
+    "ALIYUN_OSS_ENDPOINT": "oss-cn-beijing.aliyuncs.com",
+    "ALIYUN_OSS_REGION": "cn-beijing",
+    "ALIYUN_OSS_LEGACY_BUCKET": "",
     "PLATFORM_OSS_PREFIX": "platform-files",
     "PLATFORM_FILE_ACCESS_URL": "/api/download"
   },

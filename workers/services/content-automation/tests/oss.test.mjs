@@ -99,6 +99,34 @@ test("regional OSS endpoints combine with the existing separate bucket setting",
   );
 });
 
+test("virtual-host object requests include the bucket in the V4 canonical URI", () => {
+  const url = createOssObjectUrl(
+    "oss-cn-beijing.aliyuncs.com",
+    "diagnostics/core-oss-smoke-test.txt",
+    "dinqor",
+  );
+  const canonicalRequest = buildOssCanonicalRequest("PUT", url, new Headers({
+    "content-type": "text/plain; charset=utf-8",
+    "x-oss-content-sha256": "UNSIGNED-PAYLOAD",
+    "x-oss-date": "20261011T075126Z",
+  }));
+
+  assert.equal(url.pathname, "/diagnostics/core-oss-smoke-test.txt");
+  assert.equal(canonicalRequest.split("\n")[1], "/dinqor/diagnostics/core-oss-smoke-test.txt");
+});
+
+test("OSS canonical URI adds a virtual-host bucket for direct URLs and custom endpoints", () => {
+  const headers = new Headers({
+    "x-oss-content-sha256": "UNSIGNED-PAYLOAD",
+    "x-oss-date": "20261011T075126Z",
+  });
+  const virtualHostUrl = new URL("https://examplebucket.oss-cn-hangzhou.aliyuncs.com/exampleobject");
+  const customEndpointUrl = createOssObjectUrl("https://oss.example.com", "exampleobject", "examplebucket");
+
+  assert.equal(buildOssCanonicalRequest("GET", virtualHostUrl, headers).split("\n")[1], "/examplebucket/exampleobject");
+  assert.equal(buildOssCanonicalRequest("GET", customEndpointUrl, headers).split("\n")[1], "/examplebucket/exampleobject");
+});
+
 test("private object GET uses server-side OSS headers without an optional-header clause", async () => {
   const headers = await signedOssGetHeaders(
     new URL("https://examplebucket.oss-cn-hangzhou.aliyuncs.com/article-content/a.md"),

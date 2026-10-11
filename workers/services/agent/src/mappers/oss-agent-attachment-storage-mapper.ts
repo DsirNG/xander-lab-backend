@@ -2,12 +2,20 @@ import {
   createOssObjectUrl,
   inferOssRegion,
   signedOssDeleteHeaders,
-  signedOssHeadHeaders,
   signedOssGetUrl,
   signedOssPutHeaders,
 } from "@dinqor/worker-runtime/oss";
+import type { OssV4Credentials } from "@dinqor/worker-runtime/oss";
 import type { AgentAttachmentStorage } from "../interfaces/agent-attachment.js";
 import type { AgentEnvironment } from "../interfaces/agent-environment.js";
+
+function safeOssErrorCode(value: string | null): string | undefined {
+  return value && /^[a-z0-9._-]{1,100}$/i.test(value) ? value : undefined;
+}
+
+function safeOssRequestId(value: string | null): string | undefined {
+  return value && /^[a-z0-9_-]{1,100}$/i.test(value) ? value : undefined;
+}
 
 export class OssAgentAttachmentStorageMapper implements AgentAttachmentStorage {
   constructor(private readonly env: AgentEnvironment) {}
@@ -24,7 +32,18 @@ export class OssAgentAttachmentStorageMapper implements AgentAttachmentStorage {
       redirect: "manual",
       signal: AbortSignal.timeout(20_000),
     });
-    if (!response.ok) throw new Error("Agent attachment upload failed");
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      const errorCode = response.headers.get("x-oss-ec")
+        ?? body.match(/<Code>\s*([A-Za-z0-9_-]{1,80})\s*<\/Code>/i)?.[1]
+        ?? null;
+      console.error("Agent attachment OSS PUT rejected", {
+        status: response.status,
+        errorCode: safeOssErrorCode(errorCode),
+        requestId: safeOssRequestId(response.headers.get("x-oss-request-id")),
+      });
+      throw new Error("Agent attachment upload failed");
+    }
   }
 
   async delete(objectKey: string): Promise<void> {
@@ -33,14 +52,7 @@ export class OssAgentAttachmentStorageMapper implements AgentAttachmentStorage {
     for (const bucket of buckets) {
       const { objectUrl } = this.object(objectKey, bucket);
       if (buckets.length > 1) {
-        const head = await this.request(objectUrl, {
-          method: "HEAD",
-          headers: await signedOssHeadHeaders(objectUrl, credentials),
-          redirect: "manual",
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (head.status === 404) continue;
-        if (!head.ok) throw new Error("Agent attachment cleanup failed");
+        if (!await this.objectExists(objectUrl, credentials, bucket)) continue;
       }
       const response = await this.request(objectUrl, {
         method: "DELETE",
@@ -60,14 +72,7 @@ export class OssAgentAttachmentStorageMapper implements AgentAttachmentStorage {
     for (const bucket of buckets) {
       const { objectUrl } = this.object(objectKey, bucket);
       if (buckets.length > 1) {
-        const response = await this.request(objectUrl, {
-          method: "HEAD",
-          headers: await signedOssHeadHeaders(objectUrl, credentials),
-          redirect: "manual",
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (response.status === 404) continue;
-        if (!response.ok) throw new Error("Agent attachment fetch failed");
+        if (!await this.objectExists(objectUrl, credentials, bucket)) continue;
       }
       return (await signedOssGetUrl(objectUrl, credentials, 600)).toString();
     }
@@ -77,9 +82,46 @@ export class OssAgentAttachmentStorageMapper implements AgentAttachmentStorage {
   private async request(url: URL, init: RequestInit): Promise<Response> {
     try {
       return await fetch(url, init);
-    } catch {
+    } catch (error) {
+      console.error("Agent attachment OSS request unavailable", {
+        method: init.method ?? "GET",
+        error: error instanceof Error ? error.name : "UnknownError",
+      });
       throw new Error("Agent attachment storage is unavailable");
     }
+  }
+
+  private async objectExists(
+    objectUrl: URL,
+    credentials: OssV4Credentials,
+    bucket: string | undefined,
+  ): Promise<boolean> {
+    const probeUrl = await signedOssGetUrl(objectUrl, credentials, 60);
+    const response = await this.request(probeUrl, {
+      method: "GET",
+      headers: { range: "bytes=0-0" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status === 404) {
+      await response.body?.cancel().catch(() => {});
+      return false;
+    }
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      const errorCode = response.headers.get("x-oss-ec")
+        ?? body.match(/<Code>\s*([A-Za-z0-9_-]{1,80})\s*<\/Code>/i)?.[1]
+        ?? null;
+      console.error("Agent attachment OSS existence probe rejected", {
+        bucket,
+        status: response.status,
+        errorCode: safeOssErrorCode(errorCode),
+        requestId: safeOssRequestId(response.headers.get("x-oss-request-id")),
+      });
+      throw new Error("Agent attachment fetch failed");
+    }
+    await response.body?.cancel().catch(() => {});
+    return true;
   }
 
   private bucketCandidates(): Array<string | undefined> {

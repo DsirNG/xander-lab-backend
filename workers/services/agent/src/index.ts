@@ -1,4 +1,6 @@
-import { createBusinessService } from "@dinqor/worker-runtime";
+import { createBusinessService, type WorkerExecutionContextLike } from "@dinqor/worker-runtime";
+import { handleAgentOssSmokeTestRequest } from "./controllers/agent-oss-smoke-test-controller.js";
+import { handleAgentAttachmentSmokeTestRequest } from "./controllers/agent-attachment-smoke-test-controller.js";
 import { handleAgentConversationRequest } from "./controllers/agent-conversation-controller.js";
 import { handleAgentAttachmentRequest } from "./controllers/agent-attachment-controller.js";
 import { handleAgentApprovalRequest } from "./controllers/agent-approval-controller.js";
@@ -40,7 +42,7 @@ import { AgentMcpService } from "./services/agent-mcp-service.js";
 import { AgentImageService } from "./services/agent-image-service.js";
 import { AgentContentToolsService } from "./services/agent-content-tools-service.js";
 
-export default createBusinessService<AgentEnvironment>("agent", async (request, env, context) => {
+const agentService = createBusinessService<AgentEnvironment>("agent", async (request, env, context) => {
   const auth = new AgentAuthService(env.JWT_SECRET, new CoreAuthMapper(env));
   const resolveUser = () => auth.currentUserId(request);
   const contentMedia = new ContentAgentMediaMapper(env);
@@ -93,3 +95,14 @@ export default createBusinessService<AgentEnvironment>("agent", async (request, 
   const conversationService = new AgentConversationService(new D1AgentConversationMapper(env.DB), attachmentService);
   return handleAgentConversationRequest(request, conversationService, resolveUser);
 });
+
+export default {
+  ...agentService,
+  async fetch(request: Request, env: AgentEnvironment, context: WorkerExecutionContextLike): Promise<Response> {
+    const attachmentSmokeTest = await handleAgentAttachmentSmokeTestRequest(request, env);
+    if (attachmentSmokeTest) return attachmentSmokeTest;
+    const ossSmokeTest = await handleAgentOssSmokeTestRequest(request, env);
+    if (ossSmokeTest) return ossSmokeTest;
+    return agentService.fetch(request, env, context);
+  },
+};

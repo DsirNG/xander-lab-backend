@@ -1,8 +1,9 @@
 # Cloudflare Workers workspace rules
 
-This directory is the TypeScript Cloudflare Workers target. The Java/Spring
-Boot implementation remains authoritative until a service is migrated and
-cut over.
+This directory is the actively maintained TypeScript Cloudflare Workers
+reconstruction. The Java/Spring Boot version is no longer maintained and is
+historical reference only. Implement new backend features and fixes in Workers;
+do not treat the Java version as authoritative or add parallel Java changes.
 
 - Keep each deployable service in `services/<service>` with its own Wrangler
   config, D1 binding, migrations, and deployment command.

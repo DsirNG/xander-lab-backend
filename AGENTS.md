@@ -1,5 +1,13 @@
 # DinQorAI Backend Rules
 
+## Active implementation
+
+- The actively maintained backend is the TypeScript Cloudflare Workers
+  reconstruction in `workers/`; read `workers/AGENTS.md` for its runtime rules.
+- The Java/Spring Boot version is no longer maintained. Use it only as historical
+  reference; new backend features and fixes target Workers without parallel Java
+  changes. Java-specific rules below apply only to historical Java code.
+
 ## API and authentication
 
 - Return the shared `{ "code": number, "message": string, "data": null }` error shape.

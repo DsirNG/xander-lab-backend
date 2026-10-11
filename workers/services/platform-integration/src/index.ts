@@ -4,7 +4,7 @@ import { handlePlatformBlogSyncRequest } from "./controllers/platform-blog-sync-
 import { handlePlatformCredentialRequest } from "./controllers/platform-credential-controller.js";
 import { handleMcpOAuthRequest } from "./controllers/mcp-oauth-controller.js";
 import { handleMcpTransportRequest } from "./controllers/mcp-transport-controller.js";
-import { handlePlatformFileRequest } from "./controllers/platform-file-controller.js";
+import { handlePlatformFileRequest, handlePublicPlatformImageRequest } from "./controllers/platform-file-controller.js";
 import { handleJuejinCatalogRequest } from "./controllers/juejin-catalog-controller.js";
 import { handleJuejinPublicationRequest } from "./controllers/juejin-publication-controller.js";
 import { handleVerificationMailRequest } from "./controllers/verification-mail-controller.js";
@@ -109,6 +109,12 @@ const platformWorker = createBusinessService<PlatformEnvironment>("platform-inte
   const reminderMailResponse = await handleTransactionalMailRequest(request, env, reminderMail);
   if (reminderMailResponse) return reminderMailResponse;
   return handleVerificationMailRequest(request, mailService);
+}, async (request, env) => {
+  const fileService = new PlatformFileService(
+    new D1PlatformFileMapper(env.DB),
+    new AliyunPlatformFileStorageMapper(env),
+  );
+  return handlePublicPlatformImageRequest(request, fileService);
 });
 
 interface ScheduledControllerLike {

@@ -116,16 +116,19 @@ test("private media controller protects owner reads and accepts bounded multipar
   assert.equal(anonymous.status, 401);
   const form = new FormData();
   form.set("file", new File([tinyPng], "tiny.png", { type: "image/png" }));
-  const upload = await handleBlogMediaRequest(new Request("https://content/api/blog/media/images", {
+  const upload = await handleBlogMediaRequest(new Request("https://api.dinqor.cn/api/blog/media/images", {
     method: "POST", headers: { "x-user-id": "42" }, body: form,
-  }), service);
+  }), service, "https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media");
   assert.equal(upload.status, 200);
   const payload = await upload.json();
   assert.equal(payload.data.width, 1);
-  const list = await handleBlogMediaRequest(new Request("https://content/api/blog/media/images?scope=recent", {
+  assert.equal(payload.data.url, `https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media/${payload.data.storedName}`);
+  const list = await handleBlogMediaRequest(new Request("https://api.dinqor.cn/api/blog/media/images?scope=recent", {
     headers: { "x-user-id": "42" },
-  }), service);
-  assert.equal((await list.json()).data[0].id, payload.data.id);
+  }), service, "https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media");
+  const listed = await list.json();
+  assert.equal(listed.data[0].id, payload.data.id);
+  assert.equal(listed.data[0].url, payload.data.url);
 
   const internal = await handleBlogMediaRequest(new Request("https://content/internal/content/media/find-owned", {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: 42, id: payload.data.id }),
@@ -235,10 +238,17 @@ test("internal Agent generated-image contract decodes metadata and records the i
       "x-dinqor-generation-meta": encodeURIComponent(generationMeta),
     },
     body: tinyPng,
-  }), service);
+  }), service, "https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media");
   assert.equal(response.status, 200);
   const asset = await response.json();
   assert.equal(asset.sourceType, "agent_generated");
+  assert.equal(asset.url, `https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media/${asset.storedName}`);
   assert.deepEqual(JSON.parse(asset.generationMeta), JSON.parse(generationMeta));
   assert.equal(rows.length, 1);
+  const page = await handleBlogMediaRequest(new Request("https://content/api/blog/media/images/agent?page=1&size=24", {
+    headers: { "x-user-id": "42" },
+  }), service, "https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media");
+  const images = await page.json();
+  assert.equal(images.data.records[0].url, asset.url);
+  assert.equal(Object.hasOwn(images.data.records[0], "storedName"), false);
 });

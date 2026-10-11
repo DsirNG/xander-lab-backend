@@ -13,6 +13,7 @@ export interface AgentEnvironment extends ServiceEnvironment, AgentModelEnvironm
   ALIYUN_OSS_ACCESS_KEY_ID?: string;
   ALIYUN_OSS_ACCESS_KEY_SECRET?: string;
   AGENT_OSS_OBJECT_PREFIX?: string;
+  AGENT_OSS_SMOKE_TEST_ENABLED?: string;
   AGENT_MCP_CREDENTIAL_ENCRYPTION_KEY?: string;
   AGENT_MCP_CLIENT_ENABLED?: string;
   CONTENT_AUTOMATION_SERVICE?: { fetch(request: Request): Promise<Response> };

@@ -72,7 +72,7 @@ const contentService = createBusinessService<ContentEnvironment>("content-automa
   if (notificationResponse) return notificationResponse;
 
   const blogMedia = createBlogMediaService(env);
-  const mediaResponse = await handleBlogMediaRequest(request, blogMedia);
+  const mediaResponse = await handleBlogMediaRequest(request, blogMedia, env.CONTENT_MEDIA_PUBLIC_BASE_URL);
   if (mediaResponse) return mediaResponse;
 
   const planMapper = new D1BlogPlanMapper(env.DB);
@@ -132,7 +132,9 @@ export default {
   async fetch(request: Request, env: ContentEnvironment, context: WorkerExecutionContextLike): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname.startsWith(PUBLIC_MEDIA_PATH)) {
-      const response = await handleBlogMediaRequest(request, createBlogMediaService(env));
+      const response = await handleBlogMediaRequest(
+        request, createBlogMediaService(env), env.CONTENT_MEDIA_PUBLIC_BASE_URL,
+      );
       if (response) return response;
     }
     return contentService.fetch(request, env, context);

@@ -26,6 +26,7 @@ import { handleIdentityAccountRequest } from "./controllers/identity-account-con
 import { handleWechatAuthRequest } from "./controllers/wechat-auth-controller.js";
 import { handleIdentityProfileRequest } from "./controllers/identity-profile-controller.js";
 import { handleRecitationRequest } from "./controllers/recitation-controller.js";
+import { handleOssSmokeTestRequest } from "./controllers/oss-smoke-test-controller.js";
 import { handleRecitationWorkerRequest } from "./controllers/recitation-worker-controller.js";
 import type { IdentityUser } from "./interfaces/identity-repository.js";
 import { D1IdentityMapper } from "./mappers/d1-identity-mapper.js";
@@ -394,6 +395,15 @@ const coreService = createBusinessService<CoreEnvironment>("core", handleCoreReq
 
 export default {
   ...coreService,
+  async fetch(
+    request: Request,
+    env: CoreEnvironment,
+    context: { waitUntil(task: Promise<unknown>): void },
+  ): Promise<Response> {
+    const ossSmokeTest = await handleOssSmokeTestRequest(request, env);
+    if (ossSmokeTest) return ossSmokeTest;
+    return coreService.fetch(request, env, context);
+  },
   async scheduled(
     _controller: unknown,
     env: CoreEnvironment,

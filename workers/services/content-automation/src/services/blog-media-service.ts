@@ -9,6 +9,10 @@ const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const SUPPORTED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const PUBLIC_IMAGE_OBJECT_KEY = /^[1-9]\d{0,17}\/\d{4}\/(?:0[1-9]|1[0-2])\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|gif)$/;
 
+export function isPublicBlogImageObjectKey(value: string): boolean {
+  return PUBLIC_IMAGE_OBJECT_KEY.test(value);
+}
+
 function dimension(width: number, height: number): { width: number; height: number } | null {
   return Number.isSafeInteger(width) && width > 0 && Number.isSafeInteger(height) && height > 0
     ? { width, height } : null;
@@ -106,7 +110,7 @@ function agentImage(asset: BlogMediaAsset) {
     } catch { /* malformed legacy metadata must not hide the image */ }
   }
   return {
-    id: asset.id, url: asset.url, title: title?.trim() || asset.originalName,
+    id: asset.id, url: asset.url, storedName: asset.storedName, title: title?.trim() || asset.originalName,
     prompt, model, size, width: asset.width, height: asset.height, createdAt: asset.createdAt,
   };
 }
@@ -147,7 +151,7 @@ export class BlogMediaService {
   }
 
   async publicImage(objectKey: string) {
-    if (!PUBLIC_IMAGE_OBJECT_KEY.test(objectKey)) return null;
+    if (!isPublicBlogImageObjectKey(objectKey)) return null;
     const asset = await this.repository.findPublicByStoredName(objectKey);
     if (!asset || !SUPPORTED_UPLOAD_TYPES.has(asset.contentType)
       || !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > MAX_IMAGE_BYTES) return null;

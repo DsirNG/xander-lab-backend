@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { handlePlatformFileRequest } from "../.test-build/controllers/platform-file-controller.js";
+import integrationWorker from "../.test-build/index.js";
+import { handlePlatformFileRequest, handlePublicPlatformImageRequest } from "../.test-build/controllers/platform-file-controller.js";
 import { PlatformFileStorageError } from "../.test-build/interfaces/platform-file-storage.js";
 import { AliyunPlatformFileStorageMapper } from "../.test-build/mappers/aliyun-platform-file-storage-mapper.js";
 import { PlatformFileService } from "../.test-build/services/platform-file-service.js";
@@ -142,9 +143,15 @@ test("Platform upload controller requires projected identity and supports multip
   assert.equal(payload.code, 200);
   assert.equal(fixture.repository.rows.get(payload.data.storedName).objectKey,
     `videos/${payload.data.storedName}`);
+  assert.equal(payload.data.url, `https://platform.test/api/public/files/${payload.data.storedName}`);
+
+  const image = await handlePublicPlatformImageRequest(new Request(payload.data.url), fixture.service);
+  assert.equal(image.status, 200);
+  assert.match(image.headers.get("content-disposition"), /^inline;/);
+  assert.equal(image.headers.get("content-type"), "image/webp");
 });
 
-test("Platform downloads stay public while internal file contracts require the service token", async () => {
+test("Platform file controller serves inline images and protects internal file contracts", async () => {
   const fixture = fileFixture();
   const file = await fixture.service.upload(42, createFile("avatar.png"), "avatar");
   const env = { INTERNAL_SERVICE_TOKEN: "platform-token" };
@@ -170,4 +177,92 @@ test("Platform downloads stay public while internal file contracts require the s
   assert.equal(exported.status, 200);
   assert.equal(exported.headers.get("content-type"), "text/csv;charset=UTF-8");
   assert.match(await exported.text(), /Spring Boot/);
+});
+
+test("public image route is unauthenticated, inline, and limited to image assets", async () => {
+  const fixture = fileFixture();
+  const image = await fixture.service.upload(42, createFile("avatar.png"), "avatar");
+  const response = await handlePublicPlatformImageRequest(
+    new Request(`https://platform.test/api/public/files/${image.storedName}`),
+    fixture.service,
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.match(response.headers.get("content-disposition"), /^inline;/);
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.equal(response.headers.get("cross-origin-resource-policy"), "cross-origin");
+  assert.equal(await response.text(), "png-data");
+
+  const document = await fixture.service.upload(42, createFile("notes.txt", "text/plain", "private"), "upload");
+  const denied = await handlePublicPlatformImageRequest(
+    new Request(`https://platform.test/api/public/files/${document.storedName}`),
+    fixture.service,
+  );
+  assert.equal(denied.status, 404);
+});
+
+test("Platform worker bypasses service auth only for public image reads", async () => {
+  const storedName = "2fcc52bb-68ba-4cb1-88b7-dcc73bb4c76e.png";
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("png-data", {
+    status: 200,
+    headers: { "content-type": "image/png", "content-length": "8" },
+  });
+  const env = {
+    DB: {
+      prepare() {
+        return {
+          bind() {
+            return {
+              async first() {
+                return {
+                  storedName,
+                  userId: 42,
+                  originalName: "avatar.png",
+                  objectKey: `avatars/${storedName}`,
+                  byteSize: 8,
+                  contentType: "image/png",
+                  extension: "png",
+                  contentSha256: "0".repeat(64),
+                  createdAt: "2026-01-01T00:00:00Z",
+                };
+              },
+            };
+          },
+        };
+      },
+    },
+    INTERNAL_SERVICE_TOKEN: "platform-token",
+    ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+    ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+    ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+    ALIYUN_OSS_REGION: "cn-beijing",
+    ALIYUN_OSS_BUCKET: "dinqor",
+    PLATFORM_OSS_PREFIX: "platform-files",
+  };
+  try {
+    const image = await integrationWorker.fetch(
+      new Request(`https://platform.test/api/public/files/${storedName}`),
+      env,
+      { waitUntil() {} },
+    );
+    assert.equal(image.status, 200);
+    assert.equal(image.headers.get("content-type"), "image/png");
+    assert.match(image.headers.get("content-disposition"), /^inline;/);
+
+    const legacyInlineImage = await integrationWorker.fetch(
+      new Request(`https://platform.test/api/download/${storedName}?inline=1`),
+      env,
+      { waitUntil() {} },
+    );
+    assert.equal(legacyInlineImage.status, 200);
+    assert.equal(legacyInlineImage.headers.get("content-type"), "image/png");
+
+    const protectedDownload = await integrationWorker.fetch(
+      new Request(`https://platform.test/api/download/${storedName}`), env, { waitUntil() {} },
+    );
+    assert.equal(protectedDownload.status, 401);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });

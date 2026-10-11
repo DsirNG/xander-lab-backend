@@ -1,5 +1,5 @@
 import { apiError, jsonResponse } from "@dinqor/worker-runtime";
-import { BlogMediaInputError, BlogMediaService } from "../services/blog-media-service.js";
+import { BlogMediaInputError, BlogMediaService, isPublicBlogImageObjectKey } from "../services/blog-media-service.js";
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_INTERNAL_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -15,6 +15,39 @@ function success(data: unknown): Response {
 function errorResponse(error: unknown): Response {
   if (error instanceof BlogMediaInputError) return apiError(error.status, error.message);
   return apiError(503, "媒体服务暂不可用");
+}
+
+function publicImageUrl(request: Request, storedName: string, publicMediaBaseUrl?: string): string {
+  const encodedPath = storedName.split("/").map(encodeURIComponent).join("/");
+  const url = new URL(publicMediaBaseUrl || request.url);
+  const basePath = publicMediaBaseUrl
+    ? url.pathname.replace(/\/+$/, "")
+    : PUBLIC_MEDIA_PATH.replace(/\/+$/, "");
+  url.pathname = `${basePath}/${encodedPath}`;
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
+function publicMediaAsset<T extends { url: string; storedName: string | null }>(
+  request: Request,
+  asset: T,
+  publicMediaBaseUrl?: string,
+): T {
+  return asset.storedName && isPublicBlogImageObjectKey(asset.storedName)
+    ? { ...asset, url: publicImageUrl(request, asset.storedName, publicMediaBaseUrl) }
+    : asset;
+}
+
+function publicAgentImage<T extends { url: string; storedName: string | null }>(
+  request: Request,
+  image: T,
+  publicMediaBaseUrl?: string,
+) {
+  const { storedName, ...asset } = image;
+  return storedName && isPublicBlogImageObjectKey(storedName)
+    ? { ...asset, url: publicImageUrl(request, storedName, publicMediaBaseUrl) }
+    : asset;
 }
 
 function parsePositive(value: unknown): number | null {
@@ -84,7 +117,11 @@ async function formFile(request: Request): Promise<File | null> {
   } catch { return null; }
 }
 
-export async function handleBlogMediaRequest(request: Request, service: BlogMediaService): Promise<Response | null> {
+export async function handleBlogMediaRequest(
+  request: Request,
+  service: BlogMediaService,
+  publicMediaBaseUrl?: string,
+): Promise<Response | null> {
   const url = new URL(request.url);
   if (request.method === "GET" && url.pathname.startsWith(PUBLIC_MEDIA_PATH)) {
     let objectKey: string;
@@ -106,7 +143,10 @@ export async function handleBlogMediaRequest(request: Request, service: BlogMedi
   if (request.method === "GET" && url.pathname === "/api/blog/media/images") {
     const userId = projectedUserId(request);
     if (userId === null) return apiError(401, "未登录或登录已过期");
-    try { return success(await service.images(userId, url.searchParams.get("scope") ?? "recent", url.searchParams.get("keyword"))); }
+    try {
+      const images = await service.images(userId, url.searchParams.get("scope") ?? "recent", url.searchParams.get("keyword"));
+      return success(images.map((image) => publicMediaAsset(request, image, publicMediaBaseUrl)));
+    }
     catch (error) { return errorResponse(error); }
   }
   if (request.method === "GET" && url.pathname === "/api/blog/media/images/agent") {
@@ -115,7 +155,13 @@ export async function handleBlogMediaRequest(request: Request, service: BlogMedi
     const page = queryInteger(url.searchParams.get("page"), 1);
     const size = queryInteger(url.searchParams.get("size"), 24);
     if (page === null || size === null) return apiError(400, "分页参数无效");
-    try { return success(await service.agentImages(userId, page, size)); }
+    try {
+      const result = await service.agentImages(userId, page, size);
+      return success({
+        ...result,
+        records: result.records.map((image) => publicAgentImage(request, image, publicMediaBaseUrl)),
+      });
+    }
     catch (error) { return errorResponse(error); }
   }
   if (request.method === "POST" && url.pathname === "/api/blog/media/images") {
@@ -126,7 +172,8 @@ export async function handleBlogMediaRequest(request: Request, service: BlogMedi
     if (file.size > MAX_IMAGE_BYTES) return apiError(413, "图片大小不能超过 10MB");
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      return success(await service.uploadImage({ userId, bytes, originalName: file.name, contentType: file.type }));
+      const image = await service.uploadImage({ userId, bytes, originalName: file.name, contentType: file.type });
+      return success(publicMediaAsset(request, image, publicMediaBaseUrl));
     } catch (error) { return errorResponse(error); }
   }
 
@@ -156,7 +203,10 @@ export async function handleBlogMediaRequest(request: Request, service: BlogMedi
     const userId = parsePositive(body?.userId);
     const stored = body?.stored;
     if (userId === null || !stored || typeof stored !== "object" || Array.isArray(stored)) return apiError(400, "媒体信息无效");
-    try { return jsonResponse(await service.recordStored(userId, stored as Parameters<BlogMediaService["recordStored"]>[1])); }
+    try {
+      const asset = await service.recordStored(userId, stored as Parameters<BlogMediaService["recordStored"]>[1]);
+      return jsonResponse(publicMediaAsset(request, asset, publicMediaBaseUrl));
+    }
     catch (error) { return errorResponse(error); }
   }
   if (request.method === "POST" && url.pathname === "/internal/content/media/find-owned") {
@@ -164,7 +214,10 @@ export async function handleBlogMediaRequest(request: Request, service: BlogMedi
     const userId = parsePositive(body?.userId);
     const id = parsePositive(body?.id);
     if (userId === null || id === null) return apiError(400, "媒体 ID 无效");
-    try { return jsonResponse(await service.findOwned(userId, id)); }
+    try {
+      const asset = await service.findOwned(userId, id);
+      return jsonResponse(asset ? publicMediaAsset(request, asset, publicMediaBaseUrl) : null);
+    }
     catch (error) { return errorResponse(error); }
   }
   if (request.method === "POST" && url.pathname === "/internal/content/media/list-by-task") {
@@ -172,7 +225,10 @@ export async function handleBlogMediaRequest(request: Request, service: BlogMedi
     const userId = parsePositive(body?.userId);
     const taskId = parsePositive(body?.taskId);
     if (userId === null || taskId === null) return apiError(400, "Agent 任务 ID 无效");
-    try { return jsonResponse(await service.listByTask(userId, taskId)); }
+    try {
+      const assets = await service.listByTask(userId, taskId);
+      return jsonResponse(assets.map((asset) => publicMediaAsset(request, asset, publicMediaBaseUrl)));
+    }
     catch (error) { return errorResponse(error); }
   }
   if (request.method === "POST" && url.pathname === "/internal/content/media/find-reusable-generated") {
@@ -180,7 +236,10 @@ export async function handleBlogMediaRequest(request: Request, service: BlogMedi
     const userId = parsePositive(body?.userId);
     const title = typeof body?.title === "string" ? body.title.trim().slice(0, 255) : "";
     if (userId === null || !title) return apiError(400, "图片标题无效");
-    try { return jsonResponse(await service.findReusableGenerated(userId, title)); }
+    try {
+      const asset = await service.findReusableGenerated(userId, title);
+      return jsonResponse(asset ? publicMediaAsset(request, asset, publicMediaBaseUrl) : null);
+    }
     catch (error) { return errorResponse(error); }
   }
   if (request.method === "POST" && url.pathname === "/internal/content/media/record-generated") {
@@ -200,8 +259,9 @@ export async function handleBlogMediaRequest(request: Request, service: BlogMedi
     const bytes = await readBytes(request, MAX_IMAGE_BYTES);
     if (!bytes) return apiError(413, "图片内容为空或超过 10MB");
     try {
-      return jsonResponse(await service.uploadImage({ userId, bytes, originalName, contentType,
-        sourceType: "agent_generated", agentTaskId: taskId, generationMeta }));
+      const asset = await service.uploadImage({ userId, bytes, originalName, contentType,
+        sourceType: "agent_generated", agentTaskId: taskId, generationMeta });
+      return jsonResponse(publicMediaAsset(request, asset, publicMediaBaseUrl));
     } catch (error) { return errorResponse(error); }
   }
   return null;

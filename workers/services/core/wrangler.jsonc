@@ -23,7 +23,8 @@
     "RECITATION_MAX_AUDIO_BYTES": "20971520",
     "RECITATION_WORKER_BATCH_SIZE": "10",
     "RECITATION_STALE_CLAIM_SECONDS": "120",
-    "RECITATION_OSS_OBJECT_PREFIX": "recitations"
+    "RECITATION_OSS_OBJECT_PREFIX": "recitations",
+    "CORE_OSS_SMOKE_TEST_ENABLED": "false"
   },
   "services": [
     { "binding": "PLATFORM_INTEGRATION_SERVICE", "service": "dinqor-platform-integration" },

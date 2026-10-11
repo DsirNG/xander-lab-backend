@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test, { afterEach, mock } from "node:test";
 import { AgentAttachmentService } from "../.test-build/services/agent-attachment-service.js";
+import { handleAgentOssSmokeTestRequest } from "../.test-build/controllers/agent-oss-smoke-test-controller.js";
+import { handleAgentAttachmentSmokeTestRequest } from "../.test-build/controllers/agent-attachment-smoke-test-controller.js";
 import { handleAgentAttachmentRequest } from "../.test-build/controllers/agent-attachment-controller.js";
 import { OssAgentAttachmentStorageMapper } from "../.test-build/mappers/oss-agent-attachment-storage-mapper.js";
 import { AgentRunService } from "../.test-build/services/agent-run-service.js";
@@ -123,11 +125,12 @@ test("Agent storage creates an expiring OSS V4 GET URL", async () => {
   assert.match(url.searchParams.get("x-oss-signature") ?? "", /^[a-f0-9]{64}$/);
 });
 
-test("Agent attachment reads fall back to the old bucket without changing upload targets", async () => {
+test("Agent attachment reads fall back to the old bucket using a signed one-byte GET probe", async () => {
   const calls = [];
   mock.method(globalThis, "fetch", async (input, init) => {
     const url = new URL(input);
-    calls.push({ host: url.hostname, method: init.method });
+    calls.push({ host: url.hostname, method: init.method, range: new Headers(init.headers).get("range") });
+    assert.match(url.searchParams.get("x-oss-signature") ?? "", /^[a-f0-9]{64}$/);
     return new Response(null, { status: url.hostname.startsWith("dinqor.") ? 404 : 200 });
   });
   const storage = new OssAgentAttachmentStorageMapper({
@@ -140,9 +143,135 @@ test("Agent attachment reads fall back to the old bucket without changing upload
   const url = new URL(await storage.signedReadUrl("42/notes.pdf"));
   assert.equal(url.hostname, "food-cinder.oss-cn-beijing.aliyuncs.com");
   assert.deepEqual(calls, [
-    { host: "dinqor.oss-cn-beijing.aliyuncs.com", method: "HEAD" },
-    { host: "food-cinder.oss-cn-beijing.aliyuncs.com", method: "HEAD" },
+    { host: "dinqor.oss-cn-beijing.aliyuncs.com", method: "GET", range: "bytes=0-0" },
+    { host: "food-cinder.oss-cn-beijing.aliyuncs.com", method: "GET", range: "bytes=0-0" },
   ]);
+});
+
+test("Agent OSS existence probe failures log safe response diagnostics", async () => {
+  mock.method(globalThis, "fetch", async () => new Response("<Error><Code>SignatureDoesNotMatch</Code></Error>", {
+    status: 403,
+    headers: {
+      "x-oss-ec": "SignatureDoesNotMatch",
+      "x-oss-request-id": "request_123",
+    },
+  }));
+  const log = mock.method(console, "error", () => {});
+  const storage = new OssAgentAttachmentStorageMapper({
+    ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+    ALIYUN_OSS_BUCKET: "dinqor",
+    ALIYUN_OSS_LEGACY_BUCKET: "food-cinder",
+    ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+    ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+  });
+
+  await assert.rejects(storage.signedReadUrl("42/notes.pdf"), /Agent attachment fetch failed/);
+  assert.deepEqual(log.mock.calls[0].arguments, ["Agent attachment OSS existence probe rejected", {
+    bucket: "dinqor",
+    status: 403,
+    errorCode: "SignatureDoesNotMatch",
+    requestId: "request_123",
+  }]);
+});
+
+test("Agent OSS PUT failures log safe response diagnostics", async () => {
+  mock.method(globalThis, "fetch", async () => new Response(
+    "<Error><Code>AccessDenied</Code><RequestId>request_403</RequestId></Error>",
+    { status: 403, headers: { "x-oss-request-id": "request_403" } },
+  ));
+  const log = mock.method(console, "error", () => {});
+  const storage = new OssAgentAttachmentStorageMapper({
+    ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+    ALIYUN_OSS_BUCKET: "dinqor",
+    ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+    ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+  });
+
+  await assert.rejects(storage.write("42/notes.pdf", new Uint8Array([1, 2]), "application/pdf"), /upload failed/);
+  assert.deepEqual(log.mock.calls[0].arguments, ["Agent attachment OSS PUT rejected", {
+    status: 403,
+    errorCode: "AccessDenied",
+    requestId: "request_403",
+  }]);
+});
+
+test("Agent attachment upload failures record the failing stage without logging file data", async () => {
+  const removed = [];
+  const log = mock.method(console, "error", () => {});
+  const service = new AgentAttachmentService({
+    async create() { throw new Error("must not reach metadata"); },
+    async findOwned() { return null; },
+    async findOwnedMany() { return []; },
+  }, {
+    async write() { throw new Error("storage unavailable"); },
+    async delete(key) { removed.push(key); },
+    async signedReadUrl() { return "https://oss.example/signed"; },
+  });
+
+  await assert.rejects(service.upload(42, {
+    name: "notes.pdf", type: "application/pdf", size: 2, bytes: new Uint8Array([1, 2]),
+  }), /storage unavailable/);
+  assert.deepEqual(log.mock.calls[0].arguments, ["Agent attachment upload failed", {
+    stage: "oss-write",
+    error: "Error",
+  }]);
+  assert.deepEqual(removed, []);
+});
+
+test("unauthenticated Agent OSS smoke route verifies PUT and HEAD with a fixed object", async () => {
+  const calls = [];
+  mock.method(globalThis, "fetch", async (input, init) => {
+    calls.push({ url: String(input), method: init.method, body: init.body });
+    assert.equal(String(input), "https://dinqor.oss-cn-beijing.aliyuncs.com/agent-attachments/diagnostics/agent-oss-smoke-test.txt");
+    assert.match(init.headers.get("authorization"), /^OSS4-HMAC-SHA256 Credential=test-access-key\//);
+    return new Response(null, {
+      status: 200,
+      headers: { "x-oss-request-id": `${init.method.toLowerCase()}-request` },
+    });
+  });
+  const response = await handleAgentOssSmokeTestRequest(
+    new Request("https://agent.test/__ops/oss-smoke-test", { method: "POST" }),
+    {
+      AGENT_OSS_SMOKE_TEST_ENABLED: "true",
+      ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+      ALIYUN_OSS_BUCKET: "dinqor",
+      ALIYUN_OSS_REGION: "cn-beijing",
+      ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+      ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+    },
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, {
+    uploaded: true,
+    headVerified: true,
+    objectKey: "agent-attachments/diagnostics/agent-oss-smoke-test.txt",
+    putStatus: 200,
+    putRequestId: "put-request",
+    headStatus: 200,
+    headRequestId: "head-request",
+  });
+  assert.deepEqual(calls.map(({ method }) => method), ["PUT", "HEAD"]);
+});
+
+test("Agent OSS smoke route is disabled unless explicitly enabled", async () => {
+  mock.method(globalThis, "fetch", async () => { throw new Error("OSS should not be called"); });
+  const log = mock.method(console, "warn", () => {});
+  const response = await handleAgentOssSmokeTestRequest(
+    new Request("https://agent.test/__ops/oss-smoke-test", { method: "POST" }),
+    { AGENT_OSS_SMOKE_TEST_ENABLED: "false" },
+  );
+  assert.equal(response.status, 404);
+  assert.deepEqual((await response.json()).data, null);
+  assert.deepEqual(log.mock.calls[0].arguments, ["agent.oss-smoke-test.disabled", { configured: "false" }]);
+});
+
+test("Agent attachment smoke route is disabled unless explicitly enabled", async () => {
+  const response = await handleAgentAttachmentSmokeTestRequest(
+    new Request("https://agent.test/__ops/attachment-smoke-test", { method: "POST" }),
+    { AGENT_OSS_SMOKE_TEST_ENABLED: "false" },
+  );
+  assert.equal(response.status, 404);
+  assert.deepEqual((await response.json()).data, null);
 });
 
 test("Agent media mapper uploads bytes across the Content HTTPS contract and supports compensation", async () => {

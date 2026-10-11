@@ -1,6 +1,7 @@
 const encoder = new TextEncoder();
 const OSS_SIGNATURE_VERSION = "OSS4-HMAC-SHA256";
 const OSS_UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD";
+const canonicalBucketByUrl = new WeakMap<URL, string>();
 
 export interface OssV4Credentials {
   accessKeyId: string;
@@ -16,6 +17,14 @@ function encodeOssUriComponent(value: string): string {
 function toHex(bytes: ArrayBuffer | Uint8Array): string {
   const values = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   return Array.from(values, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function canonicalOssUri(url: URL): string {
+  const hostBucket = url.hostname.match(
+    /^([a-z0-9][a-z0-9-]{1,61}[a-z0-9])\.oss-[a-z0-9-]+\.aliyuncs\.com$/i,
+  )?.[1];
+  const bucket = canonicalBucketByUrl.get(url) ?? hostBucket;
+  return bucket ? "/" + bucket + (url.pathname || "/") : (url.pathname || "/");
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -108,7 +117,7 @@ export function buildOssCanonicalRequest(
 
   return [
     method.toUpperCase(),
-    url.pathname || "/",
+    canonicalOssUri(url),
     canonicalQuery(url),
     canonicalHeaders,
     additionalHeaders.join(";"),
@@ -207,6 +216,7 @@ export function createOssObjectUrl(
     throw new Error("Invalid OSS object key");
   }
   base.pathname = "/" + segments.map(encodeOssUriComponent).join("/");
+  if (bucket) canonicalBucketByUrl.set(base, bucket);
   return base;
 }
 
@@ -240,6 +250,7 @@ export async function signedOssGetUrl(
   const timestamp = now.toISOString().replace(/[:-]|\.\d{3}/g, "");
   const date = timestamp.slice(0, 8);
   const scope = date + "/" + credentials.region + "/oss/aliyun_v4_request";
+  const canonicalUri = canonicalOssUri(url);
   const signedUrl = new URL(url.toString());
   signedUrl.searchParams.set("x-oss-additional-headers", "host");
   signedUrl.searchParams.set("x-oss-credential", credentials.accessKeyId + "/" + scope);
@@ -249,7 +260,7 @@ export async function signedOssGetUrl(
 
   const canonicalRequest = [
     "GET",
-    signedUrl.pathname || "/",
+    canonicalUri,
     canonicalQuery(signedUrl),
     "host:" + signedUrl.host + "\n",
     "host",

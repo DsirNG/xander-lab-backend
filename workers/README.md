@@ -1,8 +1,10 @@
 # DinQorAI Cloudflare Workers
 
-This workspace is the local runtime skeleton for the proposed Cloudflare
-migration. It is separate from the existing Java/Spring Boot deployment and is
-not yet a replacement for its business APIs.
+This workspace is the actively maintained Cloudflare Workers reconstruction
+of the backend. The Java/Spring Boot version is no longer maintained and is
+retained as historical reference only. New backend features and fixes target
+Workers; this maintenance status does not imply that every migration or
+production deployment step has been completed.
 
 ## Start locally
 

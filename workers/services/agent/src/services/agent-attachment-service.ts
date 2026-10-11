@@ -39,20 +39,32 @@ export class AgentAttachmentService {
     if (!name.includes(".") || !ALLOWED_EXTENSIONS.has(extension)) throw new AgentAttachmentError("暂不支持该附件格式");
     const contentType = file.type.trim().slice(0, 120) || "application/octet-stream";
     const objectKey = `${userId}/${crypto.randomUUID()}.${extension}`;
-    await this.storage.write(objectKey, file.bytes, contentType);
+    let stage = "oss-write";
+    let objectWritten = false;
     let mediaAssetId: number | null = null;
     try {
+      await this.storage.write(objectKey, file.bytes, contentType);
+      objectWritten = true;
       if (contentType.toLowerCase().startsWith("image/") && this.mediaAssets) {
+        stage = "media-asset";
         mediaAssetId = (await this.mediaAssets.uploadImage(userId, name, contentType, file.bytes)).id;
       }
+      stage = "metadata";
       const row = await this.repository.create({ userId, objectKey, name, contentType, size: file.size, mediaAssetId });
       if (!row) throw new Error("Agent attachment metadata insert failed");
-      return this.reference(row);
+      stage = "signed-read-url";
+      return await this.reference(row);
     } catch (error) {
+      console.error("Agent attachment upload failed", {
+        stage,
+        error: error instanceof Error ? error.name : "UnknownError",
+      });
       if (mediaAssetId !== null && this.mediaAssets) {
         try { await this.mediaAssets.deleteAsset(userId, mediaAssetId); } catch { /* Keep the original failure. */ }
       }
-      try { await this.storage.delete(objectKey); } catch { /* Keep the original failure. */ }
+      if (objectWritten) {
+        try { await this.storage.delete(objectKey); } catch { /* Keep the original failure. */ }
+      }
       throw error;
     }
   }

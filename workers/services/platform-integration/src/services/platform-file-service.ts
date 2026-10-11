@@ -186,6 +186,14 @@ export class PlatformFileService {
     return object ? { asset, object } : null;
   }
 
+  async downloadPublicImage(storedName: string): Promise<PlatformFileDownload | null> {
+    if (!/^[0-9a-f-]{36}(?:\.[a-z0-9]{1,16})?$/.test(storedName)) return null;
+    const asset = await this.repository.find(storedName);
+    if (!asset || !asset.contentType.toLowerCase().startsWith("image/")) return null;
+    const object = await this.storage.read(asset.objectKey, asset.byteSize);
+    return object ? { asset, object } : null;
+  }
+
   export(type: string, excel: boolean): { filename: string; contentType: string; body: Uint8Array } {
     if (!/^[a-zA-Z0-9_-]{1,40}$/.test(type)) throw new PlatformFileError(400, "导出类型不正确");
     let csv: string;

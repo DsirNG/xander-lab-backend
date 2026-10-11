@@ -248,6 +248,8 @@ export type BusinessRequestHandler<E extends ServiceEnvironment> = (
   context: WorkerExecutionContextLike,
 ) => Promise<Response | null>;
 
+export type PublicBusinessRequestHandler<E extends ServiceEnvironment> = BusinessRequestHandler<E>;
+
 export interface WorkerExecutionContextLike {
   waitUntil(promise: Promise<unknown>): void;
 }
@@ -255,6 +257,7 @@ export interface WorkerExecutionContextLike {
 export function createBusinessService<E extends ServiceEnvironment = ServiceEnvironment>(
   service: string,
   handleBusinessRequest?: BusinessRequestHandler<E>,
+  handlePublicRequest?: PublicBusinessRequestHandler<E>,
 ) {
   return {
     async fetch(request: Request, env: E, context: WorkerExecutionContextLike): Promise<Response> {
@@ -264,6 +267,11 @@ export function createBusinessService<E extends ServiceEnvironment = ServiceEnvi
       }
       if (request.method === "GET" && url.pathname === "/readyz") {
         return readyResponse(service, env.DB);
+      }
+
+      if (handlePublicRequest) {
+        const publicResponse = await handlePublicRequest(request, env, context);
+        if (publicResponse) return publicResponse;
       }
 
       const expected = env.INTERNAL_SERVICE_TOKEN;
@@ -281,4 +289,3 @@ export function createBusinessService<E extends ServiceEnvironment = ServiceEnvi
     },
   };
 }
-
