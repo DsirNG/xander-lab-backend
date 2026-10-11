@@ -2,6 +2,8 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "dinqor-platform-integration",
   "main": "src/index.ts",
+  // Keep per-account OSS and integration settings managed in the Cloudflare dashboard.
+  "keep_vars": true,
   "compatibility_date": "2026-10-10",
   "secrets": { "required": ["INTERNAL_SERVICE_TOKEN", "CONTENT_AUTOMATION_SERVICE_TOKEN", "CORE_SERVICE_TOKEN", "RESEND_API_KEY", "PLATFORM_CREDENTIAL_ENCRYPTION_KEY", "PLATFORM_CSDN_API_KEY", "PLATFORM_CSDN_WEB_CONSOLE_SECRET", "ALIYUN_OSS_ACCESS_KEY_ID", "ALIYUN_OSS_ACCESS_KEY_SECRET"] },
   "dev": { "port": 8790 },
