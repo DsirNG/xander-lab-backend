@@ -10,6 +10,7 @@ const tinyPng = Uint8Array.from(Buffer.from(
 
 function setup() {
   const rows = [];
+  const objects = new Map();
   let nextId = 1;
   const repository = {
     async listImages(userId, contentType, keyword, limit) {
@@ -28,6 +29,7 @@ function setup() {
       return rows.filter((row) => row.userId === userId && row.sourceType === "agent_generated")
         .sort((a, b) => b.id - a.id).slice(0, limit);
     },
+    async findPublicByStoredName(storedName) { return rows.find((row) => row.storedName === storedName) ?? null; },
     async deleteOwned(userId, id) {
       const index = rows.findIndex((row) => row.id === id && row.userId === userId);
       if (index < 0) return false;
@@ -47,7 +49,12 @@ function setup() {
   const storage = {
     async upload(key, bytes, contentType) {
       uploaded.push({ key, bytes: bytes.byteLength, contentType });
+      objects.set(key, new Uint8Array(bytes));
       return { url: `https://cdn.example.test/photos/blog/${key}`, storedName: key };
+    },
+    async read(key) {
+      const bytes = objects.get(key);
+      return bytes ? { body: new Response(bytes).body } : null;
     },
     async delete(key) { deleted.push(key); },
   };
@@ -127,6 +134,22 @@ test("private media controller protects owner reads and accepts bounded multipar
     headers: { "x-user-id": "42" },
   }), service);
   assert.equal(invalidPage.status, 400);
+});
+
+test("public media proxy serves only registered images from the private object store", async () => {
+  const { service } = setup();
+  const asset = await service.uploadImage({ userId: 42, bytes: tinyPng, originalName: "cover.png", contentType: "image/png" });
+  const response = await handleBlogMediaRequest(new Request(`https://content/api/public/blog/media/${asset.storedName}`), service);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.equal(response.headers.get("access-control-allow-origin"), "*");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), tinyPng);
+
+  const missing = await handleBlogMediaRequest(new Request("https://content/api/public/blog/media/42/2026/10/00000000-0000-0000-0000-000000000000.png"), service);
+  assert.equal(missing.status, 404);
+  const traversal = await handleBlogMediaRequest(new Request("https://content/api/public/blog/media/..%2Fsecrets.txt"), service);
+  assert.equal(traversal.status, 404);
 });
 
 test("internal Agent image registration stores bytes in Content OSS and compensating delete cleans the object", async () => {

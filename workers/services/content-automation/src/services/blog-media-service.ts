@@ -7,6 +7,7 @@ export class BlogMediaInputError extends Error {
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const SUPPORTED_UPLOAD_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const PUBLIC_IMAGE_OBJECT_KEY = /^[1-9]\d{0,17}\/\d{4}\/(?:0[1-9]|1[0-2])\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|png|webp|gif)$/;
 
 function dimension(width: number, height: number): { width: number; height: number } | null {
   return Number.isSafeInteger(width) && width > 0 && Number.isSafeInteger(height) && height > 0
@@ -143,6 +144,16 @@ export class BlogMediaService {
     if (!asset) return false;
     if (asset.storedName) await this.storage.delete(asset.storedName);
     return this.repository.deleteOwned(userId, id);
+  }
+
+  async publicImage(objectKey: string) {
+    if (!PUBLIC_IMAGE_OBJECT_KEY.test(objectKey)) return null;
+    const asset = await this.repository.findPublicByStoredName(objectKey);
+    if (!asset || !SUPPORTED_UPLOAD_TYPES.has(asset.contentType)
+      || !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > MAX_IMAGE_BYTES) return null;
+    const stored = await this.storage.read(objectKey);
+    if (!stored) return null;
+    return { body: stored.body, contentType: asset.contentType, size: asset.size };
   }
 
   listByTask(userId: number, taskId: number) {

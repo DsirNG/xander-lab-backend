@@ -52,6 +52,12 @@ export class D1BlogMediaMapper implements BlogMediaRepository {
     return result.results;
   }
 
+  findPublicByStoredName(storedName: string): Promise<BlogMediaAsset | null> {
+    return this.db.prepare(`SELECT ${COLUMNS} FROM blog_media_asset
+      WHERE stored_name = ? AND content_type IN ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
+      LIMIT 1`).bind(storedName).first<BlogMediaAsset>();
+  }
+
   async insert(input: BlogMediaInsert): Promise<BlogMediaAsset> {
     const row = await this.db.prepare(`INSERT INTO blog_media_asset
       (user_id, url, original_name, stored_name, size, content_type, width, height,

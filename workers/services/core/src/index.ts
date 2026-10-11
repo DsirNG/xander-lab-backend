@@ -116,6 +116,7 @@ interface CoreEnvironment extends ServiceEnvironment {
   RECITATION_OSS_OBJECT_PREFIX?: string;
   ALIYUN_OSS_ENDPOINT?: string;
   ALIYUN_OSS_BUCKET?: string;
+  ALIYUN_OSS_LEGACY_BUCKET?: string;
   ALIYUN_OSS_REGION?: string;
   ALIYUN_OSS_ACCESS_KEY_ID?: string;
   ALIYUN_OSS_ACCESS_KEY_SECRET?: string;

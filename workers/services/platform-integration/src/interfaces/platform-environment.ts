@@ -26,6 +26,7 @@ export interface PlatformEnvironment extends ServiceEnvironment, McpOAuthEnviron
   ALIYUN_OSS_ENDPOINT?: string;
   ALIYUN_OSS_REGION?: string;
   ALIYUN_OSS_BUCKET?: string;
+  ALIYUN_OSS_LEGACY_BUCKET?: string;
   JUEJIN_API_BASE_URL?: string;
   JUEJIN_DEFAULT_AID?: string;
   JUEJIN_CATALOG_FRESHNESS_HOURS?: string;

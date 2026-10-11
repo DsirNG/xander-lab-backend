@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
 import test from "node:test";
 import { OssArticleContentMapper } from "../.test-build/mappers/oss-article-content-mapper.js";
+import { OssBlogMediaMapper } from "../.test-build/mappers/oss-blog-media-mapper.js";
 import {
   buildOssCanonicalRequest,
   createOssObjectUrl,
@@ -183,6 +184,47 @@ test("article content mapper signs OSS PUT and DELETE while keeping body out of 
     assert.equal(new Headers(calls[0].init.headers).get("content-type"), "text/markdown; charset=utf-8");
     assert.match(new Headers(calls[0].init.headers).get("authorization") ?? "", /^OSS4-HMAC-SHA256/);
     assert.match(new Headers(calls[2].init.headers).get("authorization") ?? "", /^OSS4-HMAC-SHA256/);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test("OSS migration writes to dinqor, reads old objects from food-cinder, and returns proxied media URLs", async () => {
+  const previousFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const url = new URL(input);
+    calls.push({ url, method: init.method });
+    if (init.method === "GET" && url.hostname.startsWith("dinqor.")) return new Response(null, { status: 404 });
+    if (init.method === "GET") return new Response("old markdown");
+    if (init.method === "HEAD" && url.hostname.startsWith("dinqor.")) return new Response(null, { status: 404 });
+    if (init.method === "HEAD") return new Response(null, { status: 200 });
+    return new Response(null, { status: 204 });
+  };
+  try {
+    const env = {
+      ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+      ALIYUN_OSS_BUCKET: "dinqor",
+      ALIYUN_OSS_LEGACY_BUCKET: "food-cinder",
+      ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+      ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+    };
+    const articles = new OssArticleContentMapper(env);
+    await articles.write("posts/42/article.md", "new markdown");
+    assert.equal(calls.at(-1).url.hostname, "dinqor.oss-cn-beijing.aliyuncs.com");
+    assert.equal(await articles.read("posts/42/article.md"), "old markdown");
+    assert.deepEqual(calls.filter((call) => call.method === "GET").map((call) => call.url.hostname), [
+      "dinqor.oss-cn-beijing.aliyuncs.com", "food-cinder.oss-cn-beijing.aliyuncs.com",
+    ]);
+
+    const media = new OssBlogMediaMapper({
+      ...env,
+      CONTENT_MEDIA_PUBLIC_BASE_URL: "https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media",
+    });
+    const stored = await media.upload("42/2026/10/00000000-0000-0000-0000-000000000001.png", new Uint8Array([1]), "image/png");
+    assert.equal(stored.url,
+      "https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media/42/2026/10/00000000-0000-0000-0000-000000000001.png");
+    assert.equal(calls.at(-1).url.hostname, "dinqor.oss-cn-beijing.aliyuncs.com");
   } finally {
     globalThis.fetch = previousFetch;
   }

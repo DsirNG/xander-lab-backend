@@ -132,6 +132,28 @@ test("OSS recitation URLs are private, expiring, and use signed object writes", 
   assert.equal(readUrl.pathname, "/recitations/42/audio.m4a");
 });
 
+test("recitation reads keep resolving objects stored in the legacy bucket", async () => {
+  const calls = [];
+  mock.method(globalThis, "fetch", async (input, init) => {
+    const url = new URL(input);
+    calls.push({ host: url.hostname, method: init.method });
+    return new Response(null, { status: url.hostname.startsWith("dinqor.") ? 404 : 200 });
+  });
+  const storage = new OssRecitationAudioMapper({
+    ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+    ALIYUN_OSS_BUCKET: "dinqor",
+    ALIYUN_OSS_LEGACY_BUCKET: "food-cinder",
+    ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+    ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+  });
+  const url = new URL(await storage.readUrl("42/audio.m4a"));
+  assert.equal(url.hostname, "food-cinder.oss-cn-beijing.aliyuncs.com");
+  assert.deepEqual(calls, [
+    { host: "dinqor.oss-cn-beijing.aliyuncs.com", method: "HEAD" },
+    { host: "food-cinder.oss-cn-beijing.aliyuncs.com", method: "HEAD" },
+  ]);
+});
+
 test("scheduled ASR worker submits, polls, aligns, and atomically advances mastery", async () => {
   const row = attempt(4, { status: "PENDING", audioUrl: "42/audio.m4a" });
   const completion = [];

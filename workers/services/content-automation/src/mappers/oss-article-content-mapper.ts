@@ -2,6 +2,7 @@ import {
   createOssObjectUrl,
   inferOssRegion,
   signedOssDeleteHeaders,
+  signedOssHeadHeaders,
   signedOssGetHeaders,
   signedOssPutHeaders,
 } from "../oss.js";
@@ -76,20 +77,39 @@ export class OssArticleContentMapper implements ArticleContentStorage {
   }
 
   async delete(objectKey: string): Promise<void> {
-    const { objectUrl, credentials } = this.privateObject(objectKey);
-    const headers = await signedOssDeleteHeaders(objectUrl, credentials);
-    let response: Response;
-    try {
-      response = await fetch(objectUrl, {
-        method: "DELETE",
-        headers,
-        redirect: "manual",
-        signal: AbortSignal.timeout(10_000),
-      });
-    } catch {
-      throw new Error("Content object cleanup failed");
+    const buckets = this.bucketCandidates();
+    for (const bucket of buckets) {
+      const { objectUrl, credentials } = this.privateObject(objectKey, bucket);
+      if (buckets.length > 1) {
+        let head: Response;
+        try {
+          head = await fetch(objectUrl, {
+            method: "HEAD",
+            headers: await signedOssHeadHeaders(objectUrl, credentials),
+            redirect: "manual",
+            signal: AbortSignal.timeout(10_000),
+          });
+        } catch {
+          throw new Error("Content object cleanup failed");
+        }
+        if (head.status === 404) continue;
+        if (!head.ok) throw new Error("Content object cleanup failed");
+      }
+      let response: Response;
+      try {
+        response = await fetch(objectUrl, {
+          method: "DELETE",
+          headers: await signedOssDeleteHeaders(objectUrl, credentials),
+          redirect: "manual",
+          signal: AbortSignal.timeout(10_000),
+        });
+      } catch {
+        throw new Error("Content object cleanup failed");
+      }
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error("Content object cleanup failed");
+      return;
     }
-    if (!response.ok && response.status !== 404) throw new Error("Content object cleanup failed");
   }
 
   private async readPublic(objectKey: string): Promise<string> {
@@ -104,19 +124,33 @@ export class OssArticleContentMapper implements ArticleContentStorage {
   }
 
   private async readSigned(objectKey: string): Promise<string> {
-    const { objectUrl, credentials } = this.privateObject(objectKey);
-    const headers = await signedOssGetHeaders(objectUrl, credentials);
-    const response = await fetch(objectUrl, {
-      method: "GET",
-      headers,
-      redirect: "manual",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) throw new Error("Content object fetch failed");
-    return readUtf8BodyWithinLimit(response);
+    for (const bucket of this.bucketCandidates()) {
+      const { objectUrl, credentials } = this.privateObject(objectKey, bucket);
+      let response: Response;
+      try {
+        response = await fetch(objectUrl, {
+          method: "GET",
+          headers: await signedOssGetHeaders(objectUrl, credentials),
+          redirect: "manual",
+          signal: AbortSignal.timeout(10_000),
+        });
+      } catch {
+        throw new Error("Content object fetch failed");
+      }
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error("Content object fetch failed");
+      return readUtf8BodyWithinLimit(response);
+    }
+    throw new Error("Content object fetch failed");
   }
 
-  private privateObject(objectKey: string) {
+  private bucketCandidates(): Array<string | undefined> {
+    const current = this.env.ALIYUN_OSS_BUCKET;
+    const legacy = this.env.ALIYUN_OSS_LEGACY_BUCKET;
+    return legacy && legacy !== current ? [current, legacy] : [current];
+  }
+
+  private privateObject(objectKey: string, bucket = this.env.ALIYUN_OSS_BUCKET) {
     const { ALIYUN_OSS_ACCESS_KEY_ID, ALIYUN_OSS_ACCESS_KEY_SECRET, ALIYUN_OSS_REGION, ALIYUN_OSS_ENDPOINT } = this.env;
     if (!ALIYUN_OSS_ACCESS_KEY_ID || !ALIYUN_OSS_ACCESS_KEY_SECRET || !ALIYUN_OSS_ENDPOINT) {
       throw new Error("Aliyun OSS credentials and endpoint configuration are incomplete");
@@ -127,7 +161,7 @@ export class OssArticleContentMapper implements ArticleContentStorage {
     const objectUrl = createOssObjectUrl(
       ALIYUN_OSS_ENDPOINT,
       `${objectPrefix}/${objectKey}`,
-      this.env.ALIYUN_OSS_BUCKET,
+      bucket,
     );
     return {
       objectUrl,

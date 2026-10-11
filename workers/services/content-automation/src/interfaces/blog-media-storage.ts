@@ -5,5 +5,6 @@ export interface StoredBlogMedia {
 
 export interface BlogMediaStorage {
   upload(objectKey: string, bytes: Uint8Array, contentType: string): Promise<StoredBlogMedia>;
+  read(objectKey: string): Promise<{ body: ReadableStream<Uint8Array> } | null>;
   delete(objectKey: string): Promise<void>;
 }

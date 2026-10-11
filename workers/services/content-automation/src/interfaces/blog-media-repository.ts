@@ -35,6 +35,7 @@ export interface BlogMediaRepository {
   findOwned(userId: number, id: number): Promise<BlogMediaAsset | null>;
   listByTask(userId: number, taskId: number): Promise<BlogMediaAsset[]>;
   listRecentGenerated(userId: number, limit: number): Promise<BlogMediaAsset[]>;
+  findPublicByStoredName(storedName: string): Promise<BlogMediaAsset | null>;
   insert(input: BlogMediaInsert): Promise<BlogMediaAsset>;
   deleteOwned(userId: number, id: number): Promise<boolean>;
 }

@@ -2,6 +2,7 @@ import {
   createOssObjectUrl,
   inferOssRegion,
   signedOssDeleteHeaders,
+  signedOssHeadHeaders,
   signedOssGetHeaders,
   signedOssPutHeaders,
   type OssV4Credentials,
@@ -14,6 +15,7 @@ export interface PreviewOssEnvironment {
   ALIYUN_OSS_REGION?: string;
   ALIYUN_OSS_ENDPOINT?: string;
   ALIYUN_OSS_BUCKET?: string;
+  ALIYUN_OSS_LEGACY_BUCKET?: string;
   BLOG_HTML_PREVIEW_OSS_PREFIX?: string;
 }
 
@@ -35,35 +37,59 @@ export class OssPreviewStorageMapper implements PreviewStorage {
   }
 
   async read(objectKey: string, maxBytes: number): Promise<string | null> {
-    const url = this.objectUrl(objectKey);
-    const headers = await signedOssGetHeaders(url, this.credentials());
-    const response = await fetch(url, {
-      method: "GET",
-      headers,
-      redirect: "manual",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error("Preview object fetch failed");
-    return readUtf8BodyWithinLimit(response, maxBytes);
+    const credentials = this.credentials();
+    for (const bucket of this.bucketCandidates()) {
+      const url = this.objectUrl(objectKey, bucket);
+      const response = await fetch(url, {
+        method: "GET",
+        headers: await signedOssGetHeaders(url, credentials),
+        redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error("Preview object fetch failed");
+      return readUtf8BodyWithinLimit(response, maxBytes);
+    }
+    return null;
   }
 
   async delete(objectKey: string): Promise<void> {
-    const url = this.objectUrl(objectKey);
-    const headers = await signedOssDeleteHeaders(url, this.credentials());
-    const response = await fetch(url, {
-      method: "DELETE",
-      headers,
-      redirect: "manual",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok && response.status !== 404) throw new Error("Preview object deletion failed");
+    const credentials = this.credentials();
+    const buckets = this.bucketCandidates();
+    for (const bucket of buckets) {
+      const url = this.objectUrl(objectKey, bucket);
+      if (buckets.length > 1) {
+        const head = await fetch(url, {
+          method: "HEAD",
+          headers: await signedOssHeadHeaders(url, credentials),
+          redirect: "manual",
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (head.status === 404) continue;
+        if (!head.ok) throw new Error("Preview object deletion failed");
+      }
+      const response = await fetch(url, {
+        method: "DELETE",
+        headers: await signedOssDeleteHeaders(url, credentials),
+        redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.status === 404) continue;
+      if (!response.ok) throw new Error("Preview object deletion failed");
+      return;
+    }
   }
 
-  private objectUrl(objectKey: string): URL {
+  private bucketCandidates(): Array<string | undefined> {
+    const current = this.env.ALIYUN_OSS_BUCKET;
+    const legacy = this.env.ALIYUN_OSS_LEGACY_BUCKET;
+    return legacy && legacy !== current ? [current, legacy] : [current];
+  }
+
+  private objectUrl(objectKey: string, bucket = this.env.ALIYUN_OSS_BUCKET): URL {
     if (!this.env.ALIYUN_OSS_ENDPOINT) throw new Error("BlogHTML Preview OSS endpoint is not configured");
     const prefix = this.env.BLOG_HTML_PREVIEW_OSS_PREFIX ?? "blog-html-preview";
-    return createOssObjectUrl(this.env.ALIYUN_OSS_ENDPOINT, `${prefix}/${objectKey}`, this.env.ALIYUN_OSS_BUCKET);
+    return createOssObjectUrl(this.env.ALIYUN_OSS_ENDPOINT, `${prefix}/${objectKey}`, bucket);
   }
 
   private credentials(): OssV4Credentials {

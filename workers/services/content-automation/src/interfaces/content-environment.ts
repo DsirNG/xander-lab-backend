@@ -3,10 +3,12 @@ import type { D1Binding, ServiceEnvironment, WorkerServiceBinding } from "@dinqo
 export interface ContentEnvironment extends ServiceEnvironment {
   DB: D1Binding;
   CONTENT_OSS_PUBLIC_BASE_URL?: string;
+  CONTENT_MEDIA_PUBLIC_BASE_URL?: string;
   CONTENT_OSS_OBJECT_PREFIX?: string;
   CONTENT_MEDIA_OSS_OBJECT_PREFIX?: string;
   ALIYUN_OSS_ENDPOINT?: string;
   ALIYUN_OSS_BUCKET?: string;
+  ALIYUN_OSS_LEGACY_BUCKET?: string;
   ALIYUN_OSS_REGION?: string;
   ALIYUN_OSS_ACCESS_KEY_ID?: string;
   ALIYUN_OSS_ACCESS_KEY_SECRET?: string;

@@ -123,6 +123,28 @@ test("Agent storage creates an expiring OSS V4 GET URL", async () => {
   assert.match(url.searchParams.get("x-oss-signature") ?? "", /^[a-f0-9]{64}$/);
 });
 
+test("Agent attachment reads fall back to the old bucket without changing upload targets", async () => {
+  const calls = [];
+  mock.method(globalThis, "fetch", async (input, init) => {
+    const url = new URL(input);
+    calls.push({ host: url.hostname, method: init.method });
+    return new Response(null, { status: url.hostname.startsWith("dinqor.") ? 404 : 200 });
+  });
+  const storage = new OssAgentAttachmentStorageMapper({
+    ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+    ALIYUN_OSS_BUCKET: "dinqor",
+    ALIYUN_OSS_LEGACY_BUCKET: "food-cinder",
+    ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+    ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+  });
+  const url = new URL(await storage.signedReadUrl("42/notes.pdf"));
+  assert.equal(url.hostname, "food-cinder.oss-cn-beijing.aliyuncs.com");
+  assert.deepEqual(calls, [
+    { host: "dinqor.oss-cn-beijing.aliyuncs.com", method: "HEAD" },
+    { host: "food-cinder.oss-cn-beijing.aliyuncs.com", method: "HEAD" },
+  ]);
+});
+
 test("Agent media mapper uploads bytes across the Content HTTPS contract and supports compensation", async () => {
   const calls = [];
   mock.method(globalThis, "fetch", async (input, init) => {

@@ -63,11 +63,13 @@ and large article bodies remain in OSS. The Core admin diagnostic persists a
 two-minute live-broadcast event for active Content SSE connections and reports
 their leased connection count without adding a durable user notification.
 The private media library stores owner metadata in Content D1 and uploads image
-bytes up to 10 MiB to Aliyun OSS under `CONTENT_MEDIA_OSS_OBJECT_PREFIX` (default
-`photos/blog`). Set `CONTENT_OSS_PUBLIC_BASE_URL` for returned image URLs and
-configure the Aliyun OSS endpoint, bucket, region, and access keys before using
-the upload route. Local gallery reads and protected media metadata contracts do
-not need provider credentials.
+bytes up to 20 MiB to Aliyun OSS under `CONTENT_MEDIA_OSS_OBJECT_PREFIX` (default
+`photos/blog`). New images are served through Content's public media proxy at
+`CONTENT_MEDIA_PUBLIC_BASE_URL`; the OSS bucket can stay private. Existing image
+URLs remain as stored. For this account migration, new objects use
+`ALIYUN_OSS_BUCKET=dinqor`, while `ALIYUN_OSS_LEGACY_BUCKET=food-cinder` lets
+workers read and clean up older objects. Local `pnpm dev` points the media URL
+to its local Content Worker when OSS is configured.
 Scheduled plan CRUD, owner-scoped run-history reads, and timezone-aware next-run
 preview use a separate Content D1 schema; referenced Core
 recitation material IDs are checked through `CORE_SERVICE_URL` and the protected
@@ -346,10 +348,11 @@ Worker's HTTPS endpoint in each deployment account; the contract supports the
 Workers being in different Cloudflare accounts. Local `pnpm dev` generates a
 temporary token pair and uses `http://127.0.0.1:8790`.
 
-For local reads of OSS-backed article bodies, set
-`CONTENT_OSS_PUBLIC_BASE_URL` before `pnpm dev` to the HTTPS base URL for the
-article-content prefix. Object keys are appended by the service; do not include
-credentials or query strings in this value.
+For local reads of legacy public OSS-backed article bodies without OSS keys, set
+`CONTENT_OSS_PUBLIC_BASE_URL` to the old bucket's HTTPS base URL. Object keys are
+appended by the service; do not include credentials or query strings in this
+value. With OSS keys configured, article reads check `ALIYUN_OSS_BUCKET` first
+and use `ALIYUN_OSS_LEGACY_BUCKET` only when the object is absent.
 
 For private OSS objects, set `ALIYUN_OSS_ENDPOINT` to the OSS endpoint and, when
 it is a regional endpoint such as `oss-cn-beijing.aliyuncs.com`, set
@@ -357,16 +360,20 @@ it is a regional endpoint such as `oss-cn-beijing.aliyuncs.com`, set
 regional endpoints; set `ALIYUN_OSS_REGION` explicitly for a custom endpoint.
 Then provide `ALIYUN_OSS_ACCESS_KEY_ID` and `ALIYUN_OSS_ACCESS_KEY_SECRET` in
 the shell before `pnpm dev`. The runner places these values only in ignored,
-temporary `.dev.vars` files for Content Automation, BlogHTML Preview, and
-Platform Integration, then removes files it created on shutdown.
+temporary `.dev.vars` files for Core, Agent, Content Automation, BlogHTML
+Preview, and Platform Integration, then removes files it created on shutdown.
 Each Worker reads them from its `env` binding (`env.ALIYUN_OSS_ACCESS_KEY_ID`
 and `env.ALIYUN_OSS_ACCESS_KEY_SECRET`).
-In Cloudflare, configure the AccessKey values as Worker Secrets on Content
-Automation; endpoint, bucket, and region can be ordinary Worker variables. The Worker
-signs private object GET requests server-side, so credentials never reach the
-Gateway response or browser. If neither AccessKey value is configured, reads
-use the existing public HTTPS base URL. Give the OSS RAM principal only
-`oss:GetObject` access to the article-content object prefix.
+In Cloudflare, configure the AccessKey values as Worker Secrets on each of those
+five Workers; endpoint, `ALIYUN_OSS_BUCKET=dinqor`,
+`ALIYUN_OSS_LEGACY_BUCKET=food-cinder`, and region can be ordinary variables.
+Set Content's `CONTENT_MEDIA_PUBLIC_BASE_URL` to
+`https://dinqor-content-automation.dinqor.workers.dev/api/public/blog/media`.
+Workers sign private object requests server-side, so credentials never reach
+the Gateway response or browser. If neither AccessKey value is configured,
+article reads use the configured public HTTPS base URL. Give the OSS RAM
+principal the object read/write permissions required by the enabled service
+prefixes.
 The default private-object prefix is `article-content/`; override it with
 `CONTENT_OSS_OBJECT_PREFIX` only when the bucket uses a different prefix.
 

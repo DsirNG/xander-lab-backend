@@ -6,6 +6,7 @@ const MAX_INTERNAL_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_MULTIPART_BYTES = MAX_IMAGE_BYTES + 64 * 1024;
 const MAX_INTERNAL_JSON_BYTES = 32 * 1024;
 const USER_ID = /^[1-9]\d{0,17}$/;
+const PUBLIC_MEDIA_PATH = "/api/public/blog/media/";
 
 function success(data: unknown): Response {
   return jsonResponse({ code: 200, message: "success", data });
@@ -85,6 +86,23 @@ async function formFile(request: Request): Promise<File | null> {
 
 export async function handleBlogMediaRequest(request: Request, service: BlogMediaService): Promise<Response | null> {
   const url = new URL(request.url);
+  if (request.method === "GET" && url.pathname.startsWith(PUBLIC_MEDIA_PATH)) {
+    let objectKey: string;
+    try { objectKey = decodeURIComponent(url.pathname.slice(PUBLIC_MEDIA_PATH.length)); }
+    catch { return apiError(404, "图片不存在"); }
+    try {
+      const image = await service.publicImage(objectKey);
+      if (!image) return apiError(404, "图片不存在");
+      return new Response(image.body, { headers: {
+        "content-type": image.contentType,
+        "content-length": String(image.size),
+        "cache-control": "public, max-age=3600, s-maxage=86400",
+        "x-content-type-options": "nosniff",
+        "access-control-allow-origin": "*",
+        "cross-origin-resource-policy": "cross-origin",
+      } });
+    } catch (error) { return errorResponse(error); }
+  }
   if (request.method === "GET" && url.pathname === "/api/blog/media/images") {
     const userId = projectedUserId(request);
     if (userId === null) return apiError(401, "未登录或登录已过期");

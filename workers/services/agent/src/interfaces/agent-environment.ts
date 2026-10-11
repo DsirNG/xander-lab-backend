@@ -8,6 +8,7 @@ export interface AgentEnvironment extends ServiceEnvironment, AgentModelEnvironm
   JWT_SECRET?: string;
   ALIYUN_OSS_ENDPOINT?: string;
   ALIYUN_OSS_BUCKET?: string;
+  ALIYUN_OSS_LEGACY_BUCKET?: string;
   ALIYUN_OSS_REGION?: string;
   ALIYUN_OSS_ACCESS_KEY_ID?: string;
   ALIYUN_OSS_ACCESS_KEY_SECRET?: string;
