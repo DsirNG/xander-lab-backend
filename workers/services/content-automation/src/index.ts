@@ -39,6 +39,12 @@ import { EmailReminderService } from "./services/email-reminder-service.js";
 import { BlogMediaService } from "./services/blog-media-service.js";
 import { BlogMcpService } from "./services/blog-mcp-service.js";
 
+const PUBLIC_MEDIA_PATH = "/api/public/blog/media/";
+
+function createBlogMediaService(env: ContentEnvironment): BlogMediaService {
+  return new BlogMediaService(new D1BlogMediaMapper(env.DB), new OssBlogMediaMapper(env));
+}
+
 const contentService = createBusinessService<ContentEnvironment>("content-automation", async (request, env, context) => {
   const contentReader = new OssArticleContentMapper(env);
   const postCreationService = new BlogPostCreationService(
@@ -65,7 +71,7 @@ const contentService = createBusinessService<ContentEnvironment>("content-automa
   const notificationResponse = await handleContentNotificationRequest(request, notifications);
   if (notificationResponse) return notificationResponse;
 
-  const blogMedia = new BlogMediaService(new D1BlogMediaMapper(env.DB), new OssBlogMediaMapper(env));
+  const blogMedia = createBlogMediaService(env);
   const mediaResponse = await handleBlogMediaRequest(request, blogMedia);
   if (mediaResponse) return mediaResponse;
 
@@ -123,7 +129,14 @@ interface ScheduledControllerLike {
 }
 
 export default {
-  ...contentService,
+  async fetch(request: Request, env: ContentEnvironment, context: WorkerExecutionContextLike): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname.startsWith(PUBLIC_MEDIA_PATH)) {
+      const response = await handleBlogMediaRequest(request, createBlogMediaService(env));
+      if (response) return response;
+    }
+    return contentService.fetch(request, env, context);
+  },
   async scheduled(
     controller: ScheduledControllerLike,
     env: ContentEnvironment,

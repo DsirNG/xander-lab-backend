@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { handleBlogMediaRequest } from "../.test-build/controllers/blog-media-controller.js";
 import { BlogMediaService } from "../.test-build/services/blog-media-service.js";
+import worker from "../.test-build/index.js";
 
 const tinyPng = Uint8Array.from(Buffer.from(
   "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000b4944415408d763f8cfc000000301010018dd8db10000000049454e44ae426082",
@@ -150,6 +151,47 @@ test("public media proxy serves only registered images from the private object s
   assert.equal(missing.status, 404);
   const traversal = await handleBlogMediaRequest(new Request("https://content/api/public/blog/media/..%2Fsecrets.txt"), service);
   assert.equal(traversal.status, 404);
+});
+
+test("public media URLs work without the internal service token while other Content routes remain protected", async () => {
+  const previousFetch = globalThis.fetch;
+  const storedName = "42/2026/10/00000000-0000-0000-0000-000000000001.png";
+  const row = {
+    id: 1, userId: 42, url: "https://food-cinder.oss-cn-beijing.aliyuncs.com/old.png",
+    originalName: "photo.png", storedName, size: tinyPng.byteLength, contentType: "image/png",
+    width: 1, height: 1, sourceType: "user_upload", agentTaskId: null, generationMeta: null,
+    createdAt: "2026-10-11T00:00:00.000Z",
+  };
+  const statement = { bind() { return this; }, async first() { return row; } };
+  globalThis.fetch = async (input, init) => {
+    assert.equal(new URL(input).hostname, "dinqor.oss-cn-beijing.aliyuncs.com");
+    assert.equal(init.method, "GET");
+    return new Response(tinyPng);
+  };
+  try {
+    const environment = {
+      DB: { prepare() { return statement; }, async batch() { return []; } },
+      ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+      ALIYUN_OSS_BUCKET: "dinqor",
+      ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+      ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+    };
+    const response = await worker.fetch(
+      new Request(`https://content/api/public/blog/media/${storedName}`),
+      environment,
+      { waitUntil() {} },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("access-control-allow-origin"), "*");
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), tinyPng);
+
+    const protectedResponse = await worker.fetch(
+      new Request("https://content/api/blog/posts"), environment, { waitUntil() {} },
+    );
+    assert.equal(protectedResponse.status, 401);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });
 
 test("internal Agent image registration stores bytes in Content OSS and compensating delete cleans the object", async () => {
