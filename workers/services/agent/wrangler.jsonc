@@ -2,6 +2,8 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "dinqor-agent",
   "main": "src/index.ts",
+  // OSS endpoints and model settings are configured per Cloudflare account.
+  "keep_vars": true,
   "compatibility_date": "2026-10-10",
   "secrets": {
     "required": [
