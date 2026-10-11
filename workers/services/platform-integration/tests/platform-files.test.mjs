@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { handlePlatformFileRequest } from "../.test-build/controllers/platform-file-controller.js";
+import { PlatformFileStorageError } from "../.test-build/interfaces/platform-file-storage.js";
+import { AliyunPlatformFileStorageMapper } from "../.test-build/mappers/aliyun-platform-file-storage-mapper.js";
 import { PlatformFileService } from "../.test-build/services/platform-file-service.js";
 
 function fileFixture() {
@@ -65,6 +67,34 @@ test("Platform file service stores bytes in OSS and only metadata in its reposit
   const downloaded = await fixture.service.download(result.storedName);
   assert.equal(downloaded.asset.originalName, "portrait.PNG");
   assert.equal(await new Response(downloaded.object.body).text(), "png-data");
+});
+
+test("Platform OSS failures expose only a safe status, error code, and request ID for diagnostics", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(
+    "<Error><Code>AccessDenied</Code><Message>private provider response</Message></Error>",
+    { status: 403, headers: { "x-oss-request-id": "oss-request-123" } },
+  );
+  try {
+    const mapper = new AliyunPlatformFileStorageMapper({
+      ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+      ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+      ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+      ALIYUN_OSS_REGION: "cn-beijing",
+      ALIYUN_OSS_BUCKET: "dinqor",
+    });
+    await assert.rejects(
+      mapper.put("avatars/diagnostic.png", new Uint8Array([1]), "image/png"),
+      (error) => error instanceof PlatformFileStorageError
+        && error.operation === "put"
+        && error.status === 403
+        && error.code === "AccessDenied"
+        && error.requestId === "oss-request-123"
+        && !error.message.includes("private provider response"),
+    );
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
 });
 
 test("Platform file service validates input and removes earlier objects when a batch fails", async () => {

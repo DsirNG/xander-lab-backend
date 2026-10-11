@@ -1,5 +1,9 @@
 import type { PlatformFileAsset, PlatformFileRepository } from "../interfaces/platform-file-repository.js";
-import type { PlatformFileObject, PlatformFileStorage } from "../interfaces/platform-file-storage.js";
+import {
+  PlatformFileStorageError,
+  type PlatformFileObject,
+  type PlatformFileStorage,
+} from "../interfaces/platform-file-storage.js";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const MAX_BATCH_FILES = 20;
@@ -64,6 +68,19 @@ function assertUserId(userId: number): void {
   if (!Number.isSafeInteger(userId) || userId < 1) throw new PlatformFileError(401, "未登录或登录已过期");
 }
 
+function logUploadFailure(phase: "oss_put" | "d1_insert", error: unknown): void {
+  const details = error instanceof PlatformFileStorageError
+    ? {
+      phase,
+      operation: error.operation,
+      ...(error.status ? { status: error.status } : {}),
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.requestId ? { requestId: error.requestId } : {}),
+    }
+    : { phase, errorName: error instanceof Error ? error.name : "UnknownError" };
+  console.error("Platform file upload failed", details);
+}
+
 /** Owns file validation, OSS/D1 coordination, downloads, and legacy export content. */
 export class PlatformFileService {
   constructor(
@@ -102,12 +119,23 @@ export class PlatformFileService {
     };
     try {
       await this.storage.put(objectKey, bytes, contentType);
-      await this.repository.create(asset);
-    } catch {
+    } catch (error) {
+      logUploadFailure("oss_put", error);
       try {
         await this.storage.delete(objectKey);
       } catch {
-        // An OSS lifecycle rule removes an orphan if upload compensation fails.
+        console.error("Platform file upload cleanup failed", { phase: "oss_put" });
+      }
+      throw new PlatformFileError(503, "文件上传失败，请稍后重试");
+    }
+    try {
+      await this.repository.create(asset);
+    } catch (error) {
+      logUploadFailure("d1_insert", error);
+      try {
+        await this.storage.delete(objectKey);
+      } catch {
+        console.error("Platform file upload cleanup failed", { phase: "d1_insert" });
       }
       throw new PlatformFileError(503, "文件上传失败，请稍后重试");
     }

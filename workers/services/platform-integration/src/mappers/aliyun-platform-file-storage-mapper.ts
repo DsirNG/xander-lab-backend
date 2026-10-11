@@ -7,7 +7,20 @@ import {
   signedOssPutHeaders,
   type OssV4Credentials,
 } from "@dinqor/worker-runtime/oss";
-import type { PlatformFileObject, PlatformFileStorage } from "../interfaces/platform-file-storage.js";
+import {
+  PlatformFileStorageError,
+  type PlatformFileObject,
+  type PlatformFileStorage,
+} from "../interfaces/platform-file-storage.js";
+
+function errorField(body: string, field: "Code"): string | undefined {
+  const value = body.match(new RegExp(`<${field}>([^<]{1,100})</${field}>`, "i"))?.[1];
+  return value && /^[a-z0-9._-]+$/i.test(value) ? value : undefined;
+}
+
+function safeRequestId(value: string | null): string | undefined {
+  return value && /^[a-z0-9_-]{1,100}$/i.test(value) ? value : undefined;
+}
 
 export interface PlatformOssEnvironment {
   ALIYUN_OSS_ACCESS_KEY_ID?: string;
@@ -33,7 +46,15 @@ export class AliyunPlatformFileStorageMapper implements PlatformFileStorage {
       redirect: "manual",
       signal: AbortSignal.timeout(30_000),
     });
-    if (!response.ok) throw new Error("Platform file upload failed");
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new PlatformFileStorageError(
+        "put",
+        response.status,
+        errorField(body, "Code"),
+        safeRequestId(response.headers.get("x-oss-request-id")),
+      );
+    }
   }
 
   async read(objectKey: string, maxBytes: number): Promise<PlatformFileObject | null> {
