@@ -16,7 +16,7 @@
     ]
   },
   "vars": {
-    "CORS_ALLOWED_ORIGINS": "https://dinqor.cn,https://xiaodongding.dpdns.org",
+    "CORS_ALLOWED_ORIGINS": "https://dinqor.cn,https://xiaodongding.dpdns.org,http://localhost:3000,http://127.0.0.1:3000",
     "GATEWAY_RATE_LIMIT_ENABLED": "true"
   },
   "routes": [

@@ -205,7 +205,7 @@ async function localConfigFor(service) {
       ...config.vars,
       ...serviceUrls,
       CORS_ALLOWED_ORIGINS: process.env.CORS_ALLOWED_ORIGINS
-        || "http://localhost:5173,http://127.0.0.1:5173,https://dinqor.cn",
+        || "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173,https://dinqor.cn,https://xiaodongding.dpdns.org",
     };
     needsLocalConfig = true;
   }
