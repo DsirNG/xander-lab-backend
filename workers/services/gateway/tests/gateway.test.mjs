@@ -310,3 +310,26 @@ test("coarse rate limiting keys requests by route and authenticated user or edge
     assert.equal(upstreamCalled, false);
   });
 });
+
+test("Swagger UI and OpenAPI docs are public and generated from the Gateway route manifest", async () => {
+  const ui = await gatewayWorker.fetch(
+    new Request("https://gateway.example/swagger-ui/index.html"),
+    environment(),
+  );
+  assert.equal(ui.status, 200);
+  assert.match(ui.headers.get("content-type"), /text\/html/);
+  assert.match(await ui.text(), /\/v3\/api-docs/);
+
+  const response = await gatewayWorker.fetch(
+    new Request("https://gateway.example/v3/api-docs"),
+    environment(),
+  );
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type"), /application\/json/);
+  const spec = await response.json();
+  assert.equal(spec.openapi, "3.0.3");
+  assert.ok(spec.paths["/api/notifications/events"].get);
+  assert.ok(spec.paths["/api/notifications"].get);
+  assert.ok(Object.keys(spec.paths).length > 100);
+  assert.equal(JSON.stringify(spec).includes("/internal/"), false);
+});

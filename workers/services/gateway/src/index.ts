@@ -108,6 +108,144 @@ const compiledRoutes: Route[] = ROUTES.map((route) => ({
 }));
 const SAFE_CORRELATION_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+const OPENAPI_METHODS = ["get", "post", "put", "patch", "delete"] as const;
+
+const openApiSuccessSchema = {
+  type: "object",
+  properties: {
+    code: { type: "integer", example: 200 },
+    message: { type: "string", example: "success" },
+    data: {},
+  },
+  required: ["code", "message", "data"],
+} as const;
+
+const openApiErrorSchema = {
+  type: "object",
+  properties: {
+    code: { type: "integer", example: 401 },
+    message: { type: "string", example: "未登录或登录已过期" },
+    data: { nullable: true },
+  },
+  required: ["code", "message", "data"],
+} as const;
+
+function openApiPath(routePath: string): string {
+  return routePath.replace(/\/\*\*/g, "/{wildcardPath}").replace(/\*/g, "{wildcardSegment}");
+}
+
+function openApiDocument(): Record<string, unknown> {
+  const paths: Record<string, Record<string, unknown>> = {};
+  for (const route of ROUTES) {
+    const path = openApiPath(route.path);
+    const pathItem = paths[path] ?? {};
+    const methods = route.method === "ANY"
+      ? OPENAPI_METHODS
+      : [route.method.toLowerCase() as typeof OPENAPI_METHODS[number]];
+    for (const method of methods) {
+      if (!(OPENAPI_METHODS as readonly string[]).includes(method) || pathItem[method]) continue;
+      const policyPath = path.replace(/\{[^/{}]+\}/g, "1");
+      const decision = accessDecision(method.toUpperCase(), policyPath);
+      const security = decision.identityMode === "none"
+        ? []
+        : decision.identityMode === "optional"
+          ? [{ bearerAuth: [] }, {}]
+          : [{ bearerAuth: [] }];
+      const operationId = `${route.service}_${method}_${path}`.replace(/[^A-Za-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+      const isStream = path === "/api/notifications/events";
+      const parameters = [...path.matchAll(/\{([^/{}]+)\}/g)].map((match) => ({
+        name: match[1],
+        in: "path",
+        required: true,
+        schema: { type: "string" },
+      }));
+      const operation: Record<string, unknown> = {
+        tags: [route.service],
+        summary: `${method.toUpperCase()} ${route.path}`,
+        description: `Forwarded by the API Gateway to the ${route.service} Worker.`,
+        operationId,
+        security,
+        parameters,
+        responses: {
+          "200": {
+            description: isStream ? "Server-sent notification events." : "Successful response.",
+            content: isStream
+              ? { "text/event-stream": { schema: { type: "string" } } }
+              : { "application/json": { schema: openApiSuccessSchema } },
+          },
+          "400": { description: "Invalid request.", content: { "application/json": { schema: openApiErrorSchema } } },
+          "401": { description: "Authentication required.", content: { "application/json": { schema: openApiErrorSchema } } },
+          "403": { description: "Access denied.", content: { "application/json": { schema: openApiErrorSchema } } },
+          "404": { description: "Resource not found.", content: { "application/json": { schema: openApiErrorSchema } } },
+          "503": { description: "Service unavailable.", content: { "application/json": { schema: openApiErrorSchema } } },
+        },
+        "x-route-pattern": route.path,
+      };
+      if (parameters.length > 0) operation.parameters = parameters;
+      if (["post", "put", "patch"].includes(method)) {
+        operation.requestBody = {
+          required: false,
+          content: { "application/json": { schema: { type: "object", additionalProperties: true } } },
+        };
+      }
+      pathItem[method] = operation;
+    }
+    paths[path] = pathItem;
+  }
+
+  return {
+    openapi: "3.0.3",
+    info: {
+      title: "DinQor API",
+      version: "1.0.0",
+      description: "Public API routes served by the Cloudflare Workers Gateway. Request and response shapes follow each endpoint's runtime contract.",
+    },
+    servers: [{ url: "/" }],
+    tags: [...new Set(ROUTES.map((route) => route.service))].map((name) => ({ name })),
+    paths,
+    components: {
+      securitySchemes: {
+        bearerAuth: { type: "http", scheme: "bearer", bearerFormat: "JWT" },
+      },
+    },
+  };
+}
+
+const SWAGGER_UI_HTML = `<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DinQor API 文档</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.33.1/swagger-ui.css" />
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5.33.1/swagger-ui-bundle.js" crossorigin></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.33.1/swagger-ui-standalone-preset.js" crossorigin></script>
+    <script>
+      window.ui = SwaggerUIBundle({
+        url: "/v3/api-docs",
+        dom_id: "#swagger-ui",
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        layout: "StandaloneLayout",
+        persistAuthorization: true,
+        filter: true,
+        validatorUrl: null
+      });
+    </script>
+  </body>
+</html>`;
+
+function swaggerUiResponse(): Response {
+  return new Response(SWAGGER_UI_HTML, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=300",
+    },
+  });
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -479,6 +617,17 @@ export default {
     }
     if (request.method === "GET" && url.pathname === "/readyz") {
       return finish(await readyResponse("gateway"));
+    }
+    if (request.method === "GET" && ["/docs", "/swagger-ui", "/swagger-ui/index.html"].includes(url.pathname)) {
+      return finish(swaggerUiResponse());
+    }
+    if (request.method === "GET" && ["/openapi.json", "/v3/api-docs"].includes(url.pathname)) {
+      return finish(new Response(JSON.stringify(openApiDocument()), {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "public, max-age=300",
+        },
+      }));
     }
 
     const route = compiledRoutes.find((candidate) =>

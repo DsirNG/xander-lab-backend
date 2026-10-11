@@ -1,4 +1,7 @@
-import type { ContentNotificationRepository } from "../interfaces/content-notification-repository.js";
+import type {
+  ContentNotificationRepository,
+  NotificationStreamPosition,
+} from "../interfaces/content-notification-repository.js";
 
 export class ContentNotificationService {
   constructor(private readonly repository: ContentNotificationRepository) {}
@@ -34,7 +37,7 @@ export class ContentNotificationService {
     return this.repository.create(input);
   }
 
-  openStream(connectionId: string, ownerId: number, nowMs: number): Promise<number> {
+  openStream(connectionId: string, ownerId: number, nowMs: number): Promise<NotificationStreamPosition> {
     return this.repository.openStream(connectionId, ownerId, nowMs);
   }
 

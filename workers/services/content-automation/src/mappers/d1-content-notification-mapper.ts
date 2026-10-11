@@ -3,6 +3,7 @@ import type {
   ContentNotification,
   ContentNotificationRepository,
   NotificationBroadcast,
+  NotificationStreamPosition,
 } from "../interfaces/content-notification-repository.js";
 
 interface NotificationRow {
@@ -104,18 +105,32 @@ export class D1ContentNotificationMapper implements ContentNotificationRepositor
     return id;
   }
 
-  async openStream(connectionId: string, ownerId: number, nowMs: number): Promise<number> {
-    const row = await this.db.prepare(`
+  async openStream(
+    connectionId: string,
+    ownerId: number,
+    nowMs: number,
+  ): Promise<NotificationStreamPosition> {
+    // Read SQLite's AUTOINCREMENT high-water mark and register in one D1 batch,
+    // so a fresh stream starts after existing notifications without loading them.
+    const [notificationCursor, stream] = await this.db.batch([
+      this.db.prepare(`
+        SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'blog_notification'), 0)
+          AS lastNotificationId
+      `),
+      this.db.prepare(`
       INSERT INTO content_notification_stream
         (connection_id, owner_id, last_seen_at_ms, lease_until_ms, last_broadcast_id)
       VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(id), 0) FROM content_notification_broadcast))
       RETURNING last_broadcast_id AS lastBroadcastId
-    `).bind(connectionId, ownerId, nowMs, nowMs + 45_000)
-      .first<{ lastBroadcastId: number }>();
-    if (!row || !Number.isSafeInteger(row.lastBroadcastId) || row.lastBroadcastId < 0) {
+      `).bind(connectionId, ownerId, nowMs, nowMs + 45_000),
+    ]);
+    const lastNotificationId = Number(notificationCursor.results?.[0]?.lastNotificationId ?? 0);
+    const lastBroadcastId = Number(stream.results?.[0]?.lastBroadcastId);
+    if (!Number.isSafeInteger(lastNotificationId) || lastNotificationId < 0
+      || !Number.isSafeInteger(lastBroadcastId) || lastBroadcastId < 0) {
       throw new Error("Content notification stream could not be registered");
     }
-    return row.lastBroadcastId;
+    return { lastNotificationId, lastBroadcastId };
   }
 
   async heartbeatStream(connectionId: string, nowMs: number): Promise<void> {

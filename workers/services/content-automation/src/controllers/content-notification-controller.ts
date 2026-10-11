@@ -15,8 +15,7 @@ function parsePage(raw: string | null, fallback: number): number | null {
   return Number.isSafeInteger(value) && value >= 1 ? value : null;
 }
 
-function parseCursor(raw: string | null): number | null {
-  if (raw === null) return 0;
+function parseCursor(raw: string): number | null {
   if (!/^\d+$/.test(raw)) return null;
   const value = Number(raw);
   return Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -72,9 +71,10 @@ function notificationEvent(record: unknown): string {
 
 function eventStream(request: Request, service: ContentNotificationService, ownerId: number): Response {
   const url = new URL(request.url);
-  const cursor = parseCursor(request.headers.get("last-event-id") ?? url.searchParams.get("afterId"));
-  if (cursor === null) return apiError(400, "通知游标无效");
-  let lastId = cursor;
+  const cursorValue = request.headers.get("last-event-id") ?? url.searchParams.get("afterId");
+  const resumeCursor = cursorValue === null ? null : parseCursor(cursorValue);
+  if (cursorValue !== null && resumeCursor === null) return apiError(400, "通知游标无效");
+  let lastId = resumeCursor ?? 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let closed = false;
   let cleanupStarted = false;
@@ -138,13 +138,15 @@ function eventStream(request: Request, service: ContentNotificationService, owne
       };
       void (async () => {
         try {
-          lastBroadcastId = await service.openStream(connectionId, ownerId, Date.now());
+          const position = await service.openStream(connectionId, ownerId, Date.now());
+          lastBroadcastId = position.lastBroadcastId;
+          if (resumeCursor === null) lastId = position.lastNotificationId;
           if (closed) {
             cleanup();
             return;
           }
           lastHeartbeatAt = Date.now();
-          controller.enqueue(encoder.encode(": connected\n\n"));
+          controller.enqueue(encoder.encode('event: connected\ndata: {"status":"connected"}\n\n'));
           await poll();
         } catch {
           if (!closed) {

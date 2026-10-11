@@ -28,12 +28,17 @@ export interface ContentNotificationRepository {
     resourceType?: string | null;
     resourceId?: number | null;
   }): Promise<number>;
-  openStream(connectionId: string, ownerId: number, nowMs: number): Promise<number>;
+  openStream(connectionId: string, ownerId: number, nowMs: number): Promise<NotificationStreamPosition>;
   heartbeatStream(connectionId: string, nowMs: number): Promise<void>;
   closeStream(connectionId: string): Promise<void>;
   listBroadcastsAfter(afterId: number, nowMs: number, limit: number): Promise<NotificationBroadcast[]>;
   broadcastTest(nowMs: number, expiresAtMs: number): Promise<number>;
   cleanupExpiredStreams(nowMs: number): Promise<void>;
+}
+
+export interface NotificationStreamPosition {
+  lastNotificationId: number;
+  lastBroadcastId: number;
 }
 
 export interface NotificationBroadcast {

@@ -32,7 +32,10 @@ function setup() {
     },
     async openStream(connectionId, ownerId, nowMs) {
       streams.set(connectionId, { ownerId, leaseUntilMs: nowMs + 45_000 });
-      return broadcasts.at(-1)?.id ?? 0;
+      return {
+        lastNotificationId: rows.at(-1)?.id ?? 0,
+        lastBroadcastId: broadcasts.at(-1)?.id ?? 0,
+      };
     },
     async heartbeatStream(connectionId, nowMs) {
       const stream = streams.get(connectionId);
@@ -107,11 +110,45 @@ test("notification event stream emits owner notifications after its cursor", asy
   assert.equal(response.headers.get("content-type"), "text/event-stream; charset=utf-8");
   const reader = response.body.getReader();
   const first = await reader.read();
-  assert.match(new TextDecoder().decode(first.value), /: connected/);
+  assert.match(new TextDecoder().decode(first.value), /event: connected/);
   const notification = await reader.read();
   const event = new TextDecoder().decode(notification.value);
   assert.match(event, /id: 1/);
   assert.match(event, /event: notification/);
+  await reader.cancel();
+});
+
+test("fresh notification streams skip history and deliver notifications created after connection", async () => {
+  const { repository, service } = setup();
+  await service.create({ userId: 42, type: "OLD", title: "Old notification", message: "History" });
+
+  let releaseFirstPoll;
+  const firstPollGate = new Promise((resolve) => { releaseFirstPoll = resolve; });
+  const originalListAfter = repository.listAfter;
+  const cursors = [];
+  let firstPoll = true;
+  repository.listAfter = async (userId, afterId, limit) => {
+    cursors.push(afterId);
+    if (firstPoll) {
+      firstPoll = false;
+      await firstPollGate;
+    }
+    return originalListAfter(userId, afterId, limit);
+  };
+
+  const response = await handleContentNotificationRequest(new Request(
+    "https://content/api/notifications/events",
+    { headers: { "x-user-id": "42" } },
+  ), service);
+  const reader = response.body.getReader();
+  assert.match(new TextDecoder().decode((await reader.read()).value), /event: connected/);
+
+  await service.create({ userId: 42, type: "NEW", title: "New notification", message: "Live" });
+  releaseFirstPoll();
+  const event = new TextDecoder().decode((await reader.read()).value);
+  assert.match(event, /id: 2/);
+  assert.match(event, /"type":"NEW"/);
+  assert.equal(cursors[0], 1, "a fresh stream polls only after the registration watermark");
   await reader.cancel();
 });
 
@@ -127,7 +164,7 @@ test("notification SSE registers active connections and streams a live-only admi
     headers: { "x-user-id": "42" },
   }), service);
   const reader = response.body.getReader();
-  assert.match(new TextDecoder().decode((await reader.read()).value), /: connected/);
+  assert.match(new TextDecoder().decode((await reader.read()).value), /event: connected/);
   assert.equal(streams.size, 1);
 
   const broadcastResponse = await handleContentNotificationRequest(new Request(
