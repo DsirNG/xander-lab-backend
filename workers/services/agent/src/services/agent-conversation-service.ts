@@ -1,4 +1,7 @@
-import type { AgentConversationRepository } from "../interfaces/agent-conversation-repository.js";
+import type {
+  AgentConversationListPage,
+  AgentConversationRepository,
+} from "../interfaces/agent-conversation-repository.js";
 import type { AgentConversationRecord, AgentRunMessage } from "../interfaces/agent-run-repository.js";
 import type { AgentAttachmentService } from "./agent-attachment-service.js";
 
@@ -18,9 +21,21 @@ export class AgentConversationService {
     return conversation ? { conversation, messages: [] } : null;
   }
 
-  async list(userId: number): Promise<AgentConversationRecord[]> {
-    const rows = await this.repository.listConversations(userId);
-    return rows.map((row) => this.withUnread(row));
+  async list(
+    userId: number,
+    page: number,
+    size: number,
+    search: string | null,
+  ): Promise<AgentConversationListPage> {
+    const offset = (page - 1) * size;
+    const rows = await this.repository.listConversations(userId, size + 1, offset, search);
+    const hasMore = rows.length > size;
+    return {
+      items: rows.slice(0, size).map((row) => this.withUnread(row)),
+      page,
+      size,
+      hasMore,
+    };
   }
 
   async get(userId: number, conversationId: number): Promise<{

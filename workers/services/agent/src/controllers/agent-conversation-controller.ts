@@ -5,6 +5,10 @@ type UserResolver = () => Promise<number | Response>;
 type JsonObject = Record<string, unknown>;
 const MAX_REQUEST_BYTES = 32 * 1024;
 const MAX_MESSAGE_LENGTH = 4000;
+const DEFAULT_CONVERSATION_PAGE_SIZE = 30;
+const MAX_CONVERSATION_PAGE_SIZE = 50;
+const MAX_CONVERSATION_PAGE = 1_000_000;
+const MAX_CONVERSATION_SEARCH_LENGTH = 100;
 
 function success(data: unknown): Response {
   return jsonResponse({ code: 200, message: "success", data });
@@ -25,6 +29,13 @@ async function readJsonBody(request: Request): Promise<JsonObject | Response> {
 }
 
 function positiveId(value: string): number | null {
+  if (!/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function positiveQueryInteger(value: string | null, fallback: number): number | null {
+  if (value === null) return fallback;
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
@@ -57,7 +68,17 @@ export async function handleAgentConversationRequest(
   if (userId instanceof Response) return userId;
 
   try {
-    if (request.method === "GET" && collectionRoute) return success(await service.list(userId));
+    if (request.method === "GET" && collectionRoute) {
+      const page = positiveQueryInteger(url.searchParams.get("page"), 1);
+      const size = positiveQueryInteger(url.searchParams.get("size"), DEFAULT_CONVERSATION_PAGE_SIZE);
+      const searchText = (url.searchParams.get("search") ?? "").trim();
+      if (page === null || page > MAX_CONVERSATION_PAGE
+        || size === null || size > MAX_CONVERSATION_PAGE_SIZE
+        || searchText.length > MAX_CONVERSATION_SEARCH_LENGTH) {
+        return apiError(400, "会话分页参数无效");
+      }
+      return success(await service.list(userId, page, size, searchText || null));
+    }
     if (request.method === "POST" && collectionRoute) {
       const body = await readJsonBody(request);
       if (body instanceof Response) return body;

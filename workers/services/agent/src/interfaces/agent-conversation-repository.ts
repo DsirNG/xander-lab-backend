@@ -13,9 +13,21 @@ export interface AgentMessageRecord {
   createdAt: string;
 }
 
+export interface AgentConversationListPage {
+  items: Array<AgentConversationRecord & { unread: boolean }>;
+  page: number;
+  size: number;
+  hasMore: boolean;
+}
+
 export interface AgentConversationRepository {
   createConversation(userId: number, title: string): Promise<AgentConversationRecord | null>;
-  listConversations(userId: number): Promise<AgentConversationRecord[]>;
+  listConversations(
+    userId: number,
+    limit: number,
+    offset: number,
+    search: string | null,
+  ): Promise<AgentConversationRecord[]>;
   findOwnedConversation(userId: number, conversationId: number): Promise<AgentConversationRecord | null>;
   listMessages(conversationId: number): Promise<AgentMessageRecord[]>;
   findSharedConversation(shareToken: string): Promise<AgentConversationRecord | null>;

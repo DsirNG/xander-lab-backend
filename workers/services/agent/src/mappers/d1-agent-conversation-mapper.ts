@@ -23,11 +23,27 @@ export class D1AgentConversationMapper implements AgentConversationRepository {
     `).bind(userId, title).first<AgentConversationRecord>();
   }
 
-  async listConversations(userId: number): Promise<AgentConversationRecord[]> {
-    const rows = await this.db.prepare(`
-      SELECT ${CONVERSATION_COLUMNS} FROM agent_conversation
-      WHERE user_id = ? ORDER BY is_pinned DESC, updated_at DESC LIMIT 50
-    `).bind(userId).all<AgentConversationRecord>();
+  async listConversations(
+    userId: number,
+    limit: number,
+    offset: number,
+    search: string | null,
+  ): Promise<AgentConversationRecord[]> {
+    const escapedSearch = search?.replace(/[!%_]/g, (character) => `!${character}`);
+    const statement = search
+      ? this.db.prepare(`
+          SELECT ${CONVERSATION_COLUMNS} FROM agent_conversation
+          WHERE user_id = ? AND title LIKE ? ESCAPE '!'
+          ORDER BY is_pinned DESC, updated_at DESC, id DESC
+          LIMIT ? OFFSET ?
+        `).bind(userId, `%${escapedSearch}%`, limit, offset)
+      : this.db.prepare(`
+          SELECT ${CONVERSATION_COLUMNS} FROM agent_conversation
+          WHERE user_id = ?
+          ORDER BY is_pinned DESC, updated_at DESC, id DESC
+          LIMIT ? OFFSET ?
+        `).bind(userId, limit, offset);
+    const rows = await statement.all<AgentConversationRecord>();
     return rows.results;
   }
 

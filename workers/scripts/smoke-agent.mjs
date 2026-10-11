@@ -68,7 +68,7 @@ try {
 
   const listedResponse = await api("/api/agent/conversations", { token });
   const listed = await listedResponse.json();
-  if (!listedResponse.ok || !listed.data.some((row) => row.id === conversationId)) {
+  if (!listedResponse.ok || !listed.data.items.some((row) => row.id === conversationId)) {
     throw new Error("Agent conversation list failed");
   }
 

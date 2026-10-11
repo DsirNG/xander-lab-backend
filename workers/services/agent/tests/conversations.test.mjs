@@ -77,7 +77,10 @@ function createEnvironment(rows = [conversation()]) {
         },
         async all() {
           if (query.includes("FROM agent_conversation")) {
-            return { results: rows.filter((row) => row.userId === call.values[0]) };
+            const userRows = rows.filter((row) => row.userId === call.values[0]);
+            const limit = call.values.at(-2);
+            const offset = call.values.at(-1);
+            return { results: userRows.slice(offset, offset + limit) };
           }
           if (query.includes("FROM agent_message")) return { results: [] };
           throw new Error("Unexpected Agent D1 all query");
@@ -163,7 +166,10 @@ test("conversation listing is scoped to the verified token subject", async () =>
   const result = await readJson(response);
 
   assert.equal(response.status, 200);
-  assert.deepEqual(result.data.map((item) => item.id), [7]);
+  assert.deepEqual(result.data.items.map((item) => item.id), [7]);
+  assert.equal(result.data.page, 1);
+  assert.equal(result.data.size, 30);
+  assert.equal(result.data.hasMore, false);
   assert.equal(calls[0].values[0], 42);
 });
 
