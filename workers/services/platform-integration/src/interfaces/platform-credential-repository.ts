@@ -28,4 +28,5 @@ export interface PlatformCredentialRepository {
   markExpired(userId: number, platform: ConnectablePlatform): Promise<void>;
   saveAccountProfile(userId: number, platform: PublishingPlatform, expectedCredential: string,
     profile: PlatformAccountProfile, verifiedAt: string): Promise<boolean>;
+  saveWechatAccountProfile(userId: number, profile: PlatformAccountProfile, verifiedAt: string): Promise<boolean>;
 }

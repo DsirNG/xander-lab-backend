@@ -15,6 +15,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ available: true });
     return false;
   }
+  if (message?.type === "READ_WECHAT_PROFILE") {
+    const pageUrl = sender.url ? new URL(sender.url) : null;
+    if (!pageUrl || !CONNECTOR_ORIGINS.has(pageUrl.origin) || !Number.isInteger(sender.tab?.id)) {
+      sendResponse({ ok: false, errorCode: "PROFILE_READ_NOT_ALLOWED" });
+      return false;
+    }
+    readWechatProfileFromAccountTab()
+      .then((profile) => sendResponse(profile
+        ? { ok: true, profile }
+        : { ok: false, errorCode: "WECHAT_PROFILE_NOT_FOUND" }))
+      .catch(() => sendResponse({ ok: false, errorCode: "WECHAT_PROFILE_NOT_FOUND" }));
+    return true;
+  }
   if (message?.type === "CANCEL") {
     const pageUrl = sender.url ? new URL(sender.url) : null;
     if (pageUrl && CONNECTOR_ORIGINS.has(pageUrl.origin) && /^[0-9a-f-]{36}$/i.test(message.taskId)) {
@@ -304,6 +317,36 @@ async function readWechatProfile(tabId) {
     return nickname ? { nickname, avatarUrl } : null;
   } catch {
     return null;
+  }
+}
+
+async function readWechatProfileFromAccountTab() {
+  const tabs = await chrome.tabs.query({ url: "https://mp.weixin.qq.com/*" });
+  let tab = tabs.find((entry) => Number.isInteger(entry.id));
+  let createdTabId = null;
+  if (!tab) {
+    tab = await chrome.tabs.create({ url: PLATFORM_URLS.wechat_mp, active: false });
+    createdTabId = tab.id;
+  }
+  try {
+    if (!Number.isInteger(tab.id)) return null;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      let currentTab;
+      try { currentTab = await chrome.tabs.get(tab.id); } catch { return null; }
+      if (currentTab.status === "complete") break;
+      if (attempt === 29) return null;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const profile = await readWechatProfile(tab.id);
+      if (profile) return profile;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    return null;
+  } finally {
+    if (Number.isInteger(createdTabId)) {
+      try { await chrome.tabs.remove(createdTabId); } catch { /* The account tab may already be closed. */ }
+    }
   }
 }
 

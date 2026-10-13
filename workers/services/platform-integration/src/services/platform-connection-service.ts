@@ -7,7 +7,20 @@ import { PlatformCredentialError, type PlatformCredentialService } from "./platf
 export class PlatformConnectionService {
   constructor(private readonly credentials: PlatformCredentialService, private readonly accounts: PlatformAccountPort) {}
 
-  async testConnection(userId: number, platform: "csdn" | "juejin" = "csdn") {
+  async testConnection(userId: number, platform: "csdn" | "juejin" | "wechat_mp" = "csdn",
+    wechatProfile?: { nickname: string | null; avatarUrl: string | null }) {
+    if (platform === "wechat_mp") {
+      if (wechatProfile) return this.credentials.saveWechatAccountProfile(userId, { username: null, ...wechatProfile });
+      const connection = await this.credentials.status(userId, platform);
+      if (connection.status !== "AUTHORIZED") {
+        throw new PlatformCredentialError(409, "微信公众号授权已失效，请重新绑定");
+      }
+      if (!connection.profile) {
+        throw new PlatformCredentialError(404, "暂未读取到微信公众号账号资料，请重新绑定");
+      }
+      return { ...connection.profile, authorizedAt: connection.authorizedAt };
+    }
+
     const name = platform === "csdn" ? "CSDN" : "掘金";
     let credential: Record<string, string>;
     let reference: string;

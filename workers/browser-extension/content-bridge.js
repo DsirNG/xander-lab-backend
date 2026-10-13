@@ -98,6 +98,24 @@
       sendRuntimeMessage({ type: "CANCEL", taskId: message.taskId });
       return;
     }
+    if (message.type === "READ_PROFILE" && typeof message.requestId === "string") {
+      sendRuntimeMessage({ type: "READ_WECHAT_PROFILE" }, (reply, failed) => {
+        const profile = reply?.profile;
+        const ok = !failed && reply?.ok === true && typeof profile?.nickname === "string";
+        window.postMessage({
+          channel,
+          type: "PROFILE_RESULT",
+          requestId: message.requestId,
+          ok,
+          errorCode: ok ? null : (reply?.errorCode || "WECHAT_PROFILE_NOT_FOUND"),
+          profile: ok ? {
+            nickname: profile.nickname.slice(0, 200),
+            avatarUrl: typeof profile.avatarUrl === "string" ? profile.avatarUrl : null,
+          } : null,
+        }, event.origin);
+      });
+      return;
+    }
     if (message.type !== "START" || typeof message.requestId !== "string"
       || !supportedPlatforms.includes(message.platform)
       || typeof message.taskId !== "string" || typeof message.transferToken !== "string") return;

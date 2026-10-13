@@ -88,4 +88,14 @@ export class D1PlatformCredentialMapper implements PlatformCredentialRepository 
     if (!result.success) throw new Error("platform account profile save failed");
     return result.meta?.changes === 1;
   }
+
+  async saveWechatAccountProfile(userId: number, profile: PlatformAccountProfile, verifiedAt: string): Promise<boolean> {
+    const result = await this.db.prepare(`
+      UPDATE platform_credential
+         SET account_name = ?, account_profile = ?, last_validated_at = ?, updated_at = ?
+       WHERE user_id = ? AND platform = 'wechat_mp' AND status = 'ACTIVE'
+    `).bind(profile.nickname, JSON.stringify(profile), verifiedAt, verifiedAt, userId).run();
+    if (!result.success) throw new Error("WeChat account profile save failed");
+    return result.meta?.changes === 1;
+  }
 }

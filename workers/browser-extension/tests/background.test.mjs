@@ -49,6 +49,7 @@ test("reports cookie, permission, and submission progress to the originating Din
   const storage = {};
   const progress = [];
   const closedTabs = [];
+  let accountTabs = [];
   const activatedTabs = [];
   const focusedWindows = [];
   let cookies = [];
@@ -92,6 +93,8 @@ test("reports cookie, permission, and submission progress to the originating Din
     permissions: { contains: async () => platformPermission },
     tabs: {
       onUpdated: makeEvent("tabUpdated"),
+      query: async () => accountTabs,
+      get: async (tabId) => ({ id: tabId, status: "complete" }),
       create: async () => ({ id: nextTabId++ }),
       remove: async (tabId) => closedTabs.push(tabId),
       update: async (tabId, options) => {
@@ -230,5 +233,17 @@ test("reports cookie, permission, and submission progress to the originating Din
   assert.equal(submittedBodies.at(-1).accountName, "测试公众号");
   assert.deepEqual(submittedBodies.at(-1).accountProfile, {
     nickname: "测试公众号", avatarUrl: "https://wx.qlogo.cn/mmhead/test/0",
+  });
+
+  accountTabs = [{ id: 300 }];
+  const profileResponses = [];
+  const readResult = events.get("message")[0]({ type: "READ_WECHAT_PROFILE" }, {
+    url: "http://localhost:3000/profile", tab: { id: 55 },
+  }, (reply) => profileResponses.push(reply));
+  assert.equal(readResult, true);
+  await waitFor(() => profileResponses.length === 1);
+  assert.deepEqual(profileResponses[0], {
+    ok: true,
+    profile: { nickname: "测试公众号", avatarUrl: "https://wx.qlogo.cn/mmhead/test/0" },
   });
 });

@@ -103,6 +103,17 @@ export class PlatformCredentialService {
     }
   }
 
+  async saveWechatAccountProfile(userId: number, value: PlatformAccountProfile) {
+    const profile = this.validateAccountProfile("wechat_mp", value);
+    if (!profile) throw new PlatformCredentialError(400, "微信公众号账号资料格式不正确");
+    const verifiedAt = new Date().toISOString();
+    if (!await this.credentials.saveWechatAccountProfile(userId, profile, verifiedAt)) {
+      throw new PlatformCredentialError(409, "微信公众号授权已更改，请重新读取账号资料");
+    }
+    const connection = await this.status(userId, "wechat_mp");
+    return { ...profile, verifiedAt, authorizedAt: connection.authorizedAt };
+  }
+
   delete(userId: number, platform: ConnectablePlatform): Promise<void> {
     return this.credentials.delete(userId, platform);
   }

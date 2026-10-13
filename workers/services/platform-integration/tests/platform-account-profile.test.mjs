@@ -61,6 +61,42 @@ test("extension WeChat profile is visible to the credential owner and rejects ar
   assert.equal((await credentials.status(42, "wechat_mp")).profile.avatarUrl, null);
 });
 
+test("WeChat connection test returns the saved account profile and both timestamps", async (context) => {
+  const { credentials } = await fixture(context);
+  await credentials.save(42, "wechat_mp", { cookie: "slave_user=private" }, "公众号名称", {
+    username: null, nickname: "公众号名称", avatarUrl: "https://wx.qlogo.cn/mmhead/a/0",
+  });
+  const service = new PlatformConnectionService(credentials, {});
+  const status = await credentials.status(42, "wechat_mp");
+  const profile = await service.testConnection(42, "wechat_mp");
+
+  assert.deepEqual(profile, {
+    username: null,
+    nickname: "公众号名称",
+    avatarUrl: "https://wx.qlogo.cn/mmhead/a/0",
+    verifiedAt: status.profile.verifiedAt,
+    authorizedAt: status.authorizedAt,
+  });
+  await assert.rejects(service.testConnection(43, "wechat_mp"), (error) => error.status === 409);
+});
+
+test("WeChat connection test saves a freshly read profile for an older binding", async (context) => {
+  const { credentials } = await fixture(context);
+  await credentials.save(42, "wechat_mp", { cookie: "slave_user=private" }, null);
+  const service = new PlatformConnectionService(credentials, {});
+  const profile = await service.testConnection(42, "wechat_mp", {
+    nickname: "新读取的公众号", avatarUrl: "https://wx.qlogo.cn/mmhead/new/0",
+  });
+  const status = await credentials.status(42, "wechat_mp");
+
+  assert.equal(profile.nickname, "新读取的公众号");
+  assert.equal(profile.avatarUrl, "https://wx.qlogo.cn/mmhead/new/0");
+  assert.equal(profile.verifiedAt, status.profile.verifiedAt);
+  assert.equal(status.profile.nickname, "新读取的公众号");
+  assert.ok(status.authorizedAt);
+  assert.ok(status.profile.verifiedAt);
+});
+
 test("an in-flight verification cannot replace a reauthorized account or resurrect a disconnected account", async (context) => {
   const { credentials } = await fixture(context);
   const profile = { username: "old-user", nickname: "Old", avatarUrl: null };
