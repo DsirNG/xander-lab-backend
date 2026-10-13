@@ -78,18 +78,19 @@ test("extension authorization stores only a hash and saves credentials for the t
   await value.service.complete(task.taskId, "csdn", task.transferToken, credential, "ada");
 
   assert.equal(row.status, "COMPLETED");
-  assert.deepEqual(value.saved, [[71, "csdn", credential, "ada"]]);
+  assert.deepEqual(value.saved, [[71, "csdn", credential, "ada", null]]);
 });
 
 test("WeChat MP uses the same single-use browser handoff", async () => {
   const value = fixture();
   const task = await value.service.start(72, "wechat_mp");
   const credential = { cookie: "slave_user=provider-session" };
+  const accountProfile = { nickname: "公众号名称", avatarUrl: "https://wx.qlogo.cn/mmhead/a/0" };
 
-  await value.service.complete(task.taskId, "wechat_mp", task.transferToken, credential, null);
+  await value.service.complete(task.taskId, "wechat_mp", task.transferToken, credential, "公众号名称", accountProfile);
 
   assert.equal(value.repository.tasks.get(task.taskId).status, "COMPLETED");
-  assert.deepEqual(value.saved, [[72, "wechat_mp", credential, null]]);
+  assert.deepEqual(value.saved, [[72, "wechat_mp", credential, "公众号名称", { username: null, ...accountProfile }]]);
 });
 
 test("disconnect cancels an in-flight handoff and removes credentials saved by its race", async () => {
@@ -187,7 +188,7 @@ test("credential controller binds extension grants to the authenticated owner an
   );
   assert.equal(completed.status, 200);
   assert.deepEqual((await completed.json()).data, { authorized: true });
-  assert.deepEqual(value.saved, [[101, "csdn", { cookie: "UserToken=provider-session", username: "ada" }, "ada"]]);
+  assert.deepEqual(value.saved, [[101, "csdn", { cookie: "UserToken=provider-session", username: "ada" }, "ada", null]]);
 });
 
 test("credential controller starts a connect-only platform grant and rejects unknown platform names", async () => {

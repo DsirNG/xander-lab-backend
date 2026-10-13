@@ -28,6 +28,8 @@ account binding only.
 `0007_expand_platform_credential_platforms.sql` rebuilds the credential table
 with the supported connection-platform identifiers while preserving existing
 encrypted CSDN/Juejin rows.
+`0008_platform_account_profile.sql` adds owner-scoped display metadata for verified
+platform profiles; it never stores cookies or authorization tokens in that column.
 
 Apply local migrations with:
 

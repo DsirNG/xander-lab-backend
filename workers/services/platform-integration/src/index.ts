@@ -1,4 +1,6 @@
 import { createBusinessService } from "@dinqor/worker-runtime";
+import { handlePlatformConnectionRequest } from "./controllers/platform-connection-controller.js";
+import { PlatformConnectionService } from "./services/platform-connection-service.js";
 import { handleCsdnPublicationRequest } from "./controllers/csdn-publication-controller.js";
 import { handlePlatformBlogSyncRequest } from "./controllers/platform-blog-sync-controller.js";
 import { handlePlatformCredentialRequest } from "./controllers/platform-credential-controller.js";
@@ -26,6 +28,8 @@ import { ResendTransactionalMailMapper } from "./mappers/resend-transactional-ma
 import { PlatformCredentialService } from "./services/platform-credential-service.js";
 import { PlatformBlogSyncService } from "./services/platform-blog-sync-service.js";
 import { PlatformAuthorizationService } from "./services/platform-authorization-service.js";
+import { PlatformExtensionAuthorizationService } from "./services/platform-extension-authorization-service.js";
+import { D1PlatformExtensionAuthorizationMapper } from "./mappers/d1-platform-extension-authorization-mapper.js";
 import { McpOAuthService } from "./services/mcp-oauth-service.js";
 import { PlatformMcpService } from "./services/platform-mcp-service.js";
 import { PlatformFileService } from "./services/platform-file-service.js";
@@ -53,6 +57,9 @@ const platformWorker = createBusinessService<PlatformEnvironment>("platform-inte
       juejin: Number(env.PLATFORM_JUEJIN_AUTHORIZATION_TIMEOUT_SECONDS ?? 60),
     },
   );
+  const extensionAuthorizationService = new PlatformExtensionAuthorizationService(
+    new D1PlatformExtensionAuthorizationMapper(env.DB), credentialService,
+  );
   const mcpOAuthService = new McpOAuthService(new D1McpOAuthMapper(env.DB), env);
   const contentMcp = new ContentMcpMapper(env);
   const mcpService = new PlatformMcpService(
@@ -72,8 +79,14 @@ const platformWorker = createBusinessService<PlatformEnvironment>("platform-inte
   if (mcpTransport) return mcpTransport;
   const oauth = await handleMcpOAuthRequest(request, env, mcpOAuthService);
   if (oauth) return oauth;
-  const credentials = await handlePlatformCredentialRequest(request, env, credentialService, authorizationService);
+  const credentials = await handlePlatformCredentialRequest(
+    request, env, credentialService, authorizationService, extensionAuthorizationService,
+  );
   if (credentials) return credentials;
+  const connection = await handlePlatformConnectionRequest(request,
+    new PlatformConnectionService(credentialService, new URL(request.url).pathname.includes("/juejin/")
+      ? new JuejinCatalogMapper(env) : new CsdnPublicationMapper(env)));
+  if (connection) return connection;
 
   const fileService = new PlatformFileService(
     new D1PlatformFileMapper(env.DB),
@@ -150,6 +163,10 @@ export default {
     const work = Promise.all([
       new D1McpOAuthMapper(env.DB).cleanupExpired(now),
       createAuthorizationService(env).cleanupExpired(),
+      new PlatformExtensionAuthorizationService(
+        new D1PlatformExtensionAuthorizationMapper(env.DB),
+        new PlatformCredentialService(new D1PlatformCredentialMapper(env.DB), env.PLATFORM_CREDENTIAL_ENCRYPTION_KEY),
+      ).cleanupExpired(),
     ]);
     if (context) context.waitUntil(work);
     else await work;

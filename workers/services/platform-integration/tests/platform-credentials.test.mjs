@@ -19,7 +19,9 @@ function d1Fixture() {
           const row = rows.get(`${values[0]}:${values[1]}`);
           return row ? { ...row } : null;
         },
-        async all() { return { results: [] }; },
+        async all() {
+          return { results: [...rows.values()].filter((row) => row.userId === values[0]).map((row) => ({ ...row })) };
+        },
         async run() {
           const rowKey = `${values[0]}:${values[1]}`;
           if (sql.includes("INSERT INTO platform_credential")) {
@@ -38,7 +40,9 @@ function d1Fixture() {
             if (row?.status === "ACTIVE") row.status = "EXPIRED";
             return { success: true, meta: { changes: row ? 1 : 0 } };
           }
-          if (sql.includes("platform_authorization")) return { success: true, meta: { changes: 0 } };
+          if (sql.includes("platform_authorization") || sql.includes("platform_extension_authorization")) {
+            return { success: true, meta: { changes: 0 } };
+          }
           throw new Error(`unexpected SQL: ${sql}`);
         },
       };
@@ -65,19 +69,26 @@ test("Platform credential service encrypts owner-bound provider data and scopes 
   const service = new PlatformCredentialService(repository, key);
   assert.equal((await service.status(42, "csdn")).status, "NOT_AUTHORIZED");
 
-  await service.save(42, "csdn", { cookie: "CSDN=secret-cookie", username: "alice" }, "alice");
+  await service.save(42, "csdn", { cookie: "UserToken=secret-cookie", username: "alice" }, "alice");
   await service.save(43, "juejin", { cookie: "sessionid=other-cookie" }, null);
+  await service.save(42, "bilibili", { cookie: "SESSDATA=provider-session" }, null);
   assert.equal((await service.status(42, "csdn")).status, "AUTHORIZED");
   assert.equal((await service.status(43, "juejin")).status, "AUTHORIZED");
   assert.equal((await service.status(42, "juejin")).status, "NOT_AUTHORIZED");
-  assert.doesNotMatch(db.rows.get("42:csdn").encryptedCredential, /CSDN=secret-cookie|alice/);
-  assert.deepEqual(await service.require(42, "csdn"), { cookie: "CSDN=secret-cookie", username: "alice" });
+  assert.equal((await service.status(42, "bilibili")).status, "AUTHORIZED");
+  const listed = await service.statuses(42);
+  assert.equal(listed.connections.csdn, "AUTHORIZED");
+  assert.equal(listed.connections.bilibili, "AUTHORIZED");
+  assert.doesNotMatch(db.rows.get("42:csdn").encryptedCredential, /UserToken=secret-cookie|alice/);
+  assert.deepEqual(await service.require(42, "csdn"), { cookie: "UserToken=secret-cookie", username: "alice" });
 
   const copied = { ...db.rows.get("42:csdn"), userId: 44 };
   db.rows.set("44:csdn", copied);
   await assert.rejects(service.require(44, "csdn"), /重新授权/);
   await service.markExpired(42, "csdn");
   assert.equal((await service.status(42, "csdn")).status, "EXPIRED");
+  await assert.rejects(service.require(42, "csdn"), (error) => error.status === 409);
+  await assert.rejects(service.require(42, "juejin"), (error) => error.status === 409);
   await service.delete(43, "juejin");
   assert.equal((await service.status(43, "juejin")).status, "NOT_AUTHORIZED");
 });
@@ -96,12 +107,12 @@ test("Platform credential endpoints enforce service and user identity and never 
 
   const saved = await integrationWorker.fetch(workerRequest(
     "/internal/v1/platform-credentials/42/csdn", {
-      method: "PUT", body: { credential: { cookie: "CSDN=secret-cookie", username: "alice" }, accountName: "alice" },
+      method: "PUT", body: { credential: { cookie: "UserToken=secret-cookie", username: "alice" }, accountName: "alice" },
     },
   ), env);
   assert.equal(saved.status, 200);
-  assert.doesNotMatch(await saved.text(), /CSDN=secret-cookie/);
-  assert.doesNotMatch(db.rows.get("42:csdn").encryptedCredential, /CSDN=secret-cookie/);
+  assert.doesNotMatch(await saved.text(), /UserToken=secret-cookie/);
+  assert.doesNotMatch(db.rows.get("42:csdn").encryptedCredential, /UserToken=secret-cookie/);
 
   const missingOwner = await integrationWorker.fetch(workerRequest(
     "/api/publishing/csdn/authorization/status", { userId: undefined },
@@ -114,6 +125,13 @@ test("Platform credential endpoints enforce service and user identity and never 
   assert.equal(ownBody.data.status, "AUTHORIZED");
   assert.equal(ownBody.data.qrCodeDataUrl, null);
   assert.doesNotMatch(JSON.stringify(ownBody), /secret-cookie/);
+
+  const connections = await integrationWorker.fetch(workerRequest("/api/platform-connections", { userId: 42 }), env);
+  const connectionsBody = await connections.json();
+  assert.equal(connections.status, 200);
+  assert.equal(connectionsBody.data.connections.csdn, "AUTHORIZED");
+  assert.equal(connectionsBody.data.connections.juejin, "NOT_AUTHORIZED");
+  assert.doesNotMatch(JSON.stringify(connectionsBody), /secret-cookie|encryptedCredential/);
 
   const internal = await integrationWorker.fetch(workerRequest(
     "/internal/platform-integration/platform-credentials/42/csdn/status",
@@ -167,5 +185,16 @@ test("Platform credential import rejects weak keys and malformed credential payl
   await assert.rejects(service.save(42, "juejin", { cookie: "sessionid=secret" }, null), /密钥/);
   const valid = new PlatformCredentialService(new D1PlatformCredentialMapper(db), key);
   await assert.rejects(valid.save(42, "juejin", { cookie: "", unknown: "value" }, null), /凭证格式/);
-  await assert.rejects(valid.save(42, "csdn", { cookie: "cookie", username: "alice" }, null), /信息不完整/);
+  await assert.rejects(valid.save(42, "csdn", { cookie: "cookie", username: "alice" }, "alice"), /登录会话/);
+  await assert.rejects(valid.save(42, "weibo", { cookie: "tracking=value" }, null), /登录会话/);
+});
+
+test("CSDN authorization accepts a valid session cookie without optional username cookies", async () => {
+  const db = d1Fixture();
+  const service = new PlatformCredentialService(new D1PlatformCredentialMapper(db), key);
+
+  await service.save(42, "csdn", { cookie: "UserToken=provider-session" }, null);
+
+  assert.equal((await service.status(42, "csdn")).status, "AUTHORIZED");
+  assert.deepEqual(await service.require(42, "csdn"), { cookie: "UserToken=provider-session" });
 });

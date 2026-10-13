@@ -1,0 +1,5 @@
+body { width: 260px; margin: 0; color: #172033; font: 14px/1.5 system-ui, sans-serif; }
+main { display: grid; gap: 12px; padding: 18px; }
+p { margin: 0; color: #586579; }
+button { min-height: 38px; border: 0; border-radius: 8px; background: #0284c7; color: white; font-weight: 650; cursor: pointer; }
+small { color: #667085; }

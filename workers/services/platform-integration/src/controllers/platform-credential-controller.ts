@@ -2,11 +2,16 @@ import { apiError, jsonResponse } from "@dinqor/worker-runtime";
 import type { PlatformEnvironment } from "../interfaces/platform-environment.js";
 import { PlatformCredentialError, type PlatformCredentialService } from "../services/platform-credential-service.js";
 import { PlatformAuthorizationError, type PlatformAuthorizationService } from "../services/platform-authorization-service.js";
+import type { PlatformExtensionAuthorizationService } from "../services/platform-extension-authorization-service.js";
+import { CONNECTABLE_PLATFORMS, type ConnectablePlatform } from "../interfaces/platform-connection.js";
 
 const MAX_CREDENTIAL_BYTES = 32 * 1024;
+const CONNECTABLE_PLATFORM_PATTERN = CONNECTABLE_PLATFORMS.join("|");
 
 function success(data: unknown): Response {
-  return jsonResponse({ code: 200, message: "success", data });
+  const response = jsonResponse({ code: 200, message: "success", data });
+  response.headers.set("cache-control", "no-store");
+  return response;
 }
 
 function userId(value: string | null): number | null {
@@ -42,25 +47,79 @@ export async function handlePlatformCredentialRequest(
   _env: PlatformEnvironment,
   service: PlatformCredentialService,
   authorization: PlatformAuthorizationService,
+  extensionAuthorization: PlatformExtensionAuthorizationService,
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname;
-  const publicStatus = path.match(/^\/api\/publishing\/(csdn|juejin)\/authorization\/status$/);
-  if (publicStatus && request.method === "GET") {
+  if (path === "/api/platform-connections" && request.method === "GET") {
     const owner = userId(request.headers.get("x-user-id"));
     if (!owner) return apiError(401, "未登录或登录已过期");
     try {
-      return success(await authorization.status(owner, publicStatus[1] as "csdn" | "juejin"));
+      return success(await service.statuses(owner));
     } catch (error) {
       return mapError(error);
     }
   }
 
-  const publicStart = path.match(/^\/api\/publishing\/(csdn|juejin)\/authorization\/start$/);
+  const publicStatus = path.match(new RegExp(`^/api/publishing/(${CONNECTABLE_PLATFORM_PATTERN})/authorization/status$`));
+  if (publicStatus && request.method === "GET") {
+    const owner = userId(request.headers.get("x-user-id"));
+    if (!owner) return apiError(401, "未登录或登录已过期");
+    try {
+      return success(await service.status(owner, publicStatus[1] as ConnectablePlatform));
+    } catch (error) {
+      return mapError(error);
+    }
+  }
+
+  const publicStart = path.match(new RegExp(`^/api/publishing/(${CONNECTABLE_PLATFORM_PATTERN})/authorization/start$`));
   if (publicStart && request.method === "POST") {
     const owner = userId(request.headers.get("x-user-id"));
     if (!owner) return apiError(401, "未登录或登录已过期");
     try {
-      return success(await authorization.start(owner, publicStart[1] as "csdn" | "juejin"));
+      return success(await extensionAuthorization.start(owner, publicStart[1] as ConnectablePlatform));
+    } catch (error) {
+      return mapError(error);
+    }
+  }
+
+  const extensionCancel = path.match(new RegExp(`^/api/publishing/(${CONNECTABLE_PLATFORM_PATTERN})/authorization/extension/([0-9a-f-]{36})/cancel$`, "i"));
+  if (extensionCancel && request.method === "POST") {
+    const owner = userId(request.headers.get("x-user-id"));
+    if (!owner) return apiError(401, "未登录或登录已过期");
+    try {
+      await extensionAuthorization.cancel(owner, extensionCancel[2]);
+      return success(null);
+    } catch (error) {
+      return mapError(error);
+    }
+  }
+
+  const extensionComplete = path.match(new RegExp(`^/api/publishing/(${CONNECTABLE_PLATFORM_PATTERN})/authorization/extension/([0-9a-f-]{36})/complete$`, "i"));
+  if (extensionComplete && request.method === "POST") {
+    const token = request.headers.get("authorization")?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1];
+    if (!token) return apiError(401, "授权任务令牌无效或已过期");
+    const body = await objectBody(request);
+    if (body instanceof Response) return body;
+    if (body.accountName !== undefined && body.accountName !== null && typeof body.accountName !== "string") {
+      return apiError(400, "平台账号名称格式不正确");
+    }
+    const accountName = typeof body.accountName === "string" ? body.accountName : null;
+    if (body.accountProfile !== undefined && body.accountProfile !== null
+      && (!body.accountProfile || typeof body.accountProfile !== "object" || Array.isArray(body.accountProfile))) {
+      return apiError(400, "平台账号资料格式不正确");
+    }
+    const accountProfile = body.accountProfile as { nickname?: unknown; avatarUrl?: unknown } | null | undefined;
+    if (accountProfile && ((accountProfile.nickname !== undefined && accountProfile.nickname !== null && typeof accountProfile.nickname !== "string")
+      || (accountProfile.avatarUrl !== undefined && accountProfile.avatarUrl !== null && typeof accountProfile.avatarUrl !== "string"))) {
+      return apiError(400, "平台账号资料格式不正确");
+    }
+    try {
+      await extensionAuthorization.complete(
+        extensionComplete[2], extensionComplete[1] as ConnectablePlatform, token, body.credential, accountName,
+        accountProfile ? { nickname: typeof accountProfile.nickname === "string" ? accountProfile.nickname : null,
+          avatarUrl: typeof accountProfile.avatarUrl === "string" ? accountProfile.avatarUrl : null } : null,
+      );
+      return success({ authorized: true });
     } catch (error) {
       return mapError(error);
     }
@@ -78,12 +137,15 @@ export async function handlePlatformCredentialRequest(
     }
   }
 
-  const publicDisconnect = path.match(/^\/api\/publishing\/(csdn|juejin)\/authorization$/);
+  const publicDisconnect = path.match(new RegExp(`^/api/publishing/(${CONNECTABLE_PLATFORM_PATTERN})/authorization$`));
   if (publicDisconnect && request.method === "DELETE") {
     const owner = userId(request.headers.get("x-user-id"));
     if (!owner) return apiError(401, "未登录或登录已过期");
     try {
-      await authorization.disconnect(owner, publicDisconnect[1] as "csdn" | "juejin");
+      const platform = publicDisconnect[1] as ConnectablePlatform;
+      await extensionAuthorization.cancelForPlatform(owner, platform);
+      if (platform === "csdn" || platform === "juejin") await authorization.disconnect(owner, platform);
+      else await service.delete(owner, platform);
       return success(null);
     } catch (error) {
       return mapError(error);

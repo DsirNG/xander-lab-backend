@@ -2,6 +2,7 @@ import { Marked, Renderer, type Tokens } from "marked";
 import type { CsdnArticleInput, CsdnPublicationPort, CsdnPublicationResult } from "../interfaces/csdn-publication-port.js";
 import { CsdnProviderError } from "../interfaces/csdn-publication-port.js";
 import type { PlatformEnvironment } from "../interfaces/platform-environment.js";
+import type { PlatformAccountPort, PlatformAccountProfile } from "../interfaces/platform-account-port.js";
 
 const API_ORIGIN = "https://bizapi.csdn.net";
 const SAVE_PATH = "/blog-console-api/v1/postedit/saveArticle";
@@ -118,8 +119,58 @@ function normalizeDescription(summary: string): string {
   return summary.trim().slice(0, 200);
 }
 
-export class CsdnPublicationMapper implements CsdnPublicationPort {
+export class CsdnPublicationMapper implements CsdnPublicationPort, PlatformAccountPort {
   constructor(private readonly env: PlatformEnvironment) {}
+
+  async getCurrentAccount(credential: Record<string, string>): Promise<PlatformAccountProfile> {
+    const cookie = credential.cookie;
+    if (!cookie || /[\r\n]/.test(cookie)) throw new CsdnProviderError(true, "CSDN 授权已失效");
+    // Account reads use the current mp console's signing pair, independently of publishing.
+    const apiKey = (this.env.PLATFORM_CSDN_ACCOUNT_API_KEY || this.env.PLATFORM_CSDN_API_KEY)?.trim();
+    const secret = this.env.PLATFORM_CSDN_ACCOUNT_API_SECRET || this.env.PLATFORM_CSDN_WEB_CONSOLE_SECRET;
+    if (!apiKey || !secret) throw new CsdnProviderError(false, "CSDN 接口签名尚未配置");
+    const path = "/blog-console-api/v1/user/info";
+    const nonce = crypto.randomUUID();
+    // No muser parameter: CSDN must resolve the current account from the saved session.
+    const canonical = `GET\n${ACCEPT}\n\n\n\nx-ca-key:${apiKey}\nx-ca-nonce:${nonce}\n${path}`;
+    let response: Response;
+    let root: Record<string, unknown>;
+    try {
+      response = await fetch(new URL(path, API_ORIGIN), {
+        method: "GET",
+        headers: {
+          accept: ACCEPT, cookie, origin: "https://mp.csdn.net", referer: "https://mp.csdn.net/",
+          "x-ca-key": apiKey, "x-ca-nonce": nonce,
+          "x-ca-signature-headers": "x-ca-key,x-ca-nonce",
+          "x-ca-stage": "",
+          "x-ca-signature": await this.sign(secret, canonical),
+        },
+        redirect: "manual", signal: AbortSignal.timeout(15_000),
+      });
+      // An HTML login redirect or authentication challenge must not pass as a profile.
+      if (response.status >= 300 && response.status < 400
+        && response.headers.get("location")?.startsWith("https://passport.csdn.net/")) {
+        await response.body?.cancel();
+        throw new CsdnProviderError(true, "CSDN 授权已失效");
+      }
+      root = parseProviderJson(await readResponseText(response));
+    } catch (error) {
+      if (error instanceof CsdnProviderError) throw error;
+      throw new CsdnProviderError(false, "CSDN 接口暂不可用");
+    }
+    // A forbidden response can also mean a signing error or provider blocking, not expiry.
+    if (Number(root.code) === 401) throw new CsdnProviderError(true, "CSDN 授权已失效");
+    if (!response.ok || Number(root.code) !== 200) throw new CsdnProviderError(false, "CSDN 接口暂不可用");
+    const data = record(root.data);
+    const username = typeof data?.username === "string" ? data.username.trim() : "";
+    if (!username || username.length > 200) throw new CsdnProviderError(false, "CSDN 账号信息格式无效");
+    return {
+      username,
+      nickname: typeof data?.nickname === "string" ? data.nickname.slice(0, 200) : null,
+      avatarUrl: typeof data?.avatar === "string" && data.avatar.startsWith("https://")
+        ? safeRemoteUrl(data.avatar) : null,
+    };
+  }
 
   async publish(credential: Record<string, string>, input: CsdnArticleInput): Promise<CsdnPublicationResult> {
     const cookie = (credential as CsdnCredential).cookie;

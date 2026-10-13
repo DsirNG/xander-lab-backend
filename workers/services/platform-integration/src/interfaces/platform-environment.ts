@@ -19,6 +19,8 @@ export interface PlatformEnvironment extends ServiceEnvironment, McpOAuthEnviron
   MCP_JUEJIN_ENABLED?: string;
   PLATFORM_CSDN_API_KEY?: string;
   PLATFORM_CSDN_WEB_CONSOLE_SECRET?: string;
+  PLATFORM_CSDN_ACCOUNT_API_KEY?: string;
+  PLATFORM_CSDN_ACCOUNT_API_SECRET?: string;
   PLATFORM_OSS_PREFIX?: string;
   PLATFORM_FILE_ACCESS_URL?: string;
   ALIYUN_OSS_ACCESS_KEY_ID?: string;

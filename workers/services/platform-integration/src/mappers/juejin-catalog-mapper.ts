@@ -6,6 +6,7 @@ import type {
 import type { JuejinDraftInput, JuejinPublicationPort, JuejinTagCandidate } from "../interfaces/juejin-publication-port.js";
 import { JuejinCatalogProviderError as ProviderError } from "../interfaces/juejin-catalog-port.js";
 import type { PlatformEnvironment } from "../interfaces/platform-environment.js";
+import type { PlatformAccountPort, PlatformAccountProfile } from "../interfaces/platform-account-port.js";
 
 const DEFAULT_BASE_URL = "https://api.juejin.cn";
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -67,8 +68,50 @@ async function readProviderBody(response: Response): Promise<string> {
   }
 }
 
-export class JuejinCatalogMapper implements JuejinCatalogPort, JuejinPublicationPort {
+export class JuejinCatalogMapper implements JuejinCatalogPort, JuejinPublicationPort, PlatformAccountPort {
   constructor(private readonly env: PlatformEnvironment) {}
+
+  async getCurrentAccount(credential: Record<string, string>): Promise<PlatformAccountProfile> {
+    const fields = credential as Credentials;
+    if (!fields.cookie || /[\r\n]/.test(fields.cookie)
+      || (fields.csrfToken && /[\r\n]/.test(fields.csrfToken))) throw new ProviderError(true, "掘金授权已失效");
+    const endpoint = this.endpoint("/user_api/v1/user/get");
+    endpoint.searchParams.set("aid", fields.aid?.trim() || this.env.JUEJIN_DEFAULT_AID?.trim() || "2608");
+    endpoint.searchParams.set("uuid", fields.uuid?.trim() || "");
+    let root: Record<string, unknown>;
+    try {
+      // Omit user_id: only the saved session may identify the current user.
+      const response = await fetch(endpoint, {
+        method: "GET", headers: {
+          cookie: fields.cookie, origin: "https://juejin.cn", referer: "https://juejin.cn/",
+          ...(fields.csrfToken ? { "x-secsdk-csrf-token": fields.csrfToken } : {}),
+        }, redirect: "manual", signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        throw new ProviderError(response.status === 401, "掘金账号接口暂不可用");
+      }
+      root = this.parseRoot(await readProviderBody(response));
+    } catch (error) {
+      if (error instanceof ProviderError) throw error;
+      throw new ProviderError(false, "掘金账号接口暂不可用");
+    }
+    if (Number(root.err_no) !== 0) throw new ProviderError(false, "掘金账号信息格式无效");
+    // Juejin returns success with null data for an anonymous current-account query.
+    if (root.data === null) throw new ProviderError(true, "掘金授权已失效");
+    const data = record(root.data);
+    const id = exactId(data?.user_id);
+    if (id === "0") throw new ProviderError(false, "掘金账号信息格式无效");
+    const nickname = name(data?.user_name);
+    let avatarUrl: string | null = null;
+    if (typeof data?.avatar_large === "string") {
+      try {
+        const url = new URL(data.avatar_large);
+        if (url.protocol === "https:" && !url.username && !url.password) avatarUrl = url.href;
+      } catch { /* An optional avatar must not invalidate an authenticated account. */ }
+    }
+    return { username: id, nickname, avatarUrl };
+  }
 
   async queryCategories(credential: Record<string, string>): Promise<JuejinCategory[]> {
     const root = await this.post("/tag_api/v1/query_category_list", credential, {});
@@ -221,7 +264,7 @@ export class JuejinCatalogMapper implements JuejinCatalogPort, JuejinPublication
     if (new TextEncoder().encode(raw).byteLength > MAX_RESPONSE_BYTES) throw new ProviderError(false);
     try {
       // Keep all provider IDs that may exceed Number.MAX_SAFE_INTEGER as decimal strings.
-      const lossless = raw.replace(/("(?:category_id|tag_id|article_id|draft_id|id)"\s*:\s*)(\d{16,})(?=\s*[,}])/g, "$1\"$2\"");
+      const lossless = raw.replace(/("(?:category_id|tag_id|article_id|draft_id|user_id|id)"\s*:\s*)(\d{16,})(?=\s*[,}])/g, "$1\"$2\"");
       const root = record(JSON.parse(lossless));
       if (!root) throw new Error("invalid JSON");
       const errorNo = typeof root.err_no === "number" ? root.err_no : Number(root.err_no ?? 0);

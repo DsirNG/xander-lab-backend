@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "DinQorAI Platform Connector",
+  "description": "Connect your publishing accounts to DinQorAI from your browser.",
+  "version": "0.3.4",
+  "permissions": ["cookies", "storage", "tabs", "alarms"],
+  "host_permissions": [
+    "https://dinqor.cn/*",
+    "https://xiaod.dpdns.org/*",
+    "https://api.xiaodongding.dpdns.org/*",
+    "https://csdn.net/*",
+    "https://*.csdn.net/*",
+    "http://csdn.net/*",
+    "http://*.csdn.net/*",
+    "https://juejin.cn/*",
+    "https://*.juejin.cn/*",
+    "https://mp.weixin.qq.com/*",
+    "http://mp.weixin.qq.com/*",
+    "https://weibo.com/*",
+    "https://*.weibo.com/*",
+    "https://zhihu.com/*",
+    "https://*.zhihu.com/*",
+    "https://baidu.com/*",
+    "https://*.baidu.com/*",
+    "https://cnblogs.com/*",
+    "https://*.cnblogs.com/*",
+    "https://douyin.com/*",
+    "https://*.douyin.com/*",
+    "https://xiaohongshu.com/*",
+    "https://*.xiaohongshu.com/*",
+    "https://toutiao.com/*",
+    "https://*.toutiao.com/*",
+    "https://51cto.com/*",
+    "https://*.51cto.com/*",
+    "https://jianshu.com/*",
+    "https://*.jianshu.com/*",
+    "https://segmentfault.com/*",
+    "https://*.segmentfault.com/*",
+    "https://oschina.net/*",
+    "https://*.oschina.net/*",
+    "https://bilibili.com/*",
+    "https://*.bilibili.com/*",
+    "https://cloud.tencent.com/*",
+    "https://qq.com/*",
+    "https://*.qq.com/*",
+    "https://aliyun.com/*",
+    "https://*.aliyun.com/*"
+  ],
+  "optional_host_permissions": [
+    "http://localhost:5173/*",
+    "http://localhost:3000/*",
+    "http://localhost:8787/*",
+    "http://127.0.0.1:8787/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://dinqor.cn/*", "https://xiaod.dpdns.org/*", "http://localhost:5173/*", "http://localhost:3000/*"],
+      "js": ["content-bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://mp.weixin.qq.com/*"],
+      "js": ["wechat-profile.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "DinQorAI Connector" }
+}
