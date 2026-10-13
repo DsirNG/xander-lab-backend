@@ -184,7 +184,7 @@ async function checkPlatformTasks(platformFilter) {
           : { cookie };
 
       const accountProfile = task.platform === "wechat_mp"
-        ? await readWechatProfile(task.tabId)
+        ? await readWechatProfileFromAccountTab()
         : null;
       const profileAccountName = accountProfile?.nickname || accountName;
 
@@ -301,33 +301,42 @@ function notifyConnector(task, state, errorCode, diagnostic) {
 }
 
 async function readWechatProfile(tabId) {
-  try {
-    const profile = await chrome.tabs.sendMessage(tabId, { type: "READ_WECHAT_ACCOUNT_PROFILE" }, { frameId: 0 });
-    if (!profile || typeof profile !== "object") return null;
-    const nickname = typeof profile.nickname === "string" ? profile.nickname.trim().slice(0, 200) : "";
-    let avatarUrl = null;
-    if (typeof profile.avatarUrl === "string") {
-      try {
-        const url = new URL(profile.avatarUrl);
-        if (url.protocol === "https:" && ["wx.qlogo.cn", "thirdwx.qlogo.cn", "mmbiz.qpic.cn"].includes(url.hostname)) {
-          avatarUrl = url.href;
-        }
-      } catch { /* An optional avatar must not invalidate a successful binding. */ }
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const profile = await chrome.tabs.sendMessage(tabId, { type: "READ_WECHAT_ACCOUNT_PROFILE" }, { frameId: 0 });
+      if (!profile || typeof profile !== "object") return null;
+      const nickname = typeof profile.nickname === "string" ? profile.nickname.trim().slice(0, 200) : "";
+      let avatarUrl = null;
+      if (typeof profile.avatarUrl === "string") {
+        try {
+          const url = new URL(profile.avatarUrl);
+          if (url.protocol === "https:" && ["wx.qlogo.cn", "thirdwx.qlogo.cn", "mmbiz.qpic.cn"].includes(url.hostname)) {
+            avatarUrl = url.href;
+          }
+        } catch { /* An optional avatar must not invalidate a successful binding. */ }
+      }
+      return nickname ? { nickname, avatarUrl } : null;
+    } catch {
+      if (attempt === 3) return null;
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    return nickname ? { nickname, avatarUrl } : null;
-  } catch {
-    return null;
   }
+  return null;
 }
 
 async function readWechatProfileFromAccountTab() {
   const tabs = await chrome.tabs.query({ url: "https://mp.weixin.qq.com/*" });
-  let tab = tabs.find((entry) => Number.isInteger(entry.id));
+  const candidates = tabs.filter((entry) => Number.isInteger(entry.id))
+    .sort((left, right) => Number(right.active === true) - Number(left.active === true)
+      || (right.lastAccessed ?? 0) - (left.lastAccessed ?? 0));
+  const existingProfiles = await Promise.all(candidates.slice(0, 4).map((entry) => readWechatProfile(entry.id)));
+  const existingProfile = existingProfiles.find(Boolean);
+  if (existingProfile) return existingProfile;
+
+  let tab;
   let createdTabId = null;
-  if (!tab) {
-    tab = await chrome.tabs.create({ url: PLATFORM_URLS.wechat_mp, active: false });
-    createdTabId = tab.id;
-  }
+  tab = await chrome.tabs.create({ url: PLATFORM_URLS.wechat_mp, active: false });
+  createdTabId = tab.id;
   try {
     if (!Number.isInteger(tab.id)) return null;
     for (let attempt = 0; attempt < 30; attempt += 1) {
