@@ -58,7 +58,15 @@ test("verification mail sends through Resend without logging delivery contents",
   const mail = JSON.parse(deliveredRequest.init.body);
   assert.deepEqual(mail.to, ["alice@example.com"]);
   assert.equal(mail.from, "noreply@example.com");
+  assert.equal(mail.subject, "【DinQorAI】登录验证码");
   assert.match(mail.text, /123456/);
+  assert.match(mail.text, /验证码 5 分钟内有效/);
+  assert.match(mail.text, /请勿告诉他人/);
+  assert.match(mail.html, /<title>DinQorAI 登录验证码<\/title>/);
+  assert.match(mail.html, /Din<span style="color:#3978f6;">Qor<\/span>AI/);
+  assert.match(mail.html, /验证码 <strong[^>]*>5 分钟内有效<\/strong>/);
+  assert.match(mail.html, /请勿将验证码告诉任何人/);
+  assert.equal((mail.html.match(/font-size:25px;font-weight:700/g) ?? []).length, 6);
 });
 
 test("verification mail reports missing configuration and Resend failures safely", async () => {

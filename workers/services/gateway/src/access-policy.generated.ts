@@ -12,6 +12,107 @@ export const ACCESS_POLICY =
     "token_location": "n/a",
     "note": "OPTIONS 不携带凭据，由 CORS 配置决定放行。必须早于 /api/admin 分支提前返回，否则真实请求会被拦截。"
   },
+  "mcp_oauth": [
+    {
+      "id": "mcp-oauth-authorize-entry",
+      "match": {
+        "method": "GET",
+        "path": "/api/mcp/oauth/authorize"
+      },
+      "access": "public",
+      "identity_mode": "none",
+      "token_location": "n/a",
+      "note": "外部 MCP 客户端的 OAuth 授权入口；后续 consent 页面再要求 DinQorAI 用户登录。"
+    },
+    {
+      "id": "mcp-oauth-consent-request",
+      "match": {
+        "method": "GET",
+        "path_pattern": "/api/mcp/oauth/authorize/requests/*"
+      },
+      "access": "authenticated",
+      "identity_mode": "required",
+      "token_location": "header",
+      "note": "用户查看自己的 MCP OAuth consent 请求。"
+    },
+    {
+      "id": "mcp-oauth-consent-approve",
+      "match": {
+        "method": "POST",
+        "path_pattern": "/api/mcp/oauth/authorize/requests/*/approve"
+      },
+      "access": "authenticated",
+      "identity_mode": "required",
+      "token_location": "header",
+      "note": "用户批准自己的 MCP OAuth consent 请求。"
+    },
+    {
+      "id": "mcp-oauth-consent-deny",
+      "match": {
+        "method": "POST",
+        "path_pattern": "/api/mcp/oauth/authorize/requests/*/deny"
+      },
+      "access": "authenticated",
+      "identity_mode": "required",
+      "token_location": "header",
+      "note": "用户拒绝自己的 MCP OAuth consent 请求。"
+    },
+    {
+      "id": "mcp-oauth-clients-list",
+      "match": {
+        "method": "GET",
+        "path": "/api/mcp/oauth/clients"
+      },
+      "access": "authenticated",
+      "identity_mode": "required",
+      "token_location": "header",
+      "note": "列出当前 DinQorAI 用户已授权的 MCP 客户端。"
+    },
+    {
+      "id": "mcp-oauth-client-revoke",
+      "match": {
+        "method": "DELETE",
+        "path_pattern": "/api/mcp/oauth/clients/*"
+      },
+      "access": "authenticated",
+      "identity_mode": "required",
+      "token_location": "header",
+      "note": "用户撤销自己的 MCP 客户端授权。"
+    },
+    {
+      "id": "mcp-oauth-client-register",
+      "match": {
+        "method": "POST",
+        "path": "/api/mcp/oauth/register"
+      },
+      "access": "public",
+      "identity_mode": "none",
+      "token_location": "n/a",
+      "note": "OAuth 动态客户端注册，不使用 DinQorAI 用户 JWT。"
+    },
+    {
+      "id": "mcp-oauth-token",
+      "match": {
+        "method": "POST",
+        "path": "/api/mcp/oauth/token"
+      },
+      "access": "public",
+      "identity_mode": "none",
+      "token_location": "n/a",
+      "note": "OAuth code/refresh token 交换端点，不使用 DinQorAI 用户 JWT。"
+    },
+    {
+      "id": "mcp-oauth-revoke",
+      "match": {
+        "method": "POST",
+        "path": "/api/mcp/oauth/revoke"
+      },
+      "access": "public",
+      "identity_mode": "none",
+      "token_location": "n/a",
+      "note": "OAuth token 撤销端点，不使用 DinQorAI 用户 JWT。"
+    }
+  ],
   "excluded": [
     {
       "id": "excluded-auth-endpoints",
@@ -56,6 +157,17 @@ export const ACCESS_POLICY =
       "identity_mode": "none",
       "token_location": "n/a",
       "note": "MCP 规范根端点，走 OAuth + PKCE + Scope，不套业务 JWT；/api/mcp 作为兼容路径保留。"
+    },
+    {
+      "id": "excluded-platform-extension-completion",
+      "match": {
+        "method": "POST",
+        "path_pattern": "/api/publishing/*/authorization/extension/*/complete"
+      },
+      "access": "excluded",
+      "identity_mode": "none",
+      "token_location": "n/a",
+      "note": "浏览器扩展只持有绑定单个、短时授权任务的一次性令牌，平台 Integration Worker 独立校验；不使用 DinQor 登录 JWT。"
     },
     {
       "id": "excluded-studio-preview",
@@ -643,6 +755,50 @@ export const ACCESS_POLICY =
     }
   ],
   "protected": [
+    {
+      "id": "juejin-connection-test",
+      "match": {
+        "method": "POST",
+        "path": "/api/publishing/juejin/connection/test"
+      },
+      "owner": "integration",
+      "note": "仅使用当前用户的已保存掘金凭据调用登录态账号接口。"
+    },
+    {
+      "id": "csdn-connection-test",
+      "match": {
+        "method": "POST",
+        "path": "/api/publishing/csdn/connection/test"
+      },
+      "owner": "integration",
+      "note": "仅使用当前用户的已保存 CSDN 凭据调用登录态账号接口。"
+    },
+    {
+      "id": "wechat-mp-connection-test",
+      "match": {
+        "method": "POST",
+        "path": "/api/publishing/wechat_mp/connection/test"
+      },
+      "owner": "integration",
+      "note": "仅返回当前用户已授权微信公众号账号资料。"
+    },
+    {
+      "id": "platform-connections-list",
+      "match": {
+        "method": "GET",
+        "path": "/api/platform-connections"
+      },
+      "owner": "integration",
+      "note": "返回当前登录用户自己的平台绑定状态汇总。"
+    },
+    {
+      "id": "platform-extension-authorization-cancel",
+      "match": {
+        "method": "POST",
+        "path_pattern": "/api/publishing/*/authorization/extension/*/cancel"
+      },
+      "owner": "integration"
+    },
     {
       "id": "virtualpay-order-create",
       "match": {

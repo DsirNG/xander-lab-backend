@@ -126,7 +126,7 @@ test("CSDN expired-session errors invalidate the user's stored credential", asyn
     async publish() { throw new CsdnProviderError(true, "session expired"); },
   });
   await assert.rejects(service.publish(input()),
-    (error) => error instanceof PlatformCredentialError && error.status === 401);
+    (error) => error instanceof PlatformCredentialError && error.status === 409);
   assert.equal(expired, true);
 });
 
@@ -165,7 +165,7 @@ test("CSDN publication endpoint requires the internal service token and uses the
   const importRequest = new Request("https://integration.test/internal/v1/platform-credentials/42/csdn", {
     method: "PUT",
     headers: { "content-type": "application/json", "x-dinqor-service-token": token },
-    body: JSON.stringify({ credential: { cookie: "CSDN=private-cookie", username: "alice" }, accountName: "alice" }),
+    body: JSON.stringify({ credential: { cookie: "UserToken=private-cookie", username: "alice" }, accountName: "alice" }),
   });
   assert.equal((await integrationWorker.fetch(importRequest, env)).status, 200);
   const denied = await integrationWorker.fetch(new Request(
@@ -194,7 +194,7 @@ test("CSDN publication endpoint requires the internal service token and uses the
     assert.deepEqual(result, {
       platform: "csdn", externalId: "301", url: "https://blog.csdn.net/alice/301",
     });
-    assert.equal(requestHeaders.get("cookie"), "CSDN=private-cookie");
+    assert.equal(requestHeaders.get("cookie"), "UserToken=private-cookie");
     assert.doesNotMatch(JSON.stringify(result), /private-cookie/);
   } finally {
     globalThis.fetch = previousFetch;

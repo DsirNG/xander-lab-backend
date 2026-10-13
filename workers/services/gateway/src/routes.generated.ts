@@ -4,6 +4,16 @@ export const ROUTES =
 [
   {
     "method": "POST",
+    "path": "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/extension/*/complete",
+    "service": "platform-integration"
+  },
+  {
+    "method": "POST",
+    "path": "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/extension/*/cancel",
+    "service": "platform-integration"
+  },
+  {
+    "method": "POST",
     "path": "/api/agent/conversations/{id}/approvals/{approvalId}/decision",
     "service": "agent"
   },
@@ -44,6 +54,11 @@ export const ROUTES =
   },
   {
     "method": "POST",
+    "path": "/api/publishing/wechat_mp/connection/test",
+    "service": "platform-integration"
+  },
+  {
+    "method": "POST",
     "path": "/api/publishing/csdn/authorization/start",
     "service": "platform-integration"
   },
@@ -68,6 +83,11 @@ export const ROUTES =
     "service": "content-automation"
   },
   {
+    "method": "POST",
+    "path": "/api/publishing/juejin/connection/test",
+    "service": "platform-integration"
+  },
+  {
     "method": "GET",
     "path": "/.well-known/oauth-protected-resource",
     "service": "platform-integration"
@@ -79,7 +99,7 @@ export const ROUTES =
   },
   {
     "method": "GET",
-    "path": "/api/publishing/{platform:csdn|juejin}/authorization/status",
+    "path": "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/status",
     "service": "platform-integration"
   },
   {
@@ -89,7 +109,12 @@ export const ROUTES =
   },
   {
     "method": "POST",
-    "path": "/api/publishing/{platform:csdn|juejin}/authorization/start",
+    "path": "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/start",
+    "service": "platform-integration"
+  },
+  {
+    "method": "POST",
+    "path": "/api/publishing/csdn/connection/test",
     "service": "platform-integration"
   },
   {
@@ -259,7 +284,7 @@ export const ROUTES =
   },
   {
     "method": "DELETE",
-    "path": "/api/publishing/{platform:csdn|juejin}/authorization",
+    "path": "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization",
     "service": "platform-integration"
   },
   {
@@ -406,6 +431,11 @@ export const ROUTES =
     "method": "GET",
     "path": "/api/notifications/events",
     "service": "content-automation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/platform-connections",
+    "service": "platform-integration"
   },
   {
     "method": "GET",

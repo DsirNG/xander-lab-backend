@@ -45,7 +45,7 @@ export class JuejinPublicationService {
       } catch (error) {
         // Keep the legacy behavior: catalog outages do not block publishing when
         // cached categories/tags or the provider defaults are still usable.
-        if (error instanceof PlatformCredentialError && error.status === 401) throw error;
+        if (error instanceof PlatformCredentialError && error.status === 409) throw error;
       }
 
       const categoryCandidate = request.categoryId?.trim()
@@ -68,7 +68,7 @@ export class JuejinPublicationService {
     } catch (error) {
       if (error instanceof JuejinCatalogProviderError) {
         if (error.sessionExpired) await this.credentials.markExpired(request.userId, "juejin");
-        throw new PlatformCredentialError(error.sessionExpired ? 401 : 503,
+        throw new PlatformCredentialError(error.sessionExpired ? 409 : 503,
           error.sessionExpired ? "掘金授权已失效，请重新授权" : "掘金发布服务暂不可用");
       }
       if (error instanceof PlatformCredentialError) throw error;

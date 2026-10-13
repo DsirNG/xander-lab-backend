@@ -330,8 +330,12 @@ publication endpoint; MCP publication billing calls Core's protected billing
 contract. Set `MCP_OAUTH_PUBLIC_BASE_URL` to the public OAuth origin and
 `MCP_OAUTH_ENABLED=true` to enable OAuth. Enable each tool surface with
 `MCP_BLOG_ENABLED`, `MCP_CSDN_ENABLED`, `MCP_DUAL_ENABLED`, and
-`MCP_JUEJIN_ENABLED`. QR login requires `PLATFORM_SELENIUM_URL` to point at a
-reachable W3C WebDriver endpoint. Apply new local D1 schemas with
+`MCP_JUEJIN_ENABLED`. Website CSDN/Juejin account linking uses the
+`browser-extension` Manifest V3 package: the extension opens a normal local
+platform tab and submits credentials through a five-minute, one-use task. It
+does not require a remote browser endpoint. Direct MCP-triggered QR sessions
+still use `PLATFORM_SELENIUM_URL` until that separate MCP handoff is redesigned.
+Apply new local D1 schemas with
 `pnpm exec wrangler d1 migrations apply dinqor-platform-integration-local --local --config wrangler.jsonc`
 from `workers/services/platform-integration`.
 For CSDN publishing, configure `PLATFORM_CSDN_API_KEY` and
@@ -443,3 +447,5 @@ pnpm exec wrangler d1 migrations apply dinqor-content-automation-local --local -
 Production deployment is intentionally not configured yet: each service still
 needs a real D1 database in its target account, production service URLs and
 secrets, and migrated domain schemas/handlers.
+
+CSDN account verification uses PLATFORM_CSDN_ACCOUNT_API_KEY and PLATFORM_CSDN_ACCOUNT_API_SECRET as Worker Secrets. Use the current mp console's account-request signing pair; account reads and legacy publishing need not share a signing configuration. Migration 0008 persists verified account display details. Authorization time is the credential's original authorized_at, while repeated connection checks update last_validated_at only.

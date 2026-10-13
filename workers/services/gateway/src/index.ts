@@ -90,6 +90,7 @@ interface CorsContext {
 
 const POLICY_GROUPS = [
   "preflight",
+  "mcp_oauth",
   "excluded",
   "prefix_rules",
   "explicit_private_get",
@@ -522,7 +523,11 @@ function corsContext(request: Request, env: GatewayEnvironment): CorsContext {
     .split(",")
     .map((candidate) => candidate.trim())
     .filter(Boolean);
-  const allowed = configured.includes("*") || configured.includes(origin);
+  const extensionCompletion = /^chrome-extension:\/\/[a-p]{32}$/.test(origin)
+    && (request.method === "OPTIONS" || request.method === "POST")
+    && /^\/api\/publishing\/(csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev)\/authorization\/extension\/[0-9a-f-]{36}\/complete$/i
+      .test(new URL(request.url).pathname);
+  const allowed = configured.includes("*") || configured.includes(origin) || extensionCompletion;
   return { origin, allowed, preflight };
 }
 

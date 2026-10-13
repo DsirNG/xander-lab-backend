@@ -1,6 +1,7 @@
 import type {
   AgentConversationListPage,
   AgentConversationRepository,
+  AgentWorkspaceResult,
 } from "../interfaces/agent-conversation-repository.js";
 import type { AgentConversationRecord, AgentRunMessage } from "../interfaces/agent-run-repository.js";
 import type { AgentAttachmentService } from "./agent-attachment-service.js";
@@ -39,12 +40,17 @@ export class AgentConversationService {
   }
 
   async get(userId: number, conversationId: number): Promise<{
+    workspaceResults: AgentWorkspaceResult[];
     conversation: AgentConversationRecord & { unread: boolean };
     messages: unknown[];
   } | null> {
     const row = await this.repository.findOwnedConversation(userId, conversationId);
     if (!row) return null;
-    return { conversation: this.withUnread(row), messages: await this.messages(conversationId, row.userId) };
+    const [messages, workspaceResults] = await Promise.all([
+      this.messages(conversationId, row.userId),
+      this.repository.listWorkspaceResults(conversationId),
+    ]);
+    return { conversation: this.withUnread(row), messages, workspaceResults };
   }
 
   async listMessages(userId: number, conversationId: number): Promise<unknown[] | null> {

@@ -1,0 +1,79 @@
+{
+	"$schema": "../../node_modules/wrangler/config-schema.json",
+	"name": "dinqor-gateway",
+	"workers_dev": true,
+	"preview_urls": true,
+	"main": "src/index.ts",
+	"keep_vars": true,
+	"compatibility_date": "2026-10-10",
+	"secrets": {
+		"required": [
+			"JWT_SECRET",
+			"CORE_SERVICE_TOKEN",
+			"AGENT_SERVICE_TOKEN",
+			"PLATFORM_INTEGRATION_SERVICE_TOKEN",
+			"CONTENT_AUTOMATION_SERVICE_TOKEN",
+			"BLOGHTML_PREVIEW_SERVICE_TOKEN",
+			"PAYMENT_SERVICE_TOKEN"
+		]
+	},
+	"vars": {
+		"CORS_ALLOWED_ORIGINS": "https://dinqor.cn,https://xiaodongding.dpdns.org,https://xiaod.dpdns.org,http://localhost:3000,http://127.0.0.1:3000",
+		"GATEWAY_RATE_LIMIT_ENABLED": "true"
+	},
+	"routes": [
+		{
+			"pattern": "api.xiaodongding.dpdns.org",
+			"custom_domain": true
+		}
+	],
+	"services": [
+		{
+			"binding": "CORE_SERVICE",
+			"service": "dinqor-core",
+			"environment": "production"
+		},
+		{
+			"binding": "AGENT_SERVICE",
+			"service": "dinqor-agent",
+			"environment": "production"
+		},
+		{
+			"binding": "PAYMENT_SERVICE",
+			"service": "dinqor-payment",
+			"environment": "production"
+		},
+		{
+			"binding": "PLATFORM_INTEGRATION_SERVICE",
+			"service": "dinqor-platform-integration",
+			"environment": "production"
+		},
+		{
+			"binding": "CONTENT_AUTOMATION_SERVICE",
+			"service": "dinqor-content-automation",
+			"environment": "production"
+		},
+		{
+			"binding": "BLOGHTML_PREVIEW_SERVICE",
+			"service": "dinqor-bloghtml-preview",
+			"environment": "production"
+		}
+	],
+	"ratelimits": [
+		{
+			"name": "GATEWAY_RATE_LIMITER",
+			"namespace_id": "1001",
+			"simple": {
+				"limit": 120,
+				"period": 60
+			}
+		}
+	],
+	"dev": {
+		"port": 8787
+	},
+	"observability": {
+		"enabled": true
+	}
+}
+

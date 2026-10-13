@@ -44,6 +44,11 @@ export class ContentBlogPublicationMapper implements PlatformBlogSyncPort {
       throw new PlatformBlogSyncError(503, "站外同步结果暂不可确认");
     }
 
+    // Internal service authentication failures must not invalidate the site login.
+    if (response.status === 401) {
+      throw new PlatformBlogSyncError(502, "Content 发布服务鉴权失败，请检查服务凭证配置");
+    }
+
     let payload: unknown;
     try {
       payload = await readJson(response);

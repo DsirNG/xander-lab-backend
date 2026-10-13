@@ -51,7 +51,7 @@ function conversation(overrides = {}) {
   };
 }
 
-function createEnvironment(rows = [conversation()]) {
+function createEnvironment(rows = [conversation()], workspaceResults = []) {
   const calls = [];
   const db = {
     prepare(query) {
@@ -82,6 +82,7 @@ function createEnvironment(rows = [conversation()]) {
             const offset = call.values.at(-1);
             return { results: userRows.slice(offset, offset + limit) };
           }
+          if (query.includes("FROM agent_event")) return { results: [...workspaceResults].reverse() };
           if (query.includes("FROM agent_message")) return { results: [] };
           throw new Error("Unexpected Agent D1 all query");
         },
@@ -241,4 +242,25 @@ test("shared conversation reads do not require a user token", async () => {
   assert.equal(response.status, 200);
   assert.equal(result.data.conversation.shareToken, "public-token");
   assert.deepEqual(result.data.messages, []);
+});
+
+test("private conversation restores durable workspace outputs without exposing them through sharing", async () => {
+  mockCoreResolution();
+  const output = { id: 91, runVersion: 1, dataContent: JSON.stringify({ tool: "blog_generate", result: { ok: true, taskId: 31 } }) };
+  const { env, calls } = createEnvironment([conversation({ shareToken: "public-test" })], [output]);
+  const owned = await agentWorker.fetch(makeRequest("/api/agent/conversations/7"), env);
+  assert.equal(owned.status, 200);
+  assert.deepEqual((await owned.json()).data.workspaceResults, [output]);
+  assert.ok(calls.some((call) => call.query.includes("FROM agent_event") && call.values[0] === 7));
+
+  calls.length = 0;
+  const foreign = await agentWorker.fetch(makeRequest("/api/agent/conversations/99"), env);
+  assert.equal(foreign.status, 404);
+  assert.ok(!calls.some((call) => call.query.includes("FROM agent_event")));
+
+  calls.length = 0;
+  const shared = await agentWorker.fetch(makeRequest("/api/agent/conversations/shared/public-test"), env);
+  assert.equal(shared.status, 200);
+  assert.equal((await shared.json()).data.workspaceResults, undefined);
+  assert.ok(!calls.some((call) => call.query.includes("FROM agent_event")));
 });

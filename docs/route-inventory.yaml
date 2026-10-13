@@ -2361,12 +2361,23 @@ routes:
     deployment_unit: dinqor-platform-integration
     kind: controller
     http_method: DELETE
-    path: "/api/publishing/{platform:csdn|juejin}/authorization"
+    path: "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization"
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformAuthorizationController#disconnect"
     file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformAuthorizationController.java
     line: 94
+  - id: integration-get-platform-connections
+    logical_owner: integration
+    deployment_unit: dinqor-platform-integration
+    kind: controller
+    http_method: GET
+    path: "/api/platform-connections"
+    stream: none
+    last_event_id: false
+    handler: "com.xander.lab.integration.host.PlatformCredentialStatusController#listConnections"
+    file: apps/platform-integration/src/main/java/com/xander/lab/integrationhost/PlatformCredentialStatusController.java
+    line: 34
   - id: integration-post-publishing-platform-csdn-juejin-authorization-cancel
     logical_owner: integration
     deployment_unit: dinqor-platform-integration
@@ -2383,7 +2394,7 @@ routes:
     deployment_unit: dinqor-platform-integration
     kind: controller
     http_method: POST
-    path: "/api/publishing/{platform:csdn|juejin}/authorization/start"
+    path: "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/start"
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformAuthorizationController#start"
@@ -2394,7 +2405,7 @@ routes:
     deployment_unit: dinqor-platform-integration
     kind: controller
     http_method: GET
-    path: "/api/publishing/{platform:csdn|juejin}/authorization/status"
+    path: "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/status"
     stream: none
     last_event_id: false
     handler: "com.xander.lab.integration.host.PlatformCredentialStatusController#status"

@@ -19,7 +19,7 @@ export class CsdnPublicationService {
     } catch (error) {
       if (error instanceof CsdnProviderError && error.sessionExpired) {
         await this.credentials.markExpired(input.userId, "csdn");
-        throw new PlatformCredentialError(401, "CSDN 授权已失效，请重新授权");
+        throw new PlatformCredentialError(409, "CSDN 授权已失效，请重新授权");
       }
       if (error instanceof PlatformCredentialError) throw error;
       throw new PlatformCredentialError(503, "CSDN 发布服务暂不可用");

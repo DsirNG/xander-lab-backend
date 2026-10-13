@@ -2,6 +2,7 @@ import type { D1Binding } from "@dinqor/worker-runtime";
 import type {
   AgentConversationRepository,
   AgentMessageRecord,
+  AgentWorkspaceResult,
 } from "../interfaces/agent-conversation-repository.js";
 import type { AgentConversationRecord } from "../interfaces/agent-run-repository.js";
 
@@ -61,6 +62,20 @@ export class D1AgentConversationMapper implements AgentConversationRepository {
       FROM agent_message WHERE conversation_id = ? ORDER BY id ASC
     `).bind(conversationId).all<AgentMessageRecord>();
     return rows.results;
+  }
+
+  async listWorkspaceResults(conversationId: number): Promise<AgentWorkspaceResult[]> {
+    // Tool results already live in the replay log. Project the latest bounded set
+    // after ownership is checked by the service; do not duplicate persisted writes.
+    const rows = await this.db.prepare(`
+      SELECT id, run_version AS runVersion, data_content AS dataContent
+      FROM agent_event
+      WHERE conversation_id = ? AND event_type IN ('tool_result', 'tool_end')
+        AND json_valid(data_content)
+        AND json_extract(data_content, '$.tool') IN ('blog_generate', 'recall_memory', 'remember', 'publish_post')
+      ORDER BY id DESC LIMIT 100
+    `).bind(conversationId).all<AgentWorkspaceResult>();
+    return rows.results.reverse();
   }
 
   findSharedConversation(shareToken: string): Promise<AgentConversationRecord | null> {

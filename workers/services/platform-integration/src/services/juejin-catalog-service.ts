@@ -56,7 +56,7 @@ export class JuejinCatalogService {
     } catch (error) {
       if (error instanceof JuejinCatalogProviderError) {
         if (error.sessionExpired) await this.credentials.markExpired(userId, "juejin");
-        throw new PlatformCredentialError(error.sessionExpired ? 401 : 503,
+        throw new PlatformCredentialError(error.sessionExpired ? 409 : 503,
           error.sessionExpired ? "掘金授权已失效，请重新授权" : "掘金目录同步暂不可用");
       }
       if (error instanceof PlatformCredentialError) throw error;

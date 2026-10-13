@@ -13,6 +13,13 @@ export interface AgentMessageRecord {
   createdAt: string;
 }
 
+/** Durable tool outputs used by the owner's workspace; never included in shared views. */
+export interface AgentWorkspaceResult {
+  id: number;
+  runVersion: number;
+  dataContent: string;
+}
+
 export interface AgentConversationListPage {
   items: Array<AgentConversationRecord & { unread: boolean }>;
   page: number;
@@ -29,6 +36,7 @@ export interface AgentConversationRepository {
     search: string | null,
   ): Promise<AgentConversationRecord[]>;
   findOwnedConversation(userId: number, conversationId: number): Promise<AgentConversationRecord | null>;
+  listWorkspaceResults(conversationId: number): Promise<AgentWorkspaceResult[]>;
   listMessages(conversationId: number): Promise<AgentMessageRecord[]>;
   findSharedConversation(shareToken: string): Promise<AgentConversationRecord | null>;
   updateReadTime(userId: number, conversationId: number, value: string): Promise<AgentConversationRecord | null>;

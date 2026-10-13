@@ -5,6 +5,26 @@ import gatewayWorker from "../.test-build/index.js";
 
 const secret = "gateway-local-test-secret-with-at-least-32-bytes";
 
+test("CSDN connection test rejects anonymous callers and forwards the resolved owner only", async () => {
+  let forwarded;
+  await withFetch(async (input, init) => {
+    const request = asRequest(input, init);
+    if (new URL(request.url).pathname === "/internal/agent/auth/resolve") return authResolverResponse(17);
+    forwarded = request;
+    return Response.json({ code: 200, data: { username: "alice" } });
+  }, async () => {
+    const url = "https://gateway.example/api/publishing/csdn/connection/test";
+    const anonymous = await gatewayWorker.fetch(new Request(url, { method: "POST", headers: { "x-user-id": "999" } }), environment());
+    assert.equal(anonymous.status, 401);
+    assert.equal(forwarded, undefined);
+    const authorized = await gatewayWorker.fetch(new Request(url, { method: "POST",
+      headers: { authorization: `Bearer ${signToken()}`, "x-user-id": "999" } }), environment());
+    assert.equal(authorized.status, 200);
+    assert.equal(new URL(forwarded.url).origin, "https://integration.example");
+    assert.equal(forwarded.headers.get("x-user-id"), "17");
+  });
+});
+
 function encode(value) {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
@@ -145,6 +165,69 @@ test("private writes reject anonymous requests before reaching a service", async
   });
 });
 
+test("MCP OAuth client management resolves the DinQorAI user session", async () => {
+  const token = signToken();
+  let forwarded;
+  let upstreamCalled = false;
+  await withFetch(async (input, init) => {
+    const request = asRequest(input, init);
+    if (request.url === "https://core.example/internal/agent/auth/resolve") {
+      return authResolverResponse();
+    }
+    upstreamCalled = true;
+    forwarded = request;
+    return new Response("[]");
+  }, async () => {
+    const anonymous = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/mcp/oauth/clients"),
+      environment(),
+    );
+    assert.equal(anonymous.status, 401);
+    assert.equal(upstreamCalled, false);
+
+    const authenticated = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/mcp/oauth/clients", {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      environment(),
+    );
+    assert.equal(authenticated.status, 200);
+    assert.equal(forwarded.url, "https://integration.example/api/mcp/oauth/clients");
+    assert.equal(forwarded.headers.get("x-user-id"), "17");
+    assert.equal(forwarded.headers.get("x-dinqor-service-token"), "integration-internal-secret");
+  });
+});
+
+test("MCP transport and OAuth protocol endpoints keep their independent authentication", async () => {
+  const forwarded = [];
+  await withFetch(async (input, init) => {
+    forwarded.push(asRequest(input, init));
+    return new Response("accepted");
+  }, async () => {
+    const transport = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/mcp/csdn", {
+        method: "POST",
+        headers: { authorization: "Bearer mcp-oauth-access-token" },
+        body: "{}",
+      }),
+      environment(),
+    );
+    assert.equal(transport.status, 200);
+    assert.equal(forwarded.at(-1).headers.get("x-user-id"), null);
+    assert.equal(forwarded.at(-1).headers.get("authorization"), "Bearer mcp-oauth-access-token");
+
+    for (const path of ["/api/mcp/oauth/register", "/api/mcp/oauth/token", "/api/mcp/oauth/revoke"]) {
+      const response = await gatewayWorker.fetch(
+        new Request(`https://gateway.example${path}`, { method: "POST", body: "{}" }),
+        environment(),
+      );
+      assert.equal(response.status, 200);
+      assert.equal(forwarded.at(-1).url, `https://integration.example${path}`);
+      assert.equal(forwarded.at(-1).headers.get("x-user-id"), null);
+    }
+  });
+});
+
 test("authenticated private requests resolve active identity and replace forged headers", async () => {
   const token = signToken();
   const calls = [];
@@ -254,6 +337,72 @@ test("CORS preflight is answered at the Gateway and disallowed origins are rejec
     );
     assert.equal(rejected.status, 403);
     assert.equal(upstreamCalled, false);
+  });
+});
+
+test("browser-extension CORS is limited to the one-use authorization completion route", async () => {
+  const extensionOrigin = `chrome-extension://${"a".repeat(32)}`;
+  const taskId = "123e4567-e89b-42d3-a456-426614174000";
+  const completionPath = `/api/publishing/csdn/authorization/extension/${taskId}/complete`;
+  let forwarded;
+
+  await withFetch(async (input, init) => {
+    forwarded = asRequest(input, init);
+    return new Response("accepted");
+  }, async () => {
+    const preflight = await gatewayWorker.fetch(
+      new Request(`https://gateway.example${completionPath}`, {
+        method: "OPTIONS",
+        headers: {
+          origin: extensionOrigin,
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "authorization,content-type",
+        },
+      }),
+      environment(),
+    );
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), extensionOrigin);
+
+    const additionalPlatformPreflight = await gatewayWorker.fetch(
+      new Request(`https://gateway.example/api/publishing/zhihu/authorization/extension/${taskId}/complete`, {
+        method: "OPTIONS",
+        headers: {
+          origin: extensionOrigin,
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "authorization,content-type",
+        },
+      }),
+      environment(),
+    );
+    assert.equal(additionalPlatformPreflight.status, 204);
+    assert.equal(additionalPlatformPreflight.headers.get("access-control-allow-origin"), extensionOrigin);
+
+    const completion = await gatewayWorker.fetch(
+      new Request(`https://gateway.example${completionPath}`, {
+        method: "POST",
+        headers: {
+          origin: extensionOrigin,
+          authorization: `Bearer ${"a".repeat(43)}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ credential: { cookie: "sessionid=secret" } }),
+      }),
+      environment(),
+    );
+    assert.equal(completion.status, 200);
+    assert.equal(completion.headers.get("access-control-allow-origin"), extensionOrigin);
+    assert.equal(forwarded.url, `https://integration.example${completionPath}`);
+
+    const cancel = await gatewayWorker.fetch(
+      new Request(`https://gateway.example/api/publishing/csdn/authorization/extension/${taskId}/cancel`, {
+        method: "POST",
+        headers: { origin: extensionOrigin, "content-type": "application/json" },
+        body: "{}",
+      }),
+      environment(),
+    );
+    assert.equal(cancel.status, 403);
   });
 });
 

@@ -25,6 +25,13 @@ const routeToService = {
   "admin-get-admin-virtual-pay-settings": "payment",
   "admin-put-admin-virtual-pay-settings": "payment",
 };
+const workersOwnedRoutes = [
+  { method: "POST", path: "/api/publishing/csdn/connection/test", service: "platform-integration" },
+  { method: "POST", path: "/api/publishing/juejin/connection/test", service: "platform-integration" },
+  { method: "POST", path: "/api/publishing/wechat_mp/connection/test", service: "platform-integration" },
+  { method: "POST", path: "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/extension/*/cancel", service: "platform-integration" },
+  { method: "POST", path: "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/extension/*/complete", service: "platform-integration" },
+];
 
 const inventory = parse(await readFile(inventoryPath, "utf8"));
 const policy = parse(await readFile(policyPath, "utf8"));
@@ -41,6 +48,7 @@ for (const route of inventory.routes ?? []) {
     service,
   });
 }
+rows.push(...workersOwnedRoutes);
 
 const unique = new Map();
 for (const route of rows) {
@@ -72,6 +80,7 @@ const content = [
 
 const policyGroups = [
   "preflight",
+  "mcp_oauth",
   "excluded",
   "prefix_rules",
   "explicit_private_get",

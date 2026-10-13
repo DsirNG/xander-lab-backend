@@ -74,7 +74,7 @@ test("Juejin publication marks an expired provider session and rejects mismatche
   };
   const service = new JuejinPublicationService(credentials, catalog, provider);
   await assert.rejects(service.publish(requestFixture()),
-    (error) => error instanceof PlatformCredentialError && error.status === 401);
+    (error) => error instanceof PlatformCredentialError && error.status === 409);
   assert.equal(expired, true);
   await assert.rejects(service.publish({ ...requestFixture(), post: { ...requestFixture().post, id: 302 } }),
     (error) => error instanceof PlatformCredentialError && error.status === 400);
@@ -141,4 +141,15 @@ test("Juejin publication controller validates internal payload ownership and ret
     method: "POST", headers: { "content-length": "5000000" }, body: "{}",
   }), service);
   assert.equal(oversized.status, 413);
+});
+
+test("expired Juejin catalog blocks draft creation even when catalog outages allow fallback", async () => {
+  let drafts = 0;
+  const service = new JuejinPublicationService(
+    { async require() { return { cookie: "test-session" }; } },
+    { async ensureFresh() { throw new PlatformCredentialError(409, "掘金授权已失效，请重新授权"); } },
+    { async createDraft() { drafts += 1; } },
+  );
+  await assert.rejects(service.publish(requestFixture()), (error) => error.status === 409);
+  assert.equal(drafts, 0);
 });

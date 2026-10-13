@@ -76,7 +76,7 @@ test("catalog sync marks expired Juejin sessions and returns an authentication e
     async queryTags() { throw new Error("must not be called"); },
   };
   const { service } = makeCatalogService({ provider, credentials });
-  await assert.rejects(service.sync(42), (error) => error instanceof PlatformCredentialError && error.status === 401);
+  await assert.rejects(service.sync(42), (error) => error instanceof PlatformCredentialError && error.status === 409);
   assert.equal(expired, true);
 });
 

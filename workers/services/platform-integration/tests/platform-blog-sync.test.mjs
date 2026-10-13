@@ -81,3 +81,26 @@ test("Content ownership, cooldown, and provider failures keep their HTTP status"
     );
   }
 });
+
+test("public sync preserves platform expiry without exposing internal 401 as site logout", async () => {
+  const env = {
+    CONTENT_AUTOMATION_SERVICE_URL: "https://content.example.test",
+    CONTENT_AUTOMATION_SERVICE_TOKEN: "test-service-token",
+  };
+  for (const platform of ["csdn", "juejin"]) {
+    for (const upstreamStatus of [409, 401]) {
+      const mapper = new ContentBlogPublicationMapper(env, async () => Response.json(
+        { code: upstreamStatus, message: upstreamStatus === 409 ? "平台授权已失效，请重新授权" : "Service authentication required", data: null },
+        { status: upstreamStatus },
+      ));
+      const response = await handlePlatformBlogSyncRequest(
+        request(`/api/blog/posts/81/sync/${platform}`), new PlatformBlogSyncService(mapper),
+      );
+      const expected = upstreamStatus === 409 ? 409 : 502;
+      assert.equal(response.status, expected);
+      const payload = await response.json();
+      assert.equal(payload.code, expected);
+      assert.match(payload.message, upstreamStatus === 409 ? /重新授权/ : /服务凭证配置/);
+    }
+  }
+});

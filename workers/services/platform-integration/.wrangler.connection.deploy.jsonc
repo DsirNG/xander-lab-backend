@@ -1,0 +1,49 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "dinqor-platform-integration",
+  "main": "D:/blog/xander-lab-backend/workers/services/platform-integration/src/index.ts",
+  "keep_vars": true,
+  "compatibility_date": "2026-10-10",
+  "secrets": {
+    "required": [
+      "INTERNAL_SERVICE_TOKEN",
+      "CONTENT_AUTOMATION_SERVICE_TOKEN",
+      "CORE_SERVICE_TOKEN",
+      "RESEND_API_KEY",
+      "PLATFORM_CREDENTIAL_ENCRYPTION_KEY",
+      "PLATFORM_CSDN_API_KEY",
+      "PLATFORM_CSDN_WEB_CONSOLE_SECRET",
+      "ALIYUN_OSS_ACCESS_KEY_ID",
+      "ALIYUN_OSS_ACCESS_KEY_SECRET"
+    ]
+  },
+  "dev": {
+    "port": 8790
+  },
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  },
+  "observability": {
+    "enabled": true
+  },
+  "services": [
+    {
+      "binding": "CORE_SERVICE",
+      "service": "dinqor-core"
+    },
+    {
+      "binding": "CONTENT_AUTOMATION_SERVICE",
+      "service": "dinqor-content-automation"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dinqor-platform-integration",
+      "database_id": "f7590cec-f665-4b37-995a-8c255b5b4a15",
+      "migrations_dir": "D:/blog/xander-lab-backend/workers/services/platform-integration/migrations"
+    }
+  ]
+}
