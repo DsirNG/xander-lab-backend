@@ -83,6 +83,31 @@ test("WeChat connection endpoint returns the owner's saved profile", async () =>
   }
 });
 
+test("WeChat connection business errors keep the HTTP response at 200", async () => {
+  const service = new PlatformConnectionService({
+    async status() { return { status: "AUTHORIZED", authorizedAt: null, profile: null }; },
+  }, {});
+  const result = await handlePlatformConnectionRequest(new Request("https://api.test/api/publishing/wechat_mp/connection/test", {
+    method: "POST", headers: { "x-user-id": "42" },
+  }), service);
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), {
+    code: 404,
+    message: "暂未读取到微信公众号账号资料，请重新绑定",
+    data: null,
+  });
+});
+
+test("WeChat profile validation errors use the platform business envelope", async () => {
+  const result = await handlePlatformConnectionRequest(new Request("https://api.test/api/publishing/wechat_mp/connection/test", {
+    method: "POST",
+    headers: { "x-user-id": "42", "content-type": "application/json" },
+    body: JSON.stringify({ accountProfile: { nickname: "   " } }),
+  }), { async testConnection() { throw new Error("invalid profile must not reach the service"); } });
+  assert.equal(result.status, 200);
+  assert.deepEqual(await result.json(), { code: 400, message: "微信公众号账号资料格式不正确", data: null });
+});
+
 test("WeChat connection endpoint accepts a profile read by the signed-in browser extension", async () => {
   const service = {
     async testConnection(owner, platform, profile) {

@@ -70,9 +70,13 @@ test("connection controller checks identity, uses only the owner credential, and
   for (const [error, status] of [[new CsdnProviderError(true), 409], [new CsdnProviderError(false), 502]]) {
     failure = error;
     const response = await handlePlatformConnectionRequest(request({ "x-user-id": "42" }), service);
-    assert.equal(response.status, status);
-    assert.equal((await response.json()).code, status);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.code, status);
+    assert.equal(body.data, null);
   }
   const missing = new PlatformConnectionService({ requireForVerification: async () => { throw new PlatformCredentialError(409, "expired"); } }, {});
-  assert.equal((await handlePlatformConnectionRequest(request({ "x-user-id": "42" }), missing)).status, 409);
+  const missingResponse = await handlePlatformConnectionRequest(request({ "x-user-id": "42" }), missing);
+  assert.equal(missingResponse.status, 200);
+  assert.equal((await missingResponse.json()).code, 409);
 });
