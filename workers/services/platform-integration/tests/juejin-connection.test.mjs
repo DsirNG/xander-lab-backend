@@ -49,3 +49,54 @@ test("Juejin connection endpoint uses the owner's Juejin credential", async () =
   assert.equal(result.status, 200);
   assert.equal((await result.json()).data.username, "123");
 });
+
+test("WeChat connection endpoint returns the owner's saved profile", async () => {
+  const service = new PlatformConnectionService({
+    async status(owner, platform) {
+      assert.equal(owner, 42);
+      assert.equal(platform, "wechat_mp");
+      return {
+        status: "AUTHORIZED",
+        authorizedAt: "2026-10-13T03:07:03.694Z",
+        profile: {
+          username: null,
+          nickname: "公众号名称",
+          avatarUrl: "https://wx.qlogo.cn/mmhead/a/0",
+          verifiedAt: "2026-10-13T08:12:29.032Z",
+        },
+      };
+    },
+  }, {});
+  for (const body of [undefined, "", "{}", '{"accountProfile":null}']) {
+    const result = await handlePlatformConnectionRequest(new Request("https://api.test/api/publishing/wechat_mp/connection/test", {
+      method: "POST", headers: { "x-user-id": "42", ...(body === undefined ? {} : { "content-type": "application/json" }) },
+      ...(body === undefined ? {} : { body }),
+    }), service);
+    assert.equal(result.status, 200);
+    assert.deepEqual((await result.json()).data, {
+      username: null,
+      nickname: "公众号名称",
+      avatarUrl: "https://wx.qlogo.cn/mmhead/a/0",
+      verifiedAt: "2026-10-13T08:12:29.032Z",
+      authorizedAt: "2026-10-13T03:07:03.694Z",
+    });
+  }
+});
+
+test("WeChat connection endpoint accepts a profile read by the signed-in browser extension", async () => {
+  const service = {
+    async testConnection(owner, platform, profile) {
+      assert.equal(owner, 42);
+      assert.equal(platform, "wechat_mp");
+      assert.deepEqual(profile, { nickname: "刚读取", avatarUrl: "https://wx.qlogo.cn/mmhead/a/0" });
+      return { username: null, ...profile, verifiedAt: "2026-10-13T09:00:00.000Z", authorizedAt: "2026-10-13T03:00:00.000Z" };
+    },
+  };
+  const result = await handlePlatformConnectionRequest(new Request("https://api.test/api/publishing/wechat_mp/connection/test", {
+    method: "POST",
+    headers: { "x-user-id": "42", "content-type": "application/json" },
+    body: JSON.stringify({ accountProfile: { nickname: "刚读取", avatarUrl: "https://wx.qlogo.cn/mmhead/a/0" } }),
+  }), service);
+  assert.equal(result.status, 200);
+  assert.equal((await result.json()).data.nickname, "刚读取");
+});

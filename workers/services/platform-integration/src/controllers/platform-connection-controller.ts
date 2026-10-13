@@ -12,19 +12,26 @@ export async function handlePlatformConnectionRequest(request: Request, service:
   try {
     let wechatProfile: { nickname: string; avatarUrl: string | null } | undefined;
     if (match[1] === "wechat_mp" && request.body) {
-      let body: unknown;
-      try { body = await request.json(); } catch { return apiError(400, "微信公众号账号资料格式不正确"); }
-      if (!body || typeof body !== "object" || Array.isArray(body)) return apiError(400, "微信公众号账号资料格式不正确");
-      const accountProfile = (body as Record<string, unknown>).accountProfile;
-      if (!accountProfile || typeof accountProfile !== "object" || Array.isArray(accountProfile)) {
-        return apiError(400, "微信公众号账号资料格式不正确");
+      let rawBody: string;
+      try { rawBody = await request.text(); } catch { return apiError(400, "微信公众号账号资料格式不正确"); }
+      if (rawBody.trim()) {
+        let body: unknown;
+        try { body = JSON.parse(rawBody) as unknown; } catch { return apiError(400, "微信公众号账号资料格式不正确"); }
+        if (!body || typeof body !== "object" || Array.isArray(body)) return apiError(400, "微信公众号账号资料格式不正确");
+        const accountProfile = (body as Record<string, unknown>).accountProfile;
+        // Empty bodies and profile-less objects are read-only connection checks for older bindings.
+        if (accountProfile !== undefined && accountProfile !== null) {
+          if (typeof accountProfile !== "object" || Array.isArray(accountProfile)) {
+            return apiError(400, "微信公众号账号资料格式不正确");
+          }
+          const profile = accountProfile as Record<string, unknown>;
+          if (typeof profile.nickname !== "string" || profile.nickname.trim().length === 0 || profile.nickname.length > 200
+            || (profile.avatarUrl !== null && profile.avatarUrl !== undefined && typeof profile.avatarUrl !== "string")) {
+            return apiError(400, "微信公众号账号资料格式不正确");
+          }
+          wechatProfile = { nickname: profile.nickname, avatarUrl: typeof profile.avatarUrl === "string" ? profile.avatarUrl : null };
+        }
       }
-      const profile = accountProfile as Record<string, unknown>;
-      if (typeof profile.nickname !== "string" || profile.nickname.trim().length === 0 || profile.nickname.length > 200
-        || (profile.avatarUrl !== null && profile.avatarUrl !== undefined && typeof profile.avatarUrl !== "string")) {
-        return apiError(400, "微信公众号账号资料格式不正确");
-      }
-      wechatProfile = { nickname: profile.nickname, avatarUrl: typeof profile.avatarUrl === "string" ? profile.avatarUrl : null };
     }
     const response = jsonResponse({ code: 200, message: "success", data: await service.testConnection(
       Number(owner), match[1] as "csdn" | "juejin" | "wechat_mp", wechatProfile,
