@@ -141,6 +141,66 @@ async function exists(path) {
   }
 }
 
+function parseJsonc(source) {
+  let json = "";
+  let inString = false;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const current = source[index];
+    const next = source[index + 1];
+
+    if (lineComment) {
+      if (current === "\n" || current === "\r") {
+        lineComment = false;
+        json += current;
+      }
+      continue;
+    }
+    if (blockComment) {
+      if (current === "*" && next === "/") {
+        blockComment = false;
+        index += 1;
+      } else if (current === "\n" || current === "\r") {
+        json += current;
+      }
+      continue;
+    }
+    if (inString) {
+      json += current;
+      if (escaped) escaped = false;
+      else if (current === "\\") escaped = true;
+      else if (current === '"') inString = false;
+      continue;
+    }
+    if (current === '"') {
+      inString = true;
+      json += current;
+      continue;
+    }
+    if (current === "/" && next === "/") {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (current === "/" && next === "*") {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (current === ",") {
+      let nextValue = index + 1;
+      while (/\s/.test(source[nextValue] ?? "")) nextValue += 1;
+      if (source[nextValue] === "}" || source[nextValue] === "]") continue;
+    }
+    json += current;
+  }
+
+  return JSON.parse(json);
+}
+
 async function writeLocalVars(service, values) {
   const path = resolve(workspace, `services/${service.name}/.dev.vars`);
   if (await exists(path)) {
@@ -193,7 +253,7 @@ async function cleanup() {
 async function localConfigFor(service) {
   const serviceDirectory = resolve(workspace, `services/${service.name}`);
   const sourcePath = resolve(serviceDirectory, "wrangler.jsonc");
-  const config = JSON.parse(await readFile(sourcePath, "utf8"));
+  const config = parseJsonc(await readFile(sourcePath, "utf8"));
   let needsLocalConfig = false;
 
   // The local stack intentionally uses its explicit localhost URLs; service bindings are for same-account production calls.
