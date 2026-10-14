@@ -42,3 +42,6 @@ apps/core-host/src/main/resources/application-local.yml
 .env.development
 .env.wave1
 
+# Local Wrangler email deployment snapshot (dependencies, cache, and logs).
+/.wrangler-email-deploy/
+
