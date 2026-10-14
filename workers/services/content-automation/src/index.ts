@@ -4,6 +4,7 @@ import { handleBlogPostCreationRequest } from "./controllers/blog-post-creation-
 import { handleExternalPublicationRequest } from "./controllers/external-publication-controller.js";
 import { handleContentNotificationRequest } from "./controllers/content-notification-controller.js";
 import { handleBlogPlanRequest } from "./controllers/blog-plan-controller.js";
+import { handleBlogPlanSeriesRequest } from "./controllers/blog-plan-series-controller.js";
 import { handleBlogAgentTaskRequest } from "./controllers/blog-agent-task-controller.js";
 import { handleBlogManagementRequest } from "./controllers/blog-management-controller.js";
 import { handleEmailReminderRequest } from "./controllers/email-reminder-controller.js";
@@ -15,6 +16,7 @@ import { D1BlogPostCreationMapper } from "./mappers/d1-blog-post-creation-mapper
 import { D1ContentPublicationMapper } from "./mappers/d1-content-publication-mapper.js";
 import { D1ContentNotificationMapper } from "./mappers/d1-content-notification-mapper.js";
 import { D1BlogPlanMapper } from "./mappers/d1-blog-plan-mapper.js";
+import { D1BlogPlanSeriesMapper } from "./mappers/d1-blog-plan-series-mapper.js";
 import { D1BlogAgentTaskMapper } from "./mappers/d1-blog-agent-task-mapper.js";
 import { D1BlogManagementMapper } from "./mappers/d1-blog-management-mapper.js";
 import { D1EmailReminderMapper } from "./mappers/d1-email-reminder-mapper.js";
@@ -32,6 +34,7 @@ import { ExternalPublicationService } from "./services/external-publication-serv
 import { BlogPostCreationService } from "./services/blog-post-creation-service.js";
 import { ContentNotificationService } from "./services/content-notification-service.js";
 import { BlogPlanService } from "./services/blog-plan-service.js";
+import { BlogPlanSeriesService } from "./services/blog-plan-series-service.js";
 import { BlogPlanExecutionService } from "./services/blog-plan-execution-service.js";
 import { BlogAgentTaskService } from "./services/blog-agent-task-service.js";
 import { BlogManagementService } from "./services/blog-management-service.js";
@@ -81,6 +84,9 @@ const contentService = createBusinessService<ContentEnvironment>("content-automa
     materials: planMaterials,
     topics: new CoreBlogPlanTopicMapper(env),
   });
+  const series = new BlogPlanSeriesService(new D1BlogPlanSeriesMapper(env.DB), plans, planMapper);
+  const seriesResponse = await handleBlogPlanSeriesRequest(request, series);
+  if (seriesResponse) return seriesResponse;
   const planExecution = new BlogPlanExecutionService(
     planMapper,
     new CoreBlogPlanModelMapper(env),

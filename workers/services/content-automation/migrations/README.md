@@ -1,6 +1,6 @@
 This D1 migration directory contains Content Automation's article, publication,
 notification, blog plan and run, BlogAgent task/session, email reminder, and
-article idempotency schemas. Publication attempt tokens and lease deadlines
+article idempotency, and multi-article series schemas. Publication attempt tokens and lease deadlines
 fence concurrent Agent retries while the Worker calls Platform. The CSDN
 cooldown is claimed atomically per user; the daily cap counts successful
 publication records in the current UTC day. Article idempotency keys are unique
@@ -10,3 +10,5 @@ stores short leases for active notification SSE connections and expiring
 diagnostic broadcasts; diagnostic events are never inserted into the durable
 per-user notification table. Migration `0012` stores owner-scoped image metadata;
 image bytes remain in Aliyun OSS under the configured media object prefix.
+
+Migration `0013` persists editable content-series drafts and links activated one-shot article plans by series and day. Series activation inserts all child plans and changes the series state in one D1 batch; only Local, CSDN, and Juejin are currently selectable for publication.

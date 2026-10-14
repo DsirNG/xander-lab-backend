@@ -7,6 +7,10 @@ export class AgentContentToolsError extends Error {
 const MUTATION_FIELDS: Record<string, readonly string[]> = {
   schedule_plan: ["topic", "topics", "triggerTimes", "triggerTime", "timezone", "audience", "tone", "syncCsdn", "syncJuejin"],
   update_plan: ["planId", "action", "topic", "topics", "triggerTimes", "triggerTime", "timezone", "audience", "tone", "syncCsdn", "syncJuejin"],
+  create_plan_series: ["title", "topic", "days", "topics", "startDate", "triggerTime", "timezone", "audience", "tone", "platforms", "publishMode", "aiOption"],
+  update_plan_series: ["seriesId", "title", "topic", "days", "topics", "startDate", "triggerTime", "timezone", "audience", "tone", "platforms", "publishMode", "aiOption"],
+  activate_plan_series: ["seriesId"],
+  retry_plan_series: ["seriesId"],
   email_reminder: ["recipientEmail", "subject", "message", "frequency", "scheduledAt", "sendTime", "timezone", "recurrenceDay", "intervalDays", "contentType", "templateId"],
   update_email_reminder: ["taskId", "action"],
 };
@@ -34,7 +38,8 @@ export class AgentContentToolsService {
     if (toolName === "schedule_plan" || toolName === "email_reminder") return true;
     const args = argsObject(input);
     const action = typeof args.action === "string" ? args.action.trim().toUpperCase() : "";
-    return (toolName === "update_plan" && ["CANCEL", "CANCELLED", "DELETE"].includes(action))
+    return toolName === "activate_plan_series" || toolName === "retry_plan_series"
+      || (toolName === "update_plan" && ["CANCEL", "CANCELLED", "DELETE"].includes(action))
       || (toolName === "update_email_reminder" && action === "DELETE");
   }
 
@@ -64,11 +69,16 @@ export class AgentContentToolsService {
       switch (toolName) {
         case "query_posts": return await this.content.queryPosts(userId, args);
         case "query_plans": return await this.content.queryPlans(userId, args);
+        case "query_plan_series": return await this.content.queryPlanSeries(userId, args);
         case "query_email_reminders": return await this.content.queryEmailReminders(userId, args);
         case "query_unsynced_posts": return await this.content.queryUnsyncedPosts(userId, args);
         case "schedule_plan":
         case "email_reminder":
         case "update_plan":
+        case "create_plan_series":
+        case "update_plan_series":
+        case "activate_plan_series":
+        case "retry_plan_series":
         case "update_email_reminder": {
           if (AgentContentToolsService.needsApproval(toolName, args) && !approved) {
             throw new AgentContentToolsError(409, "此内容操作需要用户审批");
@@ -78,6 +88,12 @@ export class AgentContentToolsService {
             if (!invocationId) throw new AgentContentToolsError(400, "计划请求缺少幂等标识");
             return await this.content.createPlan(userId, args, invocationId);
           }
+          if (toolName === "create_plan_series") {
+            return await this.content.createPlanSeries(userId, args, invocationId || crypto.randomUUID());
+          }
+          if (toolName === "update_plan_series") return await this.content.updatePlanSeries(userId, args);
+          if (toolName === "activate_plan_series") return await this.content.activatePlanSeries(userId, args);
+          if (toolName === "retry_plan_series") return await this.content.retryPlanSeries(userId, args);
           if (toolName === "email_reminder") {
             if (!invocationId) throw new AgentContentToolsError(400, "邮件提醒请求缺少幂等标识");
             return await this.content.createEmailReminder(userId, args, invocationId);
@@ -109,6 +125,20 @@ function validateMutation(toolName: string, args: Record<string, unknown>): void
   }
   if (toolName === "update_plan" && (!Number.isSafeInteger(args.planId) || (args.planId as number) < 1
     || typeof args.action !== "string")) throw new AgentContentToolsError(400, "计划操作参数无效");
+  if (toolName === "create_plan_series" && (typeof args.topic !== "string" || !args.topic.trim()
+    || typeof args.days !== "number" || !Number.isSafeInteger(args.days) || args.days < 1 || args.days > 30
+    || args.startDate !== undefined && (typeof args.startDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(args.startDate)))) {
+    throw new AgentContentToolsError(400, "系列草案需要主题和 1-30 天；开始日期应为 YYYY-MM-DD");
+  }
+  if (["update_plan_series", "activate_plan_series", "retry_plan_series"].includes(toolName)
+    && (!Number.isSafeInteger(args.seriesId) || (args.seriesId as number) < 1)) {
+    throw new AgentContentToolsError(400, "系列计划 ID 无效");
+  }
+  if (["create_plan_series", "update_plan_series"].includes(toolName)
+    && args.topics !== undefined && (!Array.isArray(args.topics) || args.topics.length < 1 || args.topics.length > 30
+      || args.topics.some((topic) => typeof topic !== "string" || !topic.trim() || topic.length > 500))) {
+    throw new AgentContentToolsError(400, "每日主题需要是 1-30 个非空主题");
+  }
   if (toolName === "update_email_reminder" && (!Number.isSafeInteger(args.taskId) || (args.taskId as number) < 1
     || typeof args.action !== "string")) throw new AgentContentToolsError(400, "邮件提醒操作参数无效");
 }

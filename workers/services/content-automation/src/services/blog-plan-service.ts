@@ -25,7 +25,7 @@ const PLAN_FIELDS = [
   "id", "topic", "triggerTimes", "topics", "nextTopicIndex", "audience", "tone",
   "scheduleType", "scheduledDate", "aiOption", "knowledgeMaterialId", "autoPublish",
   "timezone", "triggerTime", "syncCsdn", "syncJuejin", "runOnce", "nextRunAt",
-  "lastRunAt", "status", "errorMessage", "createdAt", "updatedAt",
+  "lastRunAt", "planSeriesId", "seriesDay", "status", "errorMessage", "createdAt", "updatedAt",
 ] as const;
 
 function view(plan: BlogPlan) {
@@ -119,6 +119,13 @@ export function nextOccurrence(plan: Pick<BlogPlan, "scheduleType" | "scheduledD
   const currentDate = new Date(Date.UTC(current.year, current.month - 1, current.day));
   const firstDate = plan.scheduleType === "ONCE" ? plan.scheduledDate : null;
   if (plan.scheduleType === "ONCE" && !firstDate) throw new BlogPlanError(400, "一次性计划必须设置执行日期");
+  // One-shot dates can be months away; the weekly search window must not limit them.
+  if (firstDate) {
+    const candidates = times.map((time) => localInstant(firstDate, time, zone))
+      .filter((candidate) => candidate > reference);
+    if (!candidates.length) throw new BlogPlanError(400, "一次性计划的执行时间必须晚于当前时间");
+    return Math.min(...candidates);
+  }
   if (plan.scheduleType === "WEEKLY" && !plan.scheduledDate) throw new BlogPlanError(400, "每周计划必须设置执行日期");
   const targetWeekday = plan.scheduleType === "WEEKLY" && plan.scheduledDate
     ? new Date(`${plan.scheduledDate}T00:00:00Z`).getUTCDay() : null;
@@ -201,6 +208,8 @@ function planInput(userId: number, body: PlanInput, now: number): Omit<BlogPlan,
     syncCsdn: boolean(body.syncCsdn, false),
     syncJuejin: boolean(body.syncJuejin, false),
     runOnce: scheduleType === "ONCE",
+    planSeriesId: typeof body.planSeriesId === "number" ? body.planSeriesId : null,
+    seriesDay: typeof body.seriesDay === "number" ? body.seriesDay : null,
     nextRunAt: "",
     lastRunAt: null,
     status: "ACTIVE" as const,
@@ -264,7 +273,7 @@ export class BlogPlanService {
   }
 
   async aiGenerate(userId: number, body: PlanInput) {
-    const seed = normalizedTopic(body.topic);
+    normalizedTopic(body.topic);
     const days = body.days === undefined || body.days === null ? 7 : body.days;
     if (typeof days !== "number" || !Number.isSafeInteger(days) || days < 1 || days > 30) {
       throw new BlogPlanError(400, "计划天数需在 1-30 之间");
@@ -279,29 +288,25 @@ export class BlogPlanService {
     const tone = normalizedText(body.tone, "文风语气", 60);
     const syncCsdn = boolean(body.syncCsdn, false);
     const syncJuejin = boolean(body.syncJuejin, false);
-    if (!this.options.topics) throw new BlogPlanError(503, "博客选题服务尚未配置");
     const now = this.now();
-    const existing = await this.repository.list(userId, 50, 0);
-    const excludeTitles = [...new Set([
-      seed,
-      ...existing.flatMap((plan) => [plan.topic, ...plan.topics]),
-    ])];
+    // Confirmed drafts must keep their exact daily topics; never ask the model again.
     let topics: string[];
-    try {
-      topics = await this.options.topics.generateTopics(userId, {
-        seed, count: days, audience, tone, excludeTitles,
-      });
-    } catch {
-      throw new BlogPlanError(503, "AI 主题生成失败，请稍后重试");
+    if (body.topics !== undefined) {
+      topics = jsonArray(body.topics, "每日主题", 30, 500);
+    } else {
+      topics = await this.generateTopics(userId, { ...body, count: days });
     }
-    if (!topics.length) throw new BlogPlanError(502, "AI 主题生成失败，请稍后重试");
+    const uniqueTopics = new Set(topics.map((topic) => topic.trim().toLocaleLowerCase()));
+    if (topics.length !== days || uniqueTopics.size !== days) {
+      throw new BlogPlanError(400, "每日主题必须完整且不重复，数量需与计划天数一致");
+    }
     const activeCount = await this.repository.countActive(userId);
     if (activeCount + topics.length > 50) {
       throw new BlogPlanError(429, "定时发文计划数量已达到上限，请先暂停或删除部分计划");
     }
     const dayAgo = new Date(now - 86_400_000).toISOString();
     const createdToday = await this.repository.countCreatedSince(userId, dayAgo);
-    if (createdToday + topics.length > 20) {
+    if (createdToday + topics.length > 50) {
       throw new BlogPlanError(429, "过去24小时创建的定时发文计划已达到上限");
     }
 
@@ -328,6 +333,26 @@ export class BlogPlanService {
     const created = await Promise.all(ids.map((id) => this.repository.findById(userId, id)));
     if (created.some((plan) => !plan)) throw new Error("Generated blog plans could not be read back");
     return created.map((plan) => view(plan as BlogPlan));
+  }
+
+  buildSeriesPlans(userId: number, seriesId: number, series: {
+    topic: string; topics: string[]; audience: string; tone: string;
+    aiOption: BlogPlan["aiOption"]; startDate: string; triggerTime: string;
+    timezone: string; platforms: string[]; publishMode: "DRAFT" | "REVIEW" | "AUTO";
+  }) {
+    return series.topics.map((topic, index) => {
+      const dateValue = new Date(`${series.startDate}T00:00:00.000Z`);
+      dateValue.setUTCDate(dateValue.getUTCDate() + index);
+      const scheduledDate = dateValue.toISOString().slice(0, 10);
+      return planInput(userId, {
+        topic, audience: series.audience, tone: series.tone, aiOption: series.aiOption,
+        scheduleType: "ONCE", scheduledDate, timezone: series.timezone,
+        triggerTime: series.triggerTime, autoPublish: series.publishMode === "AUTO",
+        syncCsdn: series.platforms.includes("csdn"), syncJuejin: series.platforms.includes("juejin"),
+        planSeriesId: seriesId, seriesDay: index + 1,
+        clientRequestId: `series-${seriesId}-${index + 1}`,
+      }, this.now());
+    });
   }
 
   async create(userId: number, body: PlanInput) {

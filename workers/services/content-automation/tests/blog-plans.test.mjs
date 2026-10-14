@@ -206,3 +206,27 @@ test("manual trigger creates a run and schedules execution in the Worker backgro
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(background, [42, 9, 77]);
 });
+
+
+test("confirmed 30-day draft preserves every topic without calling AI", async () => {
+  const { service, plans } = setup();
+  const topics = Array.from({ length: 30 }, (_, i) => `Frontend topic ${i + 1}`);
+  const result = await service.aiGenerate(42, { topic: "Frontend", days: 30, topics });
+  assert.equal(result.length, 30);
+  assert.deepEqual(result.map((plan) => plan.topic), topics);
+  assert.ok(plans.every((plan) => plan.runOnce && plan.scheduleType === "ONCE"));
+  assert.equal(plans[29].scheduledDate, "2026-11-09");
+});
+
+test("incomplete, blank or duplicate daily topics never create partial plans", async () => {
+  for (const topics of [["Only one"], ["Same", "same"], ["One", " "]]) {
+    const { service, plans } = setup();
+    await assert.rejects(service.aiGenerate(42, { topic: "Frontend", days: 2, topics }),
+      (error) => error instanceof BlogPlanError && error.status === 400);
+    assert.equal(plans.length, 0);
+  }
+  const { service, plans } = setup(undefined, undefined, { async generateTopics() { return ["Only one"]; } });
+  await assert.rejects(service.aiGenerate(42, { topic: "Frontend", days: 30 }),
+    (error) => error.status === 400);
+  assert.equal(plans.length, 0);
+});

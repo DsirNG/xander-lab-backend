@@ -268,6 +268,14 @@ const CONTENT_QUERY_TOOLS: AgentFunctionTool[] = [
     parameters: { type: "object", properties: { status: { type: "string", enum: ["ACTIVE", "PAUSED", "RUNNING", "FINISHED", "FAILED", "CANCELLED", "ALL"] } }, additionalProperties: false },
   },
   {
+    name: "query_plan_series",
+    description: "查询当前用户的系列发文草案、已启用计划和每日主题。可以按系列 ID 获取完整主题清单。",
+    parameters: { type: "object", properties: {
+      seriesId: { type: "integer", minimum: 1 },
+      status: { type: "string", enum: ["DRAFT", "ACTIVE", "PAUSED", "CANCELLED", "FINISHED", "FAILED", "ALL"] },
+    }, additionalProperties: false },
+  },
+  {
     name: "query_email_reminders",
     description: "查询当前用户的定时邮件提醒，可按状态和主题或收件邮箱关键词筛选。",
     parameters: { type: "object", properties: {
@@ -306,11 +314,50 @@ const SUBTASK_MAX_CALLS_PER_STEP = 3;
 const SUBTASK_MAX_FINDINGS_CHARS = 4000;
 const SUBTASK_MAX_OBSERVATION_CHARS = 1200;
 const SUBTASK_READ_ONLY_TOOLS = new Set([
-  "query_knowledge", "query_posts", "query_plans", "query_email_reminders",
+  "query_knowledge", "query_posts", "query_plans", "query_plan_series", "query_email_reminders",
   "query_unsynced_posts", "recall_memory",
 ]);
 
 const CONTENT_MUTATION_TOOLS: AgentFunctionTool[] = [
+  {
+    name: "create_plan_series",
+    description: "创建并保存一份系列发文草案，包含每一天已确定的独立主题。默认不要传 topics，让 Content AI 为用户生成并保存完整主题清单；只有用户已提供具体逐日主题时才传 topics。创建草案不会开始发文；先把完整主题列表展示给用户检查。用户明确确认后，使用 activate_plan_series，该启用操作会请求用户审批。未指定日期时从用户时区的明天开始。",
+    parameters: { type: "object", properties: {
+      title: { type: "string", maxLength: 120 }, topic: { type: "string", minLength: 1, maxLength: 500 },
+      days: { type: "integer", minimum: 1, maximum: 30 }, topics: { type: "array", minItems: 1, maxItems: 30, items: { type: "string", minLength: 1, maxLength: 500 } },
+      startDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+      triggerTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }, timezone: { type: "string", maxLength: 64 },
+      audience: { type: "string", maxLength: 120 }, tone: { type: "string", maxLength: 60 },
+      platforms: { type: "array", items: { type: "string", enum: ["local", "csdn", "juejin"] } },
+      publishMode: { type: "string", enum: ["DRAFT", "REVIEW", "AUTO"] },
+      aiOption: { type: "string", enum: ["DEEP", "PRACTICAL", "NEWS", "OPINION"] },
+    }, required: ["topic", "days"], additionalProperties: false },
+  },
+  {
+    name: "update_plan_series",
+    description: "修改尚未启用的系列发文草案。先用 query_plan_series 查看草案和完整每日主题；启用后的系列不能通过此工具修改。",
+    parameters: { type: "object", properties: {
+      seriesId: { type: "integer", minimum: 1 }, title: { type: "string", maxLength: 120 },
+      topic: { type: "string", maxLength: 500 }, days: { type: "integer", minimum: 1, maximum: 30 },
+      topics: { type: "array", minItems: 1, maxItems: 30, items: { type: "string", minLength: 1, maxLength: 500 } },
+      startDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+      triggerTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }, timezone: { type: "string", maxLength: 64 },
+      audience: { type: "string", maxLength: 120 }, tone: { type: "string", maxLength: 60 },
+      platforms: { type: "array", items: { type: "string", enum: ["local", "csdn", "juejin"] } },
+      publishMode: { type: "string", enum: ["DRAFT", "REVIEW", "AUTO"] },
+      aiOption: { type: "string", enum: ["DEEP", "PRACTICAL", "NEWS", "OPINION"] },
+    }, required: ["seriesId"], additionalProperties: false },
+  },
+  {
+    name: "activate_plan_series",
+    description: "启用一份已保存的系列发文草案，建立全部每日一次性计划。仅在用户明确确认后调用；系统会先展示并等待审批。",
+    parameters: { type: "object", properties: { seriesId: { type: "integer", minimum: 1 } }, required: ["seriesId"], additionalProperties: false },
+  },
+  {
+    name: "retry_plan_series",
+    description: "重新安排该系列中失败的每日文章计划立即重试。只在用户明确要求重试时调用；可能触发本地或外部平台发布，调用前必须展示并等待用户审批。",
+    parameters: { type: "object", properties: { seriesId: { type: "integer", minimum: 1 } }, required: ["seriesId"], additionalProperties: false },
+  },
   {
     name: "schedule_plan",
     description: "创建定时发文计划。计划创建前必须由用户审批。用户要求每日或按时自动生成博客时使用；topic 要提炼为不超过 120 字的短标题，不要直接复制素材原文。",

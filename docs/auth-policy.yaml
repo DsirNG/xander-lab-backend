@@ -605,6 +605,24 @@ protected:
     match: {method: POST, path_pattern: /api/blog-plans/*}
     owner: automation
     note: "AI 生成、主题队列、手动触发等写操作。"
+  - id: blog-plan-series-create
+    match: {method: POST, path: /api/blog-plan-series}
+    owner: automation
+  - id: blog-plan-series-list
+    match: {method: GET, path: /api/blog-plan-series}
+    owner: automation
+  - id: blog-plan-series-detail
+    match: {method: GET, path_pattern: /api/blog-plan-series/*}
+    owner: automation
+  - id: blog-plan-series-update
+    match: {method: PATCH, path_pattern: /api/blog-plan-series/*}
+    owner: automation
+  - id: blog-plan-series-activate
+    match: {method: POST, path_pattern: /api/blog-plan-series/*/activate}
+    owner: automation
+  - id: blog-plan-series-status
+    match: {method: PATCH, path_pattern: /api/blog-plan-series/*/status}
+    owner: automation
   - id: notifications-list
     match: {method: GET, path: /api/notifications}
     owner: automation

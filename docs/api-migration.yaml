@@ -817,6 +817,54 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: automation-any-blog-plan-series
+    owner: automation
+    old:
+      method: ANY
+      path: "/api/blog-plan-series/**"
+    new:
+      method: ANY
+      path: "/api/v2/automations/series/**"
+    clients:
+      web: planned
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-get-blog-plan-series
+    owner: automation
+    old:
+      method: GET
+      path: "/api/blog-plan-series"
+    new:
+      method: GET
+      path: "/api/v2/automations/series"
+    clients:
+      web: planned
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: automation-post-blog-plan-series
+    owner: automation
+    old:
+      method: POST
+      path: "/api/blog-plan-series"
+    new:
+      method: POST
+      path: "/api/v2/automations/series"
+    clients:
+      web: planned
+      miniprogram: not_applicable
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: automation-post-blog-plans-ai-generate
     owner: automation
     old:

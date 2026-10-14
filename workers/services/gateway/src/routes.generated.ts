@@ -614,6 +614,11 @@ export const ROUTES =
   },
   {
     "method": "ANY",
+    "path": "/api/blog-plan-series/**",
+    "service": "content-automation"
+  },
+  {
+    "method": "ANY",
     "path": "/api/blog/posts/*/sync/**",
     "service": "platform-integration"
   },
@@ -640,6 +645,16 @@ export const ROUTES =
   {
     "method": "POST",
     "path": "/api/blog-agent/tasks",
+    "service": "content-automation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/blog-plan-series",
+    "service": "content-automation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/blog-plan-series",
     "service": "content-automation"
   },
   {

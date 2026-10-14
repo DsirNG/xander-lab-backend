@@ -5,6 +5,9 @@ export interface BlogPlan {
   id: number;
   userId: number;
   clientRequestId: string | null;
+  planSeriesId?: number | null;
+  seriesDay?: number | null;
+  seriesPublishMode?: "DRAFT" | "REVIEW" | "AUTO" | null;
   topic: string;
   audience: string;
   tone: string;
@@ -95,4 +98,5 @@ export interface BlogPlanRepository {
   listRuns(planId: number, limit: number, offset: number): Promise<BlogPlanRun[]>;
   countRuns(planId: number): Promise<number>;
   findRun(planId: number, runId: number): Promise<BlogPlanRun | null>;
+  refreshSeriesStatus?(seriesId: number): Promise<void>;
 }

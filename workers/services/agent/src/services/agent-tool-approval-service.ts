@@ -143,6 +143,8 @@ export class AgentToolApprovalService {
     const invocationId = crypto.randomUUID();
     const requestFingerprint = await fingerprint(toolName, argumentsJson);
     const reason = toolName === "schedule_plan" ? "创建自动发文计划，系统会按计划生成并发布内容"
+      : toolName === "activate_plan_series" ? "启用系列发文计划，系统会按每日主题建立并执行全部计划"
+      : toolName === "retry_plan_series" ? "重新安排系列中失败的每日计划；执行时可能自动发布文章"
       : toolName === "email_reminder" ? "创建定时邮件提醒，系统会在指定时间向收件人发送邮件"
         : toolName === "update_plan" ? "取消或删除定时发文计划"
           : "删除定时邮件提醒，该操作不可恢复";
@@ -179,7 +181,7 @@ export class AgentToolApprovalService {
       return this.decideRemoteTool(userId, conversationId, approvalId, approved, runVersion,
         decision.approval, decision.argumentsJson);
     }
-    if (["schedule_plan", "email_reminder", "update_plan", "update_email_reminder"].includes(decision.approval.toolName)) {
+    if (["schedule_plan", "email_reminder", "update_plan", "update_email_reminder", "activate_plan_series", "retry_plan_series"].includes(decision.approval.toolName)) {
       return this.decideContentMutation(userId, conversationId, approvalId, approved, runVersion,
         decision.approval, decision.argumentsJson);
     }
@@ -265,7 +267,8 @@ export class AgentToolApprovalService {
         break;
       } catch (error) {
         failure = error;
-        const idempotentCreate = approval.toolName === "schedule_plan" || approval.toolName === "email_reminder";
+        const idempotentCreate = approval.toolName === "schedule_plan" || approval.toolName === "email_reminder"
+          || approval.toolName === "activate_plan_series";
         if (attempt === 0 && idempotentCreate && error instanceof AgentContentToolsError && error.status >= 500) continue;
         break;
       }

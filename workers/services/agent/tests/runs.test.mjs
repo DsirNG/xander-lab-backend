@@ -554,7 +554,8 @@ test("Agent persists remember results and injects matching owner memory into the
     const body = JSON.parse(init.body);
     assert.deepEqual(body.tools.map((tool) => tool.function.name), [
       "remember", "recall_memory", "emit_quiz", "emit_artifact", "plan_tasks", "image_generate",
-      "image_resend", "query_posts", "query_plans", "query_email_reminders", "query_unsynced_posts",
+      "image_resend", "query_posts", "query_plans", "query_plan_series", "query_email_reminders", "query_unsynced_posts",
+      "create_plan_series", "update_plan_series", "activate_plan_series", "retry_plan_series",
       "schedule_plan", "update_plan", "email_reminder", "update_email_reminder", "delegate_subtask",
     ]);
     callNumber += 1;

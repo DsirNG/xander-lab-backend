@@ -26,6 +26,9 @@ const routeToService = {
   "admin-put-admin-virtual-pay-settings": "payment",
 };
 const workersOwnedRoutes = [
+  { method: "GET", path: "/api/blog-plan-series", service: "content-automation" },
+  { method: "POST", path: "/api/blog-plan-series", service: "content-automation" },
+  { method: "ANY", path: "/api/blog-plan-series/**", service: "content-automation" },
   { method: "POST", path: "/api/publishing/csdn/connection/test", service: "platform-integration" },
   { method: "POST", path: "/api/publishing/juejin/connection/test", service: "platform-integration" },
   { method: "POST", path: "/api/publishing/wechat_mp/connection/test", service: "platform-integration" },

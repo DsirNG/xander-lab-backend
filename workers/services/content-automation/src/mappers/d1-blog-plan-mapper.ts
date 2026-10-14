@@ -21,6 +21,8 @@ const PLAN_SELECT = `
          timezone, trigger_time AS triggerTime, trigger_times_json AS triggerTimesJson,
          topics_json AS topicsJson, next_topic_index AS nextTopicIndex,
          sync_csdn AS syncCsdn, sync_juejin AS syncJuejin, run_once AS runOnce,
+         plan_series_id AS planSeriesId, series_day AS seriesDay,
+         (SELECT publish_mode FROM blog_plan_series WHERE id = blog_content_plan.plan_series_id) AS seriesPublishMode,
          next_run_at AS nextRunAt, last_run_at AS lastRunAt,
          processing_token AS processingToken, claimed_at AS claimedAt, status,
          error_message AS errorMessage, deleted_at AS deletedAt,
@@ -76,8 +78,8 @@ export class D1BlogPlanMapper implements BlogPlanRepository {
         (user_id, client_request_id, topic, audience, tone, schedule_type, scheduled_date,
          ai_option, knowledge_material_id, auto_publish, timezone, trigger_time,
          trigger_times_json, topics_json, next_topic_index, sync_csdn, sync_juejin,
-         run_once, next_run_at, last_run_at, status, error_message)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         run_once, next_run_at, last_run_at, status, error_message, plan_series_id, series_day)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id
     `).bind(
       plan.userId, plan.clientRequestId, plan.topic, plan.audience, plan.tone,
@@ -86,6 +88,7 @@ export class D1BlogPlanMapper implements BlogPlanRepository {
       JSON.stringify(plan.triggerTimes), JSON.stringify(plan.topics), plan.nextTopicIndex,
       Number(plan.syncCsdn), Number(plan.syncJuejin), Number(plan.runOnce),
       plan.nextRunAt, plan.lastRunAt, plan.status, plan.errorMessage,
+      plan.planSeriesId ?? null, plan.seriesDay ?? null,
     );
   }
 
@@ -383,5 +386,16 @@ export class D1BlogPlanMapper implements BlogPlanRepository {
     const row = await this.db.prepare(`${RUN_SELECT} WHERE plan_id = ? AND id = ?`)
       .bind(planId, runId).first<RunRow>();
     return row ? mapRun(row) : null;
+  }
+
+  async refreshSeriesStatus(seriesId: number): Promise<void> {
+    await this.db.prepare(`
+      UPDATE blog_plan_series SET status = CASE WHEN EXISTS (
+          SELECT 1 FROM blog_content_plan WHERE plan_series_id = ? AND status = 'FAILED'
+        ) THEN 'FAILED' ELSE 'FINISHED' END,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE id = ? AND status = 'ACTIVE'
+        AND NOT EXISTS (SELECT 1 FROM blog_content_plan WHERE plan_series_id = ? AND status NOT IN ('FINISHED', 'FAILED', 'CANCELLED'))
+    `).bind(seriesId, seriesId, seriesId).run();
   }
 }

@@ -223,6 +223,11 @@ export class BlogPlanExecutionService implements BlogPlanExecutionPort {
       });
       await this.repository.updateRun(plan.id, run.id, { localPostId: post.id });
 
+      if (!plan.autoPublish && plan.seriesPublishMode === "REVIEW") {
+        await this.notify(plan, run, "DRAFT_READY", "系列文章草稿已生成",
+          `第 ${plan.seriesDay ?? ""} 天的文章《${title}》已生成草稿，请检查后再发布。`);
+      }
+
       if (plan.autoPublish && plan.syncCsdn) {
         try {
           const result = await this.publications.sync(plan.userId, post.id, "csdn");
@@ -272,6 +277,7 @@ export class BlogPlanExecutionService implements BlogPlanExecutionPort {
           errorMessage: terminal === "SUCCEEDED" ? null : terminalMessage ?? "计划执行失败",
           updatedAt: completedAt(),
         });
+        if (plan.planSeriesId) await this.repository.refreshSeriesStatus?.(plan.planSeriesId);
       }
     }
   }

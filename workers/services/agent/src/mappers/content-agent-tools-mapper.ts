@@ -114,6 +114,27 @@ export class ContentAgentToolsMapper implements AgentContentToolsPort {
     return { data, answer: data.hint };
   }
 
+  async queryPlanSeries(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult> {
+    const seriesId = safeInt(args.seriesId, 0, Number.MAX_SAFE_INTEGER);
+    const result = object(await this.call(seriesId ? `/api/blog-plan-series/${seriesId}` : "/api/blog-plan-series", userId));
+    if (result?.code !== 200) throw new AgentContentContractError(503, "系列发文计划查询失败");
+    const rows = seriesId ? [object(result.data)].filter((row): row is Record<string, unknown> => Boolean(row))
+      : Array.isArray(result.data) ? result.data.map((row) => object(row)).filter((row): row is Record<string, unknown> => Boolean(row)) : null;
+    if (!rows) throw new AgentContentContractError(503, "系列发文计划响应无效");
+    const status = text(args.status).toUpperCase();
+    const selected = rows.filter((row) => !status || status === "ALL" || text(row.status).toUpperCase() === status);
+    const summaries = selected.map((row) => {
+      const topics = Array.isArray(row.topics) ? row.topics.filter((topic): topic is string => typeof topic === "string") : [];
+      const items = Array.isArray(row.items) ? row.items.map((item) => object(item)).filter((item): item is Record<string, unknown> => Boolean(item)) : [];
+      const head = `系列 #${row.id}《${text(row.title) || text(row.topic)}》：${text(row.status)}，${topics.length} 天，${text(row.startDate)} 开始。`;
+      const topicLines = topics.map((topic, index) => `  第 ${index + 1} 天：${topic}`);
+      const progress = items.length ? `已建立 ${items.length} 个每日计划。` : "尚未启用，没有建立每日计划。";
+      return [head, ...topicLines, progress].join("\n");
+    });
+    const answer = summaries.length ? `找到 ${summaries.length} 个系列发文计划。\n${summaries.join("\n\n")}` : "当前没有符合条件的系列发文计划。";
+    return { data: { ok: true, total: selected.length, series: selected }, answer };
+  }
+
   async queryEmailReminders(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult> {
     const query = new URLSearchParams({ page: "1", size: "20" });
     if (typeof args.status === "string" && args.status.trim()) query.set("status", args.status.trim().toUpperCase());
@@ -168,6 +189,49 @@ export class ContentAgentToolsMapper implements AgentContentToolsPort {
     });
     const data = mutationData(result, "Content plan creation failed");
     return { data: { ok: true, plan: data }, answer: `定时发文计划已创建：${text(data.topic) || text(args.topic)}。` };
+  }
+
+  async createPlanSeries(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult> {
+    const payload: Record<string, unknown> = { clientRequestId: requestId };
+    for (const key of ["title", "topic", "days", "topics", "startDate", "triggerTime", "timezone",
+      "audience", "tone", "platforms", "publishMode", "aiOption"] as const) {
+      if (Object.hasOwn(args, key)) payload[key] = args[key];
+    }
+    const result = mutationData(await this.call("/api/blog-plan-series", userId, "POST", payload), "系列草案创建失败");
+    const topics = Array.isArray(result.topics) ? result.topics.filter((topic): topic is string => typeof topic === "string") : [];
+    const lines = topics.map((topic, index) => `${index + 1}. ${topic}`);
+    const answer = `已保存系列草案 #${result.id}《${text(result.title) || text(result.topic)}》，共 ${topics.length} 天。\n${lines.join("\n")}\n\n请检查每日主题；明确确认后，我再启用计划。`;
+    return { data: { ok: true, series: result }, answer };
+  }
+
+  async updatePlanSeries(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult> {
+    const id = safeInt(args.seriesId, 0, Number.MAX_SAFE_INTEGER);
+    if (!id) throw new AgentContentContractError(400, "系列计划 ID 无效");
+    const payload: Record<string, unknown> = {};
+    for (const key of ["title", "topic", "days", "topics", "startDate", "triggerTime", "timezone",
+      "audience", "tone", "platforms", "publishMode", "aiOption"] as const) {
+      if (Object.hasOwn(args, key)) payload[key] = args[key];
+    }
+    const result = mutationData(await this.call(`/api/blog-plan-series/${id}`, userId, "PATCH", payload), "系列草案更新失败");
+    const topics = Array.isArray(result.topics) ? result.topics.filter((topic): topic is string => typeof topic === "string") : [];
+    return { data: { ok: true, series: result }, answer: `系列草案 #${id} 已更新。\n${topics.map((topic, index) => `${index + 1}. ${topic}`).join("\n")}` };
+  }
+
+  async activatePlanSeries(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult> {
+    const id = safeInt(args.seriesId, 0, Number.MAX_SAFE_INTEGER);
+    if (!id) throw new AgentContentContractError(400, "系列计划 ID 无效");
+    const result = mutationData(await this.call(`/api/blog-plan-series/${id}/activate`, userId, "POST"), "系列计划启用失败");
+    const items = Array.isArray(result.items) ? result.items : [];
+    return { data: { ok: true, series: result }, answer: `系列计划《${text(result.title) || text(result.topic)}》已启用，已安排 ${items.length} 天的文章计划。` };
+  }
+
+  async retryPlanSeries(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult> {
+    const id = safeInt(args.seriesId, 0, Number.MAX_SAFE_INTEGER);
+    if (!id) throw new AgentContentContractError(400, "系列计划 ID 无效");
+    const result = mutationData(await this.call(`/api/blog-plan-series/${id}/status`, userId, "PATCH", {
+      action: "RETRY_FAILED",
+    }), "系列失败计划重试失败");
+    return { data: { ok: true, series: result }, answer: `系列《${text(result.title) || text(result.topic)}》的失败每日计划已重排，当前状态：${text(result.status)}。` };
   }
 
   async updatePlan(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult> {
