@@ -7,6 +7,7 @@
     "smoke:agent": "node scripts/smoke-agent.mjs",
     "smoke:agent-approvals": "node scripts/smoke-agent-approvals.mjs",
     "smoke:payment": "node scripts/smoke-payment.mjs",
+    "smoke:alipay": "node scripts/smoke-alipay.mjs",
     "smoke:platform": "node scripts/smoke-platform.mjs",
     "smoke:publication": "node scripts/smoke-publication.mjs",
     "smoke:preview": "node scripts/smoke-preview.mjs",

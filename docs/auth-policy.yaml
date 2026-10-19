@@ -110,6 +110,12 @@ mcp_oauth:
 # ===================== 3. 完全排除的路径（独立鉴权体系） =====================
 # 语义：path.contains(pattern)，不是前缀匹配。
 excluded:
+  - id: excluded-alipay-notify
+    match: {method: POST, path: /api/alipay/notify}
+    access: excluded
+    identity_mode: none
+    token_location: n/a
+    note: "支付宝精确通知路由，Payment 独立验签并校验应用、收款主体、金额与订单；其他支付接口要求登录。"
   - id: excluded-auth-endpoints
     match:
       method: ANY
@@ -240,6 +246,11 @@ excluded:
 # ===================== 3. 管理后台 =====================
 # 必须在公开 GET 分支之前判断。
 prefix_rules:
+  - id: alipay-private
+    match: {method: ANY, path_prefix: /api/alipay/}
+    access: authenticated
+    identity_mode: required
+    token_location: header
   - id: admin-console
     match:
       method: ANY

@@ -3,6 +3,11 @@
   "name": "dinqor-payment",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-10",
+  "compatibility_flags": ["nodejs_compat"],
+  "alias": {
+    "urllib": "./src/mappers/alipay-fetch-transport.ts",
+    "node:util": "./src/mappers/alipay-node-util.js"
+  },
   "secrets": {
     "required": [
       "INTERNAL_SERVICE_TOKEN",

@@ -115,6 +115,17 @@ export const ACCESS_POLICY =
   ],
   "excluded": [
     {
+      "id": "excluded-alipay-notify",
+      "match": {
+        "method": "POST",
+        "path": "/api/alipay/notify"
+      },
+      "access": "excluded",
+      "identity_mode": "none",
+      "token_location": "n/a",
+      "note": "支付宝精确通知路由，Payment 独立验签并校验应用、收款主体、金额与订单；其他支付接口要求登录。"
+    },
+    {
       "id": "excluded-auth-endpoints",
       "match": {
         "method": "ANY",
@@ -290,6 +301,16 @@ export const ACCESS_POLICY =
     }
   ],
   "prefix_rules": [
+    {
+      "id": "alipay-private",
+      "match": {
+        "method": "ANY",
+        "path_prefix": "/api/alipay/"
+      },
+      "access": "authenticated",
+      "identity_mode": "required",
+      "token_location": "header"
+    },
     {
       "id": "admin-console",
       "match": {

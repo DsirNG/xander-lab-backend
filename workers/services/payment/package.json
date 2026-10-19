@@ -8,5 +8,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "deploy": "wrangler deploy"
   },
-  "dependencies": { "@dinqor/worker-runtime": "workspace:*" }
+  "dependencies": {
+    "@dinqor/worker-runtime": "workspace:*",
+    "alipay-sdk": "4.14.0"
+  }
 }

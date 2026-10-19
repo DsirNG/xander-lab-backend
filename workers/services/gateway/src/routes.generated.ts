@@ -68,6 +68,11 @@ export const ROUTES =
     "service": "platform-integration"
   },
   {
+    "method": "GET",
+    "path": "/api/admin/alipay/orders/*/refund-status",
+    "service": "payment"
+  },
+  {
     "method": "PATCH",
     "path": "/api/admin/notifications/test-broadcast",
     "service": "core"
@@ -193,6 +198,11 @@ export const ROUTES =
     "service": "content-automation"
   },
   {
+    "method": "POST",
+    "path": "/api/admin/alipay/orders/*/refund",
+    "service": "payment"
+  },
+  {
     "method": "DELETE",
     "path": "/api/admin/billing/model-prices/{model}",
     "service": "core"
@@ -306,6 +316,11 @@ export const ROUTES =
     "method": "POST",
     "path": "/api/agent/mcp-servers/{id}/probe",
     "service": "agent"
+  },
+  {
+    "method": "POST",
+    "path": "/api/alipay/orders/*/reconcile",
+    "service": "payment"
   },
   {
     "method": "GET",
@@ -426,6 +441,11 @@ export const ROUTES =
     "method": "GET",
     "path": "/api/agent/conversations/{id}",
     "service": "agent"
+  },
+  {
+    "method": "POST",
+    "path": "/api/alipay/orders/*/close",
+    "service": "payment"
   },
   {
     "method": "GET",
@@ -698,6 +718,11 @@ export const ROUTES =
     "service": "platform-integration"
   },
   {
+    "method": "GET",
+    "path": "/api/alipay/products",
+    "service": "payment"
+  },
+  {
     "method": "POST",
     "path": "/api/auth/qr/confirm",
     "service": "core"
@@ -728,6 +753,11 @@ export const ROUTES =
     "service": "platform-integration"
   },
   {
+    "method": "GET",
+    "path": "/api/alipay/orders/*",
+    "service": "payment"
+  },
+  {
     "method": "POST",
     "path": "/api/auth/qr/create",
     "service": "core"
@@ -741,6 +771,16 @@ export const ROUTES =
     "method": "DELETE",
     "path": "/api/agent/skills/{id}",
     "service": "agent"
+  },
+  {
+    "method": "POST",
+    "path": "/api/alipay/notify",
+    "service": "payment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/alipay/orders",
+    "service": "payment"
   },
   {
     "method": "PUT",

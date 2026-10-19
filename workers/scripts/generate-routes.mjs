@@ -26,6 +26,14 @@ const routeToService = {
   "admin-put-admin-virtual-pay-settings": "payment",
 };
 const workersOwnedRoutes = [
+  { method: "GET", path: "/api/alipay/products", service: "payment" },
+  { method: "POST", path: "/api/alipay/orders", service: "payment" },
+  { method: "GET", path: "/api/alipay/orders/*", service: "payment" },
+  { method: "POST", path: "/api/alipay/orders/*/reconcile", service: "payment" },
+  { method: "POST", path: "/api/alipay/orders/*/close", service: "payment" },
+  { method: "POST", path: "/api/alipay/notify", service: "payment" },
+  { method: "POST", path: "/api/admin/alipay/orders/*/refund", service: "payment" },
+  { method: "GET", path: "/api/admin/alipay/orders/*/refund-status", service: "payment" },
   { method: "GET", path: "/api/blog-plan-series", service: "content-automation" },
   { method: "POST", path: "/api/blog-plan-series", service: "content-automation" },
   { method: "ANY", path: "/api/blog-plan-series/**", service: "content-automation" },
