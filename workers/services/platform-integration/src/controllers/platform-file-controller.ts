@@ -43,8 +43,8 @@ function contentDisposition(filename: string, disposition = "attachment"): strin
   return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encodedFilename(filename)}`;
 }
 
-async function downloadResponse(storedName: string, service: PlatformFileService, inline = false): Promise<Response> {
-  const result = await service.download(storedName);
+async function downloadResponse(storedName: string, service: PlatformFileService, inline = false, owner?: number | null, enforceOwnership = false): Promise<Response> {
+  const result = await service.download(storedName, owner, enforceOwnership);
   if (!result) return new Response(null, { status: 404 });
   const disposition = inline && result.asset.contentType.toLowerCase().startsWith("image/")
     ? "inline" : "attachment";
@@ -54,7 +54,7 @@ async function downloadResponse(storedName: string, service: PlatformFileService
       "content-type": result.asset.contentType,
       "content-length": String(result.asset.byteSize),
       "content-disposition": contentDisposition(result.asset.originalName, disposition),
-      "cache-control": "public, max-age=31536000, immutable",
+      "cache-control": result.asset.contentType.toLowerCase().startsWith("image/") ? "public, max-age=31536000, immutable" : "private, no-store",
       "x-content-type-options": "nosniff",
     },
   });
@@ -172,7 +172,7 @@ export async function handlePlatformFileRequest(
     }
     if (!storedName || storedName.includes("/")) return apiError(400, "非法的文件路径");
     try {
-      return await downloadResponse(storedName, service, url.searchParams.get("inline") === "1");
+      return await downloadResponse(storedName, service, url.searchParams.get("inline") === "1", userId(request.headers.get("x-user-id")), !internalPrefix);
     } catch (error) {
       return errorResponse(error);
     }

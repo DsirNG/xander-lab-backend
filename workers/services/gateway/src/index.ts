@@ -477,6 +477,15 @@ async function authorize(
   if (authenticationFailure) return authenticationFailure;
   if (!identity || !token) return null;
 
+  // Core owns its API session checks, so let it validate Core routes once instead of
+  // resolving the same token here and again inside the Core controller.
+  if (route.service === "core") {
+    if (decision.access === "admin" && identity.role !== "ADMIN") {
+      return apiError(403, "无权限访问");
+    }
+    return null;
+  }
+
   const resolution = await resolveActiveIdentity(token, identity, env);
   if (resolution === "unavailable") return required ? apiError(503, "身份服务暂不可用") : null;
   if (resolution !== "valid") return required ? apiError(401, "未登录或登录已过期") : null;
@@ -573,6 +582,7 @@ function removeUntrustedHeaders(headers: Headers): void {
   for (const header of [
     "x-user-id",
     "x-user-role",
+    "x-dinqor-authenticated-user-id",
     "x-auth-jti",
     "x-auth-sid",
     "x-authenticated-user-id",
@@ -593,6 +603,7 @@ function removeUntrustedHeaders(headers: Headers): void {
 function addTrustedIdentity(headers: Headers, identity: UserIdentity | null): void {
   if (!identity) return;
   headers.set("x-user-id", identity.userId);
+  headers.set("x-dinqor-authenticated-user-id", identity.userId);
   if (identity.role) headers.set("x-user-role", identity.role);
   if (identity.jti) headers.set("x-auth-jti", identity.jti);
   if (identity.sid) headers.set("x-auth-sid", identity.sid);

@@ -266,3 +266,16 @@ test("Platform worker bypasses service auth only for public image reads", async 
     globalThis.fetch = previousFetch;
   }
 });
+
+
+test("private downloads enforce ownership", async () => {
+  const f = fileFixture();
+  const file = await f.service.upload(42, createFile("private.pdf", "application/pdf", "private"), "upload");
+  const path = `/api/download/${file.storedName}`;
+  const env = { INTERNAL_SERVICE_TOKEN: "platform-token" };
+  assert.equal((await handlePlatformFileRequest(request(path), env, f.service)).status, 401);
+  assert.equal((await handlePlatformFileRequest(request(path, { userId: 7 }), env, f.service)).status, 404);
+  const response = await handlePlatformFileRequest(request(path, { userId: 42 }), env, f.service);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+});

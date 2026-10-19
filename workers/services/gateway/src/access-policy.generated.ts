@@ -1465,8 +1465,8 @@ export const ACCESS_POLICY =
         "HEAD",
         "OPTIONS"
       ],
-      "access": "public",
-      "identity_mode": "optional",
+      "access": "authenticated",
+      "identity_mode": "required",
       "token_location": "header",
       "note": "未匹配的只读方法保持公开，与现状一致。"
     },

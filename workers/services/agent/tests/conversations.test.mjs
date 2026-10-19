@@ -174,6 +174,29 @@ test("conversation listing is scoped to the verified token subject", async () =>
   assert.equal(calls[0].values[0], 42);
 });
 
+test("conversation listing trusts the Gateway-verified user and skips duplicate Core auth lookup", async () => {
+  const { env, calls } = createEnvironment([conversation({ userId: 42 })]);
+  const request = makeRequest("/api/agent/conversations");
+  request.headers.set("x-dinqor-authenticated-user-id", "42");
+  const response = await agentWorker.fetch(request, env);
+  const result = await readJson(response);
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(result.data.items.map((item) => item.id), [7]);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].query, /FROM agent_conversation/);
+});
+
+test("conversation listing rejects a Gateway identity that does not match the signed token", async () => {
+  const { env, calls } = createEnvironment([conversation({ userId: 42 })]);
+  const request = makeRequest("/api/agent/conversations");
+  request.headers.set("x-dinqor-authenticated-user-id", "99");
+  const response = await agentWorker.fetch(request, env);
+
+  assert.equal(response.status, 401);
+  assert.equal(calls.length, 0);
+});
+
 test("another user's conversation is indistinguishable from a missing one", async () => {
   mockCoreResolution();
   const { env } = createEnvironment([conversation({ userId: 99 })]);

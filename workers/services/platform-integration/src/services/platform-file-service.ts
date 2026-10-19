@@ -176,12 +176,16 @@ export class PlatformFileService {
     }
   }
 
-  async download(storedName: string): Promise<PlatformFileDownload | null> {
+  async download(storedName: string, userId?: number | null, enforceOwnership = false): Promise<PlatformFileDownload | null> {
     if (!/^[0-9a-f-]{36}(?:\.[a-z0-9]{1,16})?$/.test(storedName)) {
       throw new PlatformFileError(400, "非法的文件路径");
     }
     const asset = await this.repository.find(storedName);
     if (!asset) return null;
+    if (enforceOwnership && !asset.contentType.toLowerCase().startsWith("image/")) {
+      if (!userId) throw new PlatformFileError(401, "Authentication required");
+      if (asset.userId !== userId) return null;
+    }
     const object = await this.storage.read(asset.objectKey, asset.byteSize);
     return object ? { asset, object } : null;
   }

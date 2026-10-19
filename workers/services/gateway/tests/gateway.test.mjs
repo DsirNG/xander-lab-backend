@@ -97,6 +97,7 @@ test("public routes strip forged identity and propagate safe correlation and COR
         origin: "https://app.example",
         "x-user-id": "999",
         "x-user-role": "ADMIN",
+        "x-dinqor-authenticated-user-id": "999",
         "x-auth-jti": "forged",
         "x-dinqor-service-token": "forged",
         "x-forwarded-for": "203.0.113.8",
@@ -109,6 +110,7 @@ test("public routes strip forged identity and propagate safe correlation and COR
     assert.equal(forwarded.url, "https://content.example/api/blog/posts");
     assert.equal(forwarded.headers.get("x-user-id"), null);
     assert.equal(forwarded.headers.get("x-user-role"), null);
+    assert.equal(forwarded.headers.get("x-dinqor-authenticated-user-id"), null);
     assert.equal(forwarded.headers.get("x-auth-jti"), null);
     assert.equal(forwarded.headers.get("x-forwarded-for"), null);
     assert.equal(forwarded.headers.get("x-dinqor-service-token"), "content-internal-secret");
@@ -143,6 +145,28 @@ test("same-account service bindings forward Gateway requests with the internal s
   assert.equal(forwarded.url, "https://core.example/api/auth/validate");
   assert.equal(forwarded.headers.get("x-dinqor-service-token"), "core-internal-secret");
   assert.deepEqual(await response.json(), { code: 200, message: "success", data: false });
+});
+
+test("Core routes delegate active-session validation to Core instead of resolving twice", async () => {
+  const token = signToken();
+  let forwarded;
+  await withFetch(async (input, init) => {
+    forwarded = asRequest(input, init);
+    return new Response("ok");
+  }, async () => {
+    const response = await gatewayWorker.fetch(
+      new Request("https://gateway.example/api/recitations/materials?page=1", {
+        headers: { authorization: `Bearer ${token}`, "x-user-id": "999" },
+      }),
+      environment(),
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(forwarded.url, "https://core.example/api/recitations/materials?page=1");
+    assert.equal(forwarded.headers.get("x-dinqor-service-token"), "core-internal-secret");
+    assert.equal(forwarded.headers.get("x-user-id"), null);
+    assert.equal(forwarded.headers.get("x-dinqor-authenticated-user-id"), null);
+  });
 });
 
 test("private writes reject anonymous requests before reaching a service", async () => {
@@ -194,6 +218,7 @@ test("MCP OAuth client management resolves the DinQorAI user session", async () 
     assert.equal(authenticated.status, 200);
     assert.equal(forwarded.url, "https://integration.example/api/mcp/oauth/clients");
     assert.equal(forwarded.headers.get("x-user-id"), "17");
+    assert.equal(forwarded.headers.get("x-dinqor-authenticated-user-id"), "17");
     assert.equal(forwarded.headers.get("x-dinqor-service-token"), "integration-internal-secret");
   });
 });
@@ -247,6 +272,7 @@ test("authenticated private requests resolve active identity and replace forged 
         authorization: `Bearer ${token}`,
         "x-user-id": "999",
         "x-user-role": "ADMIN",
+        "x-dinqor-authenticated-user-id": "999",
         "x-auth-jti": "forged",
       },
       body: "{}",
@@ -257,6 +283,7 @@ test("authenticated private requests resolve active identity and replace forged 
     assert.equal(calls.length, 2);
     const forwarded = calls[1];
     assert.equal(forwarded.headers.get("x-user-id"), "17");
+    assert.equal(forwarded.headers.get("x-dinqor-authenticated-user-id"), "17");
     assert.equal(forwarded.headers.get("x-user-role"), "USER");
     assert.equal(forwarded.headers.get("x-auth-jti"), "jwt-id-17");
     assert.equal(forwarded.headers.get("x-auth-sid"), "session-17");

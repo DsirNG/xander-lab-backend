@@ -19,6 +19,16 @@ export class AgentAuthService {
     }
     const claims = await verifyAccessToken(token, this.jwtSecret);
     if (!claims) return apiError(401, LOGIN_EXPIRED_MESSAGE);
+    const gatewayUserId = request.headers.get("x-dinqor-authenticated-user-id");
+    if (gatewayUserId !== null) {
+      if (!/^[1-9]\d{0,17}$/.test(gatewayUserId)
+        || !Number.isSafeInteger(Number(gatewayUserId))
+        || Number(gatewayUserId) !== Number(claims.sub)) {
+        return apiError(401, LOGIN_EXPIRED_MESSAGE);
+      }
+      // Gateway already checked account status and token revocation before forwarding this identity.
+      return Number(gatewayUserId);
+    }
     const userId = await this.identity.resolveActiveUser(token);
     if (userId instanceof Response) return userId;
     if (userId === null || userId !== Number(claims.sub)) return apiError(401, LOGIN_EXPIRED_MESSAGE);
@@ -35,6 +45,15 @@ export class AgentAuthService {
     const claims = await verifyAccessToken(token, this.jwtSecret);
     if (!claims) return apiError(401, LOGIN_EXPIRED_MESSAGE);
     if (claims.role !== "ADMIN") return apiError(403, "无权访问");
+    const gatewayUserId = request.headers.get("x-dinqor-authenticated-user-id");
+    if (gatewayUserId !== null) {
+      if (!/^[1-9]\d{0,17}$/.test(gatewayUserId)
+        || !Number.isSafeInteger(Number(gatewayUserId))
+        || Number(gatewayUserId) !== Number(claims.sub)) {
+        return apiError(401, LOGIN_EXPIRED_MESSAGE);
+      }
+      return Number(gatewayUserId);
+    }
     const userId = await this.identity.resolveActiveUser(token);
     if (userId instanceof Response) return userId;
     if (userId === null || userId !== Number(claims.sub)) return apiError(401, LOGIN_EXPIRED_MESSAGE);
