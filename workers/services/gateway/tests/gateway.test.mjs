@@ -144,7 +144,7 @@ test("same-account service bindings forward Gateway requests with the internal s
   assert.equal(response.status, 200);
   assert.equal(forwarded.url, "https://core.example/api/auth/validate");
   assert.equal(forwarded.headers.get("x-dinqor-service-token"), "core-internal-secret");
-  assert.deepEqual(await response.json(), { code: 200, message: "success", data: false });
+  assert.deepEqual(await response.json(), { code: 200, message: "操作成功", data: false });
 });
 
 test("Core routes delegate active-session validation to Core instead of resolving twice", async () => {

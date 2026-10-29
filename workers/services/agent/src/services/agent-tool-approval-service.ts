@@ -7,6 +7,7 @@ import type { AgentTurnRepository } from "../interfaces/agent-run-repository.js"
 import { AgentPublicationError } from "../mappers/content-agent-publication-mapper.js";
 import type { AgentMcpToolDefinition, AgentMcpToolPort } from "../interfaces/agent-mcp-tool-port.js";
 import { AgentContentToolsError, AgentContentToolsService } from "./agent-content-tools-service.js";
+import { AgentWeatherError, AgentWeatherService } from "./agent-weather-service.js";
 
 export class AgentApprovalError extends Error {
   constructor(readonly status: number, message: string) {
@@ -55,6 +56,7 @@ export class AgentToolApprovalService {
     private readonly publication: AgentPublicationPort,
     private readonly mcp?: AgentMcpToolPort,
     private readonly contentTools?: AgentContentToolsService,
+    private readonly weather?: AgentWeatherService,
   ) {}
 
   async requestPublishPost(
@@ -122,6 +124,38 @@ export class AgentToolApprovalService {
     return { approval: publicApproval(created.approval), eventId: created.eventId };
   }
 
+  async requestUserLocation(
+    userId: number,
+    conversationId: number,
+    runVersion: number,
+    value: unknown,
+  ): Promise<{ approval: ReturnType<typeof publicApproval>; eventId: number }> {
+    if (!this.weather) throw new AgentApprovalError(503, "天气查询服务尚未配置");
+    const row = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown> : {};
+    const when = row.when === "today" || row.when === "tomorrow" ? row.when : "current";
+    const timeZone = typeof row.timeZone === "string" && row.timeZone.length <= 80
+      ? row.timeZone : "UTC";
+    const responseLanguage = row.responseLanguage === "en" ? "en" : "zh";
+    try { new Intl.DateTimeFormat("en", { timeZone }).format(new Date()); }
+    catch { throw new AgentApprovalError(400, "天气查询时区无效"); }
+    const args = { when, timeZone, responseLanguage };
+    const argumentsJson = canonicalJson(args);
+    const invocationId = crypto.randomUUID();
+    const requestFingerprint = await fingerprint("get_user_location", argumentsJson);
+    const summaryJson = JSON.stringify({
+      tool: "get_user_location",
+      reason: "允许浏览器获取一次当前位置，只用于本次天气查询。坐标会发给天气数据服务，不写入聊天记录或长期记忆。",
+      args: { when },
+    });
+    const created = await this.repository.createPendingApproval({
+      userId, conversationId, runVersion, invocationId,
+      toolName: "get_user_location", argumentsJson, requestFingerprint, summaryJson,
+    });
+    if (!created) throw new AgentApprovalError(409, "当前会话已变化，无法创建定位授权请求");
+    return { approval: publicApproval(created.approval), eventId: created.eventId };
+  }
+
   async requestContentMutation(
     userId: number,
     conversationId: number,
@@ -167,6 +201,7 @@ export class AgentToolApprovalService {
     approvalId: number,
     approved: boolean,
     reason: string | null,
+    location?: { latitude: number; longitude: number } | null,
   ): Promise<ReturnType<typeof publicApproval>> {
     const decision = await this.repository.decideApproval(
       userId, conversationId, approvalId, approved, reason?.trim().slice(0, 500) || null,
@@ -184,6 +219,10 @@ export class AgentToolApprovalService {
     if (["schedule_plan", "email_reminder", "update_plan", "update_email_reminder", "activate_plan_series", "retry_plan_series"].includes(decision.approval.toolName)) {
       return this.decideContentMutation(userId, conversationId, approvalId, approved, runVersion,
         decision.approval, decision.argumentsJson);
+    }
+    if (decision.approval.toolName === "get_user_location") {
+      return this.decideUserLocation(userId, conversationId, approvalId, approved, runVersion,
+        decision.approval, decision.argumentsJson, location);
     }
     const args = this.validatePublishPost(JSON.parse(decision.argumentsJson) as unknown);
     if (!approved) {
@@ -235,6 +274,59 @@ export class AgentToolApprovalService {
       await this.turns.finishTurn(userId, conversationId, runVersion, finalMessage);
     }
     return this.latestApproval(userId, conversationId, approvalId, decision.approval);
+  }
+
+  private async decideUserLocation(
+    userId: number,
+    conversationId: number,
+    approvalId: number,
+    approved: boolean,
+    runVersion: number,
+    approval: AgentApprovalRecord,
+    argumentsJson: string,
+    location?: { latitude: number; longitude: number } | null,
+  ): Promise<ReturnType<typeof publicApproval>> {
+    let args: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = JSON.parse(argumentsJson);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) args = parsed as Record<string, unknown>;
+    } catch { /* A bad stored timezone falls back to a clear user-facing message below. */ }
+    const english = args.responseLanguage === "en";
+    const fallback = english
+      ? "No problem. I will not use your location. Tell me a city and I can check its weather."
+      : "好的，不使用定位。告诉我城市名称，我可以继续查询天气。";
+    if (!approved) {
+      await this.repository.failInvocation(userId, conversationId, runVersion, approval.invocationId,
+        "用户拒绝定位授权", false);
+      await this.turns.finishTurn(userId, conversationId, runVersion, fallback);
+      return this.latestApproval(userId, conversationId, approvalId, approval);
+    }
+    if (!this.weather || !location
+      || !Number.isFinite(location.latitude) || location.latitude < -90 || location.latitude > 90
+      || !Number.isFinite(location.longitude) || location.longitude < -180 || location.longitude > 180) {
+      const message = english
+        ? "I could not get a valid location. Allow browser location access or tell me a city name."
+        : "没有取得有效的定位结果。请允许浏览器定位，或直接告诉我城市名称。";
+      await this.repository.failInvocation(userId, conversationId, runVersion, approval.invocationId, message, false);
+      await this.turns.finishTurn(userId, conversationId, runVersion, message);
+      return this.latestApproval(userId, conversationId, approvalId, approval);
+    }
+    let result: Awaited<ReturnType<AgentWeatherService["byCoordinates"]>>;
+    try {
+      result = await this.weather.byCoordinates(location.latitude, location.longitude, args.when,
+        String(args.timeZone ?? "UTC"), args.responseLanguage === "en" ? "en" : "zh");
+    } catch (error) {
+      const message = english
+        ? "The weather service is temporarily unavailable. Please try again later."
+        : error instanceof AgentWeatherError ? error.message : "天气数据服务暂时不可用，请稍后重试";
+      await this.repository.failInvocation(userId, conversationId, runVersion, approval.invocationId, message, false);
+      await this.turns.finishTurn(userId, conversationId, runVersion, message);
+      return this.latestApproval(userId, conversationId, approvalId, approval);
+    }
+    // The browser coordinates are intentionally omitted from the durable tool result.
+    await this.repository.completeInvocation(userId, conversationId, runVersion, approval.invocationId, result);
+    await this.turns.finishTurn(userId, conversationId, runVersion, result.answer);
+    return this.latestApproval(userId, conversationId, approvalId, approval);
   }
 
   private async decideContentMutation(

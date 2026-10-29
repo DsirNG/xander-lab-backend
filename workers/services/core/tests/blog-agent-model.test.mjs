@@ -25,6 +25,11 @@ test("Core blog model service maps Java stages to scoped prompts and validates i
   await service.execute("research", { input: "JWT", analysisJson: "{\"angle\":\"claims\"}" });
   assert.equal(calls[1].webSearch, true);
   assert.match(calls[1].input, /\"angle\":\"claims\"/);
+  await service.execute("article", { input: "Topic and verified research findings" });
+  assert.equal(calls[2].stage, "article");
+  assert.equal(calls[2].webSearch, false);
+  assert.match(calls[2].instruction, /前置调研结果/);
+  assert.match(calls[2].instruction, /不要再次联网搜索/);
   await assert.rejects(service.execute("research", { input: "JWT", analysisJson: "not-json" }),
     (error) => error.status === 400);
   await assert.rejects(service.execute("unknown", {}), (error) => error.status === 404);
@@ -58,6 +63,8 @@ test("Core blog model mapper calls Responses and Chat Completions and preserves 
   ];
   const mapper = new CoreBlogAgentModelMapper({ async candidates() { return endpoints; } });
   const requests = [];
+  const successLogs = [];
+  mock.method(console, "info", (line) => successLogs.push(JSON.parse(line)));
   mock.method(globalThis, "fetch", async (input, init) => {
     requests.push({ input, headers: new Headers(init.headers), body: JSON.parse(init.body) });
     if (requests.length === 1) {
@@ -70,7 +77,7 @@ test("Core blog model mapper calls Responses and Chat Completions and preserves 
     } });
   });
 
-  const response = await mapper.complete({ instruction: "Return JSON", input: "A topic", webSearch: true });
+  const response = await mapper.complete({ stage: "article", instruction: "Return JSON", input: "A topic", webSearch: true });
   assert.deepEqual(JSON.parse(response.payloadJson), { title: "Blog" });
   assert.deepEqual([response.inputTokens, response.cachedTokens, response.outputTokens, response.model], [15, 2, 7, "blog-r"]);
   assert.equal(requests[0].input, "https://models.example/v1/responses");
@@ -78,11 +85,14 @@ test("Core blog model mapper calls Responses and Chat Completions and preserves 
   assert.deepEqual(requests[0].body.tools, [{ type: "web_search" }]);
 
   endpoints.splice(0, 1);
-  const chat = await mapper.complete({ instruction: "Review", input: "Article" });
+  const chat = await mapper.complete({ stage: "review", instruction: "Review", input: "Article" });
   assert.deepEqual(JSON.parse(chat.payloadJson), { pass: true });
   assert.deepEqual([chat.inputTokens, chat.cachedTokens, chat.outputTokens, chat.model], [10, 1, 3, "blog-c"]);
   assert.equal(requests[1].input, "https://models.example/v1/chat/completions");
   assert.equal(requests[1].body.response_format.type, "json_object");
+  assert.deepEqual(successLogs.map(({ stage }) => stage), ["article", "review"]);
+  assert.ok(successLogs.every(({ elapsedMs }) => Number.isFinite(elapsedMs) && elapsedMs >= 0));
+  assert.ok(!JSON.stringify(successLogs).includes("responses-key"));
 });
 
 test("Core blog model internal controller keeps the existing service-token contract response shape", async () => {
@@ -118,9 +128,11 @@ test("Core internal topic-series route preserves the Content contract", async ()
 });
 
 test("Core model mapper does not retry a non-transient provider response", async () => {
+  const failureLogs = [];
+  mock.method(console, "warn", (line) => failureLogs.push(JSON.parse(line)));
   const mapper = new CoreBlogAgentModelMapper({
     async candidates() {
-      return [{ providerId: 1, baseUrl: "https://models.example/v1", apiKey: "key", model: "blog", apiStyle: "RESPONSES" }];
+      return [{ providerId: 1, baseUrl: "https://models.example/v1", apiKey: "secret-provider-key", model: "blog", apiStyle: "RESPONSES" }];
     },
   });
   let calls = 0;
@@ -128,6 +140,12 @@ test("Core model mapper does not retry a non-transient provider response", async
     calls += 1;
     return new Response("{}", { status: 400 });
   });
-  await assert.rejects(mapper.complete({ instruction: "Return JSON", input: "A topic" }), /HTTP 400/);
+  await assert.rejects(mapper.complete({ stage: "review", instruction: "Return JSON", input: "A topic" }), /HTTP 400/);
   assert.equal(calls, 1);
+  assert.equal(failureLogs.length, 1);
+  assert.equal(failureLogs[0].event, "blog_model_candidate_failed");
+  assert.equal(failureLogs[0].stage, "review");
+  assert.equal(failureLogs[0].httpStatus, 400);
+  assert.equal(failureLogs[0].failureKind, "http_status");
+  assert.ok(!JSON.stringify(failureLogs).includes("secret-provider-key"));
 });

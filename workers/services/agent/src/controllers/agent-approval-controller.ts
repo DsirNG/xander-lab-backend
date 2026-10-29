@@ -14,7 +14,9 @@ function positiveId(value: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-async function readDecision(request: Request): Promise<{ approved: boolean; reason: string | null } | Response> {
+async function readDecision(request: Request): Promise<{
+  approved: boolean; reason: string | null; location: { latitude: number; longitude: number } | null;
+} | Response> {
   const declaredLength = request.headers.get("content-length");
   if (declaredLength && (!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAX_BODY_BYTES)) {
     return apiError(413, "请求内容过大");
@@ -56,7 +58,22 @@ async function readDecision(request: Request): Promise<{ approved: boolean; reas
       && (typeof row.reason !== "string" || row.reason.length > 500))) {
     return apiError(400, "审批请求参数不正确");
   }
-  return { approved: row.approved, reason: typeof row.reason === "string" ? row.reason : null };
+  let location: { latitude: number; longitude: number } | null = null;
+  if (row.location !== undefined && row.location !== null) {
+    if (!row.approved || !row.location || typeof row.location !== "object" || Array.isArray(row.location)) {
+      return apiError(400, "定位授权结果格式不正确");
+    }
+    const coordinates = row.location as Record<string, unknown>;
+    if (Object.keys(coordinates).some((key) => key !== "latitude" && key !== "longitude")
+      || typeof coordinates.latitude !== "number" || !Number.isFinite(coordinates.latitude)
+      || coordinates.latitude < -90 || coordinates.latitude > 90
+      || typeof coordinates.longitude !== "number" || !Number.isFinite(coordinates.longitude)
+      || coordinates.longitude < -180 || coordinates.longitude > 180) {
+      return apiError(400, "定位授权结果格式不正确");
+    }
+    location = { latitude: coordinates.latitude, longitude: coordinates.longitude };
+  }
+  return { approved: row.approved, reason: typeof row.reason === "string" ? row.reason : null, location };
 }
 
 /** Maps the owner-authenticated Agent approval endpoints onto the approval use case. */
@@ -84,7 +101,7 @@ export async function handleAgentApprovalRequest(
     const decision = await readDecision(request);
     if (decision instanceof Response) return decision;
     return success(await service.decide(
-      userId, conversationId, approvalId!, decision.approved, decision.reason,
+      userId, conversationId, approvalId!, decision.approved, decision.reason, decision.location,
     ));
   } catch (error) {
     if (error instanceof AgentApprovalError) return apiError(error.status, error.message);

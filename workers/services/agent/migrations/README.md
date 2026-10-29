@@ -12,8 +12,17 @@ bounded long-term memory. `0006_agent_attachments.sql` stores owner-scoped
 OSS object metadata. `0007_agent_mcp_servers.sql` adds owner-scoped outbound MCP
 server settings, encrypted request-header metadata, and a bounded cached tool
 catalog. `0008_agent_attachment_media.sql` links uploaded image attachments to
-their Content-owned media-library records. Apply migrations with `pnpm dev`
-locally or Wrangler against the Agent database in production.
+their Content-owned media-library records. `0009_agent_run_started_at.sql` stores
+the current or most recently completed run's UTC start time. Apply migrations
+with `pnpm dev` locally or Wrangler against the Agent database in production.
+`0010_agent_weather_geocoding_rate_limit.sql` adds one shared request slot for
+city geocoding; it stores only the next permitted request time, never location
+coordinates.
+
+For Agent weather tools, set `WEATHER_USER_AGENT` to DinQorAI's real site name
+and a contact URL or support email. No weather API key is needed. The default
+city geocoder and forecast provider can be replaced with `WEATHER_GEOCODING_URL`
+and `WEATHER_FORECAST_URL`; responses include their required source attribution.
 
 Agent uploads object bytes to `agent-attachments/<userId>/<uuid>.<extension>`
 in Aliyun OSS and stores only metadata in D1. The upload response contains a

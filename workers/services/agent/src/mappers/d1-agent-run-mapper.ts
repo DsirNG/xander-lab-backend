@@ -12,6 +12,7 @@ const CONVERSATION_COLUMNS = `
   run_version AS runVersion, cancel_requested AS cancelRequested,
   plan_json AS planJson, share_token AS shareToken, is_pinned AS isPinned,
   last_read_at AS lastReadAt, last_completed_at AS lastCompletedAt,
+  run_started_at AS runStartedAt,
   created_at AS createdAt, updated_at AS updatedAt`;
 
 export class D1AgentRunMapper implements AgentTurnRepository {
@@ -33,6 +34,7 @@ export class D1AgentRunMapper implements AgentTurnRepository {
       UPDATE agent_conversation
       SET status = 'running', error_message = NULL, cancel_requested = 0,
           run_version = run_version + 1,
+          run_started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = ? AND user_id = ? AND status <> 'running'
       RETURNING run_version AS runVersion
@@ -90,22 +92,35 @@ export class D1AgentRunMapper implements AgentTurnRepository {
     if (!row) throw new Error("本轮对话已结束或被替代");
   }
 
-  async finishTurn(userId: number, conversationId: number, runVersion: number, answer: string): Promise<{ answerEventId: number; completeEventId: number }> {
-    const result = await this.db.prepare(`
+  async finishTurn(userId: number, conversationId: number, runVersion: number, answer: string): Promise<{ completeEventId: number }> {
+    // The answer, terminal event and ready state become visible atomically, so a
+    // reconnect never observes a finished conversation with an incomplete snapshot.
+    const results = await this.db.batch([
+      this.db.prepare(`
+        INSERT INTO agent_message (conversation_id, run_version, role, kind, content)
+        SELECT ?, ?, 'assistant', 'answer', ?
+        WHERE EXISTS (SELECT 1 FROM agent_conversation
+          WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running')
+      `).bind(conversationId, runVersion, answer, conversationId, userId, runVersion),
+      this.db.prepare(`
+        INSERT INTO agent_event (conversation_id, run_version, event_type, data_content)
+        SELECT ?, ?, 'complete', ?
+        WHERE EXISTS (SELECT 1 FROM agent_conversation
+          WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running')
+        RETURNING id
+      `).bind(conversationId, runVersion, JSON.stringify({ status: "ready" }), conversationId, userId, runVersion),
+      this.db.prepare(`
       UPDATE agent_conversation
       SET status = 'ready', error_message = NULL, cancel_requested = 0,
           last_completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
-    `).bind(conversationId, userId, runVersion).run();
-    if (result.meta.changes !== 1) throw new Error("本轮对话已结束或被替代");
-    await this.db.prepare(`
-      INSERT INTO agent_message (conversation_id, run_version, role, kind, content)
-      VALUES (?, ?, 'assistant', 'answer', ?)
-    `).bind(conversationId, runVersion, answer).run();
-    const answerEventId = await this.appendEvent(conversationId, runVersion, "answer", answer);
-    const completeEventId = await this.appendEvent(conversationId, runVersion, "complete", { status: "ready" });
-    return { answerEventId, completeEventId };
+    `).bind(conversationId, userId, runVersion),
+    ]);
+    if (results[2].meta.changes !== 1) throw new Error("本轮对话已结束或被替代");
+    const completeEventId = results[1].results?.[0]?.id;
+    if (typeof completeEventId !== "number") throw new Error("智能体事件保存失败");
+    return { completeEventId };
   }
 
   async failTurn(userId: number, conversationId: number, runVersion: number, message: string): Promise<number> {
@@ -136,7 +151,8 @@ export class D1AgentRunMapper implements AgentTurnRepository {
 
   async listEventsAfter(conversationId: number, runVersion: number, afterEventId: number): Promise<AgentRunEvent[]> {
     const result = await this.db.prepare(`
-      SELECT id, event_type AS eventType, data_content AS dataContent
+      SELECT id, event_type AS eventType, data_content AS dataContent,
+             created_at AS createdAt
       FROM agent_event WHERE conversation_id = ? AND run_version = ? AND id > ?
       ORDER BY id ASC LIMIT 100
     `).bind(conversationId, runVersion, afterEventId).all<AgentRunEvent>();

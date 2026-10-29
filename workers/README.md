@@ -153,7 +153,14 @@ smoke:core-refresh` starts an isolated Core Worker and D1 database to exercise
 rotation, concurrent replay, reuse revocation, and logout through HTTP.
 
 Agent owns D1-backed conversation creation, listing, detail and message
-history reads, pin/read state, public sharing, model turns, SSE and WebSocket streaming,
+history reads. New message requests accept optional `locale` (`zh` / `en`) and
+`replyLanguage` (`auto` / `zh` / `en`). Explicit user language or translation
+requests take priority, followed by a fixed reply preference, or automatic
+language selection from the current question and conversation context. Ambiguous
+first turns fall back to `locale` (Chinese for legacy clients). These preferences
+are captured for each turn and never rewrite persisted message content or restart
+an existing stream. Agent also owns
+pin/read state, public sharing, model turns, SSE and WebSocket streaming,
 cancellation, replayable events, and versioned personal Skills. An enabled
 Skill may expose the registered `publish_post` tool. Agent records its canonical
 arguments and fingerprint in D1, waits for the owner to approve, and only then
@@ -449,3 +456,19 @@ needs a real D1 database in its target account, production service URLs and
 secrets, and migrated domain schemas/handlers.
 
 CSDN account verification uses PLATFORM_CSDN_ACCOUNT_API_KEY and PLATFORM_CSDN_ACCOUNT_API_SECRET as Worker Secrets. Use the current mp console's account-request signing pair; account reads and legacy publishing need not share a signing configuration. Migration 0008 persists verified account display details. Authorization time is the credential's original authorized_at, while repeated connection checks update last_validated_at only.
+# Public API notice language
+
+Web and Mini Program clients send `Accept-Language: zh-CN` or `en` using
+their current interface language. The public Gateway localizes the top-level
+`message` in `{ code, message, data }` responses for every `/api/` service.
+Missing or unsupported languages default to Chinese; regional variants and
+quality weights are supported. Responses include `Content-Language` and
+`Vary: Accept-Language` so caches distinguish the representations.
+
+HTTP status, business codes and `data` remain unchanged. Streams, WebSocket
+frames, downloads, internal service contracts and protocol endpoints are not
+rewritten. Agent reply language remains a separate per-turn preference.
+Known API/business notices retain their specific meaning; unknown notices use
+a localized status-based fallback. Add translations for new business notices
+in the Gateway catalog; its tests check existing literal error notices across
+all services. No translation service or additional network request is used.

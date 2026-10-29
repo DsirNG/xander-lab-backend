@@ -13,12 +13,32 @@ export class BlogAgentModelError extends Error {
 
 type StageInput = Record<string, unknown>;
 
+function modelFailure(error: unknown): BlogAgentModelError {
+  const status = error && typeof error === "object" && "status" in error
+    && typeof (error as { status?: unknown }).status === "number"
+    ? (error as { status: number }).status : undefined;
+  const timedOut = status === 408 || status === 504
+    || error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+  return timedOut
+    ? new BlogAgentModelError(504, "博客模型响应超时，请稍后重试")
+    : new BlogAgentModelError(503, "博客模型服务暂不可用");
+}
+
 const ARTICLE_INSTRUCTIONS = "你是 DinQorAI 的知识博客生成助手。把用户给出的主题、日记或项目问题，写成可发布的中文 Markdown 知识博客。"
   + "文章主干必须来自用户明确提到的主题、问题、场景与目标；你必须自行判断输入性质、合适读者与写作语气。"
   + "只扩展直接帮助理解、验证或解决用户核心问题的知识，不要为了套模板强行加入无关内容。"
-  + "先澄清文章角度，再使用网页搜索工具核验或补充外部事实；没有可靠来源时不得写成确定事实。"
+  + "先澄清文章角度；外部事实必须有可核验来源，没有可靠来源时不得写成确定事实。"
   + "输出必须且仅是 JSON，包含 title、summary、content、outline、writingBrief、contentBoundary、knowledgeGraph、categoryId、tags、review、illustrations、sources。"
   + "content 必须是完整 Markdown 文章，并以“## 参考资料”列出已检索且实际使用的来源；不需要插图时 illustrations 返回空数组。"
+  + "categoryId 只可使用 frontend、backend、architecture、devops、career。";
+
+const ARTICLE_FROM_RESEARCH_INSTRUCTION = ARTICLE_INSTRUCTIONS
+  + "本阶段会收到前置调研结果。只使用其中已核验的来源，不要再次联网搜索，也不要补造来源。";
+
+const ARTICLE_QUICK_INSTRUCTION = "你是 DinQorAI 的中文博客写作助手。根据用户提供的主题或素材，直接写出一篇清晰、结构紧凑、可发布的 Markdown 文章。"
+  + "按用户要求控制篇幅，普通主题不额外套用复杂策划模板。只基于用户素材和稳定常识，不联网搜索；遇到时效性或高风险事实时应谨慎表述，不得编造数据、来源或链接。"
+  + "输出必须且仅是 JSON，包含 title、summary、content、outline、writingBrief、contentBoundary、knowledgeGraph、categoryId、tags、review、illustrations、sources。"
+  + "content 写完整但不过度扩展的 Markdown 正文；sources 返回空数组，不要生成参考资料章节。不需要插图时 illustrations 返回空数组。"
   + "categoryId 只可使用 frontend、backend、architecture、devops、career。";
 
 const STAGES: Record<BlogAgentModelStage, (input: StageInput) => { instruction: string; content: string; webSearch?: boolean }> = {
@@ -26,18 +46,30 @@ const STAGES: Record<BlogAgentModelStage, (input: StageInput) => { instruction: 
     instruction: "你是知识博客策划编辑。只分析用户真正想写什么、必须保留什么、哪些信息需要查证。不要写文章，不要搜索。仅返回 JSON：{\"angle\":string,\"inputNature\":string,\"audience\":string,\"mustCover\":[string],\"questions\":[string],\"researchQueries\":[string]}。",
     content: String(input.input),
   }),
-  research: (input) => ({
-    instruction: "你是知识博客研究员。使用网页搜索核验和补全用户主题，只保留与文章主线直接相关的权威信息。不要写文章。仅返回 JSON：{\"findings\":[{\"claim\":string,\"evidence\":string,\"url\":string,\"publisher\":string}],\"gaps\":[string],\"recommendedStructure\":[string]}。",
-    content: `用户输入：\n${String(input.input)}\n\n策划结果：\n${String(input.analysisJson)}`,
-    webSearch: true,
+  research: (input) => {
+    const hasAnalysis = typeof input.analysisJson === "string";
+    return {
+      instruction: hasAnalysis
+        ? "你是知识博客研究员。使用网页搜索核验和补全用户主题，只保留与文章主线直接相关的权威信息。不要写文章。仅返回 JSON：{\"findings\":[{\"claim\":string,\"evidence\":string,\"url\":string,\"publisher\":string}],\"gaps\":[string],\"recommendedStructure\":[string]}。"
+        : "你是知识博客策划编辑与研究员。先从用户输入判断主题角度、信息性质、目标读者、必须覆盖的要点和查证问题，再使用网页搜索核验相关事实。只保留与文章主线直接相关的权威信息，不要写文章。仅返回 JSON：{\"angle\":string,\"inputNature\":string,\"audience\":string,\"mustCover\":[string],\"researchQueries\":[string],\"findings\":[{\"claim\":string,\"evidence\":string,\"url\":string,\"publisher\":string}],\"gaps\":[string],\"recommendedStructure\":[string]}。",
+      content: hasAnalysis
+        ? `用户输入：\n${String(input.input)}\n\n策划结果：\n${String(input.analysisJson)}`
+        : `用户输入：\n${String(input.input)}`,
+      webSearch: true,
+    };
+  },
+  article: (input) => ({
+    instruction: input.workflowMode === "quick" ? ARTICLE_QUICK_INSTRUCTION : ARTICLE_FROM_RESEARCH_INSTRUCTION,
+    content: input.workflowMode === "quick"
+      ? `用户写作要求与素材：\n${String(input.input)}`
+      : `用户输入与前置策划、调研结果：\n${String(input.input)}`,
   }),
-  article: (input) => ({ instruction: ARTICLE_INSTRUCTIONS, content: `用户输入：\n${String(input.input)}`, webSearch: true }),
   review: (input) => ({
     instruction: "你是严谨的中文知识博客审校编辑。检查逻辑、事实表述、结构、Markdown 和用户要求。保留图片 Markdown，不要虚构来源。仅返回 JSON：{\"content\":string,\"review\":string}。",
     content: `本轮用户要求：\n${String(input.request)}\n\n待审校文章：\n${String(input.content)}`,
   }),
   revise: (input) => ({
-    instruction: `${ARTICLE_INSTRUCTIONS}这是同一会话中的后续修改。必须以当前文章为基础执行用户要求，不要无故重写未涉及部分。仍返回完整 JSON 文章对象。`,
+    instruction: `${input.workflowMode === "quick" ? ARTICLE_QUICK_INSTRUCTION : ARTICLE_INSTRUCTIONS}这是同一会话中的后续修改。必须以当前文章为基础执行用户要求，不要无故重写未涉及部分。仍返回完整 JSON 文章对象。`,
     content: `当前文章：\n${String(input.content)}\n\n用户本轮修改要求：\n${String(input.instruction)}`,
   }),
   compliance: (input) => ({
@@ -47,7 +79,7 @@ const STAGES: Record<BlogAgentModelStage, (input: StageInput) => { instruction: 
 };
 
 const REQUIRED_FIELDS: Record<BlogAgentModelStage, string[]> = {
-  analyze: ["input"], research: ["input", "analysisJson"], article: ["input"],
+  analyze: ["input"], research: ["input"], article: ["input"],
   review: ["content", "request"], revise: ["content", "instruction"], compliance: ["title", "content"],
 };
 
@@ -83,9 +115,9 @@ export class BlogAgentModelService {
       + (typeof tone === "string" && tone.trim() ? `\n文风语气：\n${tone.trim()}` : "");
     let result: BlogAgentModelResponse;
     try {
-      result = await this.model.complete({ instruction, input: content, webSearch: false });
-    } catch {
-      throw new BlogAgentModelError(503, "博客模型服务暂不可用");
+      result = await this.model.complete({ stage: "topics", instruction, input: content, webSearch: false });
+    } catch (error) {
+      throw modelFailure(error);
     }
     let payload: unknown;
     try { payload = JSON.parse(result.payloadJson); }
@@ -114,19 +146,25 @@ export class BlogAgentModelService {
         throw new BlogAgentModelError(400, "博客模型请求参数无效");
       }
     }
-    if (stageValue === "research") {
+    if (stageValue === "research" && input.analysisJson !== undefined) {
+      if (typeof input.analysisJson !== "string") {
+        throw new BlogAgentModelError(400, "博客模型研究阶段参数无效");
+      }
       try { input.analysisJson = JSON.stringify(JSON.parse(input.analysisJson as string)); }
       catch { throw new BlogAgentModelError(400, "博客模型研究阶段参数无效"); }
     }
     const prompt = STAGES[stageValue](input);
+    const quickWrite = (stageValue === "article" || stageValue === "revise") && input.workflowMode === "quick";
     try {
       return await this.model.complete({
+        stage: stageValue,
         instruction: prompt.instruction,
         input: prompt.content,
         webSearch: Boolean(this.webSearchEnabled && prompt.webSearch),
+        ...(quickWrite ? { timeoutMs: 40_000, maxAttempts: 1, maxCandidates: 2, maxDurationMs: 60_000 } : {}),
       });
-    } catch {
-      throw new BlogAgentModelError(503, "博客模型服务暂不可用");
+    } catch (error) {
+      throw modelFailure(error);
     }
   }
 }

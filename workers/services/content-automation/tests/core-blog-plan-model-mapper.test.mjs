@@ -37,3 +37,26 @@ test("plan model mapper surfaces Core insufficient-point responses", async () =>
   const mapper = new CoreBlogPlanModelMapper({ CORE_SERVICE_URL: "https://core.example", CORE_SERVICE_TOKEN: "test-token" });
   await assert.rejects(mapper.ensureAvailable(42), /积分不足/);
 });
+
+test("plan model mapper uses the Core service binding without requiring a service URL", async () => {
+  let request;
+  const mapper = new CoreBlogPlanModelMapper({
+    CORE_SERVICE_TOKEN: "test-token",
+    CORE_SERVICE: {
+      fetch: async (incoming) => {
+        request = incoming;
+        return Response.json({ payloadJson: "{}", model: "blog-model" });
+      },
+    },
+  });
+
+  await mapper.runStage("analyze", { input: "Cloudflare D1" });
+
+  assert.equal(new URL(request.url).pathname, "/internal/agent/blog/model/analyze");
+  assert.equal(request.headers.get("x-dinqor-service-token"), "test-token");
+});
+
+test("plan model mapper still requires a service URL when no Core binding is present", async () => {
+  const mapper = new CoreBlogPlanModelMapper({ CORE_SERVICE_TOKEN: "test-token" });
+  await assert.rejects(mapper.ensureAvailable(42), /Core service is not configured/);
+});

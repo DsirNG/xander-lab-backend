@@ -41,6 +41,7 @@ import { AgentPlanService } from "./services/agent-plan-service.js";
 import { AgentMcpService } from "./services/agent-mcp-service.js";
 import { AgentImageService } from "./services/agent-image-service.js";
 import { AgentContentToolsService } from "./services/agent-content-tools-service.js";
+import { AgentWeatherService } from "./services/agent-weather-service.js";
 
 const agentService = createBusinessService<AgentEnvironment>("agent", async (request, env, context) => {
   const auth = new AgentAuthService(env.JWT_SECRET, new CoreAuthMapper(env));
@@ -55,12 +56,14 @@ const agentService = createBusinessService<AgentEnvironment>("agent", async (req
   const turnRepository = new D1AgentRunMapper(env.DB);
   const mcpService = new AgentMcpService(new D1AgentMcpMapper(env.DB), new McpHttpClientMapper(env), env);
   const contentTools = new AgentContentToolsService(new ContentAgentToolsMapper(env));
+  const weather = new AgentWeatherService(env);
   const approvalService = new AgentToolApprovalService(
     new D1AgentToolApprovalMapper(env.DB),
     turnRepository,
     new ContentAgentPublicationMapper(env),
     mcpService,
     contentTools,
+    weather,
   );
   const runService = new AgentRunService(
     turnRepository,
@@ -76,6 +79,7 @@ const agentService = createBusinessService<AgentEnvironment>("agent", async (req
     mcpService,
     new AgentImageService(new CoreAgentImageModelMapper(env), new OpenAiAgentImageMapper(), contentMedia, billing),
     contentTools,
+    weather,
   );
   const approvalResponse = await handleAgentApprovalRequest(request, approvalService, resolveUser);
   if (approvalResponse) return approvalResponse;

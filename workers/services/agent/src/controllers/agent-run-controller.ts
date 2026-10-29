@@ -1,10 +1,11 @@
 import { apiError, jsonResponse } from "@dinqor/worker-runtime";
 import { AgentRunService, ResponseError } from "../services/agent-run-service.js";
 import type { WorkerExecutionContextLike } from "@dinqor/worker-runtime";
+import type { AgentLanguagePreferences } from "../services/response-language.js";
 
 type UserResolver = () => Promise<number | Response>;
 
-interface TurnRequest {
+interface TurnRequest extends AgentLanguagePreferences {
   content: string;
   attachments: unknown[];
   deepThinking: boolean;
@@ -45,13 +46,28 @@ async function readTurnRequest(request: Request): Promise<TurnRequest | Response
   if (body.deepThinking !== undefined && typeof body.deepThinking !== "boolean") {
     return apiError(400, "请求内容格式不正确");
   }
+  if ((body.locale !== undefined && body.locale !== "zh" && body.locale !== "en")
+    || (body.replyLanguage !== undefined && (typeof body.replyLanguage !== "string" || !["auto", "zh", "en"].includes(body.replyLanguage)))) {
+    return apiError(400, "Invalid language preference");
+  }
+  let timeZone: string | undefined;
+  if (body.timeZone !== undefined) {
+    if (typeof body.timeZone !== "string" || body.timeZone.length > 80) return apiError(400, "Invalid time zone");
+    try { timeZone = new Intl.DateTimeFormat("en", { timeZone: body.timeZone }).resolvedOptions().timeZone; }
+    catch { return apiError(400, "Invalid time zone"); }
+  }
   if (body.attachments !== undefined && body.attachments !== null
     && (!Array.isArray(body.attachments) || body.attachments.length > 5)) {
     return apiError(400, "附件信息无效");
   }
   const attachments = Array.isArray(body.attachments) ? body.attachments : [];
   if (!content && attachments.length === 0) return apiError(400, "消息内容和附件不能同时为空");
-  return { content, attachments, deepThinking: body.deepThinking === true };
+  return {
+    content, attachments, deepThinking: body.deepThinking === true,
+    locale: body.locale as AgentLanguagePreferences["locale"],
+    replyLanguage: body.replyLanguage as AgentLanguagePreferences["replyLanguage"],
+    timeZone,
+  };
 }
 
 function sseFrame(id: number | null, eventType: string, data: unknown): string {
@@ -69,6 +85,13 @@ function eventData(value: string): unknown {
   }
 }
 
+function timestampedEventData(value: string, createdAt: string): unknown {
+  const data = eventData(value);
+  return data && typeof data === "object" && !Array.isArray(data)
+    ? { ...(data as Record<string, unknown>), eventAt: createdAt }
+    : data;
+}
+
 function streamResponse(
   run: (sink: (id: number, eventType: string, data: unknown) => void) => Promise<unknown>,
   context?: WorkerExecutionContextLike,
@@ -78,7 +101,14 @@ function streamResponse(
     start(controller) {
       const encoder = new TextEncoder();
       const execution = run((id, eventType, data) => {
-        if (open) controller.enqueue(encoder.encode(sseFrame(id, eventType, data)));
+        if (!open) return;
+        controller.enqueue(encoder.encode(sseFrame(id, eventType, data)));
+        // Billing and cleanup stay in waitUntil, while clients can finish on
+        // the durable terminal event without waiting for those network calls.
+        if (eventType === "complete" || eventType === "error") {
+          open = false;
+          controller.close();
+        }
       }).catch(() => undefined).finally(() => {
         if (open) {
           open = false;
@@ -152,7 +182,11 @@ export async function handleAgentRunRequest(
               const events = await service.listEventsAfter(conversationId, conversation.runVersion, nextId);
               for (const event of events) {
                 nextId = event.id;
-                controller.enqueue(encoder.encode(sseFrame(event.id, event.eventType, eventData(event.dataContent))));
+                controller.enqueue(encoder.encode(sseFrame(
+                  event.id,
+                  event.eventType,
+                  timestampedEventData(event.dataContent, event.createdAt ?? new Date().toISOString()),
+                )));
               }
               const current = await service.getConversation(userId, conversationId);
               if (!current || current.runVersion !== conversation.runVersion || current.status !== "running") break;
@@ -186,18 +220,21 @@ export async function handleAgentRunRequest(
 
     const turnRequest = await readTurnRequest(request);
     if (turnRequest instanceof Response) return turnRequest;
+    const language: AgentLanguagePreferences = {
+      locale: turnRequest.locale, replyLanguage: turnRequest.replyLanguage, timeZone: turnRequest.timeZone,
+    };
     const content = turnRequest.content || "请分析我上传的附件。";
     const runVersion = await service.claimTurn(userId, conversationId, content, turnRequest.attachments);
     if (action === "messages/stream") {
       return streamResponse(async (sink) => service.executeTurn(
-        userId, conversationId, runVersion, sink, turnRequest.deepThinking,
+        userId, conversationId, runVersion, sink, turnRequest.deepThinking, undefined, language,
       ), context);
     }
 
     let failure: string | null = null;
     const result = await service.executeTurn(userId, conversationId, runVersion, (_id, eventType, data) => {
       if (eventType === "error" && typeof data === "string") failure = data;
-    }, turnRequest.deepThinking);
+    }, turnRequest.deepThinking, undefined, language);
     return result.ok ? success(runVersion) : apiError(503, failure || "智能体执行失败，请稍后重试");
   } catch (error) {
     if (error instanceof ResponseError) return apiError(error.status, error.message);

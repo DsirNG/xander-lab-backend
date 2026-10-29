@@ -203,6 +203,7 @@ export interface D1Result {
 export interface ServiceEnvironment {
   DB?: D1Binding;
   INTERNAL_SERVICE_TOKEN?: string;
+  INTERNAL_SERVICE_TOKEN_NEXT?: string;
 }
 
 export function jsonResponse(body: unknown, status = 200): Response {
@@ -274,9 +275,10 @@ export function createBusinessService<E extends ServiceEnvironment = ServiceEnvi
         if (publicResponse) return publicResponse;
       }
 
-      const expected = env.INTERNAL_SERVICE_TOKEN;
       const received = request.headers.get("x-dinqor-service-token");
-      if (!expected || received !== expected) {
+      const validTokens = [env.INTERNAL_SERVICE_TOKEN, env.INTERNAL_SERVICE_TOKEN_NEXT]
+        .filter((token): token is string => Boolean(token));
+      if (!received || !validTokens.includes(received)) {
         return apiError(401, "Service authentication required");
       }
 

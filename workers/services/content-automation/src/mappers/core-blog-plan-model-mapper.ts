@@ -1,5 +1,6 @@
 import type { BlogPlanModelPort, BlogPlanModelResponse, BlogPlanModelStage } from "../interfaces/blog-plan-model-port.js";
 import { fetchWithServiceBinding, type WorkerServiceBinding } from "@dinqor/worker-runtime";
+import { coreServiceRequest } from "./core-service-request.js";
 
 export interface CoreBlogPlanModelEnvironment {
   CORE_SERVICE_URL?: string;
@@ -11,7 +12,7 @@ export class CoreBlogPlanModelMapper implements BlogPlanModelPort {
   constructor(private readonly env: CoreBlogPlanModelEnvironment) {}
 
   async runStage(stage: BlogPlanModelStage, input: Record<string, unknown>): Promise<BlogPlanModelResponse> {
-    const payload = await this.post(`/internal/agent/blog/model/${stage}`, input);
+    const payload = await this.post(`/internal/agent/blog/model/${stage}`, input, 185_000);
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
       throw new Error("Core blog model returned an invalid response");
     }
@@ -50,16 +51,14 @@ export class CoreBlogPlanModelMapper implements BlogPlanModelPort {
     });
   }
 
-  private async post(path: string, body: Record<string, unknown>): Promise<unknown> {
-    if (!this.env.CORE_SERVICE_URL || !this.env.CORE_SERVICE_TOKEN) {
-      throw new Error("Core service is not configured");
-    }
-    const response = await fetchWithServiceBinding(this.env.CORE_SERVICE, new URL(path, this.env.CORE_SERVICE_URL), {
+  private async post(path: string, body: Record<string, unknown>, timeoutMs = 90_000): Promise<unknown> {
+    const core = coreServiceRequest(this.env, path);
+    const response = await fetchWithServiceBinding(this.env.CORE_SERVICE, core.url, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-dinqor-service-token": this.env.CORE_SERVICE_TOKEN },
+      headers: { "content-type": "application/json", "x-dinqor-service-token": core.token },
       body: JSON.stringify(body),
       redirect: "manual",
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       let message = `Core service returned HTTP ${response.status}`;

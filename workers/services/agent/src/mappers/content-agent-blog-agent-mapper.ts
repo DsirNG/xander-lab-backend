@@ -25,6 +25,45 @@ async function readLimited(response: Response, max: number): Promise<string> {
   return chunks.map((chunk) => decoder.decode(chunk, { stream: true })).join("") + decoder.decode();
 }
 
+async function readSse(response: Response, max: number, consume: (block: string) => Promise<void>): Promise<void> {
+  const declared = response.headers.get("content-length");
+  if (declared && Number(declared) > max) throw new Error("Content blog response is too large");
+  const reader = response.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let total = 0;
+  let finished = false;
+  const drain = async (final = false) => {
+    let boundary: RegExpExecArray | null;
+    while ((boundary = /\r?\n\r?\n/.exec(buffer))) {
+      const block = buffer.slice(0, boundary.index);
+      buffer = buffer.slice(boundary.index + boundary[0].length);
+      await consume(block);
+    }
+    if (final && buffer) {
+      const block = buffer;
+      buffer = "";
+      await consume(block);
+    }
+  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) { finished = true; break; }
+      total += value.byteLength;
+      if (total > max) throw new Error("Content blog response is too large");
+      buffer += decoder.decode(value, { stream: true });
+      await drain();
+    }
+    buffer += decoder.decode();
+    await drain(true);
+  } finally {
+    if (!finished) await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+}
+
 function summary(value: unknown): AgentBlogTaskSummary | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
@@ -35,6 +74,7 @@ function summary(value: unknown): AgentBlogTaskSummary | null {
     summary: typeof row.summary === "string" ? row.summary : "",
     publishedPostId: Number.isSafeInteger(row.publishedPostId) ? row.publishedPostId as number : null,
     status: typeof row.status === "string" ? row.status : "",
+    generationMode: row.generationMode === "quick" ? "quick" : "full",
   };
 }
 
@@ -54,8 +94,8 @@ export class AgentBlogAgentError extends Error {
 export class ContentAgentBlogAgentMapper implements AgentBlogAgentPort {
   constructor(private readonly env: ContentAgentPublicationEnvironment) {}
 
-  async create(userId: number, input: string, clientRequestId: string): Promise<AgentBlogTaskSummary> {
-    const value = await this.post("/internal/agent/blogagent/create", { userId, input, clientRequestId });
+  async create(userId: number, input: string, clientRequestId: string, mode: "auto" | "quick" | "full" = "auto"): Promise<AgentBlogTaskSummary> {
+    const value = await this.post("/internal/agent/blogagent/create", { userId, input, clientRequestId, mode });
     const task = summary(value);
     if (!task) throw new AgentBlogAgentError(502, "Content returned an invalid BlogAgent task");
     return task;
@@ -95,10 +135,9 @@ export class ContentAgentBlogAgentMapper implements AgentBlogAgentPort {
     if (!response.headers.get("content-type")?.toLowerCase().includes("text/event-stream")) {
       throw new AgentBlogAgentError(502, "Content returned an invalid BlogAgent stream");
     }
-    const body = await readLimited(response, MAX_STREAM_BYTES);
-    let completed: AgentBlogTaskSummary | null = null;
-    for (const block of body.split(/\r?\n\r?\n/)) {
-      if (!block.trim() || block.trim().startsWith(":")) continue;
+    const completion: { task: AgentBlogTaskSummary | null } = { task: null };
+    await readSse(response, MAX_STREAM_BYTES, async (block) => {
+      if (!block.trim() || block.trim().startsWith(":")) return;
       const type = block.split(/\r?\n/).find((line) => line.startsWith("event:"))?.slice(6).trim();
       const data = block.split(/\r?\n/).filter((line) => line.startsWith("data:"))
         .map((line) => line.slice(5).replace(/^ /, "")).join("\n");
@@ -111,11 +150,13 @@ export class ContentAgentBlogAgentMapper implements AgentBlogAgentPort {
         let parsed: unknown;
         try { parsed = JSON.parse(data); }
         catch { throw new AgentBlogAgentError(502, "Content returned an invalid BlogAgent result"); }
-        completed = taskView(parsed);
+        completion.task = taskView(parsed);
       }
+    });
+    if (!completion.task || completion.task.status !== "ready") {
+      throw new AgentBlogAgentError(502, "Content BlogAgent stream ended before completion");
     }
-    if (!completed || completed.status !== "ready") throw new AgentBlogAgentError(502, "Content BlogAgent stream ended before completion");
-    return completed;
+    return completion.task;
   }
 
   private async post(path: string, body: Record<string, unknown>): Promise<unknown> {

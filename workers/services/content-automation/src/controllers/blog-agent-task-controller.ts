@@ -167,7 +167,7 @@ export async function handleBlogAgentTaskRequest(
     if (!owner) return apiError(400, "博客生成助手请求参数非法");
     try {
       if (pathname === `${INTERNAL_BASE}/create`) {
-        const task = await service.create(owner, body.input, body.clientRequestId);
+        const task = await service.create(owner, body.input, body.clientRequestId, body.mode);
         return jsonResponse(task);
       }
       if (pathname === `${INTERNAL_BASE}/find-ready`) return jsonResponse(await service.findReadyByClientRequestId(owner, body.clientRequestId));
@@ -202,7 +202,7 @@ export async function handleBlogAgentTaskRequest(
     if (pathname === BASE && request.method === "POST") {
       const body = await readBody(request);
       if (body instanceof Response) return body;
-      return success(await service.create(owner, body.input, body.clientRequestId));
+      return success(await service.create(owner, body.input, body.clientRequestId, body.mode));
     }
     const match = pathname.match(/^\/api\/blog-agent\/tasks\/([1-9]\d{0,17})(?:\/(run|run\/stream|publish|events|messages\/stream))?$/);
     if (!match) return null;

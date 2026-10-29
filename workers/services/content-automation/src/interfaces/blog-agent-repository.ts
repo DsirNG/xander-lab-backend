@@ -3,6 +3,7 @@ export interface BlogAgentTask {
   userId: number;
   clientRequestId: string | null;
   input: string;
+  generationMode: "quick" | "full";
   inputType: string;
   audience: string;
   tone: string;
@@ -62,14 +63,14 @@ export interface BlogAgentSessionView {
 }
 
 export interface BlogAgentTaskRepository {
-  create(userId: number, input: string, clientRequestId: string | null, now: string): Promise<number>;
+  create(userId: number, input: string, clientRequestId: string | null, now: string, generationMode?: "quick" | "full"): Promise<number>;
   findById(userId: number, taskId: number): Promise<BlogAgentTask | null>;
   findByRequestId(userId: number, clientRequestId: string): Promise<BlogAgentTask | null>;
   list(userId: number, limit: number): Promise<BlogAgentTask[]>;
   hydrate(userId: number, taskId: number): Promise<BlogAgentTaskView | null>;
   claim(userId: number, taskId: number, mode: "initial" | "revision", now: string): Promise<boolean>;
   updateStage(userId: number, taskId: number, stage: string, message: string, now: string): Promise<boolean>;
-  fail(userId: number, taskId: number, message: string, revision: boolean, now: string): Promise<void>;
+  fail(userId: number, taskId: number, message: string, stage: string, revision: boolean, now: string): Promise<void>;
   complete(userId: number, taskId: number, article: Record<string, unknown>, review: Record<string, unknown>, contentObjectKey: string | null, now: string): Promise<boolean>;
   publish(userId: number, taskId: number, postId: number, now: string): Promise<void>;
   appendEvent(taskId: number, eventType: string, data: string, now: string): Promise<number>;

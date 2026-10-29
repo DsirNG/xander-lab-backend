@@ -4,10 +4,11 @@ export interface AgentBlogTaskSummary {
   summary: string;
   publishedPostId: number | null;
   status: string;
+  generationMode: "quick" | "full";
 }
 
 export interface AgentBlogAgentPort {
-  create(userId: number, input: string, clientRequestId: string): Promise<AgentBlogTaskSummary>;
+  create(userId: number, input: string, clientRequestId: string, mode?: "auto" | "quick" | "full"): Promise<AgentBlogTaskSummary>;
   findReady(userId: number, clientRequestId: string): Promise<AgentBlogTaskSummary | null>;
   runStream(
     userId: number,

@@ -10,8 +10,8 @@ function setup(options = {}) {
   let nextId = 1;
   let nextEvent = 1;
   const repository = {
-    async create(userId, input, clientRequestId, now) {
-      const task = { id: nextId++, userId, clientRequestId, input, inputType: "topic", audience: "", tone: "",
+    async create(userId, input, clientRequestId, now, generationMode) {
+      const task = { id: nextId++, userId, clientRequestId, input, generationMode, inputType: "topic", audience: "", tone: "",
         status: "created", stage: "analyze", title: null, summary: null, content: null, outline: null,
         contentBoundary: "{}", knowledgeGraphJson: "{}", categoryId: "career", tagsJson: "[]", review: null,
         illustrationStatus: "none", illustrationError: null, publishedPostId: null, errorMessage: null,
@@ -43,9 +43,9 @@ function setup(options = {}) {
       task.messages.push({ id: task.messages.length + 1, taskId: id, role: "assistant", kind: "process", stage, content: message, createdAt: now });
       return true;
     },
-    async fail(userId, id, message, revision, now) {
+    async fail(userId, id, message, stage, revision, now) {
       const task = await this.findById(userId, id);
-      if (task) { task.status = revision ? "ready" : "failed"; task.errorMessage = message; task.updatedAt = now; }
+      if (task) { task.status = revision ? "ready" : "failed"; task.stage = stage; task.errorMessage = message; task.updatedAt = now; }
     },
     async complete(userId, id, article, review, contentObjectKey, now) {
       const task = await this.findById(userId, id);
@@ -69,6 +69,7 @@ function setup(options = {}) {
   };
   const model = {
     async runStage(stage, input) {
+      if (options.failStage === stage) throw new Error("simulated model failure");
       const longContent = "## Article\n\n" + "x".repeat(300 * 1024);
       const result = stage === "analyze" ? { angle: "testing" }
         : stage === "research" ? { findings: [] }
@@ -142,6 +143,14 @@ test("BlogAgent run and revision stream persist stages, versions, and replayable
   assert.match(replayText, /event: stage/);
   assert.match(replayText, /event: complete/);
   assert.ok(state.events.length >= 8);
+});
+
+test("failed BlogAgent task retains the stage where execution stopped", async () => {
+  const state = setup({ failStage: "review" });
+  const task = await state.service.create(42, "Explain a durable Worker workflow", "failed-task", "full");
+  await assert.rejects(state.service.run(42, task.id), /simulated model failure/);
+  assert.equal(state.tasks[0].status, "failed");
+  assert.equal(state.tasks[0].stage, "review");
 });
 
 test("internal Agent contract is token-protected and returns only ready idempotency results", async () => {

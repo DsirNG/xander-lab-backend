@@ -1,5 +1,6 @@
 import type { EmailReminderBillingPort } from "../interfaces/email-reminder-repository.js";
 import { fetchWithServiceBinding, type WorkerServiceBinding } from "@dinqor/worker-runtime";
+import { coreServiceRequest } from "./core-service-request.js";
 
 export interface CoreEmailReminderBillingEnvironment {
   CORE_SERVICE_URL?: string;
@@ -24,10 +25,10 @@ export class CoreEmailReminderBillingMapper implements EmailReminderBillingPort 
   }
 
   private async post(path: string, body: Record<string, unknown>): Promise<unknown> {
-    if (!this.env.CORE_SERVICE_URL || !this.env.CORE_SERVICE_TOKEN) throw new Error("Core service is not configured");
-    const response = await fetchWithServiceBinding(this.env.CORE_SERVICE, new URL(path, this.env.CORE_SERVICE_URL), {
+    const core = coreServiceRequest(this.env, path);
+    const response = await fetchWithServiceBinding(this.env.CORE_SERVICE, core.url, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-dinqor-service-token": this.env.CORE_SERVICE_TOKEN },
+      headers: { "content-type": "application/json", "x-dinqor-service-token": core.token },
       body: JSON.stringify(body),
       redirect: "manual",
       signal: AbortSignal.timeout(10_000),

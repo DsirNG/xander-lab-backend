@@ -9,6 +9,7 @@ import {
 } from "@dinqor/worker-runtime";
 import { ACCESS_POLICY } from "./access-policy.generated.js";
 import { ROUTES } from "./routes.generated.js";
+import { localizeApiResponse } from "./api-language.js";
 
 type ServiceName =
   | "core"
@@ -620,7 +621,9 @@ export default {
     const traceId = correlationId(request.headers.get("x-trace-id"));
     const requestId = correlationId(request.headers.get("x-request-id"));
     const cors = corsContext(request, env);
-    const finish = (response: Response) => finishResponse(response, traceId, cors, request);
+    const finish = async (response: Response) => finishResponse(
+      await localizeApiResponse(response, request), traceId, cors, request,
+    );
 
     if (!cors.allowed) return finish(apiError(403, "Origin is not allowed"));
     if (cors.preflight) {

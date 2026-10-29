@@ -35,6 +35,14 @@ function normalizeArticle(value: Record<string, unknown>): Record<string, unknow
       ? String(value.categoryId) : "career" };
 }
 
+function resolveGenerationMode(input: string, requested: unknown): "quick" | "full" {
+  if (requested === "quick" || requested === "full") return requested;
+  // Keep ordinary writing to one model call; reserve the research/review path for
+  // requests that explicitly need depth, current facts, sources, or verification.
+  return /深入|深度|全面|完整分析|长文|详尽|详细|系统梳理|系統梳理|引用|参考资料|參考資料|资料来源|資料來源|联网|调研|調研|最新|截至|今天|目前|实时|即時|法律|医疗|醫療|金融|投资|投資|统计|統計|数据|數據|论文|研究报告|研究報告|deep dive|in[- ]depth|comprehensive|detailed|thorough|latest|current facts|today's|research|citations?|sources|legal|medical|financial|investment|statistics|research paper/i.test(input)
+    ? "full" : "quick";
+}
+
 export class BlogAgentTaskService {
   constructor(
     private readonly repository: BlogAgentTaskRepository,
@@ -45,7 +53,7 @@ export class BlogAgentTaskService {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async create(userId: number, inputValue: unknown, requestIdValue?: unknown): Promise<BlogAgentTask> {
+  async create(userId: number, inputValue: unknown, requestIdValue?: unknown, modeValue?: unknown): Promise<BlogAgentTask> {
     if (!Number.isSafeInteger(userId) || userId < 1 || typeof inputValue !== "string"
       || !inputValue.trim() || inputValue.length > 20_000) {
       throw new BlogAgentTaskError(400, "请输入主题或日记");
@@ -55,12 +63,17 @@ export class BlogAgentTaskService {
     if (requestId !== null && (!requestId || requestId.length > 64)) {
       throw new BlogAgentTaskError(400, "请求幂等标识不能超过 64 个字符");
     }
+    if (modeValue !== undefined && !["auto", "quick", "full"].includes(String(modeValue))) {
+      throw new BlogAgentTaskError(400, "文章生成模式无效");
+    }
     if (requestId) {
       const existing = await this.repository.findByRequestId(userId, requestId);
       if (existing) return existing;
     }
     try {
-      const id = await this.repository.create(userId, inputValue.trim(), requestId, new Date(this.now()).toISOString());
+      const input = inputValue.trim();
+      const generationMode = resolveGenerationMode(input, modeValue);
+      const id = await this.repository.create(userId, input, requestId, new Date(this.now()).toISOString(), generationMode);
       const task = await this.repository.findById(userId, id);
       if (!task) throw new Error("BlogAgent task disappeared after insert");
       return task;
@@ -81,6 +94,7 @@ export class BlogAgentTaskService {
       input: task.input,
       status: task.status,
       stage: task.stage,
+      generationMode: task.generationMode,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
     }));
@@ -121,7 +135,7 @@ export class BlogAgentTaskService {
 
   async runClaimed(userId: number, taskId: number, mode: "initial" | "revision", instruction: string | null,
     observer?: BlogAgentEventObserver): Promise<BlogAgentTaskView> {
-    let lastStage = mode === "initial" ? "analyze" : "write";
+    let lastStage = mode === "initial" ? "research" : "write";
     const emit = async (eventType: string, data: string) => {
       const id = await this.repository.appendEvent(taskId, eventType, data, new Date(this.now()).toISOString());
       await observer?.(id, eventType, data);
@@ -134,31 +148,62 @@ export class BlogAgentTaskService {
         if (!await this.repository.updateStage(userId, taskId, name, message, new Date(this.now()).toISOString())) {
           throw new Error("博客生成助手执行权已失效");
         }
+        console.info(JSON.stringify({ event: "blog_agent_stage_started", taskId, stage: name }));
         await emit("stage", `${name}|${message}`);
       };
+      const runStage = async <T>(name: string, operation: () => Promise<T>): Promise<T> => {
+        const startedAt = this.now();
+        try {
+          const result = await operation();
+          console.info(JSON.stringify({ event: "blog_agent_stage_completed", taskId, stage: name,
+            elapsedMs: Math.max(0, this.now() - startedAt) }));
+          return result;
+        } catch (error) {
+          const status = error && typeof error === "object" && "status" in error
+            && typeof (error as { status?: unknown }).status === "number"
+            ? (error as { status: number }).status : undefined;
+          console.error(JSON.stringify({ event: "blog_agent_stage_failed", taskId, stage: name,
+            failureKind: error instanceof Error ? error.name : "UnknownError",
+            ...(status ? { httpStatus: status } : {}),
+            elapsedMs: Math.max(0, this.now() - startedAt) }));
+          throw error;
+        }
+      };
       let article: Record<string, unknown>;
+      let review: Record<string, unknown>;
       if (mode === "initial") {
-        await stage("analyze", "正在理解你的目标和文章边界");
-        const analysis = object(await this.model.runStage("analyze", { input: task.input }));
-        await stage("research", "正在联网查找并核验相关资料");
-        const research = object(await this.model.runStage("research", {
-          input: task.input, analysisJson: JSON.stringify(analysis),
-        }));
-        await stage("write", "正在根据策划和调研结果撰写文章草稿");
-        article = normalizeArticle(object(await this.model.runStage("article", {
-          input: `${task.input}\n\n策划结果：\n${JSON.stringify(analysis)}\n\n调研结果：\n${JSON.stringify(research)}`,
-        })));
+        if (task.generationMode === "quick") {
+          await stage("write", "正在快速撰写文章");
+          article = normalizeArticle(object(await runStage("article", () => this.model.runStage("article", {
+            input: task.input, workflowMode: "quick",
+          }))));
+        } else {
+          await stage("research", "正在理解主题、确定写作方向并联网核验资料");
+          const research = object(await runStage("research", () => this.model.runStage("research", {
+            input: task.input,
+          })));
+          await stage("write", "正在根据策划和调研结果撰写文章草稿");
+          article = normalizeArticle(object(await runStage("article", () => this.model.runStage("article", {
+            input: `${task.input}\n\n调研与写作方案：\n${JSON.stringify(research)}`, workflowMode: "full",
+          }))));
+        }
       } else {
         if (!instruction?.trim()) throw new BlogAgentTaskError(400, "修改要求不能为空");
         await stage("write", "正在根据你的新要求修改文章");
-        article = normalizeArticle(object(await this.model.runStage("revise", {
-          content: await this.readTaskContent(task), instruction: instruction.trim(),
-        })));
+        const content = await this.readTaskContent(task);
+        article = normalizeArticle(object(await runStage("write", () => this.model.runStage("revise", {
+          content, instruction: instruction.trim(), workflowMode: task.generationMode,
+        }))));
       }
-      await stage("review", mode === "initial" ? "正在进行最终逻辑与表达审校" : "正在检查本轮修改");
-      const review = object(await this.model.runStage("review", {
-        content: String(article.content), request: mode === "initial" ? task.input : instruction,
-      }));
+      if (task.generationMode === "full") {
+        await stage("review", mode === "initial" ? "正在进行最终逻辑与表达审校" : "正在检查本轮修改");
+        review = object(await runStage("review", () => this.model.runStage("review", {
+          content: String(article.content), request: mode === "initial" ? task.input : instruction,
+        })));
+      } else {
+        await stage("review", "正在检查文章结构和必需内容");
+        review = { content: article.content, review: "快速模式：已完成本地格式与完整性检查，未进行联网调研。" };
+      }
       let contentObjectKey: string | null = null;
       const content = typeof review.content === "string" && review.content.trim()
         ? review.content.trim().replace(/^\s*<!-- illustration:[a-z0-9-]+ -->\s*$/gim, "").trim()
@@ -191,7 +236,7 @@ export class BlogAgentTaskService {
       return view;
     } catch (error) {
       const message = (error instanceof Error ? error.message : "博客生成助手执行失败").slice(0, 1_000);
-      await this.repository.fail(userId, taskId, message, mode === "revision", new Date(this.now()).toISOString());
+      await this.repository.fail(userId, taskId, message, lastStage, mode === "revision", new Date(this.now()).toISOString());
       await emit("error", message);
       throw error;
     }

@@ -11,6 +11,8 @@ export interface AgentConversationRecord {
   isPinned: number;
   lastReadAt: string | null;
   lastCompletedAt: string | null;
+  /** UTC start time of the current or most recently started run. */
+  runStartedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -26,6 +28,7 @@ export interface AgentRunEvent {
   id: number;
   eventType: string;
   dataContent: string;
+  createdAt?: string;
 }
 
 export type AgentSpecialMessageKind = "quiz" | "artifact";
@@ -42,7 +45,7 @@ export interface AgentTurnRepository {
     kind: AgentSpecialMessageKind,
     content: unknown,
   ): Promise<void>;
-  finishTurn(userId: number, conversationId: number, runVersion: number, answer: string): Promise<{ answerEventId: number; completeEventId: number }>;
+  finishTurn(userId: number, conversationId: number, runVersion: number, answer: string): Promise<{ completeEventId: number }>;
   failTurn(userId: number, conversationId: number, runVersion: number, message: string): Promise<number>;
   cancelTurn(userId: number, conversationId: number): Promise<AgentConversationRecord | null>;
   isCancellationRequested(userId: number, conversationId: number, runVersion: number): Promise<boolean>;

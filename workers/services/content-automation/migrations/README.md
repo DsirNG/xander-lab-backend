@@ -12,3 +12,5 @@ per-user notification table. Migration `0012` stores owner-scoped image metadata
 image bytes remain in Aliyun OSS under the configured media object prefix.
 
 Migration `0013` persists editable content-series drafts and links activated one-shot article plans by series and day. Series activation inserts all child plans and changes the series state in one D1 batch; only Local, CSDN, and Juejin are currently selectable for publication.
+
+Migration `0014` persists each BlogAgent task's resolved generation mode. Existing tasks stay on the full workflow; new ordinary writing requests use the quick path unless they need research and independent review.

@@ -1,9 +1,14 @@
 export type BlogAgentModelStage = "analyze" | "research" | "article" | "review" | "revise" | "compliance";
 
 export interface BlogAgentModelInput {
+  stage?: string;
   instruction: string;
   input: string;
   webSearch?: boolean;
+  timeoutMs?: number;
+  maxAttempts?: number;
+  maxCandidates?: number;
+  maxDurationMs?: number;
 }
 
 export interface BlogAgentModelUsage {

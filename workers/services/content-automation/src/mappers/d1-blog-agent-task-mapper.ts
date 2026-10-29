@@ -11,7 +11,7 @@ interface VersionRow extends BlogAgentVersion {}
 interface EventRow extends BlogAgentEvent {}
 
 const TASK_COLUMNS = `id, user_id AS userId, client_request_id AS clientRequestId, input,
-  input_type AS inputType, audience, tone, status, stage, title, summary, content, outline,
+  generation_mode AS generationMode, input_type AS inputType, audience, tone, status, stage, title, summary, content, outline,
   content_boundary AS contentBoundary, knowledge_graph_json AS knowledgeGraphJson,
   content_object_key AS contentObjectKey,
   category_id AS categoryId, tags_json AS tagsJson, review,
@@ -36,11 +36,11 @@ function parseArray(value: string): string[] {
 export class D1BlogAgentTaskMapper implements BlogAgentTaskRepository {
   constructor(private readonly db: D1Binding) {}
 
-  async create(userId: number, input: string, clientRequestId: string | null, now: string): Promise<number> {
+  async create(userId: number, input: string, clientRequestId: string | null, now: string, generationMode: "quick" | "full" = "full"): Promise<number> {
     const created = await this.db.prepare(`
-      INSERT INTO blog_agent_task (user_id, client_request_id, input, status, stage, created_at, updated_at)
-      VALUES (?, ?, ?, 'created', 'analyze', ?, ?) RETURNING id
-    `).bind(userId, clientRequestId, input, now, now).first<{ id: number }>();
+      INSERT INTO blog_agent_task (user_id, client_request_id, input, generation_mode, status, stage, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'created', 'analyze', ?, ?) RETURNING id
+    `).bind(userId, clientRequestId, input, generationMode, now, now).first<{ id: number }>();
     if (!created?.id) throw new Error("BlogAgent task insert returned no id");
     await this.insertMessage(created.id, "user", "message", null, input, now);
     return created.id;
@@ -98,11 +98,11 @@ export class D1BlogAgentTaskMapper implements BlogAgentTaskRepository {
     return true;
   }
 
-  async fail(userId: number, taskId: number, message: string, revision: boolean, now: string): Promise<void> {
+  async fail(userId: number, taskId: number, message: string, stage: string, revision: boolean, now: string): Promise<void> {
     await this.db.prepare(`UPDATE blog_agent_task SET status = ?, stage = ?, error_message = ?, updated_at = ?
       WHERE id = ? AND user_id = ? AND status = 'running'`)
-      .bind(revision ? "ready" : "failed", revision ? "review" : "analyze", message.slice(0, 1_000), now, taskId, userId).run();
-    if (revision) await this.insertMessage(taskId, "assistant", "process", "review", "本轮修改失败，已保留上一版文章", now);
+      .bind(revision ? "ready" : "failed", stage, message.slice(0, 1_000), now, taskId, userId).run();
+    if (revision) await this.insertMessage(taskId, "assistant", "process", stage, "本轮修改失败，已保留上一版文章", now);
   }
 
   async complete(

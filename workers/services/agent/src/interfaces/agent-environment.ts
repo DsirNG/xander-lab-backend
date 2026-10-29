@@ -16,5 +16,8 @@ export interface AgentEnvironment extends ServiceEnvironment, AgentModelEnvironm
   AGENT_OSS_SMOKE_TEST_ENABLED?: string;
   AGENT_MCP_CREDENTIAL_ENCRYPTION_KEY?: string;
   AGENT_MCP_CLIENT_ENABLED?: string;
+  WEATHER_USER_AGENT?: string;
+  WEATHER_GEOCODING_URL?: string;
+  WEATHER_FORECAST_URL?: string;
   CONTENT_AUTOMATION_SERVICE?: { fetch(request: Request): Promise<Response> };
 }

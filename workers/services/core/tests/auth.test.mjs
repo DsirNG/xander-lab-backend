@@ -513,6 +513,7 @@ test("Core resolves Agent access tokens only for active users", async () => {
   const token = signToken({ sub: String(user.id), exp: 2_000_000_000, type: "access" });
   const env = {
     INTERNAL_SERVICE_TOKEN: "internal-test-token",
+    INTERNAL_SERVICE_TOKEN_NEXT: "next-internal-test-token",
     JWT_SECRET: secret,
     DB: createDb({ ...user, status: 1 }),
   };
@@ -530,6 +531,20 @@ test("Core resolves Agent access tokens only for active users", async () => {
   );
   assert.equal(active.status, 200);
   assert.deepEqual(await active.json(), { userId: user.id });
+
+  const nextToken = await coreWorker.fetch(
+    new Request("https://core.test/internal/agent/auth/resolve", {
+      method: "POST",
+      headers: {
+        "x-dinqor-service-token": env.INTERNAL_SERVICE_TOKEN_NEXT,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ accessToken: token }),
+    }),
+    env,
+  );
+  assert.equal(nextToken.status, 200);
+  assert.deepEqual(await nextToken.json(), { userId: user.id });
 
   const disabled = await coreWorker.fetch(
     new Request("https://core.test/internal/agent/auth/resolve", {

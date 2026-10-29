@@ -11,6 +11,7 @@ const CONVERSATION_COLUMNS = `
   run_version AS runVersion, cancel_requested AS cancelRequested,
   plan_json AS planJson, share_token AS shareToken, is_pinned AS isPinned,
   last_read_at AS lastReadAt, last_completed_at AS lastCompletedAt,
+  run_started_at AS runStartedAt,
   created_at AS createdAt, updated_at AS updatedAt`;
 
 export class D1AgentConversationMapper implements AgentConversationRepository {

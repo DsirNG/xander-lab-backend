@@ -235,5 +235,5 @@ test("approval routes authenticate, scope by owner, and validate decisions", asy
   assert.deepEqual((await decisionResponse.json()).data, { id: 11, status: "REJECTED" });
   assert.equal(invalidResponse.status, 400);
   assert.equal(unauthorized.status, 401);
-  assert.deepEqual(calls, [["list", 42, 7], ["decide", 42, 7, 11, false, "cancel"]]);
+  assert.deepEqual(calls, [["list", 42, 7], ["decide", 42, 7, 11, false, "cancel", null]]);
 });
