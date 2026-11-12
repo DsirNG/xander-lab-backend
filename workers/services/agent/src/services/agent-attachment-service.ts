@@ -38,22 +38,29 @@ export class AgentAttachmentService {
     const extension = name.toLowerCase().split(".").at(-1) ?? "";
     if (!name.includes(".") || !ALLOWED_EXTENSIONS.has(extension)) throw new AgentAttachmentError("暂不支持该附件格式");
     const contentType = file.type.trim().slice(0, 120) || "application/octet-stream";
-    const objectKey = `${userId}/${crypto.randomUUID()}.${extension}`;
+    let objectKey = `${userId}/${crypto.randomUUID()}.${extension}`;
     let stage = "oss-write";
     let objectWritten = false;
     let mediaAssetId: number | null = null;
     try {
-      await this.storage.write(objectKey, file.bytes, contentType);
-      objectWritten = true;
+      let imageUrl: string | undefined;
+      // Content owns image bytes and lifecycle. Reuse its one upload instead of
+      // copying the image into Agent OSS and then uploading it a second time.
       if (contentType.toLowerCase().startsWith("image/") && this.mediaAssets) {
         stage = "media-asset";
-        mediaAssetId = (await this.mediaAssets.uploadImage(userId, name, contentType, file.bytes)).id;
+        const asset = await this.mediaAssets.uploadImage(userId, name, contentType, file.bytes);
+        mediaAssetId = asset.id;
+        imageUrl = asset.url;
+        objectKey = `content-media/${asset.id}`;
+      } else {
+        await this.storage.write(objectKey, file.bytes, contentType);
+        objectWritten = true;
       }
       stage = "metadata";
       const row = await this.repository.create({ userId, objectKey, name, contentType, size: file.size, mediaAssetId });
       if (!row) throw new Error("Agent attachment metadata insert failed");
       stage = "signed-read-url";
-      return await this.reference(row);
+      return await this.reference(row, userId, imageUrl);
     } catch (error) {
       console.error("Agent attachment upload failed", {
         stage,
@@ -83,7 +90,7 @@ export class AgentAttachmentService {
     const rows = await this.repository.findOwnedMany(userId, ids);
     const byId = new Map(rows.map((row) => [row.id, row]));
     if (ids.some((id) => !byId.has(id))) throw new AgentAttachmentError("附件不存在或不属于当前用户", 404);
-    return Promise.all(ids.map((id) => this.reference(byId.get(id)!)));
+    return Promise.all(ids.map((id) => this.reference(byId.get(id)!, userId)));
   }
 
   async refreshStored(userId: number, value: unknown): Promise<AgentAttachmentReference[]> {
@@ -102,7 +109,7 @@ export class AgentAttachmentService {
     const references = new Map<number, AgentAttachmentReference>();
     await Promise.all(ids.map(async (id) => {
       const row = byId.get(id);
-      if (row) references.set(id, await this.reference(row));
+      if (row) references.set(id, await this.reference(row, userId));
     }));
     return idsByValue.map((valueIds) => valueIds.flatMap((id) => {
       const reference = references.get(id);
@@ -110,10 +117,17 @@ export class AgentAttachmentService {
     }));
   }
 
-  private async reference(row: { id: number; objectKey: string; name: string; contentType: string; size: number; mediaAssetId?: number | null }) {
+  private async reference(row: { id: number; objectKey: string; name: string; contentType: string; size: number; mediaAssetId?: number | null }, userId: number, uploadedUrl?: string) {
+    let url = uploadedUrl;
+    if (!url && row.objectKey.startsWith("content-media/")) {
+      if (!row.mediaAssetId || !this.mediaAssets) throw new Error("Content media reference is unavailable");
+      const asset = await this.mediaAssets.findOwned(userId, row.mediaAssetId);
+      if (!asset) throw new AgentAttachmentError("附件不存在或不属于当前用户", 404);
+      url = asset.url;
+    }
     return {
       id: row.id,
-      url: await this.storage.signedReadUrl(row.objectKey),
+      url: url ?? await this.storage.signedReadUrl(row.objectKey),
       name: row.name,
       contentType: row.contentType,
       size: row.size,

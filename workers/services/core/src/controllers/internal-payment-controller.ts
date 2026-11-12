@@ -86,6 +86,23 @@ export async function handleInternalPaymentRequest(
     return success({ appId: credential.appId, appSecret: credential.appSecret });
   }
 
+  if (path === "/internal/v1/payment/points/refund") {
+    if (!positiveInteger(body.userId) || typeof body.eventKey !== "string" || typeof body.action !== "string"
+      || typeof body.refundId !== "string") return apiError(400,"退款请求无效");
+    try { return success({ result: await dependencies.entitlements.refundPoints(body.action,body.userId,body.eventKey,body.refundId) }); }
+    catch(error) { return error instanceof TypeError ? apiError(400,"退款请求无效") : apiError(503,"退款积分处理暂不可用"); }
+  }
+  if (path === "/internal/v1/payment/subscription") {
+    if (!positiveInteger(body.userId)) return apiError(400,"用户 ID 无效");
+    try { return success(await dependencies.entitlements.subscription(body.userId)); }
+    catch { return apiError(503,"订阅状态暂不可用"); }
+  }
+  if (path === "/internal/v1/payment/points/grant") {
+    if (!positiveInteger(body.userId) || typeof body.points!=="number" || typeof body.eventKey!=="string")
+      return apiError(400,"积分请求无效");
+    try { return success({accepted:true,firstGrant:await dependencies.entitlements.grantPoints(body.userId,body.points,body.eventKey)}); }
+    catch (error) { return error instanceof TypeError ? apiError(400,"积分请求无效") : apiError(503,"积分发放暂不可用"); }
+  }
   if (path === "/internal/v1/payment/entitlements/grant") {
     if (!positiveInteger(body.userId) || typeof body.tier !== "string"
       || !Number.isSafeInteger(body.durationDays) || typeof body.durationDays !== "number"
@@ -95,8 +112,9 @@ export async function handleInternalPaymentRequest(
         body.userId, body.tier, body.durationDays, body.eventKey,
       );
       return success({ accepted: true, firstGrant: inserted });
-    } catch {
-      return apiError(400, "订阅权益请求格式不正确");
+    } catch (error) {
+      return error instanceof TypeError ? apiError(400, "订阅权益请求格式不正确")
+        : apiError(503,"订阅权益发放暂不可用");
     }
   }
   return apiError(404, "Not Found");

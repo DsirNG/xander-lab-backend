@@ -1,3 +1,5 @@
+import { ModelProbeService } from "./services/model-probe-service.js";
+import { HttpModelProbeMapper } from "./mappers/http-model-probe-mapper.js";
 import { apiError, jsonResponse } from "@dinqor/worker-runtime";
 import type { ModelProviderRecord } from "./interfaces/model-provider-repository.js";
 import type { FeatureModelConfigRecord } from "./interfaces/feature-model-config-repository.js";
@@ -29,9 +31,9 @@ function success(data: unknown): Response {
   return jsonResponse({ code: 200, message: "success", data });
 }
 
-async function readObject(request: Request): Promise<JsonObject | Response> {
+async function readObject(request: Request, maxBodyBytes = MAX_BODY_BYTES): Promise<JsonObject | Response> {
   const declaredLength = request.headers.get("content-length");
-  if (declaredLength && Number(declaredLength) > MAX_BODY_BYTES) return apiError(413, "请求内容过大");
+  if (declaredLength && Number(declaredLength) > maxBodyBytes) return apiError(413, "请求内容过大");
   if (!request.body) return apiError(400, "请求内容格式不正确");
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -41,7 +43,7 @@ async function readObject(request: Request): Promise<JsonObject | Response> {
       const { done, value } = await reader.read();
       if (done) break;
       length += value.byteLength;
-      if (length > MAX_BODY_BYTES) {
+      if (length > maxBodyBytes) {
         await reader.cancel();
         return apiError(413, "请求内容过大");
       }
@@ -357,6 +359,53 @@ async function virtualPaySettings(
   return result.kind === "saved" ? success(result.view) : apiError(503, "虚拟支付配置保存失败");
 }
 
+async function modelProbe(request: Request, env: AdminEnvironment, url: URL, providers: ModelProviderService): Promise<Response | null> {
+  const providerTest = url.pathname === "/api/admin/model-providers/test";
+  const featureTest = url.pathname.match(/^\/api\/admin\/feature-model-configs\/([^/]+)\/test$/);
+  if ((!providerTest && !featureTest) || request.method !== "POST") return null;
+  const auth = await requireAdmin(request, env.resolveUser!);
+  if (auth) return auth;
+  if (!modelGatewayEnabled(env)) return apiError(503, "模型供应商管理尚未启用");
+  const body = await readObject(request, featureTest ? 3 * 1024 * 1024 : MAX_BODY_BYTES);
+  if (body instanceof Response) return body;
+  const providerId = positiveId(body.providerId);
+  const baseUrl = text(body.baseUrl) || undefined;
+  const apiKey = text(body.apiKey) || undefined;
+  const model = text(body.model) || undefined;
+  const apiStyle = text(body.apiStyle) || undefined;
+  const featureKey = featureTest?.[1];
+  if (Number.isNaN(providerId) || (baseUrl && baseUrl.length > 255) || (apiKey && apiKey.length > 4096)) return apiError(400, "测试参数格式不正确");
+  if (providerTest && !providerId && (!baseUrl || !apiKey)) return apiError(400, "请填写基础地址和 API 密钥");
+  if (featureKey) {
+    const styles = featureKey === "recitation_asr" ? ["DASHSCOPE_ASR"] : featureKey === "blog_agent_image"
+      ? ["IMAGES_GENERATIONS", "CHAT_COMPLETIONS", "CHAT_PROMPT"] : ["CHAT_COMPLETIONS", "RESPONSES"];
+    if (!MODEL_FEATURES.includes(featureKey) || !providerId || !model || model.length > 100 || !apiStyle || !styles.includes(apiStyle)) return apiError(400, "请完整填写供应商、模型和接口风格");
+  }
+  const prompt = text(body.prompt) || undefined;
+  const messages = body.messages ?? [];
+  const imageDataUrl = text(body.imageDataUrl) || undefined;
+  const maxOutputTokens = body.maxOutputTokens;
+  const imageSize = text(body.imageSize) || undefined;
+  if (featureKey) {
+    if (!prompt || prompt.length > 8000) return apiError(400, "请输入提示词，且不超过 8000 个字符");
+    if (!Array.isArray(messages) || messages.length > 16 || messages.some((message) => {
+      const row = message && typeof message === "object" ? message as JsonObject : {};
+      return !["user", "assistant"].includes(String(row.role)) || typeof row.content !== "string" || row.content.length > 24000;
+    }) || JSON.stringify(messages).length > 32000) return apiError(400, "测试对话历史过长或格式不正确，请清空对话后重试");
+    if (maxOutputTokens !== undefined && (typeof maxOutputTokens !== "number" || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 8192)) return apiError(400, "输出 token 上限必须为 1 到 8192 的整数");
+    if (imageSize && !["256x256", "512x512", "1024x1024", "1024x1536", "1536x1024", "1792x1024", "1024x1792"].includes(imageSize)) return apiError(400, "图片尺寸不支持");
+    if (imageDataUrl && (imageDataUrl.length > 2_800_000 || !/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/]+={0,2}$/i.test(imageDataUrl))) return apiError(400, "测试图片必须为不超过 2MB 的 PNG、JPEG 或 WebP 图片");
+    if (featureKey === "img2three_vision" && !imageDataUrl) return apiError(400, "请上传用于视觉模型测试的图片");
+  }
+  const result = await new ModelProbeService(providers, new HttpModelProbeMapper()).test({
+    providerId: providerId ?? undefined, baseUrl: providerTest ? baseUrl : undefined,
+    apiKey: providerTest ? apiKey : undefined, model: featureKey ? model : undefined,
+    apiStyle: featureKey ? apiStyle : undefined, featureKey,
+    ...(featureKey ? { prompt, messages: messages as import("./interfaces/model-probe.js").ModelProbeMessage[], imageDataUrl, maxOutputTokens: maxOutputTokens as number | undefined, imageSize } : {}),
+  }, env.MODEL_PROVIDER_ENCRYPTION_KEY);
+  return jsonResponse({ code: 200, message: result.ok ? "测试通过" : "测试未通过", data: result });
+}
+
 export async function handleAdminSettingsRequest(
   request: Request,
   env: AdminEnvironment & { resolveUser: UserResolver },
@@ -366,7 +415,8 @@ export async function handleAdminSettingsRequest(
   virtualPay: VirtualPaySettingsService,
 ): Promise<Response | null> {
   const url = new URL(request.url);
-  return await modelProviders(request, env, url, providers)
+  return await modelProbe(request, env, url, providers)
+    ?? await modelProviders(request, env, url, providers)
     ?? await featureConfigs(request, env, url, featureModelConfigs)
     ?? await wechatCredential(request, env, url, wechatCredentials)
     ?? await virtualPaySettings(request, env, url, virtualPay);

@@ -14,6 +14,29 @@ interface CoreEnvelope {
 export class CorePaymentMapper implements PaymentCorePort {
   constructor(private readonly env: PaymentEnvironment) {}
 
+  async refundPoints(action: "quote"|"reserve"|"complete"|"release",userId: number,eventKey: string,refundId: string) {
+    const data=await this.call("/internal/v1/payment/points/refund",{action,userId,eventKey,refundId});
+    const value=data.result;
+    if (value===null || typeof value==='boolean') return value;
+    if (!value || typeof value!=='object') throw new PaymentCoreError(503,"退款积分服务暂不可用");
+    const row=value as import("../interfaces/payment-core-port.js").RefundPointsResult;
+    if (!Number.isSafeInteger(row.original) || row.original<=0 || !Number.isSafeInteger(row.remaining) || row.remaining<0
+      || (row.amount!==undefined && (!Number.isSafeInteger(row.amount)||row.amount<0))) throw new PaymentCoreError(503,"退款积分数据无效");
+    return row;
+  }
+  async subscription(userId: number) {
+    const data = await this.call("/internal/v1/payment/subscription", { userId });
+    if (typeof data.tier !== "string" || typeof data.active !== "boolean")
+      throw new PaymentCoreError(503, "订阅状态暂不可用");
+    return {
+      tier: data.tier,
+      active: data.active,
+      tierExpiresAt: typeof data.tierExpiresAt === "string" ? data.tierExpiresAt : null,
+    };
+  }
+  async grantPoints(input: { userId: number; points: number; eventKey: string }) {
+    await this.call("/internal/v1/payment/points/grant", input);
+  }
   async resolveWechatIdentity(userId: number, loginCode: string): Promise<PaymentWechatIdentity> {
     const data = await this.call("/internal/v1/payment/identity/resolve", { userId, loginCode });
     if (typeof data.openid !== "string" || typeof data.sessionKey !== "string") {
@@ -49,8 +72,12 @@ export class CorePaymentMapper implements PaymentCorePort {
     } catch {
       throw new PaymentCoreError(503, "身份服务暂不可用");
     }
-    if (endpoint.protocol !== "https:" && endpoint.hostname !== "127.0.0.1"
-      && endpoint.hostname !== "localhost") throw new PaymentCoreError(503, "身份服务暂不可用");
+    if (
+      endpoint.protocol !== "https:" &&
+      endpoint.hostname !== "127.0.0.1" &&
+      endpoint.hostname !== "localhost"
+    )
+      throw new PaymentCoreError(503, "身份服务暂不可用");
     try {
       const request = new Request(endpoint, {
         method: "POST",
@@ -68,7 +95,8 @@ export class CorePaymentMapper implements PaymentCorePort {
       let envelope: CoreEnvelope;
       try {
         const parsed: unknown = await response.json();
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid envelope");
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+          throw new Error("invalid envelope");
         envelope = parsed as CoreEnvelope;
       } catch {
         throw new PaymentCoreError(503, "身份服务暂不可用");

@@ -95,11 +95,19 @@ function timestampedEventData(value: string, createdAt: string): unknown {
 function streamResponse(
   run: (sink: (id: number, eventType: string, data: unknown) => void) => Promise<unknown>,
   context?: WorkerExecutionContextLike,
+  runVersion?: number,
 ): Response {
   let open = true;
+  let heartbeat: ReturnType<typeof setInterval> | undefined;
+  const stopHeartbeat = () => { if (heartbeat) clearInterval(heartbeat); };
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const encoder = new TextEncoder();
+      // Acknowledge the claimed turn before model setup or the first persisted model event.
+      controller.enqueue(encoder.encode(sseFrame(null, "accepted", { runVersion })));
+      heartbeat = setInterval(() => {
+        if (open) controller.enqueue(encoder.encode(": heartbeat\n\n"));
+      }, 15_000);
       const execution = run((id, eventType, data) => {
         if (!open) return;
         controller.enqueue(encoder.encode(sseFrame(id, eventType, data)));
@@ -107,9 +115,13 @@ function streamResponse(
         // the durable terminal event without waiting for those network calls.
         if (eventType === "complete" || eventType === "error") {
           open = false;
+          stopHeartbeat();
           controller.close();
         }
-      }).catch(() => undefined).finally(() => {
+      }).catch(() => {
+        if (open) controller.enqueue(encoder.encode(sseFrame(null, "error", "智能体服务暂不可用")));
+      }).finally(() => {
+        stopHeartbeat();
         if (open) {
           open = false;
           controller.close();
@@ -119,6 +131,7 @@ function streamResponse(
     },
     cancel() {
       open = false;
+      stopHeartbeat();
     },
   });
   return new Response(stream, {
@@ -167,6 +180,10 @@ export async function handleAgentRunRequest(
     if (action === "events") {
       const conversation = await service.getConversation(userId, conversationId);
       if (!conversation) return apiError(404, "会话不存在");
+      const requestedRun = url.searchParams.get("runVersion");
+      if (requestedRun && requestedRun !== String(conversation.runVersion)) {
+        return apiError(409, "本轮对话已结束或被替代");
+      }
       const headerCursor = request.headers.get("last-event-id");
       const queryCursor = url.searchParams.get("afterEventId");
       const cursorText = headerCursor?.trim() || queryCursor || "0";
@@ -228,7 +245,7 @@ export async function handleAgentRunRequest(
     if (action === "messages/stream") {
       return streamResponse(async (sink) => service.executeTurn(
         userId, conversationId, runVersion, sink, turnRequest.deepThinking, undefined, language,
-      ), context);
+      ), context, runVersion);
     }
 
     let failure: string | null = null;

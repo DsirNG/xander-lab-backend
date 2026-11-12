@@ -74,6 +74,7 @@
 	},
 	"observability": {
 		"enabled": true
-	}
+	},
+  "placement": { "region": "aws:ap-southeast-1" }
 }
 

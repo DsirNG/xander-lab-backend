@@ -6,6 +6,20 @@ import { BlogAgentModelService } from "../.test-build/services/blog-agent-model-
 
 afterEach(() => mock.restoreAll());
 
+test('conversation child stages never start detached provider retries or fallbacks', async () => {
+  const calls = [];
+  const service = new BlogAgentModelService({ async complete(input) {
+    calls.push(input);
+    return { payloadJson: '{}', inputTokens: 0, cachedTokens: 0, outputTokens: 0, model: 'test' };
+  } });
+  await service.execute('research', { input: 'topic', conversationTask: true });
+  await service.execute('article', { input: 'topic', workflowMode: 'quick', conversationTask: true });
+  for (const input of calls) {
+    assert.equal(input.maxAttempts, 1);
+    assert.equal(input.maxCandidates, 1);
+  }
+});
+
 test("Core blog model service maps Java stages to scoped prompts and validates inputs", async () => {
   const calls = [];
   const service = new BlogAgentModelService({

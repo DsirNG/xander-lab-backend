@@ -14,6 +14,8 @@ export class AgentConversationService {
   constructor(
     private readonly repository: AgentConversationRepository,
     private readonly attachments?: AgentAttachmentService,
+    private readonly mediaPublicBaseUrl?: string,
+    private readonly imageUrls?: { refresh(userId: number, contents: string[]): Promise<string[]> },
   ) {}
 
   async create(userId: number, content: string): Promise<{ conversation: AgentConversationRecord; messages: [] } | null> {
@@ -50,7 +52,8 @@ export class AgentConversationService {
       this.messages(conversationId, row.userId),
       this.repository.listWorkspaceResults(conversationId),
     ]);
-    return { conversation: this.withUnread(row), messages, workspaceResults };
+    const workspaceContent = await this.refreshImageContents(row.userId, workspaceResults.map(result => result.dataContent));
+    return { conversation: this.withUnread(row), messages, workspaceResults: workspaceResults.map((result, index) => ({ ...result, dataContent: workspaceContent[index] })) };
   }
 
   async listMessages(userId: number, conversationId: number): Promise<unknown[] | null> {
@@ -102,6 +105,7 @@ export class AgentConversationService {
     const refreshed = this.attachments
       ? await this.attachments.refreshStoredMany(userId, attachmentValues)
       : attachmentValues;
+    const content = await this.refreshImageContents(userId, rows.map(row => row.content));
     return rows.map((row, index) => {
       return {
         id: row.id,
@@ -111,11 +115,27 @@ export class AgentConversationService {
         kind: row.kind,
         toolName: row.toolName,
         invocationId: row.invocationId,
-        content: row.content,
+        content: content[index],
         attachments: refreshed[index] ?? [],
         createdAt: row.createdAt,
       };
     });
+  }
+
+  private refreshImageContents(userId: number, contents: string[]): Promise<string[]> {
+    const normalized = contents.map(content => this.refreshMediaUrls(content));
+    return this.imageUrls ? this.imageUrls.refresh(userId, normalized) : Promise.resolve(normalized);
+  }
+
+  /** Rewrite only our legacy public-image URLs; durable history remains unchanged. */
+  private refreshMediaUrls(content: string): string {
+    if (!this.mediaPublicBaseUrl) return content;
+    const base = new URL(this.mediaPublicBaseUrl);
+    if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) return content;
+    return content.replace(
+      /https:\/\/dinqor-content-automation\.dinqor\.workers\.dev\/api\/public\/blog\/media\/(?=[1-9]\d{0,17}\/\d{4}\/(?:0[1-9]|1[0-2])\/[0-9a-f-]{36}\.(?:png|jpg|webp|gif)(?:[\s"'<>\x60)\]\\]|$))/g,
+      () => base.toString().replace(/\/+$/, "") + "/",
+    );
   }
 
   private withUnread<T extends AgentConversationRecord>(row: T): T & { unread: boolean } {

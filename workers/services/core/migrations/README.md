@@ -38,3 +38,5 @@ changes, and logout revoke the corresponding D1 refresh sessions.
 Production user data is not imported by
 local D1 migrations; the migration plan must define an explicit export,
 ID-preserving import, and checksum process before cutover.
+
+`0011_payment_refunds.sql` adds order-attributed permanent point lots, atomic refund holds, and membership revocation. Existing untracked balances remain untouched; refund holds and releases are excluded from consumption. Apply before deploying the refund services.

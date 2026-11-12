@@ -47,7 +47,8 @@ export interface AgentTurnRepository {
   ): Promise<void>;
   finishTurn(userId: number, conversationId: number, runVersion: number, answer: string): Promise<{ completeEventId: number }>;
   failTurn(userId: number, conversationId: number, runVersion: number, message: string): Promise<number>;
-  cancelTurn(userId: number, conversationId: number): Promise<AgentConversationRecord | null>;
+  requestCancellation?(userId: number, conversationId: number, runVersion: number): Promise<boolean>;
+  cancelTurn(userId: number, conversationId: number, expectedRunVersion?: number): Promise<AgentConversationRecord | null>;
   isCancellationRequested(userId: number, conversationId: number, runVersion: number): Promise<boolean>;
   listEventsAfter(conversationId: number, runVersion: number, afterEventId: number): Promise<AgentRunEvent[]>;
 }

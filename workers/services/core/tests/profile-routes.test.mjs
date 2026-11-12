@@ -23,7 +23,7 @@ function environment(overrides = {}) {
           bind(...bound) { values = bound; return statement; },
           async first() {
             if (sql.includes("FROM sys_user WHERE id = ? AND NOT EXISTS")) return values[0] === 42 ? user : null;
-            if (sql.includes("SELECT balance FROM sys_user_points WHERE user_id = ?")) return { balance: 1250 };
+            if (sql.includes("SELECT balance FROM available_points WHERE user_id = ?")) return { balance: 1250 };
             throw new Error(`Unexpected query: ${sql}`);
           },
         };
@@ -109,4 +109,28 @@ test("admin diagnostic broadcast calls Content only for a verified administrator
 test("profile overview fails closed when Content is unavailable", async () => {
   const response = await coreWorker.fetch(await request("/api/profile/overview"), environment());
   assert.equal(response.status, 503);
+});
+
+test("lightweight profile overview returns identity and balance without waiting for Content", async () => {
+  const upstream = mock.method(globalThis, "fetch", async () => {
+    throw new Error("Lightweight overview must not call Content");
+  });
+  try {
+    const response = await coreWorker.fetch(await request("/api/profile/overview?includeBlogCount=false"), environment());
+    assert.equal(response.status, 200);
+    const { data } = await response.json();
+    assert.equal(data.user.username, "profile-user");
+    assert.equal(data.points, 1250);
+    assert.equal(data.blogCount, null);
+    assert.equal(upstream.mock.callCount(), 0);
+  } finally {
+    upstream.mock.restore();
+  }
+});
+
+test("lightweight profile still requires a valid session", async () => {
+  const response = await coreWorker.fetch(new Request("https://core.test/api/profile/overview?includeBlogCount=false", {
+    headers: { "x-dinqor-service-token": serviceToken },
+  }), environment());
+  assert.equal(response.status, 401);
 });

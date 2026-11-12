@@ -1,5 +1,12 @@
+export interface QrLoginDevice {
+  os: "windows" | "macos" | "linux" | "android" | "ios" | "chromeos" | "unknown";
+  browser: "edge" | "chrome" | "firefox" | "safari" | "opera" | "unknown";
+}
+
 export interface QrLoginState extends Record<string, unknown> {
   status?: unknown;
+  device?: QrLoginDevice;
+  createdAt?: unknown;
   expiresAt?: unknown;
   exchangeCode?: unknown;
   userId?: unknown;

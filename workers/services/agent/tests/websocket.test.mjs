@@ -101,3 +101,18 @@ test("Agent WebSocket responds to ping with pong", async () => {
   await background;
   assert.equal(response.status, 200);
 });
+
+
+test("Agent WebSocket closes on approval pause instead of polling an inactive turn forever", async () => {
+  const client = new FakeSocket();
+  const server = new FakeSocket();
+  let background;
+  await handleAgentWebSocketRequest(wsRequest(), {
+    async getConversation() { return { id: 7, runVersion: 4, status: "awaiting_approval" }; },
+    async listEventsAfter() { return [{ id: 12, eventType: "approval_required", dataContent: '{"id":9}' }]; },
+  }, async () => 42, { waitUntil(promise) { background = promise; } },
+  () => ({ client, server }), () => new Response(null, { status: 200 }));
+  await background;
+  assert.deepEqual(server.sent.map(value => JSON.parse(value)), [{ id: 12, event: "approval_required", data: { id: 9 } }]);
+  assert.equal(server.closed.code, 1000);
+});

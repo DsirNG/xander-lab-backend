@@ -472,3 +472,78 @@ Known API/business notices retain their specific meaning; unknown notices use
 a localized status-based fallback. Add translations for new business notices
 in the Gateway catalog; its tests check existing literal error notices across
 all services. No translation service or additional network request is used.
+
+
+## Agent message streaming contract
+
+Web and WeChat clients submit new turns through `POST /api/agent/conversations/:id/messages/stream`.
+After owner authentication and the durable turn claim, the response immediately emits an
+`accepted` SSE event containing `runVersion`, followed by persisted run events. Model setup
+and generation do not delay the acknowledgement. SSE comments provide a 15-second heartbeat;
+terminal events close the response before billing/cleanup finishes. WeChat reads UTF-8 chunks
+incrementally through `onChunkReceived`; H5 uses Fetch ReadableStream. Existing running turns
+and interrupted streams recover via one owner-scoped snapshot and WebSocket event replay,
+without replaying the POST. The legacy non-streaming `/messages` endpoint remains synchronous
+for compatibility and is not the interactive client transport.
+
+### Request latency diagnostics
+
+The Gateway returns `Server-Timing` durations in milliseconds: `auth` covers its
+identity/rate-limit stage, `upstream` covers the downstream response headers, and
+`gateway` covers processing through JSON localization. These overlapping timings
+are not additive and exclude client DNS/TLS and final body delivery. No token or
+user information is included. WebSocket upgrades remain untouched.
+
+`GET /api/profile/overview?includeBlogCount=false` returns authenticated profile
+and live points without a Content-service count request (`blogCount: null`). The
+Mini Program uses this lightweight form; the default endpoint retains its full
+statistics contract. A missing count must never be presented as zero.
+
+Gateway and Content run in `aws:ap-southeast-1` to keep the service-binding hop
+near the Content D1 primary observed in SIN. Production category probes after
+co-location measured 19–87ms of Gateway processing, excluding client network and
+connection setup; this does not establish latency guarantees for other routes.
+
+Public article pagination reads the count and page records in a single D1 batch
+transaction. Independent parallel reads are insufficient for a consistent page
+under concurrent publication or deletion. This guarantees one response snapshot,
+not a frozen snapshot across separate pagination requests.
+
+Agent image generation emits durable `tool_start` (`outputType: image`, `invocationId`, `startedAt`), `tool_progress` (`progress`, `estimated`, `stage`), then `tool_result` or `tool_error`. Estimated progress starts at 5%, slows toward 90%, and reaches 100% when provider image bytes are ready. A transient `image_preview` event (id 0, never persisted) delivers the inline raster image before OSS upload, media registration and billing. `tool_result` replaces it with the durable asset URL after saving. The existing Worker execution context keeps the remaining save work alive after client disconnect; failed saving retains the client preview until navigation or reload. Progress timers are cleared on success and failure.
+
+Generated-image public URLs use `CONTENT_MEDIA_PUBLIC_BASE_URL` on Content. Set
+`AGENT_MEDIA_PUBLIC_BASE_URL` to the same custom-domain media base to rewrite legacy
+Workers media links when reading conversation messages and workspace results. The
+Gateway exposes anonymous GET `/api/public/blog/media/*/*/*/*` through Content;
+object validation and media existence checks remain owned by Content.
+
+Image presentation uses 24-hour signed OSS URLs. Content signs media responses at
+read time; D1 retains durable keys. Agent re-signs owned generated-image links in
+private/shared conversation history and workspace outputs using local Web Crypto,
+without downloading images. Legacy public media URLs validate the existing asset
+and redirect to OSS with `Cache-Control: no-store`. Immediate inline generation
+preview and background media registration remain unchanged.
+
+
+### Agent streaming latency diagnostics
+
+Agent context setup starts model configuration, history, skills and MCP discovery
+concurrently; optional memory lookup starts as soon as history is available.
+Live `answer_preview` frames use ID 0 and `{offset,text}` (UTF-16 offsets).
+They are provisional and never advance a reconnect cursor. Ordered `answer_delta`
+checkpoints retain the existing string payload and durable IDs, so replay and
+WebSocket subscribers remain compatible. Clients accepting previews deduplicate
+checkpoint overlap by text position. One checkpoint write is in flight at a time;
+new text coalesces, with a 120ms idle flush / 512-character threshold. Pending
+checkpoints drain before tool/terminal events and final answers remain atomic.
+A checkpoint failure aborts generation and emits a failed turn, never completion.
+
+`agent.turn.timing` logs context, first delivery, checkpoint, drain, final save,
+terminal and total durations; `agent.model.timing` logs each attempt's response
+headers, first text and total durations, model/API style and HTTP status.
+Neither log includes prompts, answers, credentials or provider URLs. Timing
+starts at turn execution (authentication and claim happen earlier). Browser
+Performance mark `agent.answer.first-frame` records the delay from starting the
+client run to scheduling the first answer render; it is not a paint measurement.
+Production comparisons must use the same model, prompt and conversation context;
+provider generation time is outside the platform's control.

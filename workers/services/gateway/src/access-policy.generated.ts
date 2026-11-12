@@ -422,6 +422,16 @@ export const ACCESS_POLICY =
   ],
   "public_get": [
     {
+      "id": "blog-media-public-image",
+      "match": {
+        "method": "GET",
+        "path_prefix": "/api/public/blog/media/"
+      },
+      "owner": "publishing",
+      "access": "public",
+      "identity_mode": "none"
+    },
+    {
       "id": "blog-posts-list",
       "match": {
         "method": "GET",
@@ -819,6 +829,30 @@ export const ACCESS_POLICY =
         "path_pattern": "/api/publishing/*/authorization/extension/*/cancel"
       },
       "owner": "integration"
+    },
+    {
+      "id": "virtualpay-order-list",
+      "match": {
+        "method": "GET",
+        "path": "/api/virtual-pay/orders"
+      },
+      "owner": "virtualpay"
+    },
+    {
+      "id": "virtualpay-refund-read",
+      "match": {
+        "method": "GET",
+        "path_pattern": "/api/virtual-pay/orders/*/*"
+      },
+      "owner": "virtualpay"
+    },
+    {
+      "id": "virtualpay-refund-write",
+      "match": {
+        "method": "POST",
+        "path_pattern": "/api/virtual-pay/orders/*/refund"
+      },
+      "owner": "virtualpay"
     },
     {
       "id": "virtualpay-order-create",

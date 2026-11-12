@@ -287,3 +287,59 @@ test("Agent receives decrypted model candidates only through the protected Core 
     model: "image-model", apiStyle: "IMAGES_GENERATIONS",
   }]);
 });
+
+
+test("admin model probes authenticate and validate drafts before calling upstream", async () => {
+  for (const path of ["/api/admin/model-providers/test", "/api/admin/feature-model-configs/agent/test"]) {
+    const denied = await coreWorker.fetch(await request(path, { method: "POST", body: {}, role: "USER" }), env("USER"));
+    assert.equal(denied.status, 403);
+    const unavailable = await coreWorker.fetch(await request(path, { method: "POST", body: {} }), env("ADMIN", { ADMIN_MODEL_GATEWAY_ENABLED: "false" }));
+    assert.equal(unavailable.status, 503);
+    const invalid = await coreWorker.fetch(await request(path, { method: "POST", body: {} }), env());
+    assert.equal(invalid.status, 400);
+  }
+  const badStyle = await coreWorker.fetch(await request("/api/admin/feature-model-configs/agent/test", {
+    method: "POST", body: { providerId: 1, model: "m", apiStyle: "IMAGES_GENERATIONS" },
+  }), env());
+  assert.equal(badStyle.status, 400);
+  const missing = await coreWorker.fetch(await request("/api/admin/feature-model-configs/agent/test", {
+    method: "POST", body: { providerId: 99, model: "m", apiStyle: "RESPONSES", prompt: "Hello" },
+  }), env());
+  assert.equal((await missing.json()).data.reason, "provider_missing");
+});
+
+
+test("admin test chat requires a user prompt and exposes a redacted upstream 400 diagnostic", async (t) => {
+  const environment = env();
+  const create = await coreWorker.fetch(await request("/api/admin/model-providers", {
+    method: "POST", body: { name: "Test chat provider", vendor: "OPENAI_COMPATIBLE", baseUrl: "https://models.example/v1", apiKey: "admin-test-key" },
+  }), environment);
+  const providerId = (await create.json()).data.id;
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (_url, init) => {
+    calls++;
+    assert.equal(JSON.parse(init.body).prompt, "My image prompt");
+    return new Response(JSON.stringify({ error: { message: "Unsupported parameter size for admin-test-key", code: "unsupported_parameter", param: "size" } }), { status: 400, headers: { "content-type": "application/json" } });
+  });
+  const payload = { providerId, model: "image-model", apiStyle: "IMAGES_GENERATIONS" };
+  const missingPrompt = await coreWorker.fetch(await request("/api/admin/feature-model-configs/blog_agent_image/test", { method: "POST", body: payload }), environment);
+  assert.equal(missingPrompt.status, 400);
+  assert.equal(calls, 0);
+  const response = await coreWorker.fetch(await request("/api/admin/feature-model-configs/blog_agent_image/test", { method: "POST", body: { ...payload, prompt: "My image prompt" } }), environment);
+  const body = await response.json();
+  assert.equal(body.message, "测试未通过");
+  assert.equal(body.data.error.param, "size");
+  assert.match(body.data.error.message, /Unsupported parameter size/);
+  assert.equal(JSON.stringify(body).includes("admin-test-key"), false);
+  assert.equal(calls, 1);
+  assert.equal(environment.DB.configs.size, 0);
+});
+
+test("admin test chat rejects invalid history, token limits and missing vision image", async () => {
+  for (const extra of [{ messages: [{ role: "system", content: "untrusted" }] }, { maxOutputTokens: 0 }, { imageSize: "bad" }]) {
+    const response = await coreWorker.fetch(await request("/api/admin/feature-model-configs/agent/test", { method: "POST", body: { providerId: 1, model: "m", apiStyle: "RESPONSES", prompt: "Hello", ...extra } }), env());
+    assert.equal(response.status, 400);
+  }
+  const response = await coreWorker.fetch(await request("/api/admin/feature-model-configs/img2three_vision/test", { method: "POST", body: { providerId: 1, model: "m", apiStyle: "RESPONSES", prompt: "What is in this image?" } }), env());
+  assert.equal(response.status, 400);
+});

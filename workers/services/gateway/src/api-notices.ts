@@ -1,5 +1,31 @@
 /** Additional public business notices shared by the API language boundary. */
 export const businessNotices: Record<string, string> = Object.fromEntries(`
+退款请求无效|Invalid refund request
+退款积分处理暂不可用|Refund point processing is temporarily unavailable
+退款服务暂不可用|The refund service is temporarily unavailable
+退款金额无效|Invalid refund amount
+订单退款服务暂不可用|The order refund service is temporarily unavailable
+退款积分服务暂不可用|The refund points service is temporarily unavailable
+退款积分数据无效|Invalid refund point data
+退款积分数据不一致|Refund point data is inconsistent
+退款积分服务未就绪|The refund points service is not ready
+订单列表暂不可用|The order list is temporarily unavailable
+可退金额已变化，请重新确认|The refundable amount has changed. Please confirm again
+退款创建失败|Unable to create the refund request
+没有可退款积分或订单需人工处理|No refundable points remain, or the order requires manual review
+退款积分恢复中|Refund points are being restored
+退款条件已变化，请联系支持|Refund conditions have changed. Please contact support
+退款权益处理稍后重试|Refund benefits are being reconciled. Please retry later
+退款通知与订单不一致|The refund notification does not match the order
+外部部分退款需人工核对|An external partial refund requires manual reconciliation
+外部退款结果核对中|The external refund result is being verified
+外部退款需核对权益|Benefits for the external refund require reconciliation
+外部退款权益核对中|Benefits for the external refund are being verified
+退款结果核对中|The refund result is being verified
+请向 Apple 申请退款|Please request a refund from Apple
+支付已超过7天，不支持申请退款|More than 7 days have passed since payment. Refund requests are unavailable
+订单暂不支持自助退款，请查看订单说明|Self-service refunds are unavailable for this order. See the order details
+
 定位授权结果格式不正确|Invalid location authorization result format
 天气查询服务尚未配置|The weather query service is not configured
 天气查询参数格式不正确|Invalid weather query parameters
@@ -68,6 +94,11 @@ MCP 服务器重定向已拒绝|The MCP server redirect was rejected
 图片生成工具缺少有效参数 prompt|The image generation tool requires a valid prompt
 图片生成模型配置暂不可用|The image generation model configuration is temporarily unavailable
 图片生成模型尚未配置|The image generation model is not configured
+图片任务启动失败|The image generation task could not be started
+图片生成已停止。|Image generation has stopped.
+图片生成任务已中断，请重试。|Image generation was interrupted. Please try again.
+图片生成任务已中断或超时，请重试。|Image generation was interrupted or timed out. Please try again.
+图片生成失败，请重试。|Image generation failed. Please try again.
 图片生成模型调用失败，请检查图片模型接口配置或供应商状态|Image generation failed. Check the model API configuration or provider status
 图片已经生成，但保存到素材库失败|The image was generated but could not be saved to the media library
 图片已经保存到素材库，但积分扣费记录失败|The image was saved, but its points charge could not be recorded
@@ -349,6 +380,9 @@ CSDN 同步过于频繁，请稍后再试|CSDN synchronization is too frequent. 
 微信支付身份服务暂不可用|The WeChat payment identity service is temporarily unavailable
 创建虚拟支付订单失败|Unable to create the virtual payment order
 支付订单不存在|The payment order does not exist
+支付订单商品不匹配|The product does not match the payment order
+订单已支付或已过期，请重新选择商品|The order is paid or expired. Please select the product again
+微信支付身份与订单不一致|The WeChat payment identity does not match the order
 微信虚拟支付尚未配置|WeChat virtual payment is not configured
 微信虚拟支付查单暂不可用|WeChat virtual payment order queries are temporarily unavailable
 微信订单实付金额与本地订单不一致|The paid WeChat amount does not match the local order

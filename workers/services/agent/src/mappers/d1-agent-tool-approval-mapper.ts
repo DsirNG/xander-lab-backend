@@ -33,7 +33,7 @@ export class D1AgentToolApprovalMapper implements AgentToolApprovalRepository {
         UPDATE agent_conversation
         SET status = 'awaiting_approval', error_message = NULL,
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
+        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0
         RETURNING id
       `).bind(input.conversationId, input.userId, input.runVersion),
       this.db.prepare(`

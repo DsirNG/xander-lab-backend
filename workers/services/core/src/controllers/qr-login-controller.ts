@@ -27,7 +27,7 @@ export async function handleQrLoginRequest(
   if (request.method === "POST" && url.pathname === "/api/auth/qr/create") {
     const limited = await dependencies.enforceRateLimit(request, "auth-qr-ip", 10);
     if (limited) return limited;
-    const created = await dependencies.service.create();
+    const created = await dependencies.service.create(Date.now(), request.headers.get("User-Agent") ?? "");
     const qrCode = await dependencies.qrImages.createLoginQr(created.ticket);
     if (!qrCode) {
       await dependencies.service.delete(created.ticket);

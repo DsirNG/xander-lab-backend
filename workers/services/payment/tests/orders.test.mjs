@@ -15,9 +15,9 @@ function enabledSettings() {
     enabled: true,
     offerId: "offer-123",
     appKey: "application-key",
-    plus: { productId: "plus-month", priceCents: 1200, durationDays: 30 },
-    pro: { productId: "pro-month", priceCents: 2400, durationDays: 30 },
-    ultra: { productId: "ultra-month", priceCents: 4800, durationDays: 30 },
+    plus: { productId: "plus-month", priceCents: 200, durationDays: 30 },
+    pro: { productId: "pro-month", priceCents: 400, durationDays: 30 },
+    ultra: { productId: "ultra-month", priceCents: 1000, durationDays: 30 },
   };
 }
 
@@ -27,6 +27,8 @@ function setup(overrides = {}) {
     async findSettings() { return settingsRow ? { ...settingsRow } : null; },
     async saveSettings(input) {
       settingsRow = {
+        pointsProductsJson: input.pointsProducts === undefined ? settingsRow?.pointsProductsJson ?? null : JSON.stringify(input.pointsProducts),
+          pointsProductId: input.pointsProductId ?? "",
         enabled: input.enabled ? 1 : 0,
         offerId: input.offerId,
         encryptedAppKey: input.encryptedAppKey,
@@ -46,9 +48,13 @@ function setup(overrides = {}) {
   };
   const records = new Map();
   const orderRepo = {
+    async findPayable(userId, productId, quantity) {
+      return [...records.values()].find(o => o.userId === userId && o.productId === productId && o.quantity === quantity && o.status === 'PENDING' && Date.parse(o.createdAt) + 900000 > Date.now()) ?? null;
+    },
     async insertPending(input) {
+      if ([...records.values()].some(o => o.userId === input.userId && o.productId === input.productId && o.quantity === input.quantity && o.status === 'PENDING' && Date.parse(o.createdAt) + 900000 > Date.now())) return false;
       records.set(input.outTradeNo, { id: records.size + 1, ...input, wxOrderId: null,
-        status: "PENDING", paidAt: null, deliveredAt: null });
+        status: "PENDING", createdAt: new Date().toISOString(), paidAt: null, deliveredAt: null });
       return true;
     },
     async findOwnedOrder(userId, tradeNo) {
@@ -68,6 +74,8 @@ function setup(overrides = {}) {
   };
   let grantCount = 0;
   const core = {
+    async subscription() { return overrides.subscription ?? {tier:"FREE",active:false,tierExpiresAt:null}; },
+    async grantPoints(input) { grantCount += 1; overrides.onPoints?.(input); },
     async resolveWechatIdentity(userId, loginCode) {
       if (overrides.identityError) throw overrides.identityError;
       return { openid: `openid-${userId}`, sessionKey: `session-${loginCode}` };
@@ -90,7 +98,7 @@ test("Payment creates a pending D1 order and returns both WeChat HMAC signatures
   assert.equal(payData.mode, "short_series_goods");
   assert.equal(signData.offerId, "offer-123");
   assert.equal(signData.productId, "pro-month");
-  assert.equal(signData.goodsPrice, 2400);
+  assert.equal(signData.goodsPrice, 400);
   assert.equal(signData.attach, payData.outTradeNo);
   assert.equal(payData.paySig, createHmac("sha256", "application-key")
     .update(`requestVirtualPayment&${payData.signData}`).digest("hex"));
@@ -101,14 +109,42 @@ test("Payment creates a pending D1 order and returns both WeChat HMAC signatures
   assert.equal(records.get(payData.outTradeNo).openid, "openid-42");
 });
 
+test("only active subscribers can buy permanent points, in server-priced ten-point units",async()=>{
+  const denied=setup();
+  await denied.settings.save({...enabledSettings(),pointsProductId:"points-ten"},encryptionKey);
+  await assert.rejects(denied.orders.createOrder(42,"points-ten","login",2),e=>e.status===403);
+  let points;
+  const paid=setup({subscription:{tier:"PRO",active:true},queryResult:{paid:true,wxOrderId:"wx-points",paidFee:300},onPoints:i=>{points=i;}});
+  await paid.settings.save({...enabledSettings(),pointsProductId:"points-ten"},encryptionKey);
+  for(const qty of [0,-1,1.5,1001,NaN]) await assert.rejects(paid.orders.createOrder(42,"points-ten","login",qty),e=>e.status===400);
+  const order=await paid.orders.createOrder(42,"points-ten","login",3);
+  const signed=JSON.parse(order.signData);
+  assert.equal(signed.goodsPrice,100); assert.equal(signed.buyQuantity,3);
+  assert.equal(paid.records.get(order.outTradeNo).points,30);
+  await paid.orders.reconcile(42,order.outTradeNo);
+  await paid.orders.reconcile(42,order.outTradeNo);
+  assert.equal(paid.grantCount(),1); assert.equal(points.points,30);
+});
+
+test("an active plan cannot be repurchased or downgraded; upgrade pays full new price",async()=>{
+  const {settings,orders}=setup({subscription:{tier:"PRO",active:true}});
+  await settings.save(enabledSettings(),encryptionKey);
+  for(const product of ["plus-month","pro-month"]) await assert.rejects(orders.createOrder(42,product,"login"),e=>e.status===409);
+  await assert.rejects(orders.createOrder(42,"ultra-month","login",2),e=>e.status===400);
+  const order=await orders.createOrder(42,"ultra-month","login");
+  assert.equal(JSON.parse(order.signData).goodsPrice,1000);
+});
+
 test("Payment rejects missing products and does not create orders for another user's lookup", async () => {
-  const { settings, orders } = setup();
+  const { settings, orders, records } = setup();
   await settings.save(enabledSettings(), encryptionKey);
   await assert.rejects(orders.createOrder(42, "unconfigured-product", "login"), /不存在或未启用/);
   const created = await orders.createOrder(42, "plus-month", "login");
   await assert.rejects(orders.status(99, created.outTradeNo), (error) => error.status === 404);
-  assert.deepEqual(await orders.status(42, created.outTradeNo), {
+  const status = await orders.status(42, created.outTradeNo);
+  assert.deepEqual(status, {
     outTradeNo: created.outTradeNo, status: "PENDING", tier: "PLUS", deliveredAt: null,
+    expiresAt: new Date(Date.parse(records.get(created.outTradeNo).createdAt) + 900000).toISOString(), serverNow: status.serverNow,
   });
 });
 
@@ -129,7 +165,7 @@ test("Payment reconcile grants a verified paid order once and leaves pending ord
   assert.equal((await pending.orders.reconcile(42, pendingOrder.outTradeNo)).status, "PENDING");
   assert.equal(pending.grantCount(), 0);
 
-  const paid = setup({ queryResult: { paid: true, wxOrderId: "wx-123", paidFee: 1200 } });
+  const paid = setup({ queryResult: { paid: true, wxOrderId: "wx-123", paidFee: 200 } });
   await paid.settings.save(enabledSettings(), encryptionKey);
   const paidOrder = await paid.orders.createOrder(42, "plus-month", "login");
   assert.equal((await paid.orders.reconcile(42, paidOrder.outTradeNo)).status, "DELIVERED");
@@ -139,7 +175,7 @@ test("Payment reconcile grants a verified paid order once and leaves pending ord
 });
 
 test("Payment reconcile rejects paid-fee mismatches and non-owners", async () => {
-  const setupWithMismatch = setup({ queryResult: { paid: true, wxOrderId: "wx-123", paidFee: 1199 } });
+  const setupWithMismatch = setup({ queryResult: { paid: true, wxOrderId: "wx-123", paidFee: 199 } });
   await setupWithMismatch.settings.save(enabledSettings(), encryptionKey);
   const order = await setupWithMismatch.orders.createOrder(42, "plus-month", "login");
   await assert.rejects(setupWithMismatch.orders.reconcile(42, order.outTradeNo), (error) => error.status === 409);
@@ -260,3 +296,52 @@ test("Payment Core mapper maps identity rejection and refuses cross-account HTTP
   });
   await assert.rejects(insecure.resolveWechatIdentity(42, "code"), (error) => error.status === 503);
 });
+
+test("all three cards use server amounts and deliver immutable snapshots once after config removal",async()=>{
+ for(const points of [10,50,100]) {
+  let granted;
+  const ctx=setup({subscription:{tier:"PLUS",active:true},queryResult:{paid:true,wxOrderId:`wx-${points}`,paidFee:points*10},onPoints:i=>{granted=i;}});
+  const cards=[10,50,100].map(n=>({productId:`POINTS_${n}`,name:`${n}积分卡`,priceCents:n*10,points:n,enabled:true}));
+  assert.equal((await ctx.settings.save({...enabledSettings(),pointsProducts:cards},encryptionKey)).kind,"saved");
+  const response=await handlePaymentRequest(new Request("https://payment.example/api/virtual-pay/orders",{method:"POST",headers:{"content-type":"application/json","x-user-id":"42"},body:JSON.stringify({productId:`POINTS_${points}`,loginCode:"code",priceCents:1,points:999999})}),ctx.env,ctx.settings,ctx.orders);
+  assert.equal(response.status,200);
+  const order=(await response.json()).data;
+  assert.equal(JSON.parse(order.signData).goodsPrice,points*10);
+  assert.equal(ctx.records.get(order.outTradeNo).points,points);
+  await assert.rejects(ctx.orders.createOrder(42,`POINTS_${points}`,"code",Math.floor(10000/points)+1),e=>e.status===400);
+  await ctx.settings.save({...enabledSettings(),pointsProducts:[]},encryptionKey);
+  await assert.rejects(ctx.orders.createOrder(42,`POINTS_${points}`,"code"),e=>e.status===400);
+  await ctx.orders.reconcile(42,order.outTradeNo);await ctx.orders.reconcile(42,order.outTradeNo);
+  assert.equal(granted.points,points);assert.equal(ctx.grantCount(),1);
+ }
+ const denied=setup();
+ await denied.settings.save({...enabledSettings(),pointsProducts:[{productId:"POINTS_50",name:"50积分卡",points:50,priceCents:500,enabled:true}]},encryptionKey);
+ await assert.rejects(denied.orders.createOrder(42,"POINTS_50","code"),e=>e.status===403);
+});
+
+ test("pending checkout reuses the original number with a fresh session signature, including concurrent creates", async () => {
+  const { settings, orders, records } = setup();
+  await settings.save(enabledSettings(), encryptionKey);
+  const [first, second] = await Promise.all([orders.createOrder(42, 'plus-month', 'one'), orders.createOrder(42, 'plus-month', 'two')]);
+  assert.equal(first.outTradeNo, second.outTradeNo);
+  assert.equal(records.size, 1);
+  const resumed = await orders.createOrder(42, 'plus-month', 'three', 1, first.outTradeNo);
+  assert.equal(resumed.outTradeNo, first.outTradeNo);
+  assert.notEqual(resumed.signature, first.signature);
+  await assert.rejects(orders.createOrder(99, 'plus-month', 'x', 1, first.outTradeNo), e => e.status === 404);
+  await assert.rejects(orders.createOrder(42, 'pro-month', 'x', 1, first.outTradeNo), e => e.status === 409);
+  records.get(first.outTradeNo).createdAt = new Date(Date.now() - 900001).toISOString();
+  assert.equal((await orders.status(42, first.outTradeNo)).status, 'EXPIRED');
+  await assert.rejects(orders.createOrder(42, 'plus-month', 'x', 1, first.outTradeNo), e => e.status === 409);
+  const replacement = await orders.createOrder(42, 'plus-month', 'four');
+  assert.notEqual(replacement.outTradeNo, first.outTradeNo);
+ });
+ test("verified late payment is delivered even when the local checkout deadline passed", async () => {
+  const { settings, orders, records, grantCount } = setup({queryResult:{paid:true,wxOrderId:'late',paidFee:200}});
+  await settings.save(enabledSettings(), encryptionKey);
+  const order = await orders.createOrder(42, 'plus-month', 'one');
+  records.get(order.outTradeNo).createdAt = new Date(Date.now() - 900001).toISOString();
+  assert.equal((await orders.reconcile(42, order.outTradeNo)).status, 'DELIVERED');
+  assert.equal(grantCount(), 1);
+  await assert.rejects(orders.createOrder(42, 'plus-month', 'x', 1, order.outTradeNo), e => e.status === 409);
+ });

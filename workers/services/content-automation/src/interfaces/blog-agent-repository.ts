@@ -63,6 +63,7 @@ export interface BlogAgentSessionView {
 }
 
 export interface BlogAgentTaskRepository {
+  cancelByRequestId?(userId: number, requestId: string, now: string): Promise<void>;
   create(userId: number, input: string, clientRequestId: string | null, now: string, generationMode?: "quick" | "full"): Promise<number>;
   findById(userId: number, taskId: number): Promise<BlogAgentTask | null>;
   findByRequestId(userId: number, clientRequestId: string): Promise<BlogAgentTask | null>;

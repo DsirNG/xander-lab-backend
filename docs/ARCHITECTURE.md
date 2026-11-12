@@ -1,5 +1,17 @@
 # Backend Architecture
 
+## Workers image task execution
+
+Agent image generation is owned by an `AgentImageTaskObject` Durable Object alarm,
+keyed by conversation and run version. HTTP/SSE clients relay the D1 event log;
+disconnecting a subscriber does not cancel the image job. A persisted start marker
+prevents alarm retries from issuing a second paid generation after an uncertain
+interruption. Such retries record a terminal failure instead. Owned conversation
+reads recover image runs with no durable progress for ten minutes. Terminal failure
+events and conversation state changes are committed atomically and fenced by run
+version. Deployment requires the `IMAGE_TASKS` binding and `image-task-v1` SQLite
+Durable Object migration from the Agent Wrangler configuration.
+
 The current backend runtime remains Java/Spring Boot, with business capabilities
 grouped by feature and existing MySQL/Redis deployment topology. The proposed
 Cloudflare Workers + D1 target is documented separately in
@@ -578,3 +590,31 @@ CSDN connection verification is owned by Workers platform-integration: authentic
 The same private connection-test command is available for Juejin at POST /api/publishing/juejin/connection/test. PlatformConnectionService reads the owner's platform credential; JuejinCatalogMapper calls GET /user_api/v1/user/get with aid and no user_id. Juejin's err_no=0 with null data is an unauthenticated result, not successful verification; account IDs are preserved as decimal strings.
 
 Verified CSDN/Juejin account display data is persisted in Platform-owned platform_credential.account_profile (migration 0008). Credential authorization status returns only the owner's verified profile, authorized_at and last_validated_at. Fresh bindings clear previous profile data; profile updates compare the encrypted credential snapshot to fence reauthorization/disconnect races. The frontend restores stored details and requests verification once when a newly bound account has no profile. Current CSDN account API signing is configured separately through PLATFORM_CSDN_ACCOUNT_API_KEY and PLATFORM_CSDN_ACCOUNT_API_SECRET; publishing keeps its existing signing configuration.
+
+### Workers 对话停止契约
+
+停止先按用户和执行代次持久化取消标记，阻止执行器继续及写入结果；关联子任务确认终止后，
+Agent D1 在同一事务保存 `complete {status:"ready",cancelled:true}`
+与 ready 状态，保留 `cancel_requested=1` 表示该代次已取消，下一轮领取时清零。
+执行器不存在、连接断开或请求重复均不妨碍终止；旧代次不能追加事件、答案或特殊消息，也不能覆盖新代次。
+模型请求、备用模型及只读子任务每次继续前重新检查执行权，正在等待的模型连接通过 AbortSignal 退出。
+图片服务可完成已经发出的供应商请求，但返回后不再重试、保存图片、扣费或发布结果。
+
+对话启动的博客任务通过属主隔离的内部 `/internal/agent/blogagent/cancel` 命令撤销 Content 执行权；
+停止接口等待该命令成功，失败时返回错误并允许重复停止。Content 在阶段请求前后校验 running 状态，
+阻止调研结束后继续写作或审校。此类任务在 Core 中禁用脱离 Content 状态检查的内部重试和备用模型，
+独立博客任务保留原策略。已发出的远端请求及已提交的副作用不能由停止回滚。
+
+### 对话图片附件存储
+
+Workers 对话图片由 Content 媒体库单次上传并持有 OSS 对象，Agent 只保存 mediaAssetId 和 content-media/{id} 引用；刷新时通过属主校验的内部媒体查询取地址。旧附件继续使用原 Agent OSS 签名与旧桶兼容路径。非图片附件继续由 Agent 存储。Content 上传失败不创建 Agent 副本或附件记录，Agent 元数据创建失败补偿删除新媒体资产。
+
+Agent 与 Content Workers 使用香港区域 Placement Hint（aws:ap-east-1），避免随洛杉矶客户端入口执行时至北京 OSS 的连接长期无响应。入口仍为全球网络；执行位置由 Cloudflare 根据区域提示选择，上传保持原 OSS 桶、鉴权与对象路径。
+
+订阅与积分：Core 管理带到期日的套餐积分批次和永久积分，Payment 校验收款并通过幂等契约发放，详见 [套餐积分方案](migration/subscription-points.md)。
+
+Payment 管理最多三个积分道具卡的配置与启停，在订单创建时固化单价、数量和积分；Core 继续独占永久积分发放与幂等账本，配置修改不改变既有订单权益。
+
+## 小程序订单退款
+
+Payment 管理订单列表、7天退款窗口、比例金额与退款状态；Core 管理订单积分批次、冻结及会员权益回收。新增服务鉴权合同 `/internal/v1/payment/points/refund`，不共享 D1。详见 [退款迁移说明](migration/virtual-pay-refunds.md)。

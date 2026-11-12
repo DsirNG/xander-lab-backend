@@ -1,3 +1,6 @@
+import { AgentAnswerStream } from "./agent-answer-stream.js";
+import { checkRunCancellation, registerRunCancellation } from "./agent-run-cancellation.js";
+import type { AgentImageTaskPort } from "../interfaces/agent-image-task.js";
 import type { AgentModelEndpoint, AgentModelGateway } from "../interfaces/agent-model-gateway.js";
 import { responseLanguageInstruction, type AgentLanguagePreferences } from "./response-language.js";
 import type { AgentBillingPort, AgentTokenUsage } from "../interfaces/agent-billing-port.js";
@@ -257,7 +260,7 @@ const PLAN_TASKS_TOOLS: AgentFunctionTool[] = [{
 
 const IMAGE_GENERATION_TOOLS: AgentFunctionTool[] = [{
   name: "image_generate",
-  description: "根据用户描述生成一张知识插图或封面图，保存到用户的个人素材库并返回图片链接。只有用户明确要求生成图片、配图、封面或示意图时使用。prompt 必须保留用户的关键要求。",
+  description: "根据当前对话描述生成新图片，包括人物形象照、虚构角色自拍、插画、封面和示意图，保存到用户素材库。用户在讨论外观后说‘给我看看’、‘发张你的照片’也属于生成请求，应把前文形象细节写入 prompt；生成新图不要求用户先上传图片。不得将生成的角色形象宣称为真实拍摄的照片。",
   parameters: {
     type: "object",
     properties: {
@@ -271,7 +274,7 @@ const IMAGE_GENERATION_TOOLS: AgentFunctionTool[] = [{
 
 const IMAGE_RESEND_TOOLS: AgentFunctionTool[] = [{
   name: "image_resend",
-  description: "把当前会话最近上传的图片或用户自己的媒体库图片重新发送，不生成新图片。最近上传使用 source=latest_uploaded；素材库图片使用 source=asset_id 并提供 assetId。",
+  description: "仅重新发送已经存在的图片，不生成新图。用户明确要看上传过的原图时使用 latest_uploaded；用户要看已有素材库图片时使用 asset_id，必须有真实已知的 assetId，不得猜测。根据文字描述展示人物外观、AI 形象照或自拍应使用 image_generate，而不是本工具。",
   parameters: {
     type: "object",
     properties: {
@@ -767,10 +770,20 @@ export class AgentRunService {
     private readonly images?: AgentImageService,
     private readonly contentTools?: AgentContentToolsService,
     private readonly weather?: AgentWeatherService,
+    private readonly imageTasks?: AgentImageTaskPort,
   ) {}
 
-  cancelTurn(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
-    return this.repository.cancelTurn(userId, conversationId);
+  async cancelTurn(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
+    const current = await this.repository.findOwnedConversation(userId, conversationId);
+    if (!current) return null;
+    if (current.status === "running" && this.repository.requestCancellation
+      && !await this.repository.requestCancellation(userId, conversationId, current.runVersion)) {
+      return this.repository.findOwnedConversation(userId, conversationId);
+    }
+    if (current && this.blogAgent?.cancel) {
+      await this.blogAgent.cancel(userId, `agent-${conversationId}-${current.runVersion}`);
+    }
+    return this.repository.cancelTurn(userId, conversationId, current.runVersion);
   }
 
   getConversation(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
@@ -815,7 +828,32 @@ export class AgentRunService {
     abortController = new AbortController(),
     language: AgentLanguagePreferences = {},
   ): Promise<{ ok: boolean; awaitingApproval?: boolean }> {
+    const turnStarted = performance.now();
+    const timing: Record<string, number> = {};
+    const sink = onEvent;
+    let terminalSent = false;
+    onEvent = (id, event, data) => {
+      if (event === "complete" || event === "error" || event === "approval_required") {
+        terminalSent = true;
+        timing.terminalMs = performance.now() - turnStarted;
+      }
+      sink(id, event, data);
+    };
+    const finishTurn = async (answer: string) => {
+      const started = performance.now();
+      try { return await this.repository.finishTurn(userId, conversationId, runVersion, answer); }
+      finally { timing.finalSaveMs = (timing.finalSaveMs ?? 0) + performance.now() - started; }
+    };
+    let answerStream: AgentAnswerStream | undefined;
     let stoppedByUser = false;
+    const ensureActive = async () => {
+      if (await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
+        stoppedByUser = true;
+        abortController.abort("user_cancel");
+      }
+      abortController.signal.throwIfAborted();
+    };
+    registerRunCancellation(abortController.signal, ensureActive);
     let monitoring = true;
     let wakeMonitor = () => {};
     const monitorStopped = new Promise<void>((resolve) => { wakeMonitor = resolve; });
@@ -840,25 +878,25 @@ export class AgentRunService {
       const started = { phase: "understanding", runVersion, runStartedAt };
       const startedId = await this.repository.appendEvent(conversationId, runVersion, "started", started);
       onEvent(startedId, "started", started);
-      const gateway = await this.modelGateway.candidates();
+      // Start independent reads together; memory only depends on the history read.
+      const contextStarted = performance.now();
+      const historyPromise = this.repository.recentMessages(conversationId);
+      const memoryPromise = historyPromise.then(async (history) => {
+        if (!this.memory) return "";
+        const latest = [...history].reverse().find((item) => item.role === "user")?.content ?? "";
+        try { return await this.memory.context(userId, latest); }
+        catch { return ""; } // Optional memory must not prevent a turn from running.
+      });
+      const [gateway, history, skillContext, mcpTools, memoryContext] = await Promise.all([
+        this.modelGateway.candidates(), historyPromise, this.publishSkillContext(userId),
+        this.mcp && this.approvals ? this.mcp.toolsForUser(userId) : Promise.resolve([]), memoryPromise,
+      ]);
+      timing.contextMs = performance.now() - contextStarted;
       if (gateway.managed && gateway.endpoints.length === 0) {
         throw new ResponseError(503, "智能体模型尚未配置，请在管理后台配置 Agent 模型");
       }
       if (gateway.endpoints.length === 0) throw new ResponseError(503, "智能体模型尚未配置");
-
-      const history = await this.repository.recentMessages(conversationId);
-      const skillContext = await this.publishSkillContext(userId);
-      const mcpTools = this.mcp && this.approvals ? await this.mcp.toolsForUser(userId) : [];
       const memoryTools = this.memory ? MEMORY_TOOLS : [];
-      let memoryContext = "";
-      if (this.memory) {
-        const latestUserMessage = [...history].reverse().find((item) => item.role === "user")?.content ?? "";
-        try {
-          memoryContext = await this.memory.context(userId, latestUserMessage);
-        } catch {
-          // Long-term memory is useful context, but it must not prevent a turn from running.
-        }
-      }
       const systemPrompt = "You are DinqorAI's AI assistant. Answer the user's question accurately and clearly."
         + (deepThinking ? " 请谨慎核对复杂问题，只呈现必要的结论和依据，不披露内部推理过程。" : "")
         + skillContext.instructions
@@ -904,38 +942,65 @@ export class AgentRunService {
         }
       }
       let answer = "";
-      let deltaBuffer = "";
-      let firstDelta = true;
-      let lastPersistedAt = Date.now();
-
+      answerStream = new AgentAnswerStream((offset, text) => {
+        timing.firstDeliveryMs ??= performance.now() - turnStarted;
+        // No durable ID: reconnect resumes from persisted checkpoints, never previews.
+        onEvent(0, "answer_preview", { offset, text });
+      }, async (text) => {
+        const started = performance.now();
+        const id = await this.repository.appendEvent(conversationId, runVersion, "answer_delta", text);
+        timing.checkpointMs = (timing.checkpointMs ?? 0) + performance.now() - started;
+        timing.checkpoints = (timing.checkpoints ?? 0) + 1;
+        onEvent(id, "answer_delta", text);
+      }, () => abortController.abort("answer_persistence_failed"));
+      const modelStarted = performance.now();
       const onDelta = async (delta: string) => {
+        timing.firstDeltaMs ??= performance.now() - modelStarted;
         answer += delta;
         if (answer.length > MAX_ANSWER_CHARS) throw new ResponseError(502, "模型返回内容过长，请缩小问题范围");
-        deltaBuffer += delta;
-        if (firstDelta || deltaBuffer.length >= 120 || Date.now() - lastPersistedAt >= 120) {
-          firstDelta = false;
-          const chunk = deltaBuffer;
-          deltaBuffer = "";
-          lastPersistedAt = Date.now();
-          const id = await this.repository.appendEvent(conversationId, runVersion, "answer_delta", chunk);
-          onEvent(id, "answer_delta", chunk);
-        }
+        answerStream!.push(delta);
       };
 
-      const modelResult = await this.callModel(
-        gateway.endpoints, messages, onDelta, abortController.signal,
-        [...skillContext.tools, ...memoryTools, ...(this.recitation ? RECITATION_TOOLS : []), ...QUIZ_TOOLS, ...ARTIFACT_TOOLS,
-          ...PLAN_TASKS_TOOLS, ...IMAGE_GENERATION_TOOLS, ...IMAGE_RESEND_TOOLS,
+      const hasUploadedImage = messages.some(message => message.role === "user"
+        && message.attachments?.some(item => item.contentType.toLowerCase().startsWith("image/")));
+      const resendTools = hasUploadedImage ? IMAGE_RESEND_TOOLS : IMAGE_RESEND_TOOLS.map(tool => ({
+        ...tool,
+        description: tool.description + " 当前会话没有可重发的用户上传图片，仅可凭真实已知的素材 ID 重发。",
+        parameters: {
+          ...tool.parameters,
+          properties: { source: { type: "string", enum: ["asset_id"] }, assetId: { type: "integer", minimum: 1 } },
+          required: ["source", "assetId"],
+        },
+      }));
+      const tools = [...skillContext.tools, ...memoryTools, ...(this.recitation ? RECITATION_TOOLS : []), ...QUIZ_TOOLS, ...ARTIFACT_TOOLS,
+          ...PLAN_TASKS_TOOLS, ...IMAGE_GENERATION_TOOLS, ...resendTools,
           ...CONTENT_QUERY_TOOLS, ...CONTENT_MUTATION_TOOLS,
           ...DELEGATE_SUBTASK_TOOLS,
           ...(this.weather ? WEATHER_TOOLS : []),
           ...(this.blogAgent ? BLOG_GENERATION_TOOLS : []),
-          ...mcpTools.map((tool) => ({ name: tool.fullName, description: tool.description, parameters: tool.inputSchema }))],
-      );
+          ...mcpTools.map((tool) => ({ name: tool.fullName, description: tool.description, parameters: tool.inputSchema }))];
+      let modelResult = await this.callModel(gateway.endpoints, messages, onDelta, abortController.signal, tools);
+      // A provider can ignore a tool schema. Re-plan once before failing an otherwise valid image request.
+      const selectedTool = modelResult.toolCalls.length === 1 ? modelResult.toolCalls[0] : undefined;
+      if (!hasUploadedImage && selectedTool?.name === "image_resend") {
+        let selectedArgs: unknown;
+        try { selectedArgs = JSON.parse(selectedTool.arguments); } catch { /* Normal argument validation below. */ }
+        if (isRecord(selectedArgs) && selectedArgs.source === "latest_uploaded") {
+          await ensureActive();
+          modelResult = await this.callModel(gateway.endpoints, [...messages, {
+            role: "system",
+            content: "当前会话没有可重发的用户上传图片，不能执行 latest_uploaded。请重新根据完整对话判断：如果用户要求展示前文描述的外观或 AI 虚构形象，请调用 image_generate，并保留前文的外观细节；如果用户只要求重发不存在的原图，请用自然语言说明需要先上传原图，不要擅自生成替代图片或编造素材 ID。",
+          }], onDelta, abortController.signal, tools.filter(tool => tool.name !== "image_resend"));
+        }
+      }
+      timing.modelMs = performance.now() - modelStarted;
+      const drainStarted = performance.now();
+      await answerStream.flush();
+      timing.drainMs = performance.now() - drainStarted;
       if (modelResult.toolCalls.length > 0) {
         if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
           const message = "好的，已停止当前任务。你可以继续说新的需求。";
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, message);
+          const terminal = await finishTurn(message);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           return { ok: true };
         }
@@ -949,6 +1014,7 @@ export class AgentRunService {
           throw new ResponseError(400, "模型返回的工具参数格式不正确");
         }
         const toolName = modelResult.toolCalls[0].name;
+        await ensureActive();
         if (toolName === "delegate_subtask") {
           const delegated = await this.runDelegatedSubtask(
             userId, conversationId, runVersion, gateway.endpoints, messages, args, abortController.signal,
@@ -960,7 +1026,7 @@ export class AgentRunService {
           );
           if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
             const message = "好的，已停止当前任务。你可以继续说新的需求。";
-            const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, message);
+            const terminal = await finishTurn(message);
             onEvent(terminal.completeEventId, "complete", { status: "ready" });
             return { ok: true };
           }
@@ -968,7 +1034,7 @@ export class AgentRunService {
             tool: toolName, result: delegated.result,
           });
           onEvent(resultId, "tool_result", { tool: toolName, result: delegated.result });
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, delegated.answer);
+          const terminal = await finishTurn(delegated.answer);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -984,7 +1050,7 @@ export class AgentRunService {
           const toolEvent = { tool: toolName, result: result.data };
           const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
           onEvent(toolEventId, "tool_result", toolEvent);
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, result.answer);
+          const terminal = await finishTurn(result.answer);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1011,7 +1077,7 @@ export class AgentRunService {
           const toolEvent = { tool: toolName, result: result.data };
           const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
           onEvent(toolEventId, "tool_result", toolEvent);
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, result.answer);
+          const terminal = await finishTurn(result.answer);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1032,7 +1098,7 @@ export class AgentRunService {
           const answerText = answer.trim() || (plan.result.unfinished === 0
             ? "这项任务的计划已全部完成。"
             : "任务计划已保存，后续进展会记录在对话中。你可以继续让我执行下一步。");
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, answerText);
+          const terminal = await finishTurn(answerText);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1041,21 +1107,83 @@ export class AgentRunService {
           if (!this.images) throw new ResponseError(503, "图片生成服务尚未配置");
           if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
             const message = "好的，已停止当前任务。你可以继续说新的需求。";
-            const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, message);
+            const terminal = await finishTurn(message);
             onEvent(terminal.completeEventId, "complete", { status: "ready" });
             return { ok: true };
           }
+          if (this.imageTasks) {
+            await this.imageTasks.start({ userId, conversationId, runVersion, args });
+            // This request only relays durable events. Losing it cannot stop the alarm owner.
+            let cursor = 0;
+            while (true) {
+              const events = await this.repository.listEventsAfter(conversationId, runVersion, cursor);
+              for (const event of events) {
+                cursor = event.id;
+                const data: unknown = JSON.parse(event.dataContent);
+                onEvent(event.id, event.eventType, data);
+                if (event.eventType === "complete" || event.eventType === "error") {
+                  await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
+                  return { ok: event.eventType === "complete" };
+                }
+              }
+              if (events.length === 100) continue;
+              const current = await this.getConversation(userId, conversationId);
+              if (!current || current.runVersion !== runVersion || current.status !== "running") {
+                // A terminal event can commit between the event read and the status read.
+                const terminal = await this.repository.listEventsAfter(conversationId, runVersion, cursor);
+                for (const event of terminal) onEvent(event.id, event.eventType, JSON.parse(event.dataContent));
+                return { ok: current?.status === "ready" };
+              }
+              await sleep(500);
+            }
+          }
           let result: Awaited<ReturnType<AgentImageService["generate"]>>;
-          try { result = await this.images.generate(userId, conversationId, runVersion, args); }
+          const invocationId = `image-${conversationId}-${runVersion}`;
+          const startedAt = new Date().toISOString();
+          const imageStart = { tool: toolName, invocationId, phase: "start", startedAt, outputType: "image" };
+          const imageStartId = await this.repository.appendEvent(conversationId, runVersion, "tool_start", imageStart);
+          onEvent(imageStartId, "tool_start", imageStart);
+          let progressQueue = Promise.resolve();
+          const sendImageProgress = (progress: number, stage: string) => {
+            progressQueue = progressQueue.then(async () => {
+              const event = { tool: toolName, invocationId, outputType: "image", progress, estimated: progress < 100, stage, startedAt };
+              const id = await this.repository.appendEvent(conversationId, runVersion, "tool_progress", event);
+              onEvent(id, "tool_progress", event);
+            });
+            return progressQueue;
+          };
+          await sendImageProgress(5, "generating");
+          const imageStarted = Date.now();
+          // Provider APIs expose no percentage. Keep estimates below completion until the asset exists.
+          const progressTimer = setInterval(() => {
+            const progress = Math.min(90, Math.floor(5 + 85 * (1 - Math.exp(-(Date.now() - imageStarted) / 35_000))));
+            void sendImageProgress(progress, "generating").catch(() => {});
+          }, 2_000);
+          try {
+            result = await this.images.generate(userId, conversationId, runVersion, args, async (preview) => {
+              clearInterval(progressTimer);
+              // Preview bytes stay on the live connection; only durable URLs enter D1.
+              onEvent(0, "image_preview", { tool: toolName, invocationId, result: preview });
+              await sendImageProgress(100, "generated");
+            }, ensureActive);
+          }
           catch (error) {
+            clearInterval(progressTimer);
+            await progressQueue.catch(() => {});
+            const failure = { tool: toolName, invocationId, error: "图片生成失败" };
+            const failureId = await this.repository.appendEvent(conversationId, runVersion, "tool_error", failure);
+            onEvent(failureId, "tool_error", failure);
             if (error instanceof AgentImageError) throw new ResponseError(error.status, error.message);
             throw error;
+          } finally {
+            clearInterval(progressTimer);
           }
-          const toolEvent = { tool: toolName, result };
+          await sendImageProgress(100, "completed");
+          const toolEvent = { tool: toolName, invocationId, result };
           const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
           onEvent(toolEventId, "tool_result", toolEvent);
           const answerText = `![${result.title}](${result.url})`;
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, answerText);
+          const terminal = await finishTurn(answerText);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1085,7 +1213,7 @@ export class AgentRunService {
           const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
           onEvent(toolEventId, "tool_result", toolEvent);
           const answerText = `![${image.title}](${image.url})`;
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, answerText);
+          const terminal = await finishTurn(answerText);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1093,7 +1221,7 @@ export class AgentRunService {
         if (toolName === "emit_quiz") {
           if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
             const message = "好的，已停止当前任务。你可以继续说新的需求。";
-            const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, message);
+            const terminal = await finishTurn(message);
             onEvent(terminal.completeEventId, "complete", { status: "ready" });
             return { ok: true };
           }
@@ -1112,7 +1240,7 @@ export class AgentRunService {
           const quizEventId = await this.repository.appendEvent(conversationId, runVersion, "quiz", quiz);
           onEvent(quizEventId, "quiz", quiz);
           const answerText = answer.trim() || "答题卡已发出，请在卡片中作答。";
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, answerText);
+          const terminal = await finishTurn(answerText);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1120,7 +1248,7 @@ export class AgentRunService {
         if (toolName === "emit_artifact") {
           if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
             const message = "好的，已停止当前任务。你可以继续说新的需求。";
-            const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, message);
+            const terminal = await finishTurn(message);
             onEvent(terminal.completeEventId, "complete", { status: "ready" });
             return { ok: true };
           }
@@ -1138,7 +1266,7 @@ export class AgentRunService {
           const artifactEventId = await this.repository.appendEvent(conversationId, runVersion, "artifact", artifact);
           onEvent(artifactEventId, "artifact", artifact);
           const answerText = answer.trim() || "交付卡已生成，你可以在卡片中复制或下载文件。";
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, answerText);
+          const terminal = await finishTurn(answerText);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1183,7 +1311,7 @@ export class AgentRunService {
             result: result.data,
           });
           onEvent(toolEventId, "tool_result", { tool: toolName, result: result.data });
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, result.answer);
+          const terminal = await finishTurn(result.answer);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1204,7 +1332,7 @@ export class AgentRunService {
             result: result.data,
           });
           onEvent(toolEventId, "tool_result", { tool: toolName, result: result.data });
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, result.answer);
+          const terminal = await finishTurn(result.answer);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1224,7 +1352,7 @@ export class AgentRunService {
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult, "quiz-start");
           if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
             const message = "好的，已停止当前任务。你可以继续说新的需求。";
-            const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, message);
+            const terminal = await finishTurn(message);
             onEvent(terminal.completeEventId, "complete", { status: "ready" });
             return { ok: true };
           }
@@ -1238,10 +1366,11 @@ export class AgentRunService {
           const quizAnswer = await this.callModel(
             gateway.endpoints, generationMessages, onDelta, abortController.signal, [],
           );
+          await answerStream.flush();
           if (quizAnswer.toolCalls.length > 0 || !answer.trim()) {
             throw new ResponseError(502, "测验题目生成失败，请稍后重试");
           }
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, answer);
+          const terminal = await finishTurn(answer);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, quizAnswer, "quiz-generation");
           return { ok: true };
@@ -1258,7 +1387,7 @@ export class AgentRunService {
           const toolEvent = { tool: toolName, result: result.data };
           const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
           onEvent(toolEventId, "tool_result", toolEvent);
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, result.answer);
+          const terminal = await finishTurn(result.answer);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1317,7 +1446,7 @@ export class AgentRunService {
           const toolEvent = { tool: toolName, result: report };
           const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
           onEvent(toolEventId, "tool_result", toolEvent);
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, report.answer);
+          const terminal = await finishTurn(report.answer);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1336,9 +1465,11 @@ export class AgentRunService {
           try {
             const mode = args.mode === "quick" || args.mode === "full" ? args.mode : "auto";
             task = await this.blogAgent.create(userId, args.input.trim(), requestId, mode);
+            await ensureActive();
             if (task.status !== "ready") {
-              task = await this.blogAgent.findReady(userId, requestId)
-                ?? await this.blogAgent.runStream(userId, task.id, abortController.signal, async (stage, message) => {
+              const ready = await this.blogAgent.findReady(userId, requestId);
+              await ensureActive();
+              task = ready ?? await this.blogAgent.runStream(userId, task.id, abortController.signal, async (stage, message) => {
                   const progress = { tool: toolName, invocationId, stage, message: prettyBlogStage(stage, message) };
                   const progressId = await this.repository.appendEvent(conversationId, runVersion, "tool_progress", progress);
                   onEvent(progressId, "tool_progress", progress);
@@ -1346,6 +1477,7 @@ export class AgentRunService {
             }
           } catch (failure) {
             const cancelled = stoppedByUser || abortController.signal.aborted;
+            if (cancelled) await this.blogAgent.cancel?.(userId, requestId);
             const message = cancelled
               ? "博客生成任务已停止"
               : failure instanceof AgentBlogAgentError
@@ -1362,7 +1494,7 @@ export class AgentRunService {
           }
           if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
             const message = "好的，已停止当前任务。你可以继续说新的需求。";
-            const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, message);
+            const terminal = await finishTurn(message);
             onEvent(terminal.completeEventId, "complete", { status: "ready" });
             return { ok: true };
           }
@@ -1379,7 +1511,7 @@ export class AgentRunService {
             ? "已生成并完成格式检查" : "已完成联网调研和独立审校";
           const answerText = task.title ? `文章《${task.title}》${completionDescription}，可在任务 ${task.id} 中查看。`
             : `博客文章${completionDescription}，可在任务 ${task.id} 中查看。`;
-          const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, answerText);
+          const terminal = await finishTurn(answerText);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1388,30 +1520,31 @@ export class AgentRunService {
       }
       if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
         answer = "好的，已停止当前任务。你可以继续说新的需求。";
-      } else if (deltaBuffer) {
-        const id = await this.repository.appendEvent(conversationId, runVersion, "answer_delta", deltaBuffer);
-        onEvent(id, "answer_delta", deltaBuffer);
       }
+      await answerStream.flush();
       if (!answer) throw new ResponseError(502, "模型没有返回可显示的内容，请稍后重试");
 
-      const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, answer);
+      const terminal = await finishTurn(answer);
       onEvent(terminal.completeEventId, "complete", { status: "ready" });
       await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
       return { ok: true };
     } catch (error) {
+      // Finish outstanding checkpoints before publishing a terminal failure/cancellation.
+      try { await answerStream?.flush(); } catch { /* The turn fails below; no false completion. */ }
       const message = stoppedByUser
         ? "好的，已停止当前任务。你可以继续说新的需求。"
         : error instanceof ResponseError || error instanceof AgentApprovalError
           ? error.message : "智能体执行失败，请稍后重试";
-      if (stoppedByUser) {
-        const terminal = await this.repository.finishTurn(userId, conversationId, runVersion, message);
-        onEvent(terminal.completeEventId, "complete", { status: "ready" });
+      if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
+        // Stop already persisted the terminal event; do not finalize an old run again.
         return { ok: true };
       }
       const id = await this.repository.failTurn(userId, conversationId, runVersion, message);
       onEvent(id, "error", message);
       return { ok: false };
     } finally {
+      console.info("agent.turn.timing", { conversationId, runVersion, ...timing,
+        totalMs: performance.now() - turnStarted, terminalSent });
       monitoring = false;
       wakeMonitor();
       await monitor;
@@ -1452,7 +1585,7 @@ export class AgentRunService {
     let step = 0;
 
     for (; step < SUBTASK_MAX_STEPS; step++) {
-      if (signal.aborted) throw new DOMException("The operation was aborted", "AbortError");
+      await checkRunCancellation(signal);
       await onProgress(`子任务 ${step + 1}/${SUBTASK_MAX_STEPS}：${objective}`);
       const messages: AgentInputMessage[] = [
         {
@@ -1478,7 +1611,7 @@ export class AgentRunService {
 
       const calls = call.toolCalls.slice(0, SUBTASK_MAX_CALLS_PER_STEP);
       for (const callItem of calls) {
-        if (signal.aborted) throw new DOMException("The operation was aborted", "AbortError");
+        await checkRunCancellation(signal);
         const tool = tools.find((candidate) => candidate.name === callItem.name);
         if (!tool || !SUBTASK_READ_ONLY_TOOLS.has(callItem.name)) {
           failures++;
@@ -1590,7 +1723,13 @@ export class AgentRunService {
       visibleDelta = true;
       await onDelta(delta);
     };
-    for (const endpoint of endpoints) {
+    for (const [attempt, endpoint] of endpoints.entries()) {
+      await checkRunCancellation(signal);
+      const started = performance.now();
+      let headersMs: number | undefined;
+      let firstDeltaMs: number | undefined;
+      let upstreamStatus: number | undefined;
+      let ok = false;
       try {
         const chatCompletions = endpoint.apiStyle === "CHAT_COMPLETIONS";
         const endpointUrl = endpoint.baseUrl.replace(/\/+$/, "")
@@ -1633,12 +1772,22 @@ export class AgentRunService {
           redirect: "manual",
           signal,
         });
+        headersMs = performance.now() - started;
+        upstreamStatus = response.status;
         if (!response.ok) throw safeModelError(response.status);
-        const completion = await consumeChatStream(response, endpoint, guardedDelta);
+        const completion = await consumeChatStream(response, endpoint, async (delta) => {
+          firstDeltaMs ??= performance.now() - started;
+          await guardedDelta(delta);
+        });
+        ok = true;
         return { ...completion, model: endpoint.model };
       } catch (error) {
         lastError = error instanceof Error ? error : safeModelError(502);
         if (signal.aborted || visibleDelta) throw lastError;
+      } finally {
+        console.info("agent.model.timing", { attempt: attempt + 1, model: endpoint.model,
+          apiStyle: endpoint.apiStyle, headersMs, firstDeltaMs, upstreamStatus,
+          totalMs: performance.now() - started, ok });
       }
     }
     throw lastError;

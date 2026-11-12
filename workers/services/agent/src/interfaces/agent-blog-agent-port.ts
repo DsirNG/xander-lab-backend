@@ -8,6 +8,7 @@ export interface AgentBlogTaskSummary {
 }
 
 export interface AgentBlogAgentPort {
+  cancel?(userId: number, clientRequestId: string): Promise<void>;
   create(userId: number, input: string, clientRequestId: string, mode?: "auto" | "quick" | "full"): Promise<AgentBlogTaskSummary>;
   findReady(userId: number, clientRequestId: string): Promise<AgentBlogTaskSummary | null>;
   runStream(

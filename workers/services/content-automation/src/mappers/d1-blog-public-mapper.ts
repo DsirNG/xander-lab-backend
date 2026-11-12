@@ -109,16 +109,21 @@ export class D1BlogPublicMapper implements BlogPublicRepository {
     const where = filters.join(" AND ");
     const countStatement = this.db.prepare(`SELECT COUNT(*) AS total FROM blog_post p WHERE ${where}`);
     const countQuery = values.length ? countStatement.bind(...values) : countStatement;
-    const count = await countQuery.first<CountRow>();
-    const total = count?.total ?? 0;
-    const rows = await this.db.prepare(
-      `${postSelect()}
-       WHERE ${where}
-       ORDER BY p.published_at DESC, p.id DESC
-       LIMIT ? OFFSET ?`,
-    ).bind(...values, input.size, (input.page - 1) * input.size).all<BlogPostRow>();
+    // One D1 transaction keeps page rows and their total on the same snapshot.
+    const [countResult, rowsResult] = await this.db.batch([
+      countQuery,
+      this.db.prepare(
+        `${postSelect()}
+         WHERE ${where}
+         ORDER BY p.published_at DESC, p.id DESC
+         LIMIT ? OFFSET ?`,
+      ).bind(...values, input.size, (input.page - 1) * input.size),
+    ]);
+    if (!countResult?.success || !rowsResult?.success) throw new Error("Blog page read failed");
+    const total = (countResult.results?.[0] as unknown as CountRow | undefined)?.total ?? 0;
+    const rows = (rowsResult.results ?? []) as unknown as BlogPostRow[];
     return {
-      records: rows.results.map(mapPost),
+      records: rows.map(mapPost),
       total,
       current: input.page,
       pages: total === 0 ? 0 : Math.ceil(total / input.size),

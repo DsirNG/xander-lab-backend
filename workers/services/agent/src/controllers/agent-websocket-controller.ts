@@ -105,7 +105,7 @@ export async function handleAgentWebSocketRequest(
           };
           pair.server.send(JSON.stringify(frame));
           if (event.id !== null) cursor = Math.max(cursor, event.id);
-          if (event.eventType === "complete" || event.eventType === "error") {
+          if (event.eventType === "complete" || event.eventType === "error" || event.eventType === "approval_required") {
             close(1000, "turn complete");
             break;
           }

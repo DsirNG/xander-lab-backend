@@ -13,11 +13,11 @@ export class PaymentProviderError extends Error {
   }
 }
 
-async function paySignature(appKey: string, body: string): Promise<string> {
+async function paySignature(appKey: string, body: string, uri = QUERY_ORDER_URI): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw", encoder.encode(appKey), { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
   );
-  const signed = await crypto.subtle.sign("HMAC", key, encoder.encode(`${QUERY_ORDER_URI}&${body}`));
+  const signed = await crypto.subtle.sign("HMAC", key, encoder.encode(`${uri}&${body}`));
   return Array.from(new Uint8Array(signed), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
@@ -56,6 +56,10 @@ export class WechatVirtualPayMapper implements WechatPaymentPort {
       const paidFee = typeof order.paid_fee === "number" ? order.paid_fee : Number(order.paid_fee);
       const wxOrderId = typeof order.wx_order_id === "string" ? order.wx_order_id : null;
       return {
+        status: state,
+        orderType: typeof order.order_type === "number" ? order.order_type : undefined,
+        leftFee: Number.isSafeInteger(order.left_fee) ? order.left_fee as number : undefined,
+        paidTime: Number.isSafeInteger(order.paid_time) ? order.paid_time as number : undefined,
         paid: [2, 3, 4].includes(state),
         wxOrderId,
         paidFee: Number.isSafeInteger(paidFee) && paidFee >= 0 ? paidFee : 0,
@@ -66,6 +70,17 @@ export class WechatVirtualPayMapper implements WechatPaymentPort {
     }
   }
 
+  async refundOrder(input: import("../interfaces/wechat-payment-port.js").WechatRefundRequest,appKey:string) {
+    const body=JSON.stringify(input);
+    const endpoint=this.endpoint("/xpay/refund_order");
+    endpoint.searchParams.set("access_token",await this.accessToken());
+    endpoint.searchParams.set("pay_sig",await paySignature(appKey,body,"/xpay/refund_order"));
+    const response=await fetch(endpoint,{method:"POST",headers:{"content-type":"application/json"},body,redirect:"manual",signal:AbortSignal.timeout(8000)});
+    if(!response.ok) throw new PaymentProviderError();
+    const root=record(await response.json());
+    if(!root || !Number.isSafeInteger(root.errcode)) throw new PaymentProviderError();
+    return {accepted:root.errcode===0,code:root.errcode as number,wxRefundId:typeof root.refund_wx_order_id==='string'?root.refund_wx_order_id:null};
+  }
   private async accessToken(): Promise<string> {
     if (cachedAccessToken && cachedAccessToken.expiresAt > Date.now() + 60_000) {
       return cachedAccessToken.value;

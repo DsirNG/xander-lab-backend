@@ -330,6 +330,11 @@ explicit_public_write:
 # ===================== 6. 公开 GET 列表（access=public + identity_mode=optional） =====================
 # 语义：匿名可访问，但带 Token 时仍解析身份（保留 trySetUserContext 语义）。
 public_get:
+  - id: blog-media-public-image
+    match: {method: GET, path_prefix: /api/public/blog/media/}
+    owner: publishing
+    access: public
+    identity_mode: none
   - id: blog-posts-list
     match: {method: GET, path: /api/blog/posts}
     owner: publishing
@@ -463,6 +468,15 @@ protected:
   - id: platform-extension-authorization-cancel
     match: {method: POST, path_pattern: /api/publishing/*/authorization/extension/*/cancel}
     owner: integration
+  - id: virtualpay-order-list
+    match: {method: GET, path: /api/virtual-pay/orders}
+    owner: virtualpay
+  - id: virtualpay-refund-read
+    match: {method: GET, path_pattern: /api/virtual-pay/orders/*/*}
+    owner: virtualpay
+  - id: virtualpay-refund-write
+    match: {method: POST, path_pattern: /api/virtual-pay/orders/*/refund}
+    owner: virtualpay
   - id: virtualpay-order-create
     match: {method: POST, path: /api/virtual-pay/orders}
     owner: virtualpay

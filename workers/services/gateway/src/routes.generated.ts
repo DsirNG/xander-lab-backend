@@ -84,6 +84,11 @@ export const ROUTES =
   },
   {
     "method": "POST",
+    "path": "/api/admin/feature-model-configs/*/test",
+    "service": "core"
+  },
+  {
+    "method": "POST",
     "path": "/api/blog-agent/tasks/{id}/messages/stream",
     "service": "content-automation"
   },
@@ -91,6 +96,11 @@ export const ROUTES =
     "method": "POST",
     "path": "/api/publishing/juejin/connection/test",
     "service": "platform-integration"
+  },
+  {
+    "method": "GET",
+    "path": "/api/virtual-pay/orders/*/refund-status",
+    "service": "payment"
   },
   {
     "method": "GET",
@@ -106,6 +116,11 @@ export const ROUTES =
     "method": "GET",
     "path": "/api/publishing/{platform:csdn|juejin|wechat_mp|weibo|zhihu|baijiahao|cnblogs|douyin|xiaohongshu|toutiao|51cto|jianshu|segmentfault|oschina|bilibili|tencent_dev|aliyun_dev}/authorization/status",
     "service": "platform-integration"
+  },
+  {
+    "method": "GET",
+    "path": "/api/virtual-pay/orders/*/refund-quote",
+    "service": "payment"
   },
   {
     "method": "POST",
@@ -238,6 +253,11 @@ export const ROUTES =
     "service": "core"
   },
   {
+    "method": "POST",
+    "path": "/api/admin/model-providers/test",
+    "service": "core"
+  },
+  {
     "method": "GET",
     "path": "/api/admin/virtual-pay-settings",
     "service": "payment"
@@ -266,6 +286,11 @@ export const ROUTES =
     "method": "GET",
     "path": "/api/notifications/unread-count",
     "service": "content-automation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/virtual-pay/orders/*/refund",
+    "service": "payment"
   },
   {
     "method": "POST",
@@ -424,6 +449,11 @@ export const ROUTES =
   },
   {
     "method": "GET",
+    "path": "/api/public/blog/media/*/*/*/*",
+    "service": "content-automation"
+  },
+  {
+    "method": "GET",
     "path": "/api/recitations/attempts/{attemptId}",
     "service": "core"
   },
@@ -564,6 +594,11 @@ export const ROUTES =
   },
   {
     "method": "POST",
+    "path": "/api/virtual-pay/orders",
+    "service": "payment"
+  },
+  {
+    "method": "GET",
     "path": "/api/virtual-pay/orders",
     "service": "payment"
   },

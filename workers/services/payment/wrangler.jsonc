@@ -21,6 +21,7 @@
   "services": [
     { "binding": "CORE_SERVICE", "service": "dinqor-core" }
   ],
+  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": { "enabled": true },
   "d1_databases": [{
     "binding": "DB",

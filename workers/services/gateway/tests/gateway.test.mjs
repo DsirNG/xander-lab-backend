@@ -509,3 +509,47 @@ test("Swagger UI and OpenAPI docs are public and generated from the Gateway rout
   assert.ok(Object.keys(spec.paths).length > 100);
   assert.equal(JSON.stringify(spec).includes("/internal/"), false);
 });
+
+test("gateway exposes safe request duration diagnostics", async () => {
+  const response = await gatewayWorker.fetch(new Request("https://gateway.example/healthz"), environment());
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("server-timing"), /gateway;dur=\d+(?:\.\d+)?/);
+  assert.equal(response.headers.get("server-timing").includes(secret), false);
+});
+
+
+test("custom domain public media forwards anonymous GET and keeps image bytes intact", async () => {
+  const path = "/api/public/blog/media/3/2026/11/f12134ac-8e69-4b08-ae6a-20694f896466.png";
+  let calls = 0;
+  await withFetch(async (input, init) => {
+    const request = asRequest(input, init);
+    calls++;
+    assert.equal(request.url, "https://content.example" + path);
+    assert.equal(request.headers.get("x-user-id"), null);
+    return new Response(new Uint8Array([137, 80, 78, 71]), { headers: { "content-type": "image/png" } });
+  }, async () => {
+    const response = await gatewayWorker.fetch(new Request("https://api.example" + path), environment());
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("content-type"), "image/png");
+    assert.deepEqual([...new Uint8Array(await response.arrayBuffer())], [137, 80, 78, 71]);
+  });
+  assert.equal(calls, 1);
+});
+
+test("virtual order list and refund reads/writes require identity and forward only verified owner",async()=>{
+ const paths=[['GET','/api/virtual-pay/orders'],['GET','/api/virtual-pay/orders/order1234/refund-quote'],['GET','/api/virtual-pay/orders/order1234/refund-status'],['POST','/api/virtual-pay/orders/order1234/refund']];
+ for(const [method,path] of paths) {
+  let forwarded;
+  await withFetch(async(input,init)=>{
+   const request=asRequest(input,init);
+   if(new URL(request.url).pathname==='/internal/agent/auth/resolve')return authResolverResponse(17);
+   forwarded=request;return Response.json({code:200,data:{}});
+  },async()=>{
+   const url='https://gateway.example'+path;
+   assert.equal((await gatewayWorker.fetch(new Request(url,{method,headers:{'x-user-id':'999'}}),environment())).status,401);
+   assert.equal(forwarded,undefined);
+   assert.equal((await gatewayWorker.fetch(new Request(url,{method,headers:{authorization:`Bearer ${signToken()}`,'x-user-id':'999'}}),environment())).status,200);
+   assert.equal(new URL(forwarded.url).origin,'https://payment.example');assert.equal(forwarded.headers.get('x-user-id'),'17');
+  });
+ }
+});

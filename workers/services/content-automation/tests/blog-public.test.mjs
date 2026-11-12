@@ -60,6 +60,10 @@ function environment() {
       return statement;
     },
     async batch(statements) {
+      if (statements.length === 2) return [
+        { success: true, meta: { changes: 0 }, results: [await statements[0].first()] },
+        { success: true, meta: { changes: 0 }, results: (await statements[1].all()).results },
+      ];
       state.batches += 1;
       const [deleteDedup, createDedup, createView, increment] = statements;
       const [dedupeKey, now] = deleteDedup.values;

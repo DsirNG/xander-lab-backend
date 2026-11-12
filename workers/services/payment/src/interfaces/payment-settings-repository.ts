@@ -4,7 +4,16 @@ export interface PaymentProduct {
   durationDays: number;
 }
 
+export interface PointsProduct {
+  productId: string;
+  name: string;
+  priceCents: number;
+  points: number;
+  enabled: boolean;
+}
+
 export interface PaymentSettingsRecord {
+  pointsProductsJson?: string | null;
   enabled: number;
   offerId: string;
   encryptedAppKey: string | null;
@@ -17,13 +26,16 @@ export interface PaymentSettingsRecord {
   ultraProductId: string;
   ultraPriceCents: number;
   ultraDurationDays: number;
+  pointsProductId?: string;
   updatedAt: string | null;
 }
 
 export interface PaymentSettingsInput {
+  pointsProducts?: PointsProduct[];
   enabled: boolean;
   offerId: string;
   encryptedAppKey: string | null;
+  pointsProductId?: string;
   plus: PaymentProduct;
   pro: PaymentProduct;
   ultra: PaymentProduct;

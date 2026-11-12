@@ -56,12 +56,14 @@ export class D1BlogManagementMapper implements BlogManagementRepository {
       bindings.push(search.trim(), search.trim());
     }
     const where = predicates.join(" AND ");
-    const count = await this.db.prepare(`SELECT COUNT(*) AS count FROM blog_post p WHERE ${where}`)
-      .bind(...bindings).first<{ count: number }>();
+    const [count, rows] = await Promise.all([
+      this.db.prepare(`SELECT COUNT(*) AS count FROM blog_post p WHERE ${where}`)
+        .bind(...bindings).first<{ count: number }>(),
+      this.db.prepare(`${SELECT} WHERE ${where}
+        ORDER BY COALESCE(p.published_at, p.updated_at) DESC, p.id DESC LIMIT ? OFFSET ?`)
+        .bind(...bindings, size, (page - 1) * size).all<ManagedRow>(),
+    ]);
     const total = count?.count ?? 0;
-    const rows = await this.db.prepare(`${SELECT} WHERE ${where}
-      ORDER BY COALESCE(p.published_at, p.updated_at) DESC, p.id DESC LIMIT ? OFFSET ?`)
-      .bind(...bindings, size, (page - 1) * size).all<ManagedRow>();
     const pages = total === 0 ? 0 : Math.ceil(total / size);
     return { records: rows.results.map(map), total, current: page, size, pages, hasMore: page < pages };
   }
@@ -147,29 +149,30 @@ export class D1BlogManagementMapper implements BlogManagementRepository {
     const startDate = start.toISOString().slice(0, 10);
     const endExclusive = new Date(`${today}T00:00:00.000Z`);
     endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
-    const counts = await this.db.prepare(`SELECT
+    const [counts, views] = await Promise.all([
+      this.db.prepare(`SELECT
       SUM(CASE WHEN status IN (0, 1) THEN 1 ELSE 0 END) AS totalArticles,
       SUM(CASE WHEN status = 0 THEN 1 ELSE 0 END) AS drafts,
       SUM(CASE WHEN status = 1 THEN 1 ELSE 0 END) AS published,
-      SUM(CASE WHEN status = -1 THEN 1 ELSE 0 END) AS trashed
-      FROM blog_post WHERE user_id = ?`).bind(userId).first<{
-        totalArticles: number | null; drafts: number | null; published: number | null; trashed: number | null;
-      }>();
-    const views = await this.db.prepare(`SELECT substr(v.created_at, 1, 10) AS date, COUNT(*) AS views
+      SUM(CASE WHEN status = -1 THEN 1 ELSE 0 END) AS trashed,
+      SUM(CASE WHEN status = 1 AND published_at BETWEEN ? AND ? THEN 1 ELSE 0 END) AS recentPublished
+      FROM blog_post WHERE user_id = ?`).bind(startDate, today, userId).first<{
+        totalArticles: number | null; drafts: number | null; published: number | null;
+        trashed: number | null; recentPublished: number | null;
+      }>(),
+      this.db.prepare(`SELECT substr(v.created_at, 1, 10) AS date, COUNT(*) AS views
       FROM blog_post_view v JOIN blog_post p ON p.id = v.post_id
       WHERE p.user_id = ? AND v.created_at >= ? AND v.created_at < ?
       GROUP BY substr(v.created_at, 1, 10) ORDER BY date`)
-      .bind(userId, `${startDate}T00:00:00.000Z`, endExclusive.toISOString()).all<{ date: string; views: number }>();
+      .bind(userId, `${startDate}T00:00:00.000Z`, endExclusive.toISOString()).all<{ date: string; views: number }>(),
+    ]);
     const byDate = new Map(views.results.map((row) => [row.date, row.views]));
     const dailyViews = Array.from({ length: 7 }, (_, index) => {
       const date = new Date(start.getTime() + index * 86_400_000).toISOString().slice(0, 10);
       return { date, views: byDate.get(date) ?? 0 };
     });
     const recentViews = dailyViews.reduce((sum, item) => sum + item.views, 0);
-    const recentPublishedRow = await this.db.prepare(`SELECT COUNT(*) AS count FROM blog_post
-      WHERE user_id = ? AND status = 1 AND published_at BETWEEN ? AND ?`)
-      .bind(userId, startDate, today).first<{ count: number }>();
-    const recentPublished = recentPublishedRow?.count ?? 0;
+    const recentPublished = counts?.recentPublished ?? 0;
     return {
       totalArticles: counts?.totalArticles ?? 0, drafts: counts?.drafts ?? 0,
       published: counts?.published ?? 0, trashed: counts?.trashed ?? 0,

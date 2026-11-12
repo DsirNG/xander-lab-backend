@@ -10,6 +10,10 @@ function setup(options = {}) {
   let nextId = 1;
   let nextEvent = 1;
   const repository = {
+    async cancelByRequestId(userId, requestId) {
+      const task = await this.findByRequestId(userId, requestId);
+      if (task && ['created', 'running'].includes(task.status)) task.status = 'failed';
+    },
     async create(userId, input, clientRequestId, now, generationMode) {
       const task = { id: nextId++, userId, clientRequestId, input, generationMode, inputType: "topic", audience: "", tone: "",
         status: "created", stage: "analyze", title: null, summary: null, content: null, outline: null,
@@ -69,6 +73,7 @@ function setup(options = {}) {
   };
   const model = {
     async runStage(stage, input) {
+      await options.onModelStage?.(stage);
       if (options.failStage === stage) throw new Error("simulated model failure");
       const longContent = "## Article\n\n" + "x".repeat(300 * 1024);
       const result = stage === "analyze" ? { angle: "testing" }
@@ -94,6 +99,19 @@ function setup(options = {}) {
     () => Date.parse("2026-10-10T10:00:00.000Z"));
   return { tasks, events, storage, repository, service, serviceWithStorage, env };
 }
+
+test('stopping a long conversation child during research prevents article and review requests', async () => {
+  const stages = [];
+  const state = setup({ async onModelStage(stage) {
+    stages.push(stage);
+    await state.service.cancelByClientRequestId(42, 'agent-7-3');
+  } });
+  const task = await state.service.create(42, 'Research a long topic', 'agent-7-3', 'full');
+  await assert.rejects(state.service.run(42, task.id), { name: 'AbortError' });
+  assert.deepEqual(stages, ['research']);
+  assert.equal(state.tasks[0].status, 'failed');
+  assert.equal(state.tasks[0].versions.length, 0);
+});
 
 function request(url, method = "GET", body, headers = {}) {
   return new Request(`http://content${url}`, {

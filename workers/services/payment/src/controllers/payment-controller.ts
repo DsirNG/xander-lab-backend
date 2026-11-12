@@ -3,6 +3,8 @@ import type { PaymentEnvironment } from "../interfaces/payment-environment.js";
 import { PaymentOrderService, PaymentRequestError } from "../services/payment-order-service.js";
 import { PaymentSettingsService } from "../services/payment-settings-service.js";
 
+import type { PaymentRefundService } from "../services/payment-refund-service.js";
+import { WechatMessageMapper } from "../mappers/wechat-message-mapper.js";
 const MAX_SETTINGS_BYTES = 16 * 1024;
 const MAX_NOTIFICATION_BYTES = 64 * 1024;
 const XML_SUCCESS = "<xml><ErrCode>0</ErrCode><ErrMsg><![CDATA[success]]></ErrMsg></xml>";
@@ -27,9 +29,15 @@ function product(value: unknown) {
   if (value === undefined || value === null) return { productId: "", priceCents: 0, durationDays: 30 };
   if (!isObject(value)) return null;
   const productId = text(value.productId);
-  if (productId === null || productId.length > 100
-    || typeof value.priceCents !== "number" || !Number.isSafeInteger(value.priceCents)
-    || typeof value.durationDays !== "number" || !Number.isSafeInteger(value.durationDays)) return null;
+  if (
+    productId === null ||
+    productId.length > 100 ||
+    typeof value.priceCents !== "number" ||
+    !Number.isSafeInteger(value.priceCents) ||
+    typeof value.durationDays !== "number" ||
+    !Number.isSafeInteger(value.durationDays)
+  )
+    return null;
   return { productId, priceCents: value.priceCents, durationDays: value.durationDays };
 }
 
@@ -52,8 +60,31 @@ export async function handlePaymentRequest(
   env: PaymentEnvironment,
   service: PaymentSettingsService,
   orders: PaymentOrderService,
+  refunds?: PaymentRefundService,
 ): Promise<Response | null> {
   const url = new URL(request.url);
+  const refundMatch=url.pathname.match(/^\/api\/virtual-pay\/orders\/([A-Za-z0-9_-]{1,128})\/(refund|refund-quote|refund-status)$/);
+  if ((url.pathname==='/api/virtual-pay/orders' && request.method==='GET') || refundMatch) {
+    const userId=positiveUserId(request.headers.get('x-user-id'));
+    if(!userId)return apiError(401,'未登录或登录已过期');
+    if(!refunds)return apiError(503,'退款服务暂不可用');
+    try {
+      if(!refundMatch) {
+        const raw=url.searchParams.get('before');const before=raw===null?Number.MAX_SAFE_INTEGER:Number(raw);
+        if(!Number.isSafeInteger(before)||before<1)return apiError(400,'分页参数无效');
+        return success(await refunds.list(userId,before));
+      }
+      const [,tradeNo,action]=refundMatch;
+      if(action==='refund' && request.method==='POST') {
+        const body=await readObject(request);if(body instanceof Response)return body;
+        if(!Number.isSafeInteger(body.expectedAmount)||Number(body.expectedAmount)<=0)return apiError(400,'退款金额无效');
+        return success(await refunds.request(userId,tradeNo,Number(body.expectedAmount)));
+      }
+      if(action==='refund-quote' && request.method==='GET')return success(await refunds.quote(userId,tradeNo));
+      if(action==='refund-status' && request.method==='GET')return success(await refunds.reconcile(userId,tradeNo));
+      return apiError(405,'Method Not Allowed');
+    }catch(error){return error instanceof PaymentRequestError?apiError(error.status,error.message):apiError(503,'订单退款服务暂不可用');}
+  }
   if (url.pathname === "/api/virtual-pay/products" && request.method === "GET") {
     return success(await service.catalog());
   }
@@ -62,12 +93,31 @@ export async function handlePaymentRequest(
     if (!userId) return apiError(401, "未登录或登录已过期");
     const body = await readObject(request);
     if (body instanceof Response) return body;
-    if (typeof body.productId !== "string" || !body.productId.trim() || body.productId.length > 100
-      || typeof body.loginCode !== "string" || !body.loginCode.trim() || body.loginCode.length > 512) {
+    if (
+      typeof body.productId !== "string" ||
+      !body.productId.trim() ||
+      body.productId.length > 100 ||
+      typeof body.loginCode !== "string" ||
+      !body.loginCode.trim() ||
+      body.loginCode.length > 512 ||
+      (body.outTradeNo !== undefined && (typeof body.outTradeNo !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(body.outTradeNo)))
+    ) {
       return apiError(400, "商品ID或微信登录凭证格式不正确");
     }
     try {
-      return success(await orders.createOrder(userId, body.productId.trim(), body.loginCode.trim()));
+      return success(
+        await orders.createOrder(
+          userId,
+          body.productId.trim(),
+          body.loginCode.trim(),
+          body.quantity === undefined
+            ? 1
+            : Number.isSafeInteger(body.quantity)
+              ? (body.quantity as number)
+              : 0,
+          body.outTradeNo as string | undefined,
+        ),
+      );
     } catch (error) {
       return error instanceof PaymentRequestError
         ? apiError(error.status, error.message)
@@ -76,21 +126,28 @@ export async function handlePaymentRequest(
   }
   if (url.pathname === "/api/virtual-pay/notify" && request.method === "GET") {
     const valid = await orders.verifyNotificationSignature(
-      url.searchParams.get("signature"), url.searchParams.get("timestamp"), url.searchParams.get("nonce"),
+      url.searchParams.get("signature"),
+      url.searchParams.get("timestamp"),
+      url.searchParams.get("nonce"),
     );
-    return new Response(valid ? url.searchParams.get("echostr") ?? "" : "invalid signature", {
+    return new Response(valid ? (url.searchParams.get("echostr") ?? "") : "invalid signature", {
       headers: { "content-type": "text/plain; charset=utf-8" },
     });
   }
   if (url.pathname === "/api/virtual-pay/notify" && request.method === "POST") {
     const valid = await orders.verifyNotificationSignature(
-      url.searchParams.get("signature"), url.searchParams.get("timestamp"), url.searchParams.get("nonce"),
+      url.searchParams.get("signature"),
+      url.searchParams.get("timestamp"),
+      url.searchParams.get("nonce"),
     );
     if (!valid || !isXmlContentType(request.headers.get("content-type"))) return xmlResponse(XML_FAILED);
     const xml = await readXmlBody(request);
     if (xml === null) return xmlResponse(XML_FAILED);
     try {
-      await orders.deliverNotification(xml);
+      if (/<Event>(?:<!\[CDATA\[)?xpay_refund_notify(?:\]\]>)?<\/Event>/.test(xml)) {
+        if(!refunds) throw new Error('Refund service unavailable');
+        await refunds.notification(new WechatMessageMapper().parseRefundNotification(xml));
+      } else await orders.deliverNotification(xml);
       return xmlResponse(XML_SUCCESS);
     } catch {
       return xmlResponse(XML_FAILED);
@@ -108,7 +165,9 @@ export async function handlePaymentRequest(
         : apiError(503, "支付服务暂不可用");
     }
   }
-  const reconcileMatch = url.pathname.match(/^\/api\/virtual-pay\/orders\/([A-Za-z0-9_-]{1,128})\/reconcile$/);
+  const reconcileMatch = url.pathname.match(
+    /^\/api\/virtual-pay\/orders\/([A-Za-z0-9_-]{1,128})\/reconcile$/,
+  );
   if (reconcileMatch && request.method === "POST") {
     const userId = positiveUserId(request.headers.get("x-user-id"));
     if (!userId) return apiError(401, "未登录或登录已过期");
@@ -138,8 +197,26 @@ export async function handlePaymentRequest(
   const ultra = product(body.ultra);
   if (!plus || !pro || !ultra) return apiError(400, "PLUS、PRO、ULTRA 商品配置格式不正确");
 
-  const result = await service.save({ enabled: body.enabled, offerId, appKey, plus, pro, ultra },
-    env.PAYMENT_SETTINGS_ENCRYPTION_KEY);
+  const pointsProductId = text(body.pointsProductId);
+  if (pointsProductId === null || pointsProductId.length > 100) return apiError(400, "积分商品 ID 无效");
+  const result = await service.save(
+    {
+      ...(body.pointsProducts !== undefined
+        ? {
+            pointsProducts:
+              body.pointsProducts as import("../interfaces/payment-settings-repository.js").PointsProduct[],
+          }
+        : {}),
+      enabled: body.enabled,
+      offerId,
+      appKey,
+      plus,
+      pro,
+      ultra,
+      ...(body.pointsProductId !== undefined ? { pointsProductId } : {}),
+    },
+    env.PAYMENT_SETTINGS_ENCRYPTION_KEY,
+  );
   if (result.kind === "invalid") return apiError(400, result.message);
   return result.kind === "saved" ? success(result.view) : apiError(503, "虚拟支付配置保存失败");
 }
@@ -160,7 +237,8 @@ function isXmlContentType(value: string | null): boolean {
 
 async function readXmlBody(request: Request): Promise<string | null> {
   const contentLength = request.headers.get("content-length");
-  if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_NOTIFICATION_BYTES)) return null;
+  if (contentLength && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_NOTIFICATION_BYTES))
+    return null;
   if (!request.body) return null;
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];

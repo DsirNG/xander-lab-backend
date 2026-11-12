@@ -1,3 +1,6 @@
+import { OssAgentImageUrlMapper } from "./mappers/oss-agent-image-url-mapper.js";
+import { DurableAgentImageTaskMapper } from "./mappers/durable-agent-image-task-mapper.js";
+export { AgentImageTaskObject } from "./controllers/agent-image-task-object.js";
 import { createBusinessService, type WorkerExecutionContextLike } from "@dinqor/worker-runtime";
 import { handleAgentOssSmokeTestRequest } from "./controllers/agent-oss-smoke-test-controller.js";
 import { handleAgentAttachmentSmokeTestRequest } from "./controllers/agent-attachment-smoke-test-controller.js";
@@ -80,6 +83,7 @@ const agentService = createBusinessService<AgentEnvironment>("agent", async (req
     new AgentImageService(new CoreAgentImageModelMapper(env), new OpenAiAgentImageMapper(), contentMedia, billing),
     contentTools,
     weather,
+    env.IMAGE_TASKS ? new DurableAgentImageTaskMapper(env.IMAGE_TASKS) : undefined,
   );
   const approvalResponse = await handleAgentApprovalRequest(request, approvalService, resolveUser);
   if (approvalResponse) return approvalResponse;
@@ -96,7 +100,7 @@ const agentService = createBusinessService<AgentEnvironment>("agent", async (req
   const skillResponse = await handleAgentSkillRequest(request, skillService, resolveUser);
   if (skillResponse) return skillResponse;
 
-  const conversationService = new AgentConversationService(new D1AgentConversationMapper(env.DB), attachmentService);
+  const conversationService = new AgentConversationService(new D1AgentConversationMapper(env.DB), attachmentService, env.AGENT_MEDIA_PUBLIC_BASE_URL, new OssAgentImageUrlMapper(env));
   return handleAgentConversationRequest(request, conversationService, resolveUser);
 });
 

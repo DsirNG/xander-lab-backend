@@ -2,8 +2,8 @@ import {
   createOssObjectUrl,
   inferOssRegion,
   signedOssDeleteHeaders,
-  signedOssHeadHeaders,
   signedOssGetHeaders,
+  signedOssGetUrl,
   signedOssPutHeaders,
 } from "@dinqor/worker-runtime/oss";
 import type { BlogMediaStorage, StoredBlogMedia } from "../interfaces/blog-media-storage.js";
@@ -29,23 +29,91 @@ function safeSegments(value: string): string[] {
 }
 
 export class OssBlogMediaMapper implements BlogMediaStorage {
-  constructor(private readonly env: BlogMediaOssEnvironment) {}
+  constructor(
+    private readonly env: BlogMediaOssEnvironment,
+    private readonly pause: (milliseconds: number) => Promise<void> =
+      milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)),
+  ) {}
 
   async upload(objectKey: string, bytes: Uint8Array, contentType: string): Promise<StoredBlogMedia> {
     const url = this.publicObjectUrl(objectKey);
+    await this.put(objectKey, bytes, contentType);
+    return { url: url.toString(), storedName: objectKey };
+  }
+
+  async signedUrl(objectKey: string): Promise<string> {
+    const { objectUrl, credentials } = this.privateObject(objectKey);
+    return (await signedOssGetUrl(objectUrl, credentials, 86_400)).toString();
+  }
+
+  private async put(objectKey: string, bytes: Uint8Array, contentType: string): Promise<void> {
     const { objectUrl, credentials } = this.privateObject(objectKey);
     const body = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(body).set(bytes);
-    const response = await this.request(objectUrl, {
-      method: "PUT",
-      headers: await signedOssPutHeaders(objectUrl, credentials, contentType),
-      body,
-      redirect: "manual",
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!response.ok) throw new Error("Blog media upload failed");
-    return { url: url.toString(), storedName: objectKey };
+    const startedAt = Date.now();
+    const timeoutMs = bytes.byteLength <= 256 * 1024 ? 8_000 : 20_000;
+    const attempts = 2;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      let response: Response;
+      try {
+        // Each attempt re-signs a replayable buffer at the same random object key.
+        // This PUT is idempotent even if OSS saved it before the first connection timed out.
+        response = await fetch(objectUrl, {
+          method: "PUT",
+          headers: await signedOssPutHeaders(objectUrl, credentials, contentType),
+          body,
+          redirect: "manual",
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      } catch (error) {
+        const transient = error instanceof Error
+          && ["TimeoutError", "AbortError", "TypeError", "NetworkError"].includes(error.name);
+        if (transient && attempt < attempts) {
+          console.warn("content.media.oss-put-retry", {
+            attempt, nextAttempt: attempt + 1, error: error.name,
+            bytes: bytes.byteLength, elapsedMs: Date.now() - startedAt, timeoutMs,
+          });
+          await this.pause(150);
+          continue;
+        }
+        console.error("Blog media OSS request unavailable", {
+          method: "PUT", error: error instanceof Error ? error.name : "UnknownError",
+          attempts: attempt, elapsedMs: Date.now() - startedAt, bytes: bytes.byteLength,
+        });
+        throw new Error("Blog media storage is unavailable");
+      }
+      if (response.ok) {
+        await response.body?.cancel().catch(() => {});
+        console.info("content.media.oss-put-completed", {
+          attempt, elapsedMs: Date.now() - startedAt, bytes: bytes.byteLength,
+        });
+        return;
+      }
+      const retryableStatus = [408, 429, 500, 502, 503, 504].includes(response.status);
+      if (retryableStatus && attempt < attempts) {
+        const status = response.status;
+        await response.body?.cancel().catch(() => {});
+        console.warn("content.media.oss-put-retry", {
+          attempt, nextAttempt: attempt + 1, status,
+          bytes: bytes.byteLength, elapsedMs: Date.now() - startedAt, timeoutMs,
+        });
+        await this.pause(150);
+        continue;
+      }
+      // Authentication, signature and validation failures must be reported, not replayed.
+      const errorBody = await response.text().catch(() => "");
+      const errorCode = response.headers.get("x-oss-ec")
+        ?? errorBody.match(/<Code>\s*([A-Za-z0-9_-]{1,80})\s*<\/Code>/i)?.[1]
+        ?? null;
+      console.error("Blog media OSS PUT rejected", {
+        status: response.status,
+        errorCode: errorCode?.match(/^[a-z0-9._-]{1,100}$/i)?.[0],
+        requestId: response.headers.get("x-oss-request-id")?.match(/^[a-z0-9_-]{1,100}$/i)?.[0],
+      });
+      throw new Error("Blog media upload failed");
+    }
   }
+
 
   async read(objectKey: string): Promise<{ body: ReadableStream<Uint8Array> } | null> {
     for (const bucket of this.bucketCandidates()) {
@@ -68,14 +136,21 @@ export class OssBlogMediaMapper implements BlogMediaStorage {
     for (const bucket of buckets) {
       const { objectUrl, credentials } = this.privateObject(objectKey, bucket);
       if (buckets.length > 1) {
+        // A signed ranged GET uses the same verified read path as public images.
+        const headers = await signedOssGetHeaders(objectUrl, credentials);
+        headers.set("range", "bytes=0-0");
         const head = await this.request(objectUrl, {
-          method: "HEAD",
-          headers: await signedOssHeadHeaders(objectUrl, credentials),
+          method: "GET",
+          headers,
           redirect: "manual",
           signal: AbortSignal.timeout(10_000),
         });
+        await head.body?.cancel().catch(() => {});
         if (head.status === 404) continue;
-        if (!head.ok) throw new Error("Blog media cleanup failed");
+        if (!head.ok) {
+          console.error("content.media.cleanup-probe-failed", { status: head.status });
+          throw new Error("Blog media cleanup failed");
+        }
       }
       const response = await this.request(objectUrl, {
         method: "DELETE",

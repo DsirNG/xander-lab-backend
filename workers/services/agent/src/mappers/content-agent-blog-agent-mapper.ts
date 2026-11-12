@@ -94,6 +94,10 @@ export class AgentBlogAgentError extends Error {
 export class ContentAgentBlogAgentMapper implements AgentBlogAgentPort {
   constructor(private readonly env: ContentAgentPublicationEnvironment) {}
 
+  async cancel(userId: number, clientRequestId: string): Promise<void> {
+    await this.post("/internal/agent/blogagent/cancel", { userId, clientRequestId });
+  }
+
   async create(userId: number, input: string, clientRequestId: string, mode: "auto" | "quick" | "full" = "auto"): Promise<AgentBlogTaskSummary> {
     const value = await this.post("/internal/agent/blogagent/create", { userId, input, clientRequestId, mode });
     const task = summary(value);

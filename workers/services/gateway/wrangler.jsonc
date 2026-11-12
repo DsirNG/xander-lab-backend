@@ -42,5 +42,6 @@
     }
   ],
   "dev": { "port": 8787 },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  "placement": { "region": "aws:ap-southeast-1" }
 }

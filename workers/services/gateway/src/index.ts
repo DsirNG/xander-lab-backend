@@ -617,13 +617,19 @@ function validPreflightMethod(request: Request): boolean {
 
 export default {
   async fetch(request: Request, env: GatewayEnvironment): Promise<Response> {
+    const started = performance.now();
+    const timings: string[] = [];
     const url = new URL(request.url);
     const traceId = correlationId(request.headers.get("x-trace-id"));
     const requestId = correlationId(request.headers.get("x-request-id"));
     const cors = corsContext(request, env);
-    const finish = async (response: Response) => finishResponse(
-      await localizeApiResponse(response, request), traceId, cors, request,
-    );
+    const finish = async (response: Response) => {
+      const result = finishResponse(await localizeApiResponse(response, request), traceId, cors, request);
+      // Durations only: no identities, tokens or request payloads in diagnostics.
+      if (result.status === 101) return result;
+      result.headers.append("server-timing", [...timings, `gateway;dur=${(performance.now() - started).toFixed(1)}`].join(", "));
+      return result;
+    };
 
     if (!cors.allowed) return finish(apiError(403, "Origin is not allowed"));
     if (cors.preflight) {
@@ -654,7 +660,9 @@ export default {
       && candidate.matcher.test(url.pathname));
     if (!route) return finish(apiError(404, "Route not found"));
 
+    const authStarted = performance.now();
     const identity = await authorize(request, route, accessDecision(request.method, url.pathname), env);
+    timings.push(`auth;dur=${(performance.now() - authStarted).toFixed(1)}`);
     if (identity instanceof Response) return finish(identity);
 
     const [serviceUrl, serviceToken, serviceBinding] = destination(route.service, env);
@@ -673,7 +681,10 @@ export default {
       const edgeClientIp = request.headers.get("cf-connecting-ip");
       if (edgeClientIp) upstreamRequest.headers.set("x-dinqor-client-ip", edgeClientIp);
       upstreamRequest.headers.set("x-dinqor-service-token", serviceToken);
-      return finish(await fetchWithServiceBinding(serviceBinding, upstreamRequest));
+      const upstreamStarted = performance.now();
+      const response = await fetchWithServiceBinding(serviceBinding, upstreamRequest);
+      timings.push(`upstream;dur=${(performance.now() - upstreamStarted).toFixed(1)}`);
+      return finish(response);
     } catch {
       return finish(apiError(502, `Service ${route.service} is unavailable`));
     }

@@ -29,24 +29,26 @@ function publicImageUrl(request: Request, storedName: string, publicMediaBaseUrl
   return url.toString();
 }
 
-function publicMediaAsset<T extends { url: string; storedName: string | null }>(
+async function publicMediaAsset<T extends { url: string; storedName: string | null }>(
   request: Request,
   asset: T,
   publicMediaBaseUrl?: string,
-): T {
+  service?: BlogMediaService,
+): Promise<T> {
   return asset.storedName && isPublicBlogImageObjectKey(asset.storedName)
-    ? { ...asset, url: publicImageUrl(request, asset.storedName, publicMediaBaseUrl) }
+    ? { ...asset, url: await service?.presentationUrl(asset.storedName, publicImageUrl(request, asset.storedName, publicMediaBaseUrl)) ?? publicImageUrl(request, asset.storedName, publicMediaBaseUrl) }
     : asset;
 }
 
-function publicAgentImage<T extends { url: string; storedName: string | null }>(
+async function publicAgentImage<T extends { url: string; storedName: string | null }>(
   request: Request,
   image: T,
   publicMediaBaseUrl?: string,
+  service?: BlogMediaService,
 ) {
   const { storedName, ...asset } = image;
   return storedName && isPublicBlogImageObjectKey(storedName)
-    ? { ...asset, url: publicImageUrl(request, storedName, publicMediaBaseUrl) }
+    ? { ...asset, url: await service?.presentationUrl(storedName, publicImageUrl(request, storedName, publicMediaBaseUrl)) ?? publicImageUrl(request, storedName, publicMediaBaseUrl) }
     : asset;
 }
 
@@ -128,6 +130,13 @@ export async function handleBlogMediaRequest(
     try { objectKey = decodeURIComponent(url.pathname.slice(PUBLIC_MEDIA_PATH.length)); }
     catch { return apiError(404, "图片不存在"); }
     try {
+      const directUrl = await service.publicImageRedirect(objectKey);
+      if (directUrl) return new Response(null, { status: 302, headers: {
+        location: directUrl,
+        "cache-control": "no-store",
+        "referrer-policy": "no-referrer",
+        "access-control-allow-origin": "*",
+      } });
       const image = await service.publicImage(objectKey);
       if (!image) return apiError(404, "图片不存在");
       return new Response(image.body, { headers: {
@@ -145,7 +154,7 @@ export async function handleBlogMediaRequest(
     if (userId === null) return apiError(401, "未登录或登录已过期");
     try {
       const images = await service.images(userId, url.searchParams.get("scope") ?? "recent", url.searchParams.get("keyword"));
-      return success(images.map((image) => publicMediaAsset(request, image, publicMediaBaseUrl)));
+      return success(await Promise.all(images.map((image) => publicMediaAsset(request, image, publicMediaBaseUrl, service))));
     }
     catch (error) { return errorResponse(error); }
   }
@@ -159,7 +168,7 @@ export async function handleBlogMediaRequest(
       const result = await service.agentImages(userId, page, size);
       return success({
         ...result,
-        records: result.records.map((image) => publicAgentImage(request, image, publicMediaBaseUrl)),
+        records: await Promise.all(result.records.map((image) => publicAgentImage(request, image, publicMediaBaseUrl, service))),
       });
     }
     catch (error) { return errorResponse(error); }
@@ -173,7 +182,7 @@ export async function handleBlogMediaRequest(
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       const image = await service.uploadImage({ userId, bytes, originalName: file.name, contentType: file.type });
-      return success(publicMediaAsset(request, image, publicMediaBaseUrl));
+      return success(await publicMediaAsset(request, image, publicMediaBaseUrl, service));
     } catch (error) { return errorResponse(error); }
   }
 
@@ -205,7 +214,7 @@ export async function handleBlogMediaRequest(
     if (userId === null || !stored || typeof stored !== "object" || Array.isArray(stored)) return apiError(400, "媒体信息无效");
     try {
       const asset = await service.recordStored(userId, stored as Parameters<BlogMediaService["recordStored"]>[1]);
-      return jsonResponse(publicMediaAsset(request, asset, publicMediaBaseUrl));
+      return jsonResponse(await publicMediaAsset(request, asset, publicMediaBaseUrl, service));
     }
     catch (error) { return errorResponse(error); }
   }
@@ -216,7 +225,7 @@ export async function handleBlogMediaRequest(
     if (userId === null || id === null) return apiError(400, "媒体 ID 无效");
     try {
       const asset = await service.findOwned(userId, id);
-      return jsonResponse(asset ? publicMediaAsset(request, asset, publicMediaBaseUrl) : null);
+      return jsonResponse(asset ? await publicMediaAsset(request, asset, publicMediaBaseUrl, service) : null);
     }
     catch (error) { return errorResponse(error); }
   }
@@ -227,7 +236,7 @@ export async function handleBlogMediaRequest(
     if (userId === null || taskId === null) return apiError(400, "Agent 任务 ID 无效");
     try {
       const assets = await service.listByTask(userId, taskId);
-      return jsonResponse(assets.map((asset) => publicMediaAsset(request, asset, publicMediaBaseUrl)));
+      return jsonResponse(await Promise.all(assets.map((asset) => publicMediaAsset(request, asset, publicMediaBaseUrl, service))));
     }
     catch (error) { return errorResponse(error); }
   }
@@ -238,7 +247,7 @@ export async function handleBlogMediaRequest(
     if (userId === null || !title) return apiError(400, "图片标题无效");
     try {
       const asset = await service.findReusableGenerated(userId, title);
-      return jsonResponse(asset ? publicMediaAsset(request, asset, publicMediaBaseUrl) : null);
+      return jsonResponse(asset ? await publicMediaAsset(request, asset, publicMediaBaseUrl, service) : null);
     }
     catch (error) { return errorResponse(error); }
   }
@@ -261,7 +270,7 @@ export async function handleBlogMediaRequest(
     try {
       const asset = await service.uploadImage({ userId, bytes, originalName, contentType,
         sourceType: "agent_generated", agentTaskId: taskId, generationMeta });
-      return jsonResponse(publicMediaAsset(request, asset, publicMediaBaseUrl));
+      return jsonResponse(await publicMediaAsset(request, asset, publicMediaBaseUrl, service));
     } catch (error) { return errorResponse(error); }
   }
   return null;

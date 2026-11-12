@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock, afterEach } from "node:test";
+import { OssBlogMediaMapper } from "../.test-build/mappers/oss-blog-media-mapper.js";
+afterEach(() => mock.restoreAll());
 import { handleBlogMediaRequest } from "../.test-build/controllers/blog-media-controller.js";
 import { BlogMediaService } from "../.test-build/services/blog-media-service.js";
 import worker from "../.test-build/index.js";
@@ -166,11 +168,7 @@ test("public media URLs work without the internal service token while other Cont
     createdAt: "2026-10-11T00:00:00.000Z",
   };
   const statement = { bind() { return this; }, async first() { return row; } };
-  globalThis.fetch = async (input, init) => {
-    assert.equal(new URL(input).hostname, "dinqor.oss-cn-beijing.aliyuncs.com");
-    assert.equal(init.method, "GET");
-    return new Response(tinyPng);
-  };
+  globalThis.fetch = async () => { throw new Error("public image redirect must not download OSS bytes"); };
   try {
     const environment = {
       DB: { prepare() { return statement; }, async batch() { return []; } },
@@ -184,9 +182,13 @@ test("public media URLs work without the internal service token while other Cont
       environment,
       { waitUntil() {} },
     );
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 302);
     assert.equal(response.headers.get("access-control-allow-origin"), "*");
-    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), tinyPng);
+    const direct = new URL(response.headers.get("location"));
+    assert.equal(direct.hostname, "dinqor.oss-cn-beijing.aliyuncs.com");
+    assert.equal(direct.pathname, "/photos/blog/" + storedName);
+    assert.equal(direct.searchParams.get("x-oss-expires"), "86400");
+    assert.match(direct.searchParams.get("x-oss-signature"), /^[0-9a-f]{64}$/);
 
     const protectedResponse = await worker.fetch(
       new Request("https://content/api/blog/posts"), environment, { waitUntil() {} },
@@ -251,4 +253,86 @@ test("internal Agent generated-image contract decodes metadata and records the i
   const images = await page.json();
   assert.equal(images.data.records[0].url, asset.url);
   assert.equal(Object.hasOwn(images.data.records[0], "storedName"), false);
+});
+
+
+test("Content image PUT retries the same bytes once and stops on permanent failures", async () => {
+  const env = {
+    ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com", ALIYUN_OSS_BUCKET: "test-bucket",
+    ALIYUN_OSS_ACCESS_KEY_ID: "test-key", ALIYUN_OSS_ACCESS_KEY_SECRET: "test-secret",
+    CONTENT_MEDIA_PUBLIC_BASE_URL: "https://media.example/",
+  };
+  for (const failure of ["timeout", 503, 403, "network"]) {
+    const calls = [];
+    mock.method(globalThis, "fetch", async (url, init) => {
+      calls.push({ url: String(url), bytes: [...new Uint8Array(init.body)], signal: init.signal });
+      if (failure === "network") throw new TypeError("network failed");
+      if (calls.length === 1 && failure === "timeout") throw new DOMException("timeout", "TimeoutError");
+      return new Response(null, { status: calls.length === 1 && typeof failure === "number" ? failure : 200 });
+    });
+    const mapper = new OssBlogMediaMapper(env, async () => {});
+    const result = mapper.upload("42/retry.png", new Uint8Array([1, 2]), "image/png");
+    if (failure === 403 || failure === "network") {
+      await assert.rejects(result, /upload failed|storage is unavailable/);
+      assert.equal(calls.length, failure === 403 ? 1 : 2);
+    } else {
+      await result;
+      assert.equal(calls.length, 2);
+      assert.equal(calls[0].url, calls[1].url);
+      assert.deepEqual(calls[0].bytes, calls[1].bytes);
+      assert.notEqual(calls[0].signal, calls[1].signal);
+    }
+  }
+});
+
+
+test("Content cleanup locates legacy objects with a bounded signed GET before deleting", async () => {
+  const calls=[];
+  mock.method(globalThis,"fetch",async (input,init)=>{
+    const url=new URL(input),headers=new Headers(init.headers);
+    calls.push({host:url.hostname,method:init.method,range:headers.get("range")});
+    assert.match(headers.get("authorization"), /^OSS4-HMAC-SHA256 /);
+    return new Response(null,{status:url.hostname.startsWith("current.") ? 404 : 200});
+  });
+  const mapper=new OssBlogMediaMapper({
+    ALIYUN_OSS_ENDPOINT:"oss-cn-beijing.aliyuncs.com",ALIYUN_OSS_BUCKET:"current",
+    ALIYUN_OSS_LEGACY_BUCKET:"legacy",ALIYUN_OSS_ACCESS_KEY_ID:"test-key",ALIYUN_OSS_ACCESS_KEY_SECRET:"test-secret",
+  });
+  await mapper.delete("42/test.png");
+  assert.deepEqual(calls,[
+    {host:"current.oss-cn-beijing.aliyuncs.com",method:"GET",range:"bytes=0-0"},
+    {host:"legacy.oss-cn-beijing.aliyuncs.com",method:"GET",range:"bytes=0-0"},
+    {host:"legacy.oss-cn-beijing.aliyuncs.com",method:"DELETE",range:null},
+  ]);
+});
+
+
+test("generated media responses return direct signed OSS URLs without persisting expiring links", async () => {
+  const { service, storage, rows } = setup();
+  let signed = 0;
+  storage.signedUrl = async key => { signed++; return "https://images.oss-cn-beijing.aliyuncs.com/photos/blog/" + key + "?x-oss-signature=test"; };
+  const response = await handleBlogMediaRequest(new Request("https://content.example/internal/content/media/record-generated", {
+    method: "POST", headers: { "x-dinqor-user-id": "42", "x-dinqor-content-type": "image/png" }, body: tinyPng,
+  }), service, "https://api.example/api/public/blog/media");
+  assert.equal(response.status, 200);
+  const image = await response.json();
+  assert.match(image.url, /^https:\/\/images\.oss-cn-beijing\.aliyuncs\.com\/photos\/blog\//);
+  assert.equal(rows[0].url.includes("x-oss-signature"), false);
+  const listing = await handleBlogMediaRequest(new Request("https://content.example/api/blog/media/images/agent", {headers:{"x-user-id":"42"}}), service);
+  assert.match((await listing.json()).data.records[0].url, /x-oss-signature=test/);
+  assert.equal(signed, 2);
+});
+
+
+test("legacy public image links redirect to OSS without reading bytes and reject missing assets", async () => {
+  const { service, storage } = setup();
+  const asset = await service.uploadImage({ userId: 42, bytes: tinyPng, contentType: "image/png" });
+  storage.signedUrl = async key => "https://images.oss-cn-beijing.aliyuncs.com/photos/blog/" + key + "?signature=test";
+  storage.read = async () => { throw new Error("must not download image bytes"); };
+  const response = await handleBlogMediaRequest(new Request("https://api.example/api/public/blog/media/" + asset.storedName), service);
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get("location"), /^https:\/\/images\.oss-cn-beijing/);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const missing = await handleBlogMediaRequest(new Request("https://api.example/api/public/blog/media/42/2026/11/00000000-0000-0000-0000-000000000000.png"), service);
+  assert.equal(missing.status, 404);
 });

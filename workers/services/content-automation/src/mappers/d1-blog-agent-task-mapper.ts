@@ -90,6 +90,13 @@ export class D1BlogAgentTaskMapper implements BlogAgentTaskRepository {
     return result.meta.changes === 1;
   }
 
+  async cancelByRequestId(userId: number, requestId: string, now: string): Promise<void> {
+    await this.db.prepare(`UPDATE blog_agent_task SET status = 'failed',
+      error_message = 'Task cancelled', updated_at = ?
+      WHERE user_id = ? AND client_request_id = ? AND status IN ('created', 'running')`)
+      .bind(now, userId, requestId).run();
+  }
+
   async updateStage(userId: number, taskId: number, stage: string, message: string, now: string): Promise<boolean> {
     const result = await this.db.prepare(`UPDATE blog_agent_task SET stage = ?, updated_at = ?
       WHERE id = ? AND user_id = ? AND status = 'running'`).bind(stage, now, taskId, userId).run();

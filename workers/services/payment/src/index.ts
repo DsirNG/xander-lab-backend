@@ -14,7 +14,9 @@ import { AlipaySdkMapper } from "./mappers/alipay-sdk-mapper.js";
 import { resolveAlipayConfiguration } from "./services/alipay-configuration.js";
 import { AlipayOrderService } from "./services/alipay-order-service.js";
 
-export default createBusinessService<PaymentEnvironment>("payment", async (request, env) => {
+import { D1PaymentRefundMapper } from "./mappers/d1-payment-refund-mapper.js";
+import { PaymentRefundService } from "./services/payment-refund-service.js";
+const paymentWorker = createBusinessService<PaymentEnvironment>("payment", async (request, env) => {
   const settings = new PaymentSettingsService(new D1PaymentSettingsMapper(env.DB));
   const core = new CorePaymentMapper(env);
   const alipayResponse = await handleAlipayRequest(request, () => {
@@ -27,5 +29,17 @@ export default createBusinessService<PaymentEnvironment>("payment", async (reque
     new D1PaymentOrderMapper(env.DB), settings, core, new WechatVirtualPayMapper(env, core),
     new WechatMessageMapper(), env,
   );
-  return handlePaymentRequest(request, env, settings, orders);
+  const refunds = new PaymentRefundService(new D1PaymentOrderMapper(env.DB),new D1PaymentRefundMapper(env.DB),
+    core,new WechatVirtualPayMapper(env,core),settings,env);
+  return handlePaymentRequest(request, env, settings, orders,refunds);
 });
+
+// Recovery does not depend on the user keeping the order page open.
+export default {
+  ...paymentWorker,
+  async scheduled(_event: unknown, env: PaymentEnvironment) {
+    const core=new CorePaymentMapper(env);
+    await new PaymentRefundService(new D1PaymentOrderMapper(env.DB),new D1PaymentRefundMapper(env.DB),core,
+      new WechatVirtualPayMapper(env,core),new PaymentSettingsService(new D1PaymentSettingsMapper(env.DB)),env).sweep();
+  },
+};

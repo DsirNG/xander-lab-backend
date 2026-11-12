@@ -1,4 +1,5 @@
 import type { D1Binding } from "@dinqor/worker-runtime";
+import { recoverStaleImageRun } from "./recover-stale-image-run.js";
 import type {
   AgentConversationRepository,
   AgentMessageRecord,
@@ -49,10 +50,12 @@ export class D1AgentConversationMapper implements AgentConversationRepository {
     return rows.results;
   }
 
-  findOwnedConversation(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
-    return this.db.prepare(`
+  async findOwnedConversation(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
+    const read = () => this.db.prepare(`
       SELECT ${CONVERSATION_COLUMNS} FROM agent_conversation WHERE id = ? AND user_id = ?
     `).bind(conversationId, userId).first<AgentConversationRecord>();
+    const row = await read();
+    return await recoverStaleImageRun(this.db, row) ? read() : row;
   }
 
   async listMessages(conversationId: number): Promise<AgentMessageRecord[]> {

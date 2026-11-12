@@ -86,17 +86,20 @@ export class D1EmailReminderMapper implements EmailReminderRepository {
       values.push(input.search, input.search);
     }
     const where = filters.join(" AND ");
-    const count = await this.db.prepare(`SELECT COUNT(*) AS count FROM email_reminder_task WHERE ${where}`)
-      .bind(...values).first<{ count: number }>();
-    const total = Number(count?.count ?? 0);
-    const rows = await this.db.prepare(`${SELECT} WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`)
-      .bind(...values, input.size, (input.page - 1) * input.size).all<ReminderRow>();
-    const stats = await this.db.prepare(`SELECT COUNT(*) AS total,
+    // These independent reads share the same owner filters, not each other's results.
+    const [count, rows, stats] = await Promise.all([
+      this.db.prepare(`SELECT COUNT(*) AS count FROM email_reminder_task WHERE ${where}`)
+        .bind(...values).first<{ count: number }>(),
+      this.db.prepare(`${SELECT} WHERE ${where} ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`)
+        .bind(...values, input.size, (input.page - 1) * input.size).all<ReminderRow>(),
+      this.db.prepare(`SELECT COUNT(*) AS total,
         SUM(CASE WHEN status IN ('PENDING', 'SENDING') THEN 1 ELSE 0 END) AS active,
         SUM(CASE WHEN status = 'SENT' THEN 1 ELSE 0 END) AS sent,
         SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) AS pending
       FROM email_reminder_task WHERE user_id = ? AND deleted_at IS NULL`)
-      .bind(input.userId).first<{ total: number | null; active: number | null; sent: number | null; pending: number | null }>();
+        .bind(input.userId).first<{ total: number | null; active: number | null; sent: number | null; pending: number | null }>(),
+    ]);
+    const total = Number(count?.count ?? 0);
     const pages = total === 0 ? 0 : Math.ceil(total / input.size);
     return { records: rows.results.map(map), total, current: input.page, pages, size: input.size,
       hasMore: input.page < pages, stats: { total: Number(stats?.total ?? 0), active: Number(stats?.active ?? 0),

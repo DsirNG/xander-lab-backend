@@ -47,6 +47,18 @@ export class WechatMessageMapper implements WechatMessagePort {
     return constantTimeEqual(hex, signature.toLowerCase());
   }
 
+  parseRefundNotification(xml: string) {
+    if(encoder.encode(xml).byteLength>64*1024 || /<!\s*(?:DOCTYPE|ENTITY)/i.test(xml)
+      || !/^\s*(?:<\?xml[^?]*\?>\s*)?<xml>[\s\S]*<\/xml>\s*$/.test(xml)) throw new Error('Invalid refund XML');
+    const field=(tag:string)=>{const value=getTag(xml,tag);if(!value)throw new Error('Missing refund field');return value;};
+    if(field('Event')!=='xpay_refund_notify') throw new Error('Invalid refund event');
+    const fee=Number(field('RefundFee'));const ret=Number(field('RetCode'));
+    if(!Number.isSafeInteger(fee)||fee<=0||!Number.isSafeInteger(ret))throw new Error('Invalid refund amounts');
+    const refundId=field('MchRefundId');
+    if(!/^[A-Za-z0-9_-]{8,32}$/.test(refundId))throw new Error('Invalid refund id');
+    return {tradeNo:field('MchOrderId'),openid:field('OpenId'),refundId,wxOrderId:field('WxOrderId'),
+      wxRefundId:field('WxRefundId'),fee,success:ret===0};
+  }
   parseDeliveryNotification(xml: string): WechatDeliveryNotification {
     try {
       if (encoder.encode(xml).byteLength > 64 * 1024 || /<!\s*(?:DOCTYPE|ENTITY)/i.test(xml)) throw new Error("unsafe XML");

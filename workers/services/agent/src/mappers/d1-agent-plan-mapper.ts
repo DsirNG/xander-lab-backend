@@ -10,15 +10,15 @@ export class D1AgentPlanMapper implements AgentPlanRepository {
     const results = await this.db.batch([
       this.db.prepare(`UPDATE agent_conversation SET plan_json = ?, updated_at =
         strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
+        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0
         RETURNING id`).bind(planJson, conversationId, userId, runVersion),
       this.db.prepare(`INSERT INTO agent_message (conversation_id, run_version, role, kind, content)
         SELECT ?, ?, 'assistant', 'plan', ? WHERE EXISTS (
-          SELECT 1 FROM agent_conversation WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
+          SELECT 1 FROM agent_conversation WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0
         ) RETURNING id`).bind(conversationId, runVersion, planJson, conversationId, userId, runVersion),
       this.db.prepare(`INSERT INTO agent_event (conversation_id, run_version, event_type, data_content)
         SELECT ?, ?, 'plan', ? WHERE EXISTS (
-          SELECT 1 FROM agent_conversation WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
+          SELECT 1 FROM agent_conversation WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0
         ) RETURNING id`).bind(conversationId, runVersion, planJson, conversationId, userId, runVersion),
     ]);
     if ((results[0]?.meta?.changes ?? 0) !== 1) return null;

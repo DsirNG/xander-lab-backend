@@ -24,7 +24,7 @@ export async function handleProfileOverviewRequest(
   if (request.method !== "GET" || url.pathname !== "/api/profile/overview") return null;
   const user = await resolveCurrentUser(request, env, auth);
   if (user instanceof Response) return user;
-  const result = await service.get(user);
+  const result = await service.get(user, url.searchParams.get("includeBlogCount") !== "false");
   if (result.kind === "unconfigured") return apiError(503, "个人博客统计服务尚未配置");
   if (result.kind === "unavailable") return apiError(503, "个人博客统计服务暂不可用");
   if (result.kind === "invalid_response") return apiError(503, "个人博客统计服务响应无效");

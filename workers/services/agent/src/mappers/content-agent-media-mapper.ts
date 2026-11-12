@@ -17,7 +17,7 @@ function internalEndpoint(baseUrl: string | undefined, path: string): URL {
 export class ContentAgentMediaMapper implements AgentMediaAssetPort, AgentImageMediaPort {
   constructor(private readonly env: AgentEnvironment) {}
 
-  async uploadImage(userId: number, originalName: string, contentType: string, bytes: Uint8Array): Promise<{ id: number }> {
+  async uploadImage(userId: number, originalName: string, contentType: string, bytes: Uint8Array): Promise<{ id: number; url: string }> {
     if (!this.env.CONTENT_AUTOMATION_SERVICE_TOKEN) throw new Error("Content media contract is not configured");
     const body = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(body).set(bytes);
@@ -35,7 +35,7 @@ export class ContentAgentMediaMapper implements AgentMediaAssetPort, AgentImageM
         },
         body,
         redirect: "manual",
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(60_000),
       });
     } catch { throw new Error("Content media contract failed"); }
     if (!response.ok) throw new Error("Content media upload failed");
@@ -43,7 +43,9 @@ export class ContentAgentMediaMapper implements AgentMediaAssetPort, AgentImageM
     if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("Content media upload returned invalid data");
     const id = (result as Record<string, unknown>).id;
     if (typeof id !== "number" || !Number.isSafeInteger(id) || id < 1) throw new Error("Content media upload returned invalid data");
-    return { id };
+    const url = (result as Record<string, unknown>).url;
+    if (typeof url !== "string" || !url.startsWith("https://")) throw new Error("Content media upload returned invalid data");
+    return { id, url };
   }
 
   async deleteAsset(userId: number, id: number): Promise<void> {

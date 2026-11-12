@@ -3,6 +3,8 @@
   "name": "dinqor-content-automation",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-10",
+  // Keep OSS traffic on the Hong Kong route; LAX-to-Beijing uploads stalled.
+  "placement": { "region": "aws:ap-southeast-1" },
   "secrets": {
     "required": ["INTERNAL_SERVICE_TOKEN", "PLATFORM_INTEGRATION_SERVICE_TOKEN", "CORE_SERVICE_TOKEN"]
   },

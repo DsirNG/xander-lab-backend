@@ -6,7 +6,7 @@ import type {
 } from "../interfaces/payment-settings-repository.js";
 
 const SELECT_SETTINGS = `
-  SELECT enabled, offer_id AS offerId, encrypted_app_key AS encryptedAppKey,
+  SELECT points_products_json AS pointsProductsJson, points_product_id AS pointsProductId, enabled, offer_id AS offerId, encrypted_app_key AS encryptedAppKey,
          plus_product_id AS plusProductId, plus_price_cents AS plusPriceCents,
          plus_duration_days AS plusDurationDays, pro_product_id AS proProductId,
          pro_price_cents AS proPriceCents, pro_duration_days AS proDurationDays,
@@ -22,14 +22,18 @@ export class D1PaymentSettingsMapper implements PaymentSettingsRepository {
   }
 
   async saveSettings(input: PaymentSettingsInput): Promise<boolean> {
-    const result = await this.db.prepare(`
+    const result = await this.db
+      .prepare(
+        `
       INSERT INTO virtual_pay_settings (
         id, enabled, offer_id, encrypted_app_key,
         plus_product_id, plus_price_cents, plus_duration_days,
         pro_product_id, pro_price_cents, pro_duration_days,
-        ultra_product_id, ultra_price_cents, ultra_duration_days
-      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ultra_product_id, ultra_price_cents, ultra_duration_days, points_product_id, points_products_json
+      ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
+        points_products_json = CASE WHEN ? = 1 THEN excluded.points_products_json ELSE virtual_pay_settings.points_products_json END,
+        points_product_id = CASE WHEN ? = 1 THEN excluded.points_product_id ELSE virtual_pay_settings.points_product_id END,
         enabled = excluded.enabled,
         offer_id = excluded.offer_id,
         encrypted_app_key = excluded.encrypted_app_key,
@@ -43,20 +47,27 @@ export class D1PaymentSettingsMapper implements PaymentSettingsRepository {
         ultra_price_cents = excluded.ultra_price_cents,
         ultra_duration_days = excluded.ultra_duration_days,
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-    `).bind(
-      input.enabled ? 1 : 0,
-      input.offerId,
-      input.encryptedAppKey,
-      input.plus.productId,
-      input.plus.priceCents,
-      input.plus.durationDays,
-      input.pro.productId,
-      input.pro.priceCents,
-      input.pro.durationDays,
-      input.ultra.productId,
-      input.ultra.priceCents,
-      input.ultra.durationDays,
-    ).run();
+    `,
+      )
+      .bind(
+        input.enabled ? 1 : 0,
+        input.offerId,
+        input.encryptedAppKey,
+        input.plus.productId,
+        input.plus.priceCents,
+        input.plus.durationDays,
+        input.pro.productId,
+        input.pro.priceCents,
+        input.pro.durationDays,
+        input.ultra.productId,
+        input.ultra.priceCents,
+        input.ultra.durationDays,
+        input.pointsProductId ?? "",
+        input.pointsProducts === undefined ? null : JSON.stringify(input.pointsProducts),
+        input.pointsProducts === undefined ? 0 : 1,
+        input.pointsProductId === undefined ? 0 : 1,
+      )
+      .run();
     return result.success;
   }
 }

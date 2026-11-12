@@ -2,6 +2,8 @@ import type { AgentBillingPort } from "../interfaces/agent-billing-port.js";
 import type { AgentImageGenerationPort } from "../interfaces/agent-image-generation-port.js";
 import type { AgentImageMediaPort } from "../interfaces/agent-image-media-port.js";
 import type { AgentImageModelGateway } from "../interfaces/agent-image-model-gateway.js";
+import { AgentImageProviderError } from "../interfaces/agent-image-provider-error.js";
+import type { AgentImagePreview } from "../interfaces/agent-image-preview.js";
 
 const IMAGE_STYLE = "生成一张构图完整、风格鲜明、适合展示的知识插图或封面图，画面主次分明、层次丰富，不添加水印；如包含文字，保持简短清晰。用户要求：";
 
@@ -17,7 +19,9 @@ export class AgentImageService {
     private readonly billing: AgentBillingPort,
   ) {}
 
-  async generate(userId: number, conversationId: number, runVersion: number, input: unknown) {
+  async generate(userId: number, conversationId: number, runVersion: number, input: unknown,
+    onPreview?: (preview: AgentImagePreview) => Promise<void>,
+    ensureActive: () => Promise<void> = async () => {}) {
     if (!Number.isSafeInteger(userId) || userId < 1 || !input || typeof input !== "object" || Array.isArray(input)) {
       throw new AgentImageError(400, "图片生成参数无效");
     }
@@ -36,26 +40,46 @@ export class AgentImageService {
 
     let generated: Awaited<ReturnType<AgentImageGenerationPort["generate"]>> | null = null;
     for (const endpoint of configured.endpoints) {
+      await ensureActive();
       try {
         generated = await this.generator.generate(endpoint, IMAGE_STYLE + prompt);
         break;
-      } catch {
+      } catch (error) {
+        console.warn("Agent image provider failed", {
+          conversationId, runVersion, providerId: endpoint.providerId,
+          apiStyle: endpoint.apiStyle,
+          stage: error instanceof AgentImageProviderError ? error.stage : "unknown",
+          providerStatus: error instanceof AgentImageProviderError ? error.providerStatus : undefined,
+          networkReason: error instanceof AgentImageProviderError ? error.networkReason : undefined,
+        });
         // A failed provider may be replaced by the next explicitly configured fallback.
       }
     }
     if (!generated) throw new AgentImageError(502, "图片生成模型调用失败，请检查图片模型接口配置或供应商状态");
+    await ensureActive();
 
     const resolvedTitle = title || "AI 生成图片";
+    if (onPreview) {
+      // The provider supplied inline bytes. Deliver them before any storage/billing work.
+      const chunks: string[] = [];
+      for (let offset = 0; offset < generated.bytes.length; offset += 8192) {
+        chunks.push(String.fromCharCode(...generated.bytes.subarray(offset, offset + 8192)));
+      }
+      await onPreview({ url: `data:${generated.contentType};base64,${btoa(chunks.join(""))}`,
+        title: resolvedTitle, contentType: generated.contentType, storageStatus: "saving" });
+    }
     const originalName = `agent-image-${Date.now()}.${generated.extension}`;
     const generationMeta = JSON.stringify({
       title: resolvedTitle, prompt, style: "tool", model: generated.model, size: generated.size,
     });
     let asset: Awaited<ReturnType<AgentImageMediaPort["recordGenerated"]>>;
+    await ensureActive();
     try {
       asset = await this.media.recordGenerated(userId, originalName, generated.contentType, generated.bytes, generationMeta);
     } catch {
       throw new AgentImageError(503, "图片已经生成，但保存到素材库失败");
     }
+    await ensureActive();
     try {
       await this.billing.chargeTokens({
         userId,

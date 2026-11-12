@@ -38,7 +38,7 @@ interface LedgerRequest {
   remark?: unknown;
 }
 
-const CREDIT_TYPES = new Set(["grant", "merge-credit"]);
+const CREDIT_TYPES = new Set(["grant", "merge-credit", "subscription-grant", "points-purchase"]);
 const IMAGE_BIZ_TYPE = "blog-agent-illustration";
 const DEFAULT_PRICE: TokenPrice = {
   inputMilliPer1kToken: 50,
@@ -225,16 +225,16 @@ export async function grantRegistrationPoints(
 }
 
 async function pointsOverview(env: BillingEnvironment, billing: BillingService, userId: number): Promise<Response> {
-  const [balance, consumed] = await Promise.all([
-    billing.balance(userId),
+  const [wallet, consumed] = await Promise.all([
+    billing.wallet(userId),
     billing.consumedToday(userId),
   ]);
   const config = settings(env);
   return success({
     unit: "milli-point",
-    balance,
+    ...wallet,
     consumedToday: consumed,
-    enablePreCheck: config.enabled && balance < config.preCheckMinBalance,
+    enablePreCheck: config.enabled && wallet.balance < config.preCheckMinBalance,
   });
 }
 
@@ -250,7 +250,7 @@ async function pageLedger(request: Request, billing: BillingService, userId: num
   const records = pageResult.records.map((row) => {
     const bizType = String(row.bizType);
     const amount = Number(row.amount);
-    const credit = CREDIT_TYPES.has(bizType);
+    const credit = typeof row.balanceDelta === "number" ? row.balanceDelta > 0 : CREDIT_TYPES.has(bizType);
     return {
       ...row,
       delta: credit ? amount : -amount,

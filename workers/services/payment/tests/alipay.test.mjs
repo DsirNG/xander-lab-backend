@@ -42,16 +42,17 @@ function setup() {
   const events = new Set();
   const calls = [];
   let failure = false;
+  let subscription={tier:"FREE",active:false};
   let result = { trade_status:"WAIT_BUYER_PAY",total_amount:"24.00",trade_no:"ALI_TEST" };
   const provider = {
     page:() => "<form></form>", verifyNotification:() => true,
     async call(method,body) { calls.push({ method,body }); return { out_trade_no:body.out_trade_no,...result }; },
   };
-  const service = new AlipayOrderService(repository, { async grantEntitlement(input) {
+  const service = new AlipayOrderService(repository, { async subscription(){return subscription;}, async grantEntitlement(input) {
     if (failure) throw new Error("Core unavailable");
     events.add(input.eventKey);
   } },provider,config);
-  return { repository,service,sqlite,events,calls,provider,setResult(value) { result=value; },failCore(value) { failure=value; } };
+  return { repository,service,sqlite,events,calls,provider,setSubscription(value){subscription=value;},setResult(value) { result=value; },failCore(value) { failure=value; } };
 }
 
 const create = (service,key="request-000000000001") => service.create(42,"pro-month",key);
@@ -80,7 +81,7 @@ test("SDK pageExec generates a signed POST form with real return URL and exact s
   assert.match(html,/FAST_INSTANT_TRADE_PAY/);
   assert.match(html,/24\.00/);
   assert.doesNotMatch(html,/notify_url|undefined|null/);
-  assert.doesNotMatch(html,new RegExp(config.privateKey.slice(0,60)));
+  assert.equal(html.includes(config.privateKey.slice(0,60)),false);
 });
 
 test("SDK notification verification rejects tampering and non-RSA2 signatures", () => {
@@ -102,6 +103,13 @@ test("D1 checkout is idempotent, snapshots the catalog and hides other users' or
   await assert.rejects(s.service.status(99,first.outTradeNo),(error) => error.status===404);
   assert.equal(first.priceCents,2400);
   assert.doesNotMatch(JSON.stringify(first),/privateKey|sellerId|userId/);
+});
+
+test("web checkout also refuses duplicate active subscriptions before opening payment",async()=>{
+  const s=setup();s.setSubscription({tier:"PRO",active:true});
+  await assert.rejects(create(s.service),e=>e.status===409);
+  s.setSubscription({tier:"PLUS",active:true});
+  assert.ok((await create(s.service)).paymentHtml);
 });
 
 test("verified callback and query replay grant one durable entitlement", async () => {

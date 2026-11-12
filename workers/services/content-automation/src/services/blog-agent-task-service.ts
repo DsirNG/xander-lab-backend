@@ -115,6 +115,14 @@ export class BlogAgentTaskService {
     return task?.status === "ready" ? task : null;
   }
 
+  async cancelByClientRequestId(userId: number, requestId: unknown): Promise<void> {
+    if (typeof requestId !== "string" || !/^agent-[1-9]\d*-[1-9]\d*$/.test(requestId) || requestId.length > 64) {
+      throw new BlogAgentTaskError(400, "Invalid agent task request ID");
+    }
+    if (!this.repository.cancelByRequestId) throw new BlogAgentTaskError(503, "Cancellation unavailable");
+    await this.repository.cancelByRequestId(userId, requestId, new Date(this.now()).toISOString());
+  }
+
   async prepare(userId: number, taskId: number, mode: "initial" | "revision"): Promise<void> {
     const task = await this.repository.findById(userId, taskId);
     if (!task) throw new BlogAgentTaskError(404, "博客生成助手任务不存在");
@@ -143,6 +151,7 @@ export class BlogAgentTaskService {
     try {
       const task = await this.repository.findById(userId, taskId);
       if (!task || task.status !== "running") throw new BlogAgentTaskError(404, "博客生成助手任务不存在");
+      const conversationTask = /^agent-[1-9]\d*-[1-9]\d*$/.test(task.clientRequestId ?? "");
       const stage = async (name: string, message: string) => {
         lastStage = name;
         if (!await this.repository.updateStage(userId, taskId, name, message, new Date(this.now()).toISOString())) {
@@ -154,7 +163,13 @@ export class BlogAgentTaskService {
       const runStage = async <T>(name: string, operation: () => Promise<T>): Promise<T> => {
         const startedAt = this.now();
         try {
+          if ((await this.repository.findById(userId, taskId))?.status !== "running") {
+            throw new DOMException("The operation was aborted", "AbortError");
+          }
           const result = await operation();
+          if ((await this.repository.findById(userId, taskId))?.status !== "running") {
+            throw new DOMException("The operation was aborted", "AbortError");
+          }
           console.info(JSON.stringify({ event: "blog_agent_stage_completed", taskId, stage: name,
             elapsedMs: Math.max(0, this.now() - startedAt) }));
           return result;
@@ -175,16 +190,16 @@ export class BlogAgentTaskService {
         if (task.generationMode === "quick") {
           await stage("write", "正在快速撰写文章");
           article = normalizeArticle(object(await runStage("article", () => this.model.runStage("article", {
-            input: task.input, workflowMode: "quick",
+            input: task.input, workflowMode: "quick", conversationTask,
           }))));
         } else {
           await stage("research", "正在理解主题、确定写作方向并联网核验资料");
           const research = object(await runStage("research", () => this.model.runStage("research", {
-            input: task.input,
+            input: task.input, conversationTask,
           })));
           await stage("write", "正在根据策划和调研结果撰写文章草稿");
           article = normalizeArticle(object(await runStage("article", () => this.model.runStage("article", {
-            input: `${task.input}\n\n调研与写作方案：\n${JSON.stringify(research)}`, workflowMode: "full",
+            input: `${task.input}\n\n调研与写作方案：\n${JSON.stringify(research)}`, workflowMode: "full", conversationTask,
           }))));
         }
       } else {
@@ -192,13 +207,13 @@ export class BlogAgentTaskService {
         await stage("write", "正在根据你的新要求修改文章");
         const content = await this.readTaskContent(task);
         article = normalizeArticle(object(await runStage("write", () => this.model.runStage("revise", {
-          content, instruction: instruction.trim(), workflowMode: task.generationMode,
+          content, instruction: instruction.trim(), workflowMode: task.generationMode, conversationTask,
         }))));
       }
       if (task.generationMode === "full") {
         await stage("review", mode === "initial" ? "正在进行最终逻辑与表达审校" : "正在检查本轮修改");
         review = object(await runStage("review", () => this.model.runStage("review", {
-          content: String(article.content), request: mode === "initial" ? task.input : instruction,
+          content: String(article.content), request: mode === "initial" ? task.input : instruction, conversationTask,
         })));
       } else {
         await stage("review", "正在检查文章结构和必需内容");

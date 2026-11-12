@@ -58,13 +58,22 @@ test("Agent uploads bounded allowed files to OSS and returns owner-bound metadat
 test("Agent image uploads register a Content-owned media asset and persist its owner reference", async () => {
   const calls = [];
   const mediaAssets = {
-    async uploadImage(...args) { calls.push(["upload", ...args]); return { id: 73 }; },
+    async uploadImage(...args) { calls.push(["upload", ...args]); return { id: 73, url: "https://media.example/cover.png" }; },
     async deleteAsset(...args) { calls.push(["delete", ...args]); },
   };
-  const { service, rows } = attachmentHarness(mediaAssets);
+  const { service, rows, written } = attachmentHarness(mediaAssets);
   const image = await service.upload(42, {
     name: "cover.png", type: "image/png", size: 4, bytes: new Uint8Array([1, 2, 3, 4]),
   });
+  assert.equal(written.length, 0);
+  assert.equal(image.url, "https://media.example/cover.png");
+  assert.equal(rows.get(image.id).objectKey, "content-media/73");
+  mediaAssets.findOwned = async (userId, id) => {
+    assert.equal(userId, 42); assert.equal(id, 73);
+    return { id, url: "https://media.example/refreshed.png" };
+  };
+  assert.equal((await service.resolveOwned(42, [image.id]))[0].url, "https://media.example/refreshed.png");
+  await assert.rejects(service.resolveOwned(99, [image.id]), /不属于当前用户/);
   assert.equal(image.mediaAssetId, 73);
   assert.equal(rows.get(image.id).mediaAssetId, 73);
   assert.deepEqual(calls[0], ["upload", 42, "cover.png", "image/png", new Uint8Array([1, 2, 3, 4])]);
@@ -281,14 +290,14 @@ test("Agent media mapper uploads bytes across the Content HTTPS contract and sup
     const path = new URL(input).pathname;
     if (path.endsWith("/record-generated")) return Response.json({ id: 92, url: "https://cdn.example/92.png", width: 1, height: 1, contentType: "image/png" });
     if (path.endsWith("/find-owned")) return Response.json({ id: 93, url: "https://cdn.example/93.png", originalName: "asset.png", size: 20, width: 1, height: 1, contentType: "image/png" });
-    return Response.json({ id: 91 });
+    return Response.json({ id: 91, url: "https://cdn.example/91.png" });
   });
   const mapper = new ContentAgentMediaMapper({
     CONTENT_AUTOMATION_SERVICE_URL: "https://content.example/base",
     CONTENT_AUTOMATION_SERVICE_TOKEN: "service-token",
   });
   const saved = await mapper.uploadImage(42, "cover image.png", "image/png", new Uint8Array([1, 2, 3]));
-  assert.deepEqual(saved, { id: 91 });
+  assert.deepEqual(saved, { id: 91, url: "https://cdn.example/91.png" });
   assert.equal(calls[0].url.pathname, "/internal/content/media/upload-image");
   assert.equal(calls[0].init.headers["x-dinqor-service-token"], "service-token");
   assert.equal(calls[0].init.headers["x-dinqor-user-id"], "42");
@@ -385,4 +394,66 @@ test("Chat Completions sends images and leaves unsupported document blocks out",
   const content = requestBody.messages.at(-1).content;
   assert.equal(content[0].type, "text");
   assert.deepEqual(content.slice(1), [{ type: "image_url", image_url: { url: image.url } }]);
+});
+
+
+function retryStorage() {
+  return new OssAgentAttachmentStorageMapper({
+    ALIYUN_OSS_ENDPOINT: "oss-cn-beijing.aliyuncs.com",
+    ALIYUN_OSS_BUCKET: "dinqor",
+    ALIYUN_OSS_ACCESS_KEY_ID: "test-access-key",
+    ALIYUN_OSS_ACCESS_KEY_SECRET: "test-access-secret",
+  }, async () => {});
+}
+
+test("Agent attachment PUT reconnects once after timeout using identical object and bytes", async () => {
+  const calls = [];
+  mock.method(globalThis, "fetch", async (url, init) => {
+    calls.push({ url: String(url), bytes: [...new Uint8Array(init.body)], signal: init.signal });
+    if (calls.length === 1) throw new DOMException("upstream timeout", "TimeoutError");
+    return new Response(null, { status: 200 });
+  });
+  await retryStorage().write("42/retry.png", new Uint8Array([1, 2, 3]), "image/png");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url, calls[1].url);
+  assert.deepEqual(calls[0].bytes, calls[1].bytes);
+  assert.notEqual(calls[0].signal, calls[1].signal);
+});
+
+test("Agent attachment PUT retries transient OSS errors but never permission or signature errors", async () => {
+  for (const status of [503, 429, 403, 400]) {
+    const calls = [];
+    mock.method(globalThis, "fetch", async () => {
+      calls.push(status);
+      return new Response(null, { status: calls.length === 1 ? status : 200 });
+    });
+    if (status === 503 || status === 429) {
+      await retryStorage().write("42/retry.png", new Uint8Array([1]), "image/png");
+      assert.equal(calls.length, 2);
+    } else {
+      await assert.rejects(retryStorage().write("42/retry.png", new Uint8Array([1]), "image/png"), /upload failed/);
+      assert.equal(calls.length, 1);
+    }
+  }
+});
+
+test("Agent attachment PUT stops after two failed connections", async () => {
+  let count = 0;
+  mock.method(globalThis, "fetch", async () => { count++; throw new TypeError("network failed"); });
+  await assert.rejects(retryStorage().write("42/retry.png", new Uint8Array([1]), "image/png"), /storage is unavailable/);
+  assert.equal(count, 2);
+});
+
+
+test("Failed Content image upload never writes an Agent copy or attachment metadata", async () => {
+  const { service, rows, written, removed } = attachmentHarness({
+    async uploadImage() { throw new Error("Content unavailable"); },
+    async deleteAsset() { throw new Error("must not delete an unknown asset"); },
+  });
+  await assert.rejects(service.upload(42, {
+    name: "cover.png", type: "image/png", size: 2, bytes: new Uint8Array([1, 2]),
+  }), /Content unavailable/);
+  assert.equal(rows.size, 0);
+  assert.deepEqual(written, []);
+  assert.deepEqual(removed, []);
 });

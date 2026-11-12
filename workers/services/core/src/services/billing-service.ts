@@ -28,8 +28,19 @@ export class BillingService {
     return this.billing.appendLedger(input);
   }
 
-  grantRegistrationPoints(userId: number, amount: number, unitPrice: string, enabled: boolean): Promise<void> {
+  grantRegistrationPoints(
+    userId: number,
+    amount: number,
+    unitPrice: string,
+    enabled: boolean,
+  ): Promise<void> {
     return this.billing.grantRegistrationPoints(userId, amount, unitPrice, enabled);
+  }
+
+  async wallet(userId: number) {
+    if (this.billing.wallet) return this.billing.wallet(userId);
+    const balance = await this.balance(userId);
+    return { balance, subscriptionBalance: 0, permanentBalance: balance, nextExpiry: null };
   }
 
   balance(userId: number): Promise<number> {

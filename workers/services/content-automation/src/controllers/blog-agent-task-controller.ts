@@ -176,6 +176,10 @@ export async function handleBlogAgentTaskRequest(
         if (!taskId) return apiError(400, "博客生成助手请求参数非法");
         return jsonResponse(await service.findPublishedPost(owner, taskId));
       }
+      if (pathname === `${INTERNAL_BASE}/cancel`) {
+        await service.cancelByClientRequestId(owner, body.clientRequestId);
+        return jsonResponse(null);
+      }
       const run = pathname.match(/^\/internal\/agent\/blogagent\/([1-9]\d{0,17})\/run-stream$/);
       if (run) {
         const taskId = positive(run[1]);

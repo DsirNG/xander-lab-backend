@@ -1,4 +1,5 @@
 import type { D1Binding } from "@dinqor/worker-runtime";
+import { recoverStaleImageRun } from "./recover-stale-image-run.js";
 import type {
   AgentConversationRecord,
   AgentRunEvent,
@@ -18,10 +19,12 @@ const CONVERSATION_COLUMNS = `
 export class D1AgentRunMapper implements AgentTurnRepository {
   constructor(private readonly db: D1Binding) {}
 
-  findOwnedConversation(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
-    return this.db.prepare(`
+  async findOwnedConversation(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
+    const read = () => this.db.prepare(`
       SELECT ${CONVERSATION_COLUMNS} FROM agent_conversation WHERE id = ? AND user_id = ?
     `).bind(conversationId, userId).first<AgentConversationRecord>();
+    const row = await read();
+    return await recoverStaleImageRun(this.db, row) ? read() : row;
   }
 
   async claimTurn(
@@ -66,9 +69,12 @@ export class D1AgentRunMapper implements AgentTurnRepository {
   ): Promise<number> {
     const row = await this.db.prepare(`
       INSERT INTO agent_event (conversation_id, run_version, event_type, data_content)
-      VALUES (?, ?, ?, ?) RETURNING id
-    `).bind(conversationId, runVersion, eventType, JSON.stringify(data)).first<{ id: number }>();
-    if (!row) throw new Error("智能体事件保存失败");
+      SELECT ?, ?, ?, ? WHERE EXISTS (
+        SELECT 1 FROM agent_conversation WHERE id = ? AND run_version = ?
+          AND status = 'running' AND cancel_requested = 0
+      ) RETURNING id
+    `).bind(conversationId, runVersion, eventType, JSON.stringify(data), conversationId, runVersion).first<{ id: number }>();
+    if (!row) throw new DOMException("The operation was aborted", "AbortError");
     return row.id;
   }
 
@@ -84,7 +90,7 @@ export class D1AgentRunMapper implements AgentTurnRepository {
       SELECT ?, ?, 'assistant', ?, ?
       WHERE EXISTS (
         SELECT 1 FROM agent_conversation
-        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
+        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0
       )
       RETURNING id
     `).bind(conversationId, runVersion, kind, JSON.stringify(content), conversationId, userId, runVersion)
@@ -100,13 +106,13 @@ export class D1AgentRunMapper implements AgentTurnRepository {
         INSERT INTO agent_message (conversation_id, run_version, role, kind, content)
         SELECT ?, ?, 'assistant', 'answer', ?
         WHERE EXISTS (SELECT 1 FROM agent_conversation
-          WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running')
+          WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0)
       `).bind(conversationId, runVersion, answer, conversationId, userId, runVersion),
       this.db.prepare(`
         INSERT INTO agent_event (conversation_id, run_version, event_type, data_content)
         SELECT ?, ?, 'complete', ?
         WHERE EXISTS (SELECT 1 FROM agent_conversation
-          WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running')
+          WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0)
         RETURNING id
       `).bind(conversationId, runVersion, JSON.stringify({ status: "ready" }), conversationId, userId, runVersion),
       this.db.prepare(`
@@ -114,7 +120,7 @@ export class D1AgentRunMapper implements AgentTurnRepository {
       SET status = 'ready', error_message = NULL, cancel_requested = 0,
           last_completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-      WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
+      WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0
     `).bind(conversationId, userId, runVersion),
     ]);
     if (results[2].meta.changes !== 1) throw new Error("本轮对话已结束或被替代");
@@ -124,21 +130,52 @@ export class D1AgentRunMapper implements AgentTurnRepository {
   }
 
   async failTurn(userId: number, conversationId: number, runVersion: number, message: string): Promise<number> {
-    await this.db.prepare(`
+    const results = await this.db.batch([
+      this.db.prepare(`
+        INSERT INTO agent_event (conversation_id, run_version, event_type, data_content)
+        SELECT id, run_version, 'error', ? FROM agent_conversation
+        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0
+        RETURNING id
+      `).bind(JSON.stringify(message), conversationId, userId, runVersion),
+      this.db.prepare(`
       UPDATE agent_conversation
       SET status = 'failed', error_message = ?, cancel_requested = 0,
           last_completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-      WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
-    `).bind(message, conversationId, userId, runVersion).run();
-    return this.appendEvent(conversationId, runVersion, "error", message);
+      WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running' AND cancel_requested = 0
+    `).bind(message, conversationId, userId, runVersion),
+    ]);
+    const id = results[0].results?.[0]?.id;
+    // A late worker must not report an error for an already completed or superseded run.
+    return typeof id === "number" ? id : 0;
   }
 
-  cancelTurn(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
-    return this.db.prepare(`
-      UPDATE agent_conversation SET cancel_requested = CASE WHEN status = 'running' THEN 1 ELSE 0 END
-      WHERE id = ? AND user_id = ? RETURNING ${CONVERSATION_COLUMNS}
-    `).bind(conversationId, userId).first<AgentConversationRecord>();
+  async requestCancellation(userId: number, conversationId: number, runVersion: number): Promise<boolean> {
+    const result = await this.db.prepare(`UPDATE agent_conversation SET cancel_requested = 1
+      WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'`)
+      .bind(conversationId, userId, runVersion).run();
+    return result.meta.changes === 1;
+  }
+
+  async cancelTurn(userId: number, conversationId: number, expectedRunVersion?: number): Promise<AgentConversationRecord | null> {
+    const current = await this.db.prepare(`SELECT ${CONVERSATION_COLUMNS} FROM agent_conversation
+      WHERE id = ? AND user_id = ?`).bind(conversationId, userId).first<AgentConversationRecord>();
+    if (!current || current.status !== "running") return current;
+    if (expectedRunVersion !== undefined && current.runVersion !== expectedRunVersion) return current;
+    // Revoke this version atomically with its terminal event. A delayed stop must
+    // never cancel a newly claimed turn, and a disconnected executor is not needed.
+    await this.db.batch([
+      this.db.prepare(`INSERT INTO agent_event (conversation_id, run_version, event_type, data_content)
+        SELECT id, run_version, 'complete', ? FROM agent_conversation
+        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'`)
+        .bind(JSON.stringify({ status: "ready", cancelled: true }), conversationId, userId, current.runVersion),
+      this.db.prepare(`UPDATE agent_conversation SET status = 'ready', cancel_requested = 1,
+        error_message = NULL, last_completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'`)
+        .bind(conversationId, userId, current.runVersion),
+    ]);
+    return this.findOwnedConversation(userId, conversationId);
   }
 
   async isCancellationRequested(userId: number, conversationId: number, runVersion: number): Promise<boolean> {
@@ -146,7 +183,8 @@ export class D1AgentRunMapper implements AgentTurnRepository {
       SELECT cancel_requested AS cancelRequested FROM agent_conversation
       WHERE id = ? AND user_id = ? AND run_version = ? AND status = 'running'
     `).bind(conversationId, userId, runVersion).first<{ cancelRequested: number }>();
-    return row?.cancelRequested === 1;
+    // Completed, deleted and superseded versions have no execution authority.
+    return !row || row.cancelRequested === 1;
   }
 
   async listEventsAfter(conversationId: number, runVersion: number, afterEventId: number): Promise<AgentRunEvent[]> {

@@ -39,7 +39,7 @@ function createDb(role = "USER") {
           if (sql.includes("FROM sys_user WHERE id = ? AND NOT EXISTS")) {
             return values[0] === user.id && user.status === 1 ? { ...user } : null;
           }
-          if (sql.includes("SELECT balance FROM sys_user_points")) return { balance: 1_500_000 };
+          if (sql.includes("FROM available_points")) return { balance: 1_500_000,subscriptionBalance:0,permanentBalance:1_500_000,nextExpiry:null };
           if (sql.includes("SELECT COALESCE(SUM(amount), 0) AS consumedToday")) return { consumedToday: 4_500 };
           if (sql.includes("SELECT COUNT(*) AS total FROM points_ledger")) return { total: 2 };
           if (sql.includes("INSERT INTO billing_model_price")) {
@@ -79,7 +79,7 @@ function createDb(role = "USER") {
       };
       return statement;
     },
-    async batch() { throw new Error("Unexpected billing batch"); },
+    async batch(stmts) { return Promise.all(stmts.map(s=>s.run())); },
   };
 }
 
@@ -117,6 +117,7 @@ test("points overview and ledger are private and scoped to the authenticated use
   assert.deepEqual((await overview.json()).data, {
     unit: "milli-point",
     balance: 1_500_000,
+    subscriptionBalance:0,permanentBalance:1_500_000,nextExpiry:null,
     consumedToday: 4_500,
     enablePreCheck: false,
   });

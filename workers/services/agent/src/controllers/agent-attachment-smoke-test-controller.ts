@@ -169,6 +169,7 @@ export async function handleAgentAttachmentSmokeTestRequest(
         throw error;
       }
     },
+    findOwned(userId: number, id: number) { return contentMedia.findOwned(userId, id); },
     async deleteAsset(userId: number, id: number) {
       try {
         await contentMedia.deleteAsset(userId, id);

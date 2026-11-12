@@ -118,6 +118,11 @@ function agentImage(asset: BlogMediaAsset) {
 export class BlogMediaService {
   constructor(private readonly repository: BlogMediaRepository, private readonly storage: BlogMediaStorage) {}
 
+  /** Signed URLs are presentation values; D1 retains durable object keys and URLs. */
+  async presentationUrl(objectKey: string, fallback: string): Promise<string> {
+    return this.storage.signedUrl ? this.storage.signedUrl(objectKey) : fallback;
+  }
+
   images(userId: number, scope: string, keyword: string | null) {
     safeUserId(userId);
     const trimmed = keyword?.trim().slice(0, 255) || null;
@@ -148,6 +153,14 @@ export class BlogMediaService {
     if (!asset) return false;
     if (asset.storedName) await this.storage.delete(asset.storedName);
     return this.repository.deleteOwned(userId, id);
+  }
+
+  async publicImageRedirect(objectKey: string): Promise<string | null> {
+    if (!this.storage.signedUrl || !isPublicBlogImageObjectKey(objectKey)) return null;
+    const asset = await this.repository.findPublicByStoredName(objectKey);
+    if (!asset || !SUPPORTED_UPLOAD_TYPES.has(asset.contentType)
+      || !Number.isSafeInteger(asset.size) || asset.size < 1 || asset.size > MAX_IMAGE_BYTES) return null;
+    return this.storage.signedUrl(objectKey);
   }
 
   async publicImage(objectKey: string) {

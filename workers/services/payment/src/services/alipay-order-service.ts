@@ -27,6 +27,10 @@ export class AlipayOrderService {
     this.checkContext(order);
     if (order.productId !== productId) throw new PaymentRequestError(409,"Idempotency key belongs to another product");
     if (order.status !== "PENDING") return { ...view(order), paymentHtml: null };
+    const subscription=await this.core.subscription(userId);
+    const ranks=["FREE","PLUS","PRO","ULTRA"];
+    if(subscription.active && ranks.indexOf(order.tier)<=ranks.indexOf(subscription.tier))
+      throw new PaymentRequestError(409,"当前套餐有效期内只能升级");
     return { ...view(order), paymentHtml: this.provider.page({ ...order, subject: `DinQorAI ${order.tier}` }) };
   }
 

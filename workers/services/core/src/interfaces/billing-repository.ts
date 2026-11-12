@@ -34,7 +34,15 @@ export interface BillingModelPriceInput extends BillingTokenPrice {
   remark: string | null;
 }
 
+export interface PointsWallet {
+  balance: number;
+  subscriptionBalance: number;
+  permanentBalance: number;
+  nextExpiry: string | null;
+}
+
 export interface BillingRepository {
+  wallet?(userId: number): Promise<PointsWallet>;
   findModelPrice(model: string): Promise<BillingModelPrice | null>;
   listModelPrices(): Promise<BillingModelPrice[]>;
   deleteModelPrice(model: string): Promise<void>;
@@ -43,7 +51,17 @@ export interface BillingRepository {
   grantRegistrationPoints(userId: number, amount: number, unitPrice: string, enabled: boolean): Promise<void>;
   findBalance(userId: number): Promise<number>;
   findConsumedToday(userId: number): Promise<number>;
-  pageLedger(userId: number, size: number, offset: number): Promise<{ records: Record<string, unknown>[]; total: number }>;
+  pageLedger(
+    userId: number,
+    size: number,
+    offset: number,
+  ): Promise<{ records: Record<string, unknown>[]; total: number }>;
   grantByKey(userId: number, bizKey: string, amount: number, unitPrice: string): Promise<void>;
-  transferBalance(fromUserId: number, toUserId: number, bizKey: string, unitPrice: string, remark: string): Promise<void>;
+  transferBalance(
+    fromUserId: number,
+    toUserId: number,
+    bizKey: string,
+    unitPrice: string,
+    remark: string,
+  ): Promise<void>;
 }

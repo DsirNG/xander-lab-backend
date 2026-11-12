@@ -3,7 +3,7 @@ import type { ManagedBlogCountRepository, ManagedBlogCountResult } from "../inte
 import type { ProfileOverviewRepository } from "../interfaces/profile-overview-repository.js";
 
 export type ProfileOverviewResult =
-  | { kind: "ready"; user: IdentityUser; points: number; blogCount: number }
+  | { kind: "ready"; user: IdentityUser; points: number; blogCount: number | null }
   | Exclude<ManagedBlogCountResult, { kind: "count" }>;
 
 export class ProfileOverviewService {
@@ -12,10 +12,12 @@ export class ProfileOverviewService {
     private readonly blogCounts: ManagedBlogCountRepository,
   ) {}
 
-  async get(user: IdentityUser): Promise<ProfileOverviewResult> {
+  async get(user: IdentityUser, includeBlogCount = true): Promise<ProfileOverviewResult> {
     const [points, blogCount] = await Promise.all([
       this.profiles.findPointsBalance(user.id),
-      this.blogCounts.countForUser(user.id),
+      includeBlogCount
+        ? this.blogCounts.countForUser(user.id)
+        : Promise.resolve({ kind: "count" as const, count: null }),
     ]);
     if (blogCount.kind !== "count") return blogCount;
     return { kind: "ready", user, points: points ?? 0, blogCount: blogCount.count };

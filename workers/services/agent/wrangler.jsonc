@@ -5,6 +5,8 @@
   // OSS endpoints and model settings are configured per Cloudflare account.
   "keep_vars": true,
   "compatibility_date": "2026-10-10",
+  // Keep OSS traffic on the Hong Kong route; LAX-to-Beijing uploads stalled.
+  "placement": { "region": "aws:ap-east-1" },
   "secrets": {
     "required": [
       "JWT_SECRET",
@@ -22,6 +24,8 @@
   ],
   "dev": { "port": 8789 },
   "observability": { "enabled": true },
+  "durable_objects": { "bindings": [{ "name": "IMAGE_TASKS", "class_name": "AgentImageTaskObject" }] },
+  "migrations": [{ "tag": "image-task-v1", "new_sqlite_classes": ["AgentImageTaskObject"] }],
   "d1_databases": [{
     "binding": "DB",
     "database_name": "dinqor-agent-local",

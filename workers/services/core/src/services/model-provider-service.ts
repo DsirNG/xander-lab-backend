@@ -17,6 +17,10 @@ export type ModelProviderMutation =
 export class ModelProviderService {
   constructor(private readonly providers: ModelProviderRepository) {}
 
+  find(id: number): Promise<ModelProviderRecord | null> {
+    return this.providers.findProvider(id);
+  }
+
   list(): Promise<ModelProviderRecord[]> {
     return this.providers.listProviders();
   }

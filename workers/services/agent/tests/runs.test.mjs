@@ -64,6 +64,29 @@ function createRepository() {
   };
 }
 
+test('stop between failed model requests prevents fallback and further execution', async () => {
+  const { repository, state } = createRepository();
+  let cancelled = false;
+  repository.isCancellationRequested = async () => cancelled;
+  const endpoint = { providerId: 1, baseUrl: 'https://models.example/v1', apiKey: 'test',
+    model: 'test', apiStyle: 'CHAT_COMPLETIONS' };
+  const service = new AgentRunService(repository, {
+    async candidates() { return { managed: true, endpoints: [endpoint, endpoint] }; },
+  }, { async ensureAvailable() { return true; }, async chargeTokens() {} });
+  let calls = 0;
+  mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    cancelled = true;
+    state.conversation.status = 'ready';
+    return new Response('unavailable', { status: 503 });
+  });
+  const version = await service.claimTurn(42, 7, 'long task', []);
+  await service.executeTurn(42, 7, version, () => {});
+  assert.equal(calls, 1);
+  assert.equal(state.messages.filter(m => m.role === 'assistant').length, 0);
+  assert.equal(state.events.some(e => e.eventType === 'error'), false);
+});
+
 test("Agent executes a streamed text turn and persists replayable terminal events", async () => {
   const { repository, state } = createRepository();
   const charges = [];
@@ -116,7 +139,7 @@ test("Agent executes a streamed text turn and persists replayable terminal event
   assert.equal(state.conversation.status, "ready");
   assert.equal(state.messages.at(-1).content, "Hello world");
   assert.deepEqual(delivered.map((event) => event.eventType), [
-    "started", "answer_delta", "answer_delta", "complete",
+    "started", "answer_preview", "answer_delta", "answer_preview", "answer_delta", "complete",
   ]);
   assert.equal(state.events.at(-1).eventType, "complete");
   assert.deepEqual(charges, [{
@@ -334,10 +357,18 @@ test("Agent saves plan_tasks through the run service and emits a replayable plan
 
 test("Agent image_generate stores an image and streams the Content media-library result", async () => {
   const { repository, state } = createRepository();
+  let tick;
+  let cleared = false;
+  mock.method(globalThis, "setInterval", (callback) => { tick = callback; return 123; });
+  mock.method(globalThis, "clearInterval", (timer) => { assert.equal(timer, 123); cleared = true; });
   let generated;
   const imageService = {
     async generate(...args) {
+      assert.equal(state.events.at(-2).eventType, "tool_start");
+      assert.equal(state.events.at(-1).data.progress, 5);
+      tick();
       generated = args;
+      await args[4]({ url: "data:image/png;base64,YQ==", title: "D1 illustration", contentType: "image/png", storageStatus: "saving" });
       return {
         ok: true, assetId: 99, url: "https://cdn.example/99.png", title: "D1 illustration",
         width: 1, height: 1, contentType: "image/png",
@@ -376,9 +407,21 @@ test("Agent image_generate stores an image and streams the Content media-library
   const delivered = [];
   const result = await service.executeTurn(42, 7, runVersion, (id, eventType, data) => delivered.push({ id, eventType, data }));
   assert.deepEqual(result, { ok: true });
-  assert.deepEqual(generated, [42, 7, 1, { prompt: "small database diagram", title: "D1 illustration" }]);
+  assert.deepEqual(generated.slice(0, 4), [42, 7, 1, { prompt: "small database diagram", title: "D1 illustration" }]);
+  assert.equal(typeof generated[4], "function");
   assert.equal(state.messages.at(-1).content, "![D1 illustration](https://cdn.example/99.png)");
-  assert.deepEqual(delivered.map((event) => event.eventType), ["started", "tool_result", "complete"]);
+  assert.deepEqual(delivered.map((event) => event.eventType), ["started", "tool_start", "tool_progress", "image_preview", "tool_progress", "tool_progress", "tool_progress", "tool_result", "complete"]);
+  assert.equal(delivered[1].data.outputType, "image");
+  assert.equal(delivered[2].data.progress, 5);
+  assert.equal(delivered[2].data.estimated, true);
+  assert.equal(delivered[3].id, 0);
+  assert.equal(delivered[3].data.result.storageStatus, "saving");
+  assert.ok(delivered[4].data.progress >= 5 && delivered[4].data.progress <= 90);
+  assert.equal(delivered[6].data.progress, 100);
+  assert.equal(delivered[6].data.estimated, false);
+  assert.equal(delivered[1].data.invocationId, delivered[7].data.invocationId);
+  assert.ok(!JSON.stringify(state.events).includes("data:image"));
+  assert.equal(cleared, true);
   assert.equal(charges[0].bizType, "agent-turn");
 });
 
@@ -1265,3 +1308,187 @@ test("Agent validates language preferences and passes them to both message trans
     assert.equal(claimed, false);
   }
 });
+
+
+test("SSE acknowledges a claimed turn and forwards deltas before model execution finishes", { timeout: 2000 }, async () => {
+  let finish;
+  let sink;
+  const tracked = [];
+  const response = await handleAgentRunRequest(new Request(
+    "https://agent/api/agent/conversations/7/messages/stream", {
+      method: "POST", body: JSON.stringify({ content: "stream now" }),
+    }), {
+      async claimTurn() { return 4; },
+      async executeTurn(_user, _conversation, _version, emit) {
+        sink = emit;
+        return new Promise(resolve => { finish = resolve; });
+      },
+    }, async () => 42, { waitUntil(promise) { tracked.push(promise); } });
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  assert.match(decoder.decode((await reader.read()).value), /event: accepted\ndata: {"runVersion":4}/);
+  sink(1, "answer_delta", "first token");
+  assert.match(decoder.decode((await reader.read()).value), /event: answer_delta\ndata: first token/);
+  sink(2, "complete", { status: "ready" });
+  assert.match(decoder.decode((await reader.read()).value), /event: complete/);
+  assert.equal((await reader.read()).done, true);
+  finish({ ok: true });
+  await tracked[0];
+});
+
+test("SSE emits heartbeats while the model is pending and clears the timer on disconnect", async () => {
+  let heartbeat;
+  let finish;
+  const cleared = [];
+  mock.method(globalThis, "setInterval", callback => { heartbeat = callback; return 123; });
+  mock.method(globalThis, "clearInterval", timer => { cleared.push(timer); });
+  const tracked = [];
+  const response = await handleAgentRunRequest(new Request(
+    "https://agent/api/agent/conversations/7/messages/stream", {
+      method: "POST", body: JSON.stringify({ content: "slow model" }),
+    }), {
+      async claimTurn() { return 5; },
+      async executeTurn() { return new Promise(resolve => { finish = resolve; }); },
+    }, async () => 42, { waitUntil(promise) { tracked.push(promise); } });
+  const reader = response.body.getReader();
+  await reader.read();
+  heartbeat();
+  assert.equal(new TextDecoder().decode((await reader.read()).value), ": heartbeat\n\n");
+  await reader.cancel();
+  assert.ok(cleared.includes(123));
+  finish({ ok: true });
+  await tracked[0];
+});
+
+
+test("Agent starts independent context reads together and does not wait for the gateway to load memory", async () => {
+  const { repository } = createRepository();
+  let resolveGateway;
+  const gateway = new Promise(resolve => { resolveGateway = resolve; });
+  const called = [];
+  const recent = repository.recentMessages;
+  repository.recentMessages = async () => { called.push("history"); return recent(); };
+  const service = new AgentRunService(repository, { candidates() { called.push("gateway"); return gateway; } },
+    { async ensureAvailable() { return true; }, async chargeTokens() {} }, {},
+    { async listActive() { called.push("skills"); return []; } },
+    { async context(user, query) { called.push("memory"); assert.equal(query, "hello"); return ""; } },
+    undefined, undefined, undefined, undefined,
+    { async toolsForUser() { called.push("mcp"); return []; } });
+  mock.method(globalThis, "fetch", async () => new Response('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n'));
+  const version = await service.claimTurn(42, 7, "hello", []);
+  const running = service.executeTurn(42, 7, version, () => {});
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+  assert.deepEqual(new Set(called), new Set(["gateway", "history", "skills", "memory", "mcp"]));
+  resolveGateway({ managed: true, endpoints: [{ baseUrl: "https://models.example/v1", apiKey: "secret", model: "test", apiStyle: "CHAT_COMPLETIONS" }] });
+  assert.equal((await running).ok, true);
+});
+
+test("Agent delivers text while checkpoint is blocked and completes only after durable final save", async () => {
+  const { repository, state } = createRepository();
+  let releaseCheckpoint, releaseFinish, enteredCheckpoint, enteredFinish;
+  const checkpointEntered = new Promise(resolve => { enteredCheckpoint = resolve; });
+  const finishEntered = new Promise(resolve => { enteredFinish = resolve; });
+  const checkpointGate = new Promise(resolve => { releaseCheckpoint = resolve; });
+  const finishGate = new Promise(resolve => { releaseFinish = resolve; });
+  const append = repository.appendEvent, finish = repository.finishTurn;
+  repository.appendEvent = async (...args) => {
+    if (args[2] === "answer_delta") { enteredCheckpoint(); await checkpointGate; }
+    return append(...args);
+  };
+  repository.finishTurn = async (...args) => { enteredFinish(); await finishGate; return finish(...args); };
+  const service = new AgentRunService(repository, { async candidates() { return { managed: true,
+    endpoints: [{ baseUrl: "https://models.example/v1", apiKey: "secret", model: "test", apiStyle: "CHAT_COMPLETIONS" }] }; } },
+    { async ensureAvailable() { return true; }, async chargeTokens() {} });
+  mock.method(globalThis, "fetch", async () => new Response('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: {"choices":[{"delta":{"content":" world"}}]}\n\ndata: [DONE]\n\n'));
+  const events = [];
+  const version = await service.claimTurn(42, 7, "hello", []);
+  const running = service.executeTurn(42, 7, version, (id, event, data) => { events.push({ id, event, data }); });
+  await checkpointEntered;
+  for (let i = 0; i < 20; i++) await Promise.resolve();
+  assert.equal(events.filter(e => e.event === "answer_preview").map(e => e.data.text).join(""), "Hello world");
+  assert.ok(!events.some(e => e.event === "complete"));
+  releaseCheckpoint(); await finishEntered;
+  assert.ok(!events.some(e => e.event === "complete"));
+  assert.equal(state.events.filter(e => e.eventType === "answer_delta").map(e => e.data).join(""), "Hello world");
+  releaseFinish(); assert.equal((await running).ok, true);
+  assert.equal(events.at(-1).event, "complete");
+  assert.equal(state.messages.at(-1).content, "Hello world");
+});
+
+
+test("Agent reports a failed turn when a checkpoint cannot be saved", async () => {
+  const { repository, state } = createRepository();
+  const append = repository.appendEvent;
+  repository.appendEvent = async (...args) => {
+    if (args[2] === "answer_delta") throw new Error("storage unavailable with private details");
+    return append(...args);
+  };
+  const service = new AgentRunService(repository, { async candidates() { return { managed: true,
+    endpoints: [{ baseUrl: "https://models.example/v1", apiKey: "secret", model: "test", apiStyle: "CHAT_COMPLETIONS" }] }; } },
+    { async ensureAvailable() { return true; }, async chargeTokens() {} });
+  mock.method(globalThis, "fetch", async () => new Response('data: {"choices":[{"delta":{"content":"draft"}}]}\n\ndata: [DONE]\n\n'));
+  const version = await service.claimTurn(42, 7, "hello", []);
+  const events = [];
+  const result = await service.executeTurn(42, 7, version, (id, event, data) => events.push({ id, event, data }));
+  assert.equal(result.ok, false);
+  assert.equal(state.conversation.status, "failed");
+  assert.ok(!events.some(e => e.event === "complete"));
+  assert.equal(events.at(-1).event, "error");
+  assert.ok(!JSON.stringify(events).includes("private details"));
+});
+
+for (const wantsNewImage of [true, false]) {
+  test(`Missing uploaded image is replanned once: ${wantsNewImage ? 'generate the described persona' : 'request the missing original'}`, async () => {
+    const { repository, state } = createRepository();
+    const description = '黑色扎发、黑框眼镜、银色耳钉、金色项链、黑色短袖，侧坐桌边';
+    state.messages.push({ id: 1, role: 'assistant', content: description });
+    const generated = [];
+    const service = new AgentRunService(repository, {
+      async candidates() { return { managed: true, endpoints: [{ providerId: 4, baseUrl: 'https://models.example/v1',
+        apiKey: 'test', model: 'agent-model', apiStyle: 'CHAT_COMPLETIONS' }] }; },
+    }, { async ensureAvailable() { return true; }, async chargeTokens() {} },
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, {
+      async generate(...args) {
+        generated.push(args);
+        return { ok: true, assetId: 99, url: 'https://cdn.example/persona.png', title: '虚构形象', contentType: 'image/png' };
+      },
+    });
+    let calls = 0;
+    mock.method(globalThis, 'fetch', async (_url, init) => {
+      const body = JSON.parse(init.body);
+      calls++;
+      assert.ok(calls <= 2, 'Recovery must be bounded');
+      const tools = body.tools.map(tool => tool.function);
+      assert.ok(body.messages.some(message => message.content === description), 'Keep the preceding persona description');
+      let delta;
+      if (calls === 1) {
+        const resend = tools.find(tool => tool.name === 'image_resend');
+        assert.deepEqual(resend.parameters.properties.source.enum, ['asset_id']);
+        assert.ok(resend.parameters.required.includes('assetId'));
+        assert.match(tools.find(tool => tool.name === 'image_generate').description, /形象照/);
+        delta = { tool_calls: [{ index: 0, function: { name: 'image_resend', arguments: JSON.stringify({ source: 'latest_uploaded' }) } }] };
+      } else {
+        assert.equal(tools.some(tool => tool.name === 'image_resend'), false);
+        assert.match(body.messages.at(-1).content, /不要擅自生成替代图片/);
+        delta = wantsNewImage
+          ? { tool_calls: [{ index: 0, function: { name: 'image_generate', arguments: JSON.stringify({ prompt: description, title: '虚构形象' }) } }] }
+          : { content: '请先上传需要重发的原图。' };
+      }
+      return new Response(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`,
+        { headers: { 'content-type': 'text/event-stream' } });
+    });
+    const version = await service.claimTurn(42, 7, wantsNewImage ? '给我看看呐' : '重发我上传的原图', []);
+    const result = await service.executeTurn(42, 7, version, () => {});
+    assert.deepEqual(result, { ok: true });
+    assert.equal(calls, 2);
+    assert.equal(state.messages.filter(message => message.role === 'user').length, 1);
+    assert.equal(state.events.some(event => event.eventType === 'error'), false);
+    assert.equal(generated.length, wantsNewImage ? 1 : 0);
+    if (wantsNewImage) {
+      assert.equal(generated[0][3].prompt, description);
+      assert.match(state.messages.at(-1).content, /persona.png/);
+    } else {
+      assert.equal(state.messages.at(-1).content, '请先上传需要重发的原图。');
+    }
+  });
+}

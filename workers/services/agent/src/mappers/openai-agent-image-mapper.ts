@@ -1,5 +1,6 @@
 import type { AgentGeneratedImage, AgentImageGenerationPort } from "../interfaces/agent-image-generation-port.js";
 import type { AgentImageModelEndpoint } from "../interfaces/agent-image-model-gateway.js";
+import { AgentImageProviderError } from "../interfaces/agent-image-provider-error.js";
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_BASE64_LENGTH = Math.ceil(MAX_IMAGE_BYTES / 3) * 4;
@@ -62,8 +63,14 @@ function imageData(value: unknown): { bytes: Uint8Array; contentType: string } {
 }
 
 function decodedImage(value: unknown): { bytes: Uint8Array; contentType: string; usage: AgentGeneratedImage["usage"] } {
-  const image = imageData(value);
-  const usage = safeUsage(record(value).usage);
+  let image: ReturnType<typeof imageData>;
+  try {
+    image = imageData(value);
+    extension(image.contentType);
+  } catch { throw new AgentImageProviderError("image"); }
+  let usage: AgentGeneratedImage["usage"];
+  try { usage = safeUsage(record(value).usage); }
+  catch { throw new AgentImageProviderError("usage"); }
   return { bytes: image.bytes, contentType: image.contentType, usage };
 }
 
@@ -104,7 +111,8 @@ async function readProviderJson(response: Response): Promise<unknown> {
 
 /** Calls the configured OpenAI-compatible image endpoint and accepts bounded inline image bytes. */
 export class OpenAiAgentImageMapper implements AgentImageGenerationPort {
-  constructor(private readonly fetcher: typeof fetch = fetch) {}
+  // Workers requires the global receiver when fetch is stored on an instance.
+  constructor(private readonly fetcher: typeof fetch = fetch.bind(globalThis)) {}
 
   async generate(endpoint: AgentImageModelEndpoint, prompt: string): Promise<AgentGeneratedImage> {
     const path = endpoint.apiStyle === "IMAGES_GENERATIONS" ? "/images/generations" : "/chat/completions";
@@ -119,10 +127,17 @@ export class OpenAiAgentImageMapper implements AgentImageGenerationPort {
         method: "POST", headers: { authorization: `Bearer ${endpoint.apiKey}`, "content-type": "application/json" },
         body: JSON.stringify(payload), redirect: "manual", signal: AbortSignal.timeout(90_000),
       });
-    } catch { throw new Error("Image provider request failed"); }
-    if (!response.ok) throw new Error("Image provider returned an error");
+    } catch (error) {
+      const timeout = error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name);
+      throw new AgentImageProviderError("request", undefined, timeout ? "timeout" : "connection");
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      throw new AgentImageProviderError("http", response.status);
+    }
     let value: unknown;
-    try { value = await readProviderJson(response); } catch { throw new Error("Image provider returned invalid JSON or an oversized body"); }
+    try { value = await readProviderJson(response); }
+    catch { throw new AgentImageProviderError("response", response.status); }
     const parsed = decodedImage(value);
     const root = record(value);
     const usage = parsed.usage;

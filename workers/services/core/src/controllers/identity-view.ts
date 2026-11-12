@@ -1,4 +1,5 @@
 import type { IdentityUser } from "../interfaces/identity-repository.js";
+import { effectiveIdentityTier } from "../services/identity-tier.js";
 
 function localDateTime(value: string | null): string | null {
   if (!value) return null;
@@ -11,7 +12,7 @@ export function userInfo(user: IdentityUser) {
     nickname: user.nickname,
     avatar: user.avatar,
     role: user.role,
-    tier: user.tier,
+    tier: effectiveIdentityTier(user),
     tierExpiresAt: localDateTime(user.tierExpiresAt),
     email: user.email,
     createdAt: localDateTime(user.createdAt),

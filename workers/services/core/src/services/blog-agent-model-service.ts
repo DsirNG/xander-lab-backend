@@ -162,6 +162,9 @@ export class BlogAgentModelService {
         input: prompt.content,
         webSearch: Boolean(this.webSearchEnabled && prompt.webSearch),
         ...(quickWrite ? { timeoutMs: 40_000, maxAttempts: 1, maxCandidates: 2, maxDurationMs: 60_000 } : {}),
+        // Conversation execution authority is checked by Content between requests.
+        // A detached Core request cannot safely start its own unguarded retries.
+        ...(input.conversationTask === true ? { maxAttempts: 1, maxCandidates: 1 } : {}),
       });
     } catch (error) {
       throw modelFailure(error);

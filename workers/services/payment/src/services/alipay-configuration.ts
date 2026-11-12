@@ -38,6 +38,8 @@ export function resolveAlipayConfiguration(env: PaymentEnvironment): AlipayConfi
       throw new Error("Invalid payment product");
     }
     ids.add(item.productId);
+    if (production && (item.priceCents!==({PLUS:200,PRO:400,ULTRA:1000}[item.tier]) || item.durationDays!==30))
+      throw new Error("Invalid payment product");
   }
   const returnUrl = endpoint(env.ALIPAY_RETURN_URL, production);
   if (new URL(returnUrl).pathname !== "/payment/alipay/return") throw new Error("Invalid return route");

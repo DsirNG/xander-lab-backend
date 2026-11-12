@@ -19,3 +19,5 @@ keys are persistent; the refund amount and request number remain stable on
 retries. No existing WeChat schema is changed. Alipay is disabled by default.
 See [the integration guide](../../../docs/alipay-webpay.md) for activation,
 Workers transport restrictions, local validation and outstanding external tests.
+
+`0005_order_refunds.sql` adds durable per-order refund intent and externally initiated refund tracking. Apply with Core 0011 before enabling the new order/refund routes. See `docs/migration/virtual-pay-refunds.md` for the 7-day policy and rollout.
