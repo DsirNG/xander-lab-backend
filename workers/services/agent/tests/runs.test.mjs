@@ -1538,3 +1538,21 @@ for (const scenario of ['saved', 'description-only', 'deleted', 'unavailable', '
     assert.deepEqual(lookedUp, ['description-only', 'unavailable'].includes(scenario) ? [] : [123]);
   });
 }
+
+test('Plain writing rejects an unsolicited blog tool and recovers with prose', async () => {
+  const {repository,state} = createRepository();
+  const service = new AgentRunService(repository, {async candidates(){return {managed:true,endpoints:[{providerId:1,baseUrl:'https://models.example/v1',apiKey:'test',model:'test',apiStyle:'CHAT_COMPLETIONS'}]}}},
+    {async ensureAvailable(){return true},async chargeTokens(){}},undefined,undefined,undefined,undefined,undefined,
+    {async create(){assert.fail('Plain prose must not create a blog task')}});
+  let calls=0;
+  mock.method(globalThis,'fetch',async (_url,init)=>{
+    const body=JSON.parse(init.body);calls++;
+    assert.equal(body.tools.some(t=>t.function.name==='blog_generate'),false);
+    assert.match(body.messages[0].content,/直接在对话中给出完整正文/);
+    const delta=calls===1?{tool_calls:[{index:0,function:{name:'blog_generate',arguments:'{"input":"春天"}'}}]}:{content:'春风拂过河岸，草木渐渐苏醒。'};
+    return new Response(`data: ${JSON.stringify({choices:[{delta}]})}\n\ndata: [DONE]\n\n`,{headers:{'content-type':'text/event-stream'}});
+  });
+  const version=await service.claimTurn(42,7,'写一段春天的文字',[]);
+  assert.deepEqual(await service.executeTurn(42,7,version,()=>{}),{ok:true});
+  assert.equal(calls,2);assert.match(state.messages.at(-1).content,/春风/);
+});
