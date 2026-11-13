@@ -91,6 +91,21 @@ export class AgentMemoryService {
     return recalled;
   }
 
+  /** Only explicit assistant-portrait references are eligible; unrelated user pictures are excluded. */
+  async savedPortraitAssetIds(userId: number): Promise<number[]> {
+    const rows = await this.repository.list(userId, MAX_MEMORIES);
+    const ids: number[] = [];
+    for (const row of rows.filter(row => row.userId === userId)
+      .sort((a, b) => compareDate(b.updatedAt, a.updatedAt))) {
+      if (!/assistant[-_ ]?(?:portrait|avatar|image|appearance)|ai[-_ ]?(?:portrait|avatar|image)|persona|(?:助手|AI|人工智能|你自己|自身).{0,12}(?:形象|照片|头像)/i.test(`${row.memoryKey} ${row.content}`)) continue;
+      for (const match of row.content.matchAll(/(?:["']?(?:assetId|mediaAssetId|asset_id)["']?\s*[:=：]\s*|素材(?:ID|编号|id)\s*[:：=]?\s*)(\d+)/g)) {
+        const id = Number(match[1]);
+        if (Number.isSafeInteger(id) && id > 0 && !ids.includes(id)) ids.push(id);
+      }
+    }
+    return ids;
+  }
+
   async context(userId: number, query: string): Promise<string> {
     const memories = await this.recall(userId, query);
     if (memories.length === 0) return "";

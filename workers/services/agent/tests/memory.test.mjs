@@ -79,3 +79,15 @@ test("remember and recall tools return honest user-facing results", async () => 
   assert.equal(absent.data.removed, false);
   assert.match(absent.answer, /没有找到/);
 });
+
+test('Portrait references are user scoped and exclude descriptions and unrelated pictures', async () => {
+  const repository = new MemoryRepository();
+  const service = new AgentMemoryService(repository);
+  await service.remember(42, 'assistant-name', 'FACT', '双双，黑发', 7);
+  await service.remember(42, 'vacation', 'FACT', 'assetId: 998', 7);
+  await service.remember(43, 'assistant-portrait', 'FACT', 'assetId: 999', 8);
+  await service.remember(42, 'assistant-portrait', 'FACT', '{"assetId":123}', 7);
+  assert.deepEqual(await service.savedPortraitAssetIds(42), [123]);
+  await service.forget(42, 'assistant-portrait');
+  assert.deepEqual(await service.savedPortraitAssetIds(42), []);
+});

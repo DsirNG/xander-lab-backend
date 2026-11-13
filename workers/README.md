@@ -547,3 +547,14 @@ Performance mark `agent.answer.first-frame` records the delay from starting the
 client run to scheduling the first answer render; it is not a paint measurement.
 Production comparisons must use the same model, prompt and conversation context;
 provider generation time is outside the platform's control.
+
+### Saved assistant portraits
+
+Requests to view the assistant's own portrait use `image_resend` with
+`source: assistant_portrait`; they do not authorize image generation. Portrait
+memory stores a verified media reference under `assistant-portrait` (for example,
+`assetId: 123`). Reads are scoped to the current user's memory and re-check media
+ownership. A name or appearance description alone is not a saved photograph.
+Missing/deleted references produce a normal explanatory reply; lookup failures
+produce a retry message, never a generated replacement. Explicit requests to
+create a new image continue to use `image_generate`.

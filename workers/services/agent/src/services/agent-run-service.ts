@@ -39,7 +39,7 @@ interface AgentFunctionTool {
 const MEMORY_TOOLS: AgentFunctionTool[] = [
   {
     name: "remember",
-    description: "把跨会话长期有效的信息写入自己的长期记忆，或删除已失效的记忆。只记用户的身份、稳定偏好、长期目标或明确要求记住的事；不要记临时细节、密码、密钥或可从内容服务查询的数据。memoryKey 使用稳定英文短横线命名；复用同一个 key 会更新。",
+    description: "把跨会话长期有效的信息写入自己的长期记忆，或删除已失效的记忆。只记用户的身份、稳定偏好、长期目标或明确要求记住的事；也可记住用户明确指定的助手名字、外貌和自身形象照引用。保存形象照时使用 assistant-portrait 作为 memoryKey，content 记录真实已知的 assetId（例如 assetId: 123），外貌文字不能当作已有照片；不要猜测 ID。不要记临时细节、密码、密钥或可从内容服务查询的数据。memoryKey 使用稳定英文短横线命名；复用同一个 key 会更新。",
     parameters: {
       type: "object",
       properties: {
@@ -260,7 +260,7 @@ const PLAN_TASKS_TOOLS: AgentFunctionTool[] = [{
 
 const IMAGE_GENERATION_TOOLS: AgentFunctionTool[] = [{
   name: "image_generate",
-  description: "根据当前对话描述生成新图片，包括人物形象照、虚构角色自拍、插画、封面和示意图，保存到用户素材库。用户在讨论外观后说‘给我看看’、‘发张你的照片’也属于生成请求，应把前文形象细节写入 prompt；生成新图不要求用户先上传图片。不得将生成的角色形象宣称为真实拍摄的照片。",
+  description: "根据当前对话描述生成新图片，包括人物形象照、虚构角色自拍、插画、封面和示意图，保存到用户素材库。只有用户明确要求生成、画或重新制作新图时调用。‘发一张你的形象照’和讨论你的外貌后‘给我看看’是查看已保存形象照，必须使用 image_resend 的 assistant_portrait，不能自动生成。生成新图不要求用户先上传图片。不得将生成的角色形象宣称为真实拍摄的照片。",
   parameters: {
     type: "object",
     properties: {
@@ -274,11 +274,11 @@ const IMAGE_GENERATION_TOOLS: AgentFunctionTool[] = [{
 
 const IMAGE_RESEND_TOOLS: AgentFunctionTool[] = [{
   name: "image_resend",
-  description: "仅重新发送已经存在的图片，不生成新图。用户明确要看上传过的原图时使用 latest_uploaded；用户要看已有素材库图片时使用 asset_id，必须有真实已知的 assetId，不得猜测。根据文字描述展示人物外观、AI 形象照或自拍应使用 image_generate，而不是本工具。",
+  description: "仅重新发送已经存在的图片，不生成新图。用户明确要看上传过的原图时使用 latest_uploaded；用户要看已有素材库图片时使用 asset_id，必须有真实已知的 assetId，不得猜测。用户要看你自己的形象照或自拍（包括讨论你的外貌后说给我看看）时使用 assistant_portrait，查找已保存的形象照片；没有照片会明确说明，绝不自动生成。",
   parameters: {
     type: "object",
     properties: {
-      source: { type: "string", enum: ["latest_uploaded", "asset_id"] },
+      source: { type: "string", enum: ["latest_uploaded", "asset_id", "assistant_portrait"] },
       assetId: { type: "integer", minimum: 1 },
     },
     required: ["source"], additionalProperties: false,
@@ -754,6 +754,16 @@ function usageFromEvent(
   return { inputTokens, outputTokens, cachedTokens };
 }
 
+/** Viewing an existing assistant portrait is distinct from authorizing a new image. */
+function isSavedPortraitRequest(history: { role: string; content: string }[]): boolean {
+  const latest = [...history].reverse().find(item => item.role === "user")?.content ?? "";
+  if (!/不要|别|不需要|do not|don.t/i.test(latest) && /(?:生成|重画|画一|画张|制作|create|generate|draw)/i.test(latest)) return false;
+  if (!/发|看|展示|照片|自拍|send|show|photo|selfie/i.test(latest)) return false;
+  if (/(?:你的|你自己|自身).{0,12}(?:形象|照片|自拍|头像)|(?:your|your own)\s+(?:portrait|photo|selfie|picture)/i.test(latest)) return true;
+  return /给我看看|让我看看|发来看看|show me/i.test(latest)
+    && history.slice(-5, -1).some(item => /我的形象|我的外貌|你的形象|你的外貌|my appearance|my portrait/i.test(item.content));
+}
+
 export class AgentRunService {
   constructor(
     private readonly repository: AgentTurnRepository,
@@ -965,21 +975,26 @@ export class AgentRunService {
         && message.attachments?.some(item => item.contentType.toLowerCase().startsWith("image/")));
       const resendTools = hasUploadedImage ? IMAGE_RESEND_TOOLS : IMAGE_RESEND_TOOLS.map(tool => ({
         ...tool,
-        description: tool.description + " 当前会话没有可重发的用户上传图片，仅可凭真实已知的素材 ID 重发。",
+        description: tool.description + " 当前会话没有可重发的用户上传图片，可读取已保存的自身形象照，或凭真实已知的素材 ID 重发。",
         parameters: {
           ...tool.parameters,
-          properties: { source: { type: "string", enum: ["asset_id"] }, assetId: { type: "integer", minimum: 1 } },
-          required: ["source", "assetId"],
+          properties: { source: { type: "string", enum: ["asset_id", "assistant_portrait"] }, assetId: { type: "integer", minimum: 1 } },
+          required: ["source"],
         },
       }));
+      const portraitRequest = isSavedPortraitRequest(history);
       const tools = [...skillContext.tools, ...memoryTools, ...(this.recitation ? RECITATION_TOOLS : []), ...QUIZ_TOOLS, ...ARTIFACT_TOOLS,
-          ...PLAN_TASKS_TOOLS, ...IMAGE_GENERATION_TOOLS, ...resendTools,
+          ...PLAN_TASKS_TOOLS, ...(portraitRequest ? [] : IMAGE_GENERATION_TOOLS), ...resendTools,
           ...CONTENT_QUERY_TOOLS, ...CONTENT_MUTATION_TOOLS,
           ...DELEGATE_SUBTASK_TOOLS,
           ...(this.weather ? WEATHER_TOOLS : []),
           ...(this.blogAgent ? BLOG_GENERATION_TOOLS : []),
           ...mcpTools.map((tool) => ({ name: tool.fullName, description: tool.description, parameters: tool.inputSchema }))];
-      let modelResult = await this.callModel(gateway.endpoints, messages, onDelta, abortController.signal, tools);
+      let modelResult = await this.callModel(gateway.endpoints, messages, async (delta) => { if (!portraitRequest) await onDelta(delta); }, abortController.signal, tools);
+      // A saved portrait request must never spend image-generation credits, even if a provider ignores tools.
+      if (portraitRequest) {
+        modelResult = { ...modelResult, toolCalls: [{ name: "image_resend", arguments: JSON.stringify({ source: "assistant_portrait" }) }] };
+      }
       // A provider can ignore a tool schema. Re-plan once before failing an otherwise valid image request.
       const selectedTool = modelResult.toolCalls.length === 1 ? modelResult.toolCalls[0] : undefined;
       if (!hasUploadedImage && selectedTool?.name === "image_resend") {
@@ -989,8 +1004,8 @@ export class AgentRunService {
           await ensureActive();
           modelResult = await this.callModel(gateway.endpoints, [...messages, {
             role: "system",
-            content: "当前会话没有可重发的用户上传图片，不能执行 latest_uploaded。请重新根据完整对话判断：如果用户要求展示前文描述的外观或 AI 虚构形象，请调用 image_generate，并保留前文的外观细节；如果用户只要求重发不存在的原图，请用自然语言说明需要先上传原图，不要擅自生成替代图片或编造素材 ID。",
-          }], onDelta, abortController.signal, tools.filter(tool => tool.name !== "image_resend"));
+            content: "当前会话没有可重发的用户上传图片，不能执行 latest_uploaded。请重新根据完整对话判断：如果用户要看你的形象照，请用 image_resend 的 assistant_portrait 读取已保存照片，不能生成替代；只有用户明确要求生成新图时才可调用 image_generate；如果用户只要求重发不存在的原图，请用自然语言说明需要先上传原图，不要擅自生成替代图片或编造素材 ID。",
+          }], onDelta, abortController.signal, tools.map(tool => tool.name === "image_resend" ? { ...tool, parameters: { ...tool.parameters, properties: { source: { type: "string", enum: ["assistant_portrait", "asset_id"] }, assetId: { type: "integer", minimum: 1 } } } } : tool));
         }
       }
       timing.modelMs = performance.now() - modelStarted;
@@ -1189,11 +1204,33 @@ export class AgentRunService {
           return { ok: true };
         }
         if (toolName === "image_resend") {
-          if (!this.images) throw new ResponseError(503, "图片素材服务尚未配置");
           const input = isRecord(args) ? args : {};
           const source = typeof input.source === "string" ? input.source : "";
           let image: { assetId?: number; url: string; title: string; contentType: string };
-          if (source === "asset_id") {
+          if (source === "assistant_portrait") {
+            let savedImage: { assetId?: number; url: string; title: string; contentType: string } | undefined;
+            try {
+              const ids = await this.memory?.savedPortraitAssetIds(userId) ?? [];
+              for (const id of ids) {
+                if (!this.images) throw new ResponseError(503, "图片素材服务尚未配置");
+                try { savedImage = await this.images.findOwned(userId, id); break; }
+                catch (error) {
+                  if (!(error instanceof AgentImageError) || ![403, 404].includes(error.status)) throw error;
+                }
+              }
+            } catch {
+              const terminal = await finishTurn("暂时无法读取我已保存的形象照，请稍后再试。我没有生成新图片。");
+              onEvent(terminal.completeEventId, "complete", { status: "ready" });
+              return { ok: true };
+            }
+            if (!savedImage) {
+              const terminal = await finishTurn("我目前没有找到已保存且可发送的自身形象照片。记住名字和外貌描述不代表已经保存了照片，我不会自动生成新图来代替。");
+              onEvent(terminal.completeEventId, "complete", { status: "ready" });
+              return { ok: true };
+            }
+            image = savedImage;
+          } else if (source === "asset_id") {
+            if (!this.images) throw new ResponseError(503, "图片素材服务尚未配置");
             try { image = await this.images.findOwned(userId, input.assetId); }
             catch (error) {
               if (error instanceof AgentImageError) throw new ResponseError(error.status, error.message);

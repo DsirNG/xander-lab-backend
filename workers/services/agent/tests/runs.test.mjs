@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { afterEach, mock } from "node:test";
 import { AgentRunService } from "../.test-build/services/agent-run-service.js";
+import { AgentImageError } from "../.test-build/services/agent-image-service.js";
 import { AgentMemoryService } from "../.test-build/services/agent-memory-service.js";
 import { AgentRecitationService } from "../.test-build/services/agent-recitation-service.js";
 import { handleAgentRunRequest } from "../.test-build/controllers/agent-run-controller.js";
@@ -1463,12 +1464,12 @@ for (const wantsNewImage of [true, false]) {
       let delta;
       if (calls === 1) {
         const resend = tools.find(tool => tool.name === 'image_resend');
-        assert.deepEqual(resend.parameters.properties.source.enum, ['asset_id']);
-        assert.ok(resend.parameters.required.includes('assetId'));
+        assert.deepEqual(resend.parameters.properties.source.enum, ['asset_id', 'assistant_portrait']);
+        assert.ok(resend.parameters.required.includes('source'));
         assert.match(tools.find(tool => tool.name === 'image_generate').description, /形象照/);
         delta = { tool_calls: [{ index: 0, function: { name: 'image_resend', arguments: JSON.stringify({ source: 'latest_uploaded' }) } }] };
       } else {
-        assert.equal(tools.some(tool => tool.name === 'image_resend'), false);
+        assert.ok(tools.find(tool => tool.name === 'image_resend').parameters.properties.source.enum.includes('assistant_portrait'));
         assert.match(body.messages.at(-1).content, /不要擅自生成替代图片/);
         delta = wantsNewImage
           ? { tool_calls: [{ index: 0, function: { name: 'image_generate', arguments: JSON.stringify({ prompt: description, title: '虚构形象' }) } }] }
@@ -1477,7 +1478,7 @@ for (const wantsNewImage of [true, false]) {
       return new Response(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`,
         { headers: { 'content-type': 'text/event-stream' } });
     });
-    const version = await service.claimTurn(42, 7, wantsNewImage ? '给我看看呐' : '重发我上传的原图', []);
+    const version = await service.claimTurn(42, 7, wantsNewImage ? '请生成一张新的形象照' : '重发我上传的原图', []);
     const result = await service.executeTurn(42, 7, version, () => {});
     assert.deepEqual(result, { ok: true });
     assert.equal(calls, 2);
@@ -1490,5 +1491,50 @@ for (const wantsNewImage of [true, false]) {
     } else {
       assert.equal(state.messages.at(-1).content, '请先上传需要重发的原图。');
     }
+  });
+}
+
+for (const scenario of ['saved', 'description-only', 'deleted', 'unavailable', 'contextual']) {
+  test(`Assistant portrait retrieval never generates: ${scenario}`, async () => {
+    const { repository, state } = createRepository();
+    state.messages.push({ id: 1, role: 'assistant', content: '我的形象是黑色扎发、黑框眼镜。' });
+    const memory = new AgentMemoryService({
+      async list(userId) {
+        assert.equal(userId, 42);
+        if (scenario === 'unavailable') throw new Error('offline');
+        return [{ userId: 42, memoryKey: 'assistant-portrait', kind: 'FACT', content:
+          scenario === 'description-only' ? '名字双双，黑色扎发、黑框眼镜' : 'assetId: 123', updatedAt: '2026-11-13' }];
+      }, async markRecalled() {},
+    });
+    const lookedUp = [];
+    const service = new AgentRunService(repository, {
+      async candidates() { return { managed: true, endpoints: [{ providerId: 4, baseUrl: 'https://models.example/v1',
+        apiKey: 'test', model: 'agent-model', apiStyle: 'CHAT_COMPLETIONS' }] }; },
+    }, { async ensureAvailable() { return true; }, async chargeTokens() {} },
+    undefined, undefined, memory, undefined, undefined, undefined, undefined, undefined, {
+      async generate() { assert.fail('Viewing a portrait must never generate or charge for an image'); },
+      async findOwned(userId, id) {
+        assert.equal(userId, 42); lookedUp.push(id);
+        if (scenario === 'deleted') throw new AgentImageError(404, 'not found');
+        return { assetId: id, url: 'https://cdn.example/saved-portrait.png', title: '双双', contentType: 'image/png' };
+      },
+    });
+    mock.method(globalThis, 'fetch', async (_url, init) => {
+      const body = JSON.parse(init.body);
+      assert.equal(body.tools.some(t => t.function.name === 'image_generate'), false);
+      const delta = { content: '我将生成一张新照片', tool_calls: [{ index: 0, function: {
+        name: 'image_generate', arguments: JSON.stringify({ prompt: 'portrait' }) } }] };
+      return new Response(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`,
+        { headers: { 'content-type': 'text/event-stream' } });
+    });
+    const version = await service.claimTurn(42, 7, scenario === 'contextual' ? '给我看看讷' : '发一张你的形象照给我', []);
+    assert.deepEqual(await service.executeTurn(42, 7, version, () => {}), { ok: true });
+    const answer = state.messages.at(-1).content;
+    if (['saved', 'contextual'].includes(scenario)) assert.match(answer, /saved-portrait.png/);
+    else if (scenario === 'unavailable') assert.match(answer, /暂时无法读取/);
+    else assert.match(answer, /没有找到已保存/);
+    assert.ok(!JSON.stringify(state.events).includes('我将生成一张新照片'));
+    assert.equal(state.conversation.status, 'ready');
+    assert.deepEqual(lookedUp, ['description-only', 'unavailable'].includes(scenario) ? [] : [123]);
   });
 }
