@@ -76,6 +76,24 @@ function imageOutput(body: Record<string, unknown>, message: Record<string, unkn
   return images;
 }
 
+function textOutput(body: Record<string, unknown>, choice: Record<string, unknown>, message: Record<string, unknown>): string {
+  const content = message.content;
+  const fromParts = Array.isArray(content)
+    ? content.map((part) => {
+      const item = record(part);
+      return typeof item.text === "string" ? item.text : typeof item.content === "string" ? item.content : "";
+    }).join("\n")
+    : typeof content === "string" ? content : "";
+  if (fromParts.trim()) return fromParts;
+  for (const value of [message.reasoning_content, choice.text, body.output_text, body.response, body.content, body.text]) {
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  const nested = record(body.data);
+  const nestedChoice = record(Array.isArray(nested.choices) ? nested.choices[0] : undefined);
+  const nestedMessage = record(nestedChoice.message);
+  return typeof nestedMessage.content === "string" ? nestedMessage.content : typeof nestedChoice.text === "string" ? nestedChoice.text : "";
+}
+
 /** Makes only explicit administrator requests. Returns bounded output and redacted provider diagnostics. */
 export class HttpModelProbeMapper implements ModelProbePort {
   constructor(private readonly fetcher: typeof fetch = fetch.bind(globalThis)) {}
@@ -136,7 +154,8 @@ export class HttpModelProbeMapper implements ModelProbePort {
         return result(false, reason, response, diagnostic ? { error: diagnostic } : {});
       }
       if (read.exceeded) return result(false, "response_too_large", response);
-      if (!validJson) return result(false, "invalid_response", response);
+      const rawResponse = safeText(read.text, input.apiKey, 20_000);
+      if (!validJson) return result(false, "invalid_response", response, rawResponse ? { rawResponse } : {});
       if (!input.model) {
         if (!Array.isArray(body.data)) return result(false, "invalid_response", response, diagnostic ? { error: diagnostic } : {});
         const models = body.data.map((item) => safeText(record(item).id, input.apiKey, 100)).filter((id): id is string => Boolean(id)).slice(0, 500);
@@ -145,22 +164,20 @@ export class HttpModelProbeMapper implements ModelProbePort {
       const choice = record(Array.isArray(body.choices) ? body.choices[0] : undefined);
       const message = record(choice.message);
       const images = imageOutput(body, message);
-      let text = typeof message.content === "string" ? message.content : "";
+      let text = textOutput(body, choice, message);
       if (style === "RESPONSES") {
         text = typeof body.output_text === "string" ? body.output_text : (Array.isArray(body.output) ? body.output : [])
           .flatMap((item) => Array.isArray(record(item).content) ? record(item).content as unknown[] : [])
           .map((item) => typeof record(item).text === "string" ? record(item).text as string : "").join("\n");
-      } else if (Array.isArray(message.content)) {
-        text = message.content.map((part) => typeof record(part).text === "string" ? record(part).text as string : "").join("\n");
       }
       const finishReason = safeText(choice.finish_reason ?? body.status, input.apiKey, 80);
       if (image && !images.length || !image && (!text.trim() || body.status === "failed" || body.status === "cancelled")) {
-        return result(false, "invalid_response", response, { ...(diagnostic ? { error: diagnostic } : {}), output: { ...(finishReason ? { finishReason } : {}) } });
+        return result(false, "invalid_response", response, { ...(diagnostic ? { error: diagnostic } : {}), ...(rawResponse ? { rawResponse } : {}), output: { ...(finishReason ? { finishReason } : {}) } });
       }
       // Inline base64 belongs in the image preview, never in a text bubble or history.
       if (image) text = text.replace(/data:image\/[^;\s]+;base64,[a-z0-9+/=]+/gi, "");
       const truncated = text.length > 24_000 || body.status === "incomplete" || choice.finish_reason === "length";
-      return result(true, "success", response, { output: { ...(text.trim() ? { text: safeText(text, input.apiKey, 24_000) } : {}), ...(images.length ? { images } : {}), ...(finishReason ? { finishReason } : {}), ...(truncated ? { truncated } : {}) } });
+      return result(true, "success", response, { ...(rawResponse ? { rawResponse } : {}), output: { ...(text.trim() ? { text: safeText(text, input.apiKey, 24_000) } : {}), ...(images.length ? { images } : {}), ...(finishReason ? { finishReason } : {}), ...(truncated ? { truncated } : {}) } });
     } catch {
       return result(false, controller.signal.aborted ? "timeout" : "connection");
     } finally { clearTimeout(timer); }

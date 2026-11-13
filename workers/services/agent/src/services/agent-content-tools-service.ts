@@ -5,6 +5,7 @@ export class AgentContentToolsError extends Error {
 }
 
 const MUTATION_FIELDS: Record<string, readonly string[]> = {
+  create_blog_draft: ["title", "summary", "content", "categoryId", "tags", "coverImage"],
   schedule_plan: ["topic", "topics", "triggerTimes", "triggerTime", "timezone", "audience", "tone", "syncCsdn", "syncJuejin"],
   update_plan: ["planId", "action", "topic", "topics", "triggerTimes", "triggerTime", "timezone", "audience", "tone", "syncCsdn", "syncJuejin"],
   create_plan_series: ["title", "topic", "days", "topics", "startDate", "triggerTime", "timezone", "audience", "tone", "platforms", "publishMode", "aiOption"],
@@ -72,6 +73,10 @@ export class AgentContentToolsService {
         case "query_plan_series": return await this.content.queryPlanSeries(userId, args);
         case "query_email_reminders": return await this.content.queryEmailReminders(userId, args);
         case "query_unsynced_posts": return await this.content.queryUnsyncedPosts(userId, args);
+        case "create_blog_draft": {
+          AgentContentToolsService.validateMutationArguments(toolName, args);
+          return await this.content.createBlogDraft(userId, args, invocationId || crypto.randomUUID());
+        }
         case "schedule_plan":
         case "email_reminder":
         case "update_plan":
@@ -115,6 +120,10 @@ function validateMutation(toolName: string, args: Record<string, unknown>): void
   const allowed = MUTATION_FIELDS[toolName];
   if (!allowed || Object.keys(args).some((key) => !allowed.includes(key))) {
     throw new AgentContentToolsError(400, "内容操作参数包含不支持的字段");
+  }
+  if (toolName === "create_blog_draft" && (typeof args.title !== "string" || !args.title.trim()
+    || typeof args.content !== "string" || !args.content.trim())) {
+    throw new AgentContentToolsError(400, "博客草稿需要真实的标题和正文；不能只使用文件名或占位提示");
   }
   if (toolName === "schedule_plan" && (typeof args.topic !== "string" || !args.topic.trim() || args.topic.length > 120)) {
     throw new AgentContentToolsError(400, "文章主题不能为空且不能超过 120 个字符");

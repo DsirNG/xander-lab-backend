@@ -7,6 +7,7 @@ import type { AgentTurnRepository } from "../interfaces/agent-run-repository.js"
 import { AgentPublicationError } from "../mappers/content-agent-publication-mapper.js";
 import type { AgentMcpToolDefinition, AgentMcpToolPort } from "../interfaces/agent-mcp-tool-port.js";
 import { AgentContentToolsError, AgentContentToolsService } from "./agent-content-tools-service.js";
+import { AgentToolExecutionPipeline, type AgentTool } from "./agent-tool-runtime.js";
 import { AgentWeatherError, AgentWeatherService } from "./agent-weather-service.js";
 
 export class AgentApprovalError extends Error {
@@ -352,9 +353,17 @@ export class AgentToolApprovalService {
     let failure: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        result = await this.contentTools.executeApprovedMutation(
-          userId, approval.toolName, args, approval.invocationId,
-        );
+        const pipeline = new AgentToolExecutionPipeline(new Map([[approval.toolName, {
+          definition: () => ({ name: approval.toolName, description: "已审批的内容操作", parameters: {}, readOnly: false }),
+          execute: async (_context, input) => ({ ok: true, data: await this.contentTools!.executeApprovedMutation(
+            userId, approval.toolName, input, approval.invocationId,
+          ) }),
+        } satisfies AgentTool]]));
+        const executed = await pipeline.execute({ name: approval.toolName, arguments: args, invocationId: approval.invocationId }, {
+          userId, conversationId, runVersion, invocationId: approval.invocationId,
+          idempotencyKey: approval.invocationId, signal: new AbortController().signal,
+        });
+        result = executed.data as Awaited<ReturnType<AgentContentToolsService["executeApprovedMutation"]>>;
         failure = null;
         break;
       } catch (error) {
@@ -407,7 +416,15 @@ export class AgentToolApprovalService {
       || !this.mcp) throw new AgentApprovalError(409, "远端 MCP 审批参数损坏");
     let result: unknown;
     try {
-      result = await this.mcp.callApprovedTool(userId, row.serverId, row.remoteToolName, row.arguments);
+      const pipeline = new AgentToolExecutionPipeline(new Map([[approval.toolName, {
+        definition: () => ({ name: approval.toolName, description: "已审批的远端 MCP 工具", parameters: {}, readOnly: false }),
+        execute: async () => ({ ok: true, data: await this.mcp!.callApprovedTool(userId, row.serverId as number, row.remoteToolName as string, row.arguments) }),
+      } satisfies AgentTool]]));
+      const executed = await pipeline.execute({ name: approval.toolName, arguments: row.arguments, invocationId: approval.invocationId }, {
+        userId, conversationId, runVersion, invocationId: approval.invocationId,
+        idempotencyKey: approval.invocationId, signal: new AbortController().signal,
+      });
+      result = executed.data;
     } catch {
       const message = "远端 MCP 请求已发送但结果无法确认；系统没有自动重试，请先检查第三方服务器状态。";
       await this.repository.failInvocation(userId, conversationId, runVersion, approval.invocationId, message, true);

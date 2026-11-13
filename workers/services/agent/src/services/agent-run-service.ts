@@ -20,6 +20,14 @@ import type { AgentMcpToolPort } from "../interfaces/agent-mcp-tool-port.js";
 import { AgentBlogAgentError } from "../mappers/content-agent-blog-agent-mapper.js";
 import { AgentImageError, AgentImageService } from "./agent-image-service.js";
 import { AgentContentToolsError, AgentContentToolsService } from "./agent-content-tools-service.js";
+import { AgentToolRegistry, type AgentToolDefinition } from "./agent-tool-registry.js";
+import { AgentToolExecutionPipeline, type AgentTool, type AgentToolResult } from "./agent-tool-runtime.js";
+import { createContentMutationTool, createContentQueryTools } from "./agent-content-tool-adapters.js";
+import { createBlogGenerationTool } from "./agent-blog-tool-adapters.js";
+import { AgentToolDispatcher } from "./agent-tool-dispatcher.js";
+import { createPublishPostTool } from "./agent-publication-tool-adapters.js";
+import { createArtifactTool } from "./agent-artifact-tool-adapters.js";
+import { createMcpApprovalTool } from "./agent-mcp-tool-adapters.js";
 
 interface AgentInputMessage {
   role: string;
@@ -32,394 +40,15 @@ interface AgentModelToolCall {
   arguments: string;
 }
 
-interface AgentFunctionTool {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-}
+type AgentFunctionTool = AgentToolDefinition;
 
-const MEMORY_TOOLS: AgentFunctionTool[] = [
-  {
-    name: "remember",
-    description: "把跨会话长期有效的信息写入自己的长期记忆，或删除已失效的记忆。只记用户的身份、稳定偏好、长期目标或明确要求记住的事；也可记住用户明确指定的助手名字、外貌和自身形象照引用。保存形象照时使用 assistant-portrait 作为 memoryKey，content 记录真实已知的 assetId（例如 assetId: 123），外貌文字不能当作已有照片；不要猜测 ID。不要记临时细节、密码、密钥或可从内容服务查询的数据。memoryKey 使用稳定英文短横线命名；复用同一个 key 会更新。",
-    parameters: {
-      type: "object",
-      properties: {
-        action: { type: "string", enum: ["upsert", "delete"], description: "写入/更新或删除；默认 upsert" },
-        memoryKey: { type: "string", maxLength: 120, description: "稳定记忆标识，例如 writing-style" },
-        kind: { type: "string", enum: ["PROFILE", "PREFERENCE", "FACT", "PROJECT"] },
-        content: { type: "string", maxLength: 2000, description: "单条长期记忆正文；删除时省略" },
-      },
-      required: ["memoryKey"],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "recall_memory",
-    description: "按关键词查找自己的长期记忆。通常记忆已自动注入；仅在用户追问更早的具体事实或需确认某条记忆时调用。",
-    parameters: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "关键词或主题；留空时返回最近更新的记忆" },
-        limit: { type: "integer", minimum: 1, maximum: 8 },
-      },
-      additionalProperties: false,
-    },
-  },
-];
-
-const RECITATION_TOOLS: AgentFunctionTool[] = [
-  {
-    name: "query_knowledge",
-    description: "查询当前用户自己的个人知识库、掌握度和原文摘录。涉及用户已保存的知识时先查这里；只返回用户本人的记录。",
-    parameters: {
-      type: "object",
-      properties: {
-        search: { type: "string", maxLength: 300, description: "按标题或正文搜索，可选" },
-        masteryLevel: { type: "string", enum: ["NEW", "FAMILIAR", "RECALLING", "APPLYING", "MASTERED"] },
-        dueOnly: { type: "boolean", description: "仅查已到复习时间的记录" },
-        fullContent: { type: "boolean", description: "返回较长正文摘录，最多 3 条" },
-        limit: { type: "integer", minimum: 1, maximum: 30 },
-      },
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "create_knowledge",
-    description: "把用户明确要求保存或加入个人知识库的内容写入知识库。只有用户明确要求保存时才调用，不得擅自保存普通聊天内容。",
-    parameters: {
-      type: "object",
-      properties: {
-        title: { type: "string", maxLength: 100 },
-        content: { type: "string", maxLength: 10_000 },
-        knowledgeType: { type: "string", enum: ["RECITATION", "CONCEPT", "MATH"] },
-      },
-      required: ["title", "content", "knowledgeType"],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "start_knowledge_quiz",
-    description: "仅在用户明确要求复习或测验其个人知识时调用。按材料内容生成一组不附答案的题目，并把测验绑定到当前对话。",
-    parameters: {
-      type: "object",
-      properties: {
-        materialId: { type: "integer", minimum: 1, description: "当前用户个人知识库中的材料 ID" },
-        questionCount: { type: "integer", minimum: 3, maximum: 10, description: "题目数量，默认 5" },
-      },
-      required: ["materialId"],
-      additionalProperties: false,
-    },
-  },
-  {
-    name: "record_knowledge_quiz",
-    description: "用户提交当前对话中的测验答案后调用。逐题记录原题、用户原答、简短评语和基于材料的 0 到 1 得分；不得补记用户未回答的题。",
-    parameters: {
-      type: "object",
-      properties: {
-        quizSessionId: { type: "integer", minimum: 1, description: "start_knowledge_quiz 返回的会话 ID" },
-        verdict: { type: "string", maxLength: 1000, description: "整体反馈" },
-        items: {
-          type: "array", minItems: 1, maxItems: 20,
-          items: {
-            type: "object",
-            properties: {
-              question: { type: "string", maxLength: 500 },
-              userAnswer: { type: "string", maxLength: 1000 },
-              comment: { type: "string", maxLength: 500 },
-              credit: { type: "number", minimum: 0, maximum: 1 },
-            },
-            required: ["question", "userAnswer", "comment", "credit"],
-            additionalProperties: false,
-          },
-        },
-      },
-      required: ["quizSessionId", "items"],
-      additionalProperties: false,
-    },
-  },
-];
-
-const QUIZ_TOOLS: AgentFunctionTool[] = [{
-  name: "emit_quiz",
-  description: "把题目发成可点选、可翻页并一次提交的答题卡。用户要求出题、测验或练习时使用；题目不要写入回复正文。来自 start_knowledge_quiz 时原样传入 quizSessionId；普通练习省略。答题卡发出后用一句话请用户在卡片作答。",
-  parameters: {
-    type: "object",
-    properties: {
-      quizSessionId: { type: "integer", minimum: 1, description: "可选，start_knowledge_quiz 返回的测验会话 ID" },
-      title: { type: "string", maxLength: 60, description: "可选的答题卡标题" },
-      questions: {
-        type: "array", minItems: 1, maxItems: 10,
-        items: {
-          type: "object",
-          properties: {
-            prompt: { type: "string", maxLength: 500 },
-            type: { type: "string", enum: ["single", "multiple", "text"] },
-            options: { type: "array", maxItems: 8, items: { type: "string", maxLength: 200 } },
-          },
-          required: ["prompt", "type"],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ["questions"],
-    additionalProperties: false,
-  },
-}];
-
-const ARTIFACT_TOOLS: AgentFunctionTool[] = [{
-  name: "emit_artifact",
-    description: "把用户明确要求的文件作为对话内交付卡发给用户，文件可预览、复制或下载。支持 Markdown、HTML、TXT、CSV、JSON、DOCX、PDF；用户明确要求 Word/PDF 时使用对应 format，并把完整文章正文放在 content 中，由客户端生成真实文件。普通解释、单个短示例和小修复直接写在回复中。每个文件必须提供完整内容，最多 12 个文件。",
-  parameters: {
-    type: "object",
-    properties: {
-      name: { type: "string", maxLength: 60 },
-      kind: { type: "string", enum: ["code", "document"], description: "document 会使用文档交付卡样式" },
-        format: { type: "string", enum: ["text", "docx", "pdf"], description: "文档格式；Word 用 docx，PDF 用 pdf" },
-      summary: { type: "string", maxLength: 300, description: "文件交付卡中的简短内容摘要" },
-      framework: { type: "string", maxLength: 60 },
-      entry: { type: "string", maxLength: 120, description: "可选，需与 files 中的 path 对应；默认选第一个 HTML 文件或第一个文件" },
-      runHint: { type: "string", maxLength: 300 },
-      files: {
-        type: "array", minItems: 1, maxItems: 12,
-        items: {
-          type: "object",
-          properties: {
-            path: { type: "string", maxLength: 120 },
-            content: { type: "string", maxLength: 20_000 },
-            contentType: { type: "string", maxLength: 120 },
-          },
-          required: ["path", "content"],
-          additionalProperties: false,
-        },
-      },
-    },
-    required: ["files"],
-    additionalProperties: false,
-  },
-}];
-
-const BLOG_GENERATION_TOOLS: AgentFunctionTool[] = [{
-  name: "blog_generate",
-  description: "仅在用户明确要求创建博客文章、发布到当前博客，或明确确认了紧接着的博客提示时调用；普通写文章、生成文字、润色、总结和文件生成直接在对话或对应文件工具中完成，不调用本工具。把一个主题、日记片段或项目经历写成中文知识博客。默认 mode=auto：普通主题、个人经历、短文和简单修改使用 quick，单次模型生成并做本地格式检查；只有用户明确要求深入、完整、带资料/引用，或内容涉及最新事实、法律、医疗、金融等需要核验时才用 full（联网调研、撰写和独立审校）。input 原样保留用户的关键信息。",
-  parameters: {
-    type: "object",
-    properties: {
-      input: { type: "string", maxLength: 20_000, description: "用户想写的主题、经历或项目描述的完整原文" },
-      mode: { type: "string", enum: ["auto", "quick", "full"], description: "默认 auto；按用户对深度、时效性和资料核验的实际要求选择" },
-    },
-    required: ["input"], additionalProperties: false,
-  },
-}];
-
-const PLAN_TASKS_TOOLS: AgentFunctionTool[] = [{
-  name: "plan_tasks",
-  description: "为需要多个步骤的任务保存或替换完整计划。每次传入全部步骤；状态为 PENDING、IN_PROGRESS、DONE、DROPPED。最多一个步骤处于 IN_PROGRESS；DROPPED 必须附上 note。单步任务不要调用。",
-  parameters: {
-    type: "object",
-    properties: {
-      items: {
-        type: "array", maxItems: 20,
-        items: {
-          type: "object",
-          properties: {
-            title: { type: "string", maxLength: 120 },
-            status: { type: "string", enum: ["PENDING", "IN_PROGRESS", "DONE", "DROPPED"] },
-            note: { type: "string", maxLength: 300 },
-          },
-          required: ["title", "status"], additionalProperties: false,
-        },
-      },
-    },
-    required: ["items"], additionalProperties: false,
-  },
-}];
-
-const IMAGE_GENERATION_TOOLS: AgentFunctionTool[] = [{
-  name: "image_generate",
-  description: "根据当前对话描述生成新图片，包括人物形象照、虚构角色自拍、插画、封面和示意图，保存到用户素材库。只有用户明确要求生成、画或重新制作新图时调用。‘发一张你的形象照’和讨论你的外貌后‘给我看看’是查看已保存形象照，必须使用 image_resend 的 assistant_portrait，不能自动生成。生成新图不要求用户先上传图片。不得将生成的角色形象宣称为真实拍摄的照片。",
-  parameters: {
-    type: "object",
-    properties: {
-      prompt: { type: "string", minLength: 1, maxLength: 2_000, description: "图片内容的详细描述，包含主题、风格和构图" },
-      title: { type: "string", maxLength: 120, description: "素材库中显示的图片标题，可选" },
-    },
-    required: ["prompt"],
-    additionalProperties: false,
-  },
-}];
-
-const IMAGE_RESEND_TOOLS: AgentFunctionTool[] = [{
-  name: "image_resend",
-  description: "仅重新发送已经存在的图片，不生成新图。用户明确要看上传过的原图时使用 latest_uploaded；用户要看已有素材库图片时使用 asset_id，必须有真实已知的 assetId，不得猜测。用户要看你自己的形象照或自拍（包括讨论你的外貌后说给我看看）时使用 assistant_portrait，查找已保存的形象照片；没有照片会明确说明，绝不自动生成。",
-  parameters: {
-    type: "object",
-    properties: {
-      source: { type: "string", enum: ["latest_uploaded", "asset_id", "assistant_portrait"] },
-      assetId: { type: "integer", minimum: 1 },
-    },
-    required: ["source"], additionalProperties: false,
-  },
-}];
-
-const CONTENT_QUERY_TOOLS: AgentFunctionTool[] = [
-  {
-    name: "query_posts",
-    description: "查询当前用户自己的博客文章，按草稿、已发布、回收站、标题关键词和平台同步状态筛选。用户询问已有文章、草稿或同步情况时使用。",
-    parameters: {
-      type: "object", properties: {
-        status: { type: "string", enum: ["draft", "published", "trashed"] },
-        search: { type: "string", maxLength: 300 },
-        juejinSynced: { type: "boolean" }, csdnSynced: { type: "boolean" },
-        limit: { type: "integer", minimum: 1, maximum: 50 },
-        page: { type: "integer", minimum: 1 }, size: { type: "integer", minimum: 1, maximum: 50 },
-      }, additionalProperties: false,
-    },
-  },
-  {
-    name: "query_plans",
-    description: "查询当前用户自己的定时发文计划，可按 ACTIVE、PAUSED、RUNNING、FINISHED、FAILED、CANCELLED 筛选。",
-    parameters: { type: "object", properties: { status: { type: "string", enum: ["ACTIVE", "PAUSED", "RUNNING", "FINISHED", "FAILED", "CANCELLED", "ALL"] } }, additionalProperties: false },
-  },
-  {
-    name: "query_plan_series",
-    description: "查询当前用户的系列发文草案、已启用计划和每日主题。可以按系列 ID 获取完整主题清单。",
-    parameters: { type: "object", properties: {
-      seriesId: { type: "integer", minimum: 1 },
-      status: { type: "string", enum: ["DRAFT", "ACTIVE", "PAUSED", "CANCELLED", "FINISHED", "FAILED", "ALL"] },
-    }, additionalProperties: false },
-  },
-  {
-    name: "query_email_reminders",
-    description: "查询当前用户的定时邮件提醒，可按状态和主题或收件邮箱关键词筛选。",
-    parameters: { type: "object", properties: {
-      status: { type: "string", enum: ["PENDING", "PAUSED", "SENDING", "SENT", "FAILED", "ALL"] },
-      search: { type: "string", maxLength: 120 },
-    }, additionalProperties: false },
-  },
-  {
-    name: "query_unsynced_posts",
-    description: "查询当前用户尚未成功同步到掘金或 CSDN 的文章。",
-    parameters: { type: "object", properties: {
-      platform: { type: "string", enum: ["juejin", "csdn"] },
-      status: { type: "string", enum: ["draft", "published", "trashed"] },
-      search: { type: "string", maxLength: 300 },
-    }, additionalProperties: false },
-  },
-];
-
-const DELEGATE_SUBTASK_TOOLS: AgentFunctionTool[] = [{
-  name: "delegate_subtask",
-  description: "把需要多步只读取证的独立问题交给一个上下文隔离的子智能体，只返回它的结论。brief 必须自包含。",
-  parameters: {
-    type: "object",
-    properties: {
-      objective: { type: "string", minLength: 1, maxLength: 300 },
-      brief: { type: "string", maxLength: 2000 },
-      tools: { type: "array", maxItems: 8, items: { type: "string" } },
-    },
-    required: ["objective"],
-    additionalProperties: false,
-  },
-}];
-
-const SUBTASK_MAX_STEPS = 5;
-const SUBTASK_MAX_CALLS_PER_STEP = 3;
-const SUBTASK_MAX_FINDINGS_CHARS = 4000;
-const SUBTASK_MAX_OBSERVATION_CHARS = 1200;
-const SUBTASK_READ_ONLY_TOOLS = new Set([
-  "query_knowledge", "query_posts", "query_plans", "query_plan_series", "query_email_reminders",
-  "query_unsynced_posts", "recall_memory",
-]);
-
-const CONTENT_MUTATION_TOOLS: AgentFunctionTool[] = [
-  {
-    name: "create_plan_series",
-    description: "创建并保存一份系列发文草案，包含每一天已确定的独立主题。默认不要传 topics，让 Content AI 为用户生成并保存完整主题清单；只有用户已提供具体逐日主题时才传 topics。创建草案不会开始发文；先把完整主题列表展示给用户检查。用户明确确认后，使用 activate_plan_series，该启用操作会请求用户审批。未指定日期时从用户时区的明天开始。",
-    parameters: { type: "object", properties: {
-      title: { type: "string", maxLength: 120 }, topic: { type: "string", minLength: 1, maxLength: 500 },
-      days: { type: "integer", minimum: 1, maximum: 30 }, topics: { type: "array", minItems: 1, maxItems: 30, items: { type: "string", minLength: 1, maxLength: 500 } },
-      startDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
-      triggerTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }, timezone: { type: "string", maxLength: 64 },
-      audience: { type: "string", maxLength: 120 }, tone: { type: "string", maxLength: 60 },
-      platforms: { type: "array", items: { type: "string", enum: ["local", "csdn", "juejin"] } },
-      publishMode: { type: "string", enum: ["DRAFT", "REVIEW", "AUTO"] },
-      aiOption: { type: "string", enum: ["DEEP", "PRACTICAL", "NEWS", "OPINION"] },
-    }, required: ["topic", "days"], additionalProperties: false },
-  },
-  {
-    name: "update_plan_series",
-    description: "修改尚未启用的系列发文草案。先用 query_plan_series 查看草案和完整每日主题；启用后的系列不能通过此工具修改。",
-    parameters: { type: "object", properties: {
-      seriesId: { type: "integer", minimum: 1 }, title: { type: "string", maxLength: 120 },
-      topic: { type: "string", maxLength: 500 }, days: { type: "integer", minimum: 1, maximum: 30 },
-      topics: { type: "array", minItems: 1, maxItems: 30, items: { type: "string", minLength: 1, maxLength: 500 } },
-      startDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
-      triggerTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }, timezone: { type: "string", maxLength: 64 },
-      audience: { type: "string", maxLength: 120 }, tone: { type: "string", maxLength: 60 },
-      platforms: { type: "array", items: { type: "string", enum: ["local", "csdn", "juejin"] } },
-      publishMode: { type: "string", enum: ["DRAFT", "REVIEW", "AUTO"] },
-      aiOption: { type: "string", enum: ["DEEP", "PRACTICAL", "NEWS", "OPINION"] },
-    }, required: ["seriesId"], additionalProperties: false },
-  },
-  {
-    name: "activate_plan_series",
-    description: "启用一份已保存的系列发文草案，建立全部每日一次性计划。仅在用户明确确认后调用；系统会先展示并等待审批。",
-    parameters: { type: "object", properties: { seriesId: { type: "integer", minimum: 1 } }, required: ["seriesId"], additionalProperties: false },
-  },
-  {
-    name: "retry_plan_series",
-    description: "重新安排该系列中失败的每日文章计划立即重试。只在用户明确要求重试时调用；可能触发本地或外部平台发布，调用前必须展示并等待用户审批。",
-    parameters: { type: "object", properties: { seriesId: { type: "integer", minimum: 1 } }, required: ["seriesId"], additionalProperties: false },
-  },
-  {
-    name: "schedule_plan",
-    description: "创建定时发文计划。计划创建前必须由用户审批。用户要求每日或按时自动生成博客时使用；topic 要提炼为不超过 120 字的短标题，不要直接复制素材原文。",
-    parameters: { type: "object", properties: {
-      topic: { type: "string", minLength: 1, maxLength: 120 },
-      topics: { type: "array", maxItems: 30, items: { type: "string", maxLength: 500 } },
-      triggerTimes: { type: "array", maxItems: 5, items: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" } },
-      triggerTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
-      timezone: { type: "string", maxLength: 64 }, audience: { type: "string", maxLength: 120 },
-      tone: { type: "string", maxLength: 60 }, syncCsdn: { type: "boolean" }, syncJuejin: { type: "boolean" },
-    }, required: ["topic"], additionalProperties: false },
-  },
-  {
-    name: "update_plan",
-    description: "修改当前用户自己的定时发文计划。支持暂停、恢复、编辑；取消或删除必须先经用户审批。先用 query_plans 确认计划 ID。",
-    parameters: { type: "object", properties: {
-      planId: { type: "integer", minimum: 1 },
-      action: { type: "string", enum: ["PAUSE", "PAUSED", "RESUME", "CANCEL", "CANCELLED", "DELETE", "EDIT"] },
-      topic: { type: "string", maxLength: 120 }, topics: { type: "array", maxItems: 30, items: { type: "string", maxLength: 500 } },
-      triggerTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
-      triggerTimes: { type: "array", maxItems: 5, items: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" } },
-      timezone: { type: "string", maxLength: 64 }, audience: { type: "string", maxLength: 120 },
-      tone: { type: "string", maxLength: 60 }, syncCsdn: { type: "boolean" }, syncJuejin: { type: "boolean" },
-    }, required: ["planId", "action"], additionalProperties: false },
-  },
-  {
-    name: "email_reminder",
-    description: "创建定时邮件提醒，创建前必须经用户审批。支持一次性或周期发送；用户要求在指定时间向邮箱发送邮件时使用。",
-    parameters: { type: "object", properties: {
-      recipientEmail: { type: "string", maxLength: 254 }, subject: { type: "string", maxLength: 200 },
-      message: { type: "string", minLength: 1, maxLength: 10_000 },
-      frequency: { type: "string", enum: ["ONCE", "DAILY", "WEEKLY", "MONTHLY", "CUSTOM"] },
-      scheduledAt: { type: "string", description: "ONCE 使用 ISO-8601 带时区时间" },
-      sendTime: { type: "string", pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" },
-      timezone: { type: "string", maxLength: 64 }, recurrenceDay: { type: "integer", minimum: 1, maximum: 31 },
-      intervalDays: { type: "integer", minimum: 1, maximum: 365 },
-      contentType: { type: "string", enum: ["PLAIN", "HTML"] },
-      templateId: { type: "string", enum: ["classic", "minimal", "card", "notice"] },
-    }, required: ["recipientEmail", "subject", "message"], additionalProperties: false },
-  },
-  {
-    name: "update_email_reminder",
-    description: "暂停、恢复或删除当前用户自己的邮件提醒。删除不可恢复，必须先经用户审批。先用 query_email_reminders 确认任务 ID。",
-    parameters: { type: "object", properties: {
-      taskId: { type: "integer", minimum: 1 }, action: { type: "string", enum: ["PAUSE", "PAUSED", "RESUME", "DELETE"] },
-    }, required: ["taskId", "action"], additionalProperties: false },
-  },
-];
+import {
+  MEMORY_TOOLS, RECITATION_TOOLS, QUIZ_TOOLS, ARTIFACT_TOOLS, BLOG_GENERATION_TOOLS,
+  PLAN_TASKS_TOOLS, IMAGE_GENERATION_TOOLS, IMAGE_RESEND_TOOLS, CONTENT_QUERY_TOOLS,
+  DELEGATE_SUBTASK_TOOLS, CONTENT_MUTATION_TOOLS,
+  SUBTASK_MAX_STEPS, SUBTASK_MAX_CALLS_PER_STEP, SUBTASK_MAX_FINDINGS_CHARS,
+  SUBTASK_MAX_OBSERVATION_CHARS, SUBTASK_READ_ONLY_TOOLS,
+} from "./agent-tool-definitions.js";
 
 interface AgentModelCompletion {
   usage: AgentTokenUsage;
@@ -657,7 +286,7 @@ function safeArtifactPath(value: unknown): string {
   return path;
 }
 
-function buildArtifactCard(args: unknown, conversationId: number, runVersion: number): {
+export function buildArtifactCard(args: unknown, conversationId: number, runVersion: number): {
   artifact: Record<string, unknown>;
   fileCount: number;
 } {
@@ -986,6 +615,116 @@ export class AgentRunService {
         return finishTurn(summary);
       };
 
+      // Standard tool handler: execution is delegated to the runtime, while
+      // this coordinator owns the durable result, localized answer, and turn
+      // billing contract shared by ordinary query/mutation tools.
+      const handleStandardToolResult = async (
+        toolName: string,
+        result: { data?: unknown; answer?: string },
+      ) => {
+        const toolEvent = { tool: toolName, result: result.data };
+        const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
+        onEvent(toolEventId, "tool_result", toolEvent);
+        const terminal = await finishToolAnswer(result.answer ?? "");
+        onEvent(terminal.completeEventId, "complete", { status: "ready" });
+        await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
+        return { ok: true as const };
+      };
+
+      const handleApprovalTool = async (tool: AgentTool, toolArguments: Record<string, unknown>) => {
+        targetDispatcher.register(tool);
+        await targetDispatcher.executePipeline({ name: tool.definition().name, arguments: toolArguments }, {
+          userId, conversationId, runVersion, invocationId: crypto.randomUUID(),
+          idempotencyKey: crypto.randomUUID(), signal: abortController.signal,
+        });
+        return { ok: true as const, awaitingApproval: true as const };
+      };
+
+      const handleArtifactToolResult = async (result: { data?: unknown }) => {
+        const payload = result.data as { fileCount: number; artifact: Record<string, unknown>; hint: string };
+        const { artifact } = payload;
+        const toolEvent = { tool: "emit_artifact", result: payload };
+        const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
+        onEvent(toolEventId, "tool_result", toolEvent);
+        await this.repository.saveSpecialMessage(userId, conversationId, runVersion, "artifact", artifact);
+        const artifactEventId = await this.repository.appendEvent(conversationId, runVersion, "artifact", artifact);
+        onEvent(artifactEventId, "artifact", artifact);
+        const answerText = answer.trim() || (language.replyLanguage === "en"
+          ? "Your files are ready. You can copy or download them from the card."
+          : "交付卡已生成，你可以在卡片中复制或下载文件。");
+        const terminal = await finishTurn(answerText);
+        onEvent(terminal.completeEventId, "complete", { status: "ready" });
+        await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
+        return { ok: true as const };
+      };
+
+      const handleBlogToolResult = async (task: Awaited<ReturnType<AgentBlogAgentPort["create"]>>, invocationId: string) => {
+        const result = {
+          ok: true, taskId: task.id, title: task.title, summary: task.summary,
+          generationMode: task.generationMode,
+          publishedPostId: task.publishedPostId ?? -1,
+          hint: `文章已生成。可以继续修改，或查看任务 ${task.id} 进行发布。`,
+        };
+        const toolResult = { tool: "blog_generate", invocationId, result };
+        const resultId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolResult);
+        onEvent(resultId, "tool_result", toolResult);
+        const completionDescription = task.generationMode === "quick"
+          ? "已生成并完成格式检查" : "已完成联网调研和独立审校";
+        const answerText = language.replyLanguage === "en"
+          ? `The blog article${task.title ? ` “${task.title}”` : ""} is ready${task.generationMode === "quick"
+            ? " and its formatting has been checked" : " after web research and independent review"}. View it in task ${task.id}.`
+          : task.title ? `文章《${task.title}》${completionDescription}，可在任务 ${task.id} 中查看。`
+            : `博客文章${completionDescription}，可在任务 ${task.id} 中查看。`;
+        const terminal = await finishTurn(answerText);
+        onEvent(terminal.completeEventId, "complete", { status: "ready" });
+        await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
+        return { ok: true as const };
+      };
+
+      const handleBlogGenerationTool = async (toolArguments: unknown) => {
+        if (!this.blogAgent) throw new ResponseError(503, "博客生成助手尚未配置");
+        if (!isRecord(toolArguments) || typeof toolArguments.input !== "string"
+          || !toolArguments.input.trim() || toolArguments.input.length > 20_000) {
+          throw new ResponseError(400, "博客生成工具缺少有效参数 input");
+        }
+        const requestId = `agent-${conversationId}-${runVersion}`;
+        const invocationId = requestId;
+        const toolStart = { tool: "blog_generate", invocationId, phase: "start", startedAt: new Date().toISOString() };
+        const toolStartId = await this.repository.appendEvent(conversationId, runVersion, "tool_start", toolStart);
+        onEvent(toolStartId, "tool_start", toolStart);
+        let task: Awaited<ReturnType<AgentBlogAgentPort["create"]>>;
+        try {
+          const blogTool = targetDispatcher.resolve("blog_generate", toolArguments);
+          if (!blogTool) throw new ResponseError(503, "博客生成工具尚未注册");
+          targetDispatcher.register(blogTool);
+          const generated = await targetDispatcher.executePipeline({ name: "blog_generate", arguments: toolArguments, invocationId }, {
+            userId, conversationId, runVersion, invocationId, idempotencyKey: requestId, signal: abortController.signal,
+          });
+          task = generated.data as Awaited<ReturnType<AgentBlogAgentPort["create"]>>;
+          await ensureActive();
+        } catch (failure) {
+          const cancelled = stoppedByUser || abortController.signal.aborted;
+          if (cancelled) await this.blogAgent.cancel?.(userId, requestId);
+          const message = cancelled
+            ? "博客生成任务已停止"
+            : failure instanceof AgentBlogAgentError
+              ? failure.message
+              : "博客生成服务暂不可用，请稍后重试";
+          const toolError = { tool: "blog_generate", invocationId, error: message, cancelled };
+          const errorId = await this.repository.appendEvent(conversationId, runVersion, "tool_error", toolError);
+          onEvent(errorId, "tool_error", toolError);
+          if (cancelled) throw failure;
+          throw new ResponseError(failure instanceof AgentBlogAgentError ? failure.status : 503, message);
+        }
+        if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
+          const message = "好的，已停止当前任务。你可以继续说新的需求。";
+          const terminal = await finishTurn(message);
+          onEvent(terminal.completeEventId, "complete", { status: "ready" });
+          return { ok: true as const };
+        }
+        return await handleBlogToolResult(task, invocationId);
+      };
+
       const hasUploadedImage = messages.some(message => message.role === "user"
         && message.attachments?.some(item => item.contentType.toLowerCase().startsWith("image/")));
       const resendTools = hasUploadedImage ? IMAGE_RESEND_TOOLS : IMAGE_RESEND_TOOLS.map(tool => ({
@@ -999,12 +738,29 @@ export class AgentRunService {
       }));
       const portraitRequest = isSavedPortraitRequest(history);
       const blogAuthorized = allowsBlogTask(history);
-      const tools = [...skillContext.tools, ...memoryTools, ...(this.recitation ? RECITATION_TOOLS : []), ...QUIZ_TOOLS, ...ARTIFACT_TOOLS,
+      const queryTools = this.contentTools ? createContentQueryTools(this.contentTools, userId, CONTENT_QUERY_TOOLS) : new Map();
+      const toolRegistry = new AgentToolRegistry([...skillContext.tools, ...memoryTools, ...(this.recitation ? RECITATION_TOOLS : []), ...QUIZ_TOOLS, ...ARTIFACT_TOOLS,
           ...PLAN_TASKS_TOOLS, ...(portraitRequest ? [] : IMAGE_GENERATION_TOOLS), ...resendTools,
           ...CONTENT_QUERY_TOOLS, ...CONTENT_MUTATION_TOOLS,
           ...DELEGATE_SUBTASK_TOOLS,
           ...(this.blogAgent && blogAuthorized ? BLOG_GENERATION_TOOLS : []),
-          ...mcpTools.map((tool) => ({ name: tool.fullName, description: tool.description, parameters: tool.inputSchema }))];
+          ...mcpTools.map((tool) => ({ name: tool.fullName, description: tool.description, parameters: tool.inputSchema }))], queryTools);
+      const tools = toolRegistry.list();
+      const targetDispatcher = new AgentToolDispatcher(new Map(CONTENT_QUERY_TOOLS
+        .map((definition) => [definition.name, toolRegistry.executor(definition.name)])
+        .filter((entry): entry is [string, AgentTool] => !!entry[1])));
+      if (this.blogAgent && blogAuthorized) {
+        targetDispatcher.registerFactory("blog_generate", (input) => {
+          const requestId = `agent-${conversationId}-${runVersion}`;
+          const mode = input.mode === "quick" || input.mode === "full" ? input.mode : "auto";
+          return createBlogGenerationTool(this.blogAgent!, userId, requestId, input.input as string, mode,
+            abortController.signal, async (stage, message) => {
+              const progress = { tool: "blog_generate", invocationId: requestId, stage, message: prettyBlogStage(stage, message) };
+              const progressId = await this.repository.appendEvent(conversationId, runVersion, "tool_progress", progress);
+              onEvent(progressId, "tool_progress", progress);
+            });
+        });
+      }
       let modelResult = await this.callModel(gateway.endpoints, messages, async (delta) => { if (!portraitRequest) await onDelta(delta); }, abortController.signal, tools);
       // A saved portrait request must never spend image-generation credits, even if a provider ignores tools.
       if (portraitRequest) {
@@ -1033,6 +789,86 @@ export class AgentRunService {
           modelResult = { ...modelResult, toolCalls: [] };
         }
       }
+      if (this.approvals) {
+        if (toolRegistry.has("publish_post")) {
+          targetDispatcher.registerFactory("publish_post", () => createPublishPostTool(this.approvals!, userId,
+            conversationId, runVersion, modelResult.usage, modelResult.model,
+            () => this.chargeTurnQuietly(userId, conversationId, runVersion, {
+              usage: modelResult.usage, model: modelResult.model,
+            }),
+            (eventId, approval) => onEvent(eventId, "approval_required", approval)));
+          targetDispatcher.registerHandler("publish_post", async (call) => {
+            const tool = targetDispatcher.resolve("publish_post", isRecord(call.arguments) ? call.arguments : {});
+            if (!tool) throw new ResponseError(503, "文章同步审批工具尚未注册");
+            return handleApprovalTool(tool, isRecord(call.arguments) ? call.arguments : {});
+          });
+        }
+        for (const mcpTool of mcpTools) {
+          targetDispatcher.registerFactory(mcpTool.fullName, () => createMcpApprovalTool(mcpTool, this.approvals!,
+            userId, conversationId, runVersion,
+            () => this.chargeTurnQuietly(userId, conversationId, runVersion, {
+              usage: modelResult.usage, model: modelResult.model,
+            }),
+            (eventId, approval) => onEvent(eventId, "approval_required", approval)));
+          targetDispatcher.registerHandler(mcpTool.fullName, async (call) => {
+            const tool = targetDispatcher.resolve(mcpTool.fullName, isRecord(call.arguments) ? call.arguments : {});
+            if (!tool) throw new ResponseError(400, "远端 MCP 工具不存在或当前用户无权使用");
+            return handleApprovalTool(tool, isRecord(call.arguments) ? call.arguments : {});
+          });
+        }
+      }
+      if (toolRegistry.has("emit_artifact")) {
+        targetDispatcher.registerFactory("emit_artifact", () => createArtifactTool(this.documents, userId, conversationId, runVersion));
+        targetDispatcher.registerHandler("emit_artifact", async (call, context) => {
+          if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
+            const message = "好的，已停止当前任务。你可以继续说新的需求。";
+            const terminal = await finishTurn(message);
+            onEvent(terminal.completeEventId, "complete", { status: "ready" });
+            return { ok: true };
+          }
+          const artifactTool = targetDispatcher.resolve("emit_artifact", isRecord(call.arguments) ? call.arguments : {});
+          if (!artifactTool) throw new ResponseError(503, "文件产物工具尚未注册");
+          targetDispatcher.register(artifactTool);
+          const result = await targetDispatcher.executePipeline(call, context);
+          return await handleArtifactToolResult(result);
+        });
+      }
+      if (this.blogAgent && blogAuthorized) {
+        targetDispatcher.registerHandler("blog_generate", (call) => handleBlogGenerationTool(call.arguments));
+      }
+      if (this.contentTools) {
+        for (const definition of CONTENT_MUTATION_TOOLS) {
+          targetDispatcher.registerHandler(definition.name, async (call) => {
+            const toolArguments = isRecord(call.arguments) ? call.arguments : {};
+            if (AgentContentToolsService.needsApproval(definition.name, toolArguments)) {
+              if (!this.approvals) throw new ResponseError(503, "内容操作审批服务尚未配置");
+              await this.chargeTurnQuietly(userId, conversationId, runVersion, {
+                usage: modelResult.usage, model: modelResult.model,
+              });
+              const approval = await this.approvals.requestContentMutation(
+                userId, conversationId, runVersion, definition.name, toolArguments,
+              );
+              onEvent(approval.eventId, "approval_required", approval.approval);
+              return { ok: true, awaitingApproval: true };
+            }
+            const tool = createContentMutationTool(this.contentTools!, userId, definition.name);
+            targetDispatcher.register(tool);
+            let result: Awaited<ReturnType<AgentToolExecutionPipeline["execute"]>>;
+            try {
+              result = await targetDispatcher.executePipeline(call, {
+                userId, conversationId, runVersion,
+                invocationId: crypto.randomUUID(), idempotencyKey: crypto.randomUUID(),
+                signal: abortController.signal,
+              });
+            } catch (error) {
+              if (error instanceof AgentContentToolsError) throw new ResponseError(error.status, error.message);
+              throw error;
+            }
+            const mutation = result.data as { data: { data: unknown; answer: string } };
+            return await handleStandardToolResult(definition.name, { data: result.data, answer: mutation.data.answer });
+          });
+        }
+      }
       timing.modelMs = performance.now() - modelStarted;
       const drainStarted = performance.now();
       await answerStream.flush();
@@ -1055,6 +891,9 @@ export class AgentRunService {
         }
         const toolName = modelResult.toolCalls[0].name;
         await ensureActive();
+        if (!toolRegistry.has(toolName)) {
+          throw new ResponseError(400, "模型请求了当前会话不可用的工具");
+        }
         if (toolName === "delegate_subtask") {
           const delegated = await this.runDelegatedSubtask(
             userId, conversationId, runVersion, gateway.endpoints, messages, args, abortController.signal,
@@ -1079,48 +918,35 @@ export class AgentRunService {
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
         }
-        if (CONTENT_QUERY_TOOLS.some((tool) => tool.name === toolName)) {
-          if (!this.contentTools) throw new ResponseError(503, "内容查询服务尚未配置");
-          let result: Awaited<ReturnType<AgentContentToolsService["execute"]>>;
-          try { result = await this.contentTools.execute(userId, toolName, args); }
-          catch (error) {
-            if (error instanceof AgentContentToolsError) throw new ResponseError(error.status, error.message);
-            throw error;
-          }
-          const toolEvent = { tool: toolName, result: result.data };
-          const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
-          onEvent(toolEventId, "tool_result", toolEvent);
-          const terminal = await finishToolAnswer(result.answer);
-          onEvent(terminal.completeEventId, "complete", { status: "ready" });
-          await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
-          return { ok: true };
+        if (targetDispatcher.hasHandler(toolName)) {
+          const handled = await targetDispatcher.execute({ name: toolName, arguments: isRecord(args) ? args : {} }, {
+            userId, conversationId, runVersion, invocationId: crypto.randomUUID(),
+            idempotencyKey: crypto.randomUUID(), signal: abortController.signal,
+          });
+          return (handled as AgentToolResult & { awaitingApproval?: boolean }).awaitingApproval
+            ? handled : { ok: true };
         }
-        if (CONTENT_MUTATION_TOOLS.some((tool) => tool.name === toolName)) {
-          if (!this.contentTools) throw new ResponseError(503, "内容操作服务尚未配置");
-          if (AgentContentToolsService.needsApproval(toolName, args)) {
-            if (!this.approvals) throw new ResponseError(503, "内容操作审批服务尚未配置");
-            await this.chargeTurnQuietly(userId, conversationId, runVersion, {
-              usage: modelResult.usage, model: modelResult.model,
-            });
-            const approval = await this.approvals.requestContentMutation(
-              userId, conversationId, runVersion, toolName, args,
-            );
-            onEvent(approval.eventId, "approval_required", approval.approval);
-            return { ok: true, awaitingApproval: true };
+        const targetTool = targetDispatcher.resolve(toolName, isRecord(args) ? args : {});
+        if (targetTool) {
+          if (toolName === "emit_artifact" && (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion))) {
+            const message = "好的，已停止当前任务。你可以继续说新的需求。";
+            const terminal = await finishTurn(message);
+            onEvent(terminal.completeEventId, "complete", { status: "ready" });
+            return { ok: true };
           }
-          let result: Awaited<ReturnType<AgentContentToolsService["execute"]>>;
-          try { result = await this.contentTools.execute(userId, toolName, args); }
+          let result: Awaited<ReturnType<AgentToolExecutionPipeline["execute"]>>;
+          try {
+            result = await targetDispatcher.execute({ name: toolName, arguments: args }, {
+              userId, conversationId, runVersion, invocationId: crypto.randomUUID(),
+              idempotencyKey: crypto.randomUUID(), signal: abortController.signal,
+            });
+          }
           catch (error) {
             if (error instanceof AgentContentToolsError) throw new ResponseError(error.status, error.message);
+            if (error instanceof Error && error.name === "AgentToolExecutionError") throw new ResponseError(400, error.message);
             throw error;
           }
-          const toolEvent = { tool: toolName, result: result.data };
-          const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
-          onEvent(toolEventId, "tool_result", toolEvent);
-          const terminal = await finishToolAnswer(result.answer);
-          onEvent(terminal.completeEventId, "complete", { status: "ready" });
-          await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
-          return { ok: true };
+          return await handleStandardToolResult(toolName, result);
         }
         if (toolName === "plan_tasks") {
           if (!this.plans) throw new ResponseError(503, "任务计划服务尚未配置");
@@ -1322,64 +1148,6 @@ export class AgentRunService {
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
         }
-        if (toolName === "emit_artifact") {
-          if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
-            const message = "好的，已停止当前任务。你可以继续说新的需求。";
-            const terminal = await finishTurn(message);
-            onEvent(terminal.completeEventId, "complete", { status: "ready" });
-            return { ok: true };
-          }
-          let { artifact, fileCount } = buildArtifactCard(args, conversationId, runVersion);
-          const documentArtifact = artifact as { kind?: string; format?: string; files: Array<{ path: string; content: string; contentType?: string }> };
-          if (this.documents && documentArtifact.kind === "document" && (documentArtifact.format === "docx" || documentArtifact.format === "pdf") && documentArtifact.files.length === 1) {
-            const source = documentArtifact.files[0];
-            const uploaded = await this.documents.create(userId, source.path, documentArtifact.format as "docx" | "pdf", source.content);
-            artifact = { ...artifact, files: [{ ...source, content: "", contentType: uploaded.contentType, url: uploaded.url, size: uploaded.size, attachmentId: uploaded.id }] };
-          }
-          const result = {
-            ok: true,
-            fileCount,
-            artifact,
-            hint: "代码已经作为交付卡发给用户了，用户可以复制或下载文件。请用简短回复说明怎么运行和注意事项，不要重复粘贴源码。",
-          };
-          const toolEvent = { tool: toolName, result };
-          const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
-          onEvent(toolEventId, "tool_result", toolEvent);
-          await this.repository.saveSpecialMessage(userId, conversationId, runVersion, "artifact", artifact);
-          const artifactEventId = await this.repository.appendEvent(conversationId, runVersion, "artifact", artifact);
-          onEvent(artifactEventId, "artifact", artifact);
-          const answerText = answer.trim() || (language.replyLanguage === "en"
-            ? "Your files are ready. You can copy or download them from the card."
-            : "交付卡已生成，你可以在卡片中复制或下载文件。");
-          const terminal = await finishTurn(answerText);
-          onEvent(terminal.completeEventId, "complete", { status: "ready" });
-          await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
-          return { ok: true };
-        }
-        if (toolName.startsWith("mcp__")) {
-          if (!this.approvals || !this.mcp) throw new ResponseError(503, "远端 MCP 审批服务尚未配置");
-          const mcpTool = mcpTools.find((tool) => tool.fullName === toolName);
-          if (!mcpTool) throw new ResponseError(400, "远端 MCP 工具不存在或当前用户无权使用");
-          await this.chargeTurnQuietly(userId, conversationId, runVersion, {
-            usage: modelResult.usage,
-            model: modelResult.model,
-          });
-          const approval = await this.approvals.requestRemoteTool(
-            userId, conversationId, runVersion, mcpTool, args,
-          );
-          onEvent(approval.eventId, "approval_required", approval.approval);
-          return { ok: true, awaitingApproval: true };
-        }
-        if (toolName === "publish_post") {
-          if (!this.approvals) throw new ResponseError(503, "文章同步审批服务尚未配置");
-          await this.chargeTurnQuietly(userId, conversationId, runVersion, {
-            usage: modelResult.usage,
-            model: modelResult.model,
-          });
-          const approval = await this.approvals.requestPublishPost(userId, conversationId, runVersion, args);
-          onEvent(approval.eventId, "approval_required", approval.approval);
-          return { ok: true, awaitingApproval: true };
-        }
         if (toolName === "remember" || toolName === "recall_memory") {
           if (!this.memory) throw new ResponseError(503, "长期记忆服务尚未配置");
           let result: { data: unknown; answer: string };
@@ -1473,74 +1241,6 @@ export class AgentRunService {
           const toolEventId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolEvent);
           onEvent(toolEventId, "tool_result", toolEvent);
           const terminal = await finishToolAnswer(result.answer);
-          onEvent(terminal.completeEventId, "complete", { status: "ready" });
-          await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
-          return { ok: true };
-        }
-        if (toolName === "blog_generate") {
-          if (!this.blogAgent) throw new ResponseError(503, "博客生成助手尚未配置");
-          if (!isRecord(args) || typeof args.input !== "string" || !args.input.trim() || args.input.length > 20_000) {
-            throw new ResponseError(400, "博客生成工具缺少有效参数 input");
-          }
-          const requestId = `agent-${conversationId}-${runVersion}`;
-          const invocationId = requestId;
-          const toolStart = { tool: toolName, invocationId, phase: "start", startedAt: new Date().toISOString() };
-          const toolStartId = await this.repository.appendEvent(conversationId, runVersion, "tool_start", toolStart);
-          onEvent(toolStartId, "tool_start", toolStart);
-          let task: Awaited<ReturnType<AgentBlogAgentPort["create"]>>;
-          try {
-            const mode = args.mode === "quick" || args.mode === "full" ? args.mode : "auto";
-            task = await this.blogAgent.create(userId, args.input.trim(), requestId, mode);
-            await ensureActive();
-            if (task.status !== "ready") {
-              const ready = await this.blogAgent.findReady(userId, requestId);
-              await ensureActive();
-              task = ready ?? await this.blogAgent.runStream(userId, task.id, abortController.signal, async (stage, message) => {
-                  const progress = { tool: toolName, invocationId, stage, message: prettyBlogStage(stage, message) };
-                  const progressId = await this.repository.appendEvent(conversationId, runVersion, "tool_progress", progress);
-                  onEvent(progressId, "tool_progress", progress);
-                });
-            }
-          } catch (failure) {
-            const cancelled = stoppedByUser || abortController.signal.aborted;
-            if (cancelled) await this.blogAgent.cancel?.(userId, requestId);
-            const message = cancelled
-              ? "博客生成任务已停止"
-              : failure instanceof AgentBlogAgentError
-                ? failure.message
-                : "博客生成服务暂不可用，请稍后重试";
-            const toolError = { tool: toolName, invocationId, error: message, cancelled };
-            const errorId = await this.repository.appendEvent(conversationId, runVersion, "tool_error", toolError);
-            onEvent(errorId, "tool_error", toolError);
-            if (cancelled) throw failure;
-            throw new ResponseError(
-              failure instanceof AgentBlogAgentError ? failure.status : 503,
-              message,
-            );
-          }
-          if (stoppedByUser || await this.repository.isCancellationRequested(userId, conversationId, runVersion)) {
-            const message = "好的，已停止当前任务。你可以继续说新的需求。";
-            const terminal = await finishTurn(message);
-            onEvent(terminal.completeEventId, "complete", { status: "ready" });
-            return { ok: true };
-          }
-          const result = {
-            ok: true, taskId: task.id, title: task.title, summary: task.summary,
-            generationMode: task.generationMode,
-            publishedPostId: task.publishedPostId ?? -1,
-            hint: `文章已生成。可以继续修改，或查看任务 ${task.id} 进行发布。`,
-          };
-          const toolResult = { tool: toolName, invocationId, result };
-          const resultId = await this.repository.appendEvent(conversationId, runVersion, "tool_result", toolResult);
-          onEvent(resultId, "tool_result", toolResult);
-          const completionDescription = task.generationMode === "quick"
-            ? "已生成并完成格式检查" : "已完成联网调研和独立审校";
-          const answerText = language.replyLanguage === "en"
-            ? `The blog article${task.title ? ` “${task.title}”` : ""} is ready${task.generationMode === "quick"
-              ? " and its formatting has been checked" : " after web research and independent review"}. View it in task ${task.id}.`
-            : task.title ? `文章《${task.title}》${completionDescription}，可在任务 ${task.id} 中查看。`
-              : `博客文章${completionDescription}，可在任务 ${task.id} 中查看。`;
-          const terminal = await finishTurn(answerText);
           onEvent(terminal.completeEventId, "complete", { status: "ready" });
           await this.chargeTurnQuietly(userId, conversationId, runVersion, modelResult);
           return { ok: true };
@@ -1925,3 +1625,6 @@ export function apiErrorForRun(error: unknown): Response {
     ? Response.json({ code: error.status, message: error.message, data: null }, { status: error.status })
     : Response.json({ code: 503, message: "智能体服务暂不可用", data: null }, { status: 503 });
 }
+
+
+

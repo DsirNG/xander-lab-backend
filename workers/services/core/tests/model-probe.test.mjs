@@ -47,6 +47,20 @@ test("model probes use the selected protocol and require actual text output", as
   }
 });
 
+test("model probe accepts gateway-compatible chat response text shapes", async () => {
+  for (const body of [
+    { choices: [{ text: "OK" }] },
+    { response: "OK" },
+    { data: { choices: [{ message: { content: "OK" } }] } },
+  ]) {
+    const result = await new HttpModelProbeMapper(async () => json(body)).probe({
+      ...input, model: "m", apiStyle: "CHAT_COMPLETIONS",
+    });
+    assert.equal(result.ok, true, JSON.stringify(body));
+    assert.equal(result.output.text, "OK");
+  }
+});
+
 test("vision probe includes image input and image probes reject text-only replies", async () => {
   const vision = new HttpModelProbeMapper(async (_url, init) => {
     const payload = JSON.parse(init.body);

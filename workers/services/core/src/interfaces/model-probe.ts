@@ -30,6 +30,7 @@ export interface ModelProbeResult {
   error?: ModelProbeError;
   output?: { text?: string; images?: string[]; finishReason?: string; truncated?: boolean };
   models?: string[];
+  rawResponse?: string;
 }
 export interface ModelProbePort {
   probe(input: ModelProbeInput): Promise<ModelProbeResult>;

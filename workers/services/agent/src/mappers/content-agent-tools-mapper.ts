@@ -170,6 +170,18 @@ export class ContentAgentToolsMapper implements AgentContentToolsPort {
     return { data, answer };
   }
 
+  async createBlogDraft(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult> {
+    const title = text(args.title); const content = text(args.content);
+    if (!title || !content) throw new AgentContentContractError(400, "博客草稿需要标题和正文；当前只有文件名，无法保存草稿");
+    const response = await this.call("/api/blog/posts", userId, "POST", {
+      title, content, summary: text(args.summary) || undefined, categoryId: text(args.categoryId) || "career",
+      tags: Array.isArray(args.tags) ? args.tags.filter((tag): tag is string => typeof tag === "string") : undefined,
+      coverImage: text(args.coverImage) || undefined, publish: false,
+    });
+    const post = mutationData(response, "博客草稿保存失败");
+    return { data: { ok: true, draft: post, postId: post.id, status: "draft" }, answer: `博客草稿已保存：${post.title || title}（文章 #${post.id}）。` };
+  }
+
   async createPlan(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult> {
     const triggerTimes = Array.isArray(args.triggerTimes)
       ? args.triggerTimes.filter((value): value is string => typeof value === "string").slice(0, 5)

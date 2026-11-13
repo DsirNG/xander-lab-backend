@@ -13,6 +13,7 @@ export interface AgentContentToolsPort {
   queryPlanSeries(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult>;
   queryEmailReminders(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult>;
   queryUnsyncedPosts(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult>;
+  createBlogDraft(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult>;
   createPlan(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult>;
   createPlanSeries(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult>;
   updatePlanSeries(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult>;

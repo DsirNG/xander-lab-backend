@@ -29,7 +29,7 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "dinqor-agent-local",
-    "database_id": "00000000-0000-0000-0000-000000000102",
+    "database_id": "82bd76bc-9be1-401c-b52e-8c56ce756902",
     "migrations_dir": "migrations"
   }]
 }
