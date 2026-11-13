@@ -618,3 +618,10 @@ Payment 管理最多三个积分道具卡的配置与启停，在订单创建时
 ## 小程序订单退款
 
 Payment 管理订单列表、7天退款窗口、比例金额与退款状态；Core 管理订单积分批次、冻结及会员权益回收。新增服务鉴权合同 `/internal/v1/payment/points/refund`，不共享 D1。详见 [退款迁移说明](migration/virtual-pay-refunds.md)。
+
+### 会话编辑分支与重命名（Workers Agent）
+
+- `POST /api/agent/conversations/{id}/fork` 接收 `messageId`、`requestId`、`content`；只接受当前用户所属会话中的用户消息。D1 原子批次创建私有分支并复制锚点前的完整消息记录（含附件、工具调用配对），不复制锚点及后续内容、不继承分享令牌或运行状态，不改动原会话。
+- 分支请求以 `(user_id, fork_key)` 唯一约束去重；重试返回同一分支。返回历史快照后，小程序对新会话调用现有流式发送接口；编辑取消不调用分支接口，分支阶段停止不会取消原会话。
+- `POST /api/agent/conversations/{id}/title` 接收 1–100 字符的非空标题，数据库更新按当前用户隔离。Gateway 路由清单同步登记，沿用会话私有鉴权策略。
+- 部署前执行 Agent 迁移 `0011_agent_conversation_forks.sql`；新增字段为可空兼容字段。

@@ -7,7 +7,7 @@ import type {
 
 const PROVIDER_SELECT = `
   SELECT id, name, vendor, base_url AS baseUrl, encrypted_api_key AS encryptedApiKey,
-         description, enabled, priority, created_at AS createdAt, updated_at AS updatedAt
+         models_json AS modelsJson, description, enabled, priority, created_at AS createdAt, updated_at AS updatedAt
   FROM model_provider`;
 
 export class D1ModelProviderMapper implements ModelProviderRepository {
@@ -35,24 +35,24 @@ export class D1ModelProviderMapper implements ModelProviderRepository {
 
   createProvider(input: ModelProviderInput): Promise<ModelProviderRecord | null> {
     return this.db.prepare(`
-      INSERT INTO model_provider (name, vendor, base_url, encrypted_api_key, description, enabled, priority)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO model_provider (name, vendor, base_url, encrypted_api_key, description, enabled, priority, models_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id, name, vendor, base_url AS baseUrl, encrypted_api_key AS encryptedApiKey,
-                description, enabled, priority, created_at AS createdAt, updated_at AS updatedAt
+                models_json AS modelsJson, description, enabled, priority, created_at AS createdAt, updated_at AS updatedAt
     `).bind(input.name, input.vendor, input.baseUrl, input.encryptedApiKey, input.description,
-      input.enabled ? 1 : 0, input.priority).first<ModelProviderRecord>();
+      input.enabled ? 1 : 0, input.priority, input.modelsJson ?? "[]").first<ModelProviderRecord>();
   }
 
   updateProvider(id: number, input: ModelProviderInput): Promise<ModelProviderRecord | null> {
     return this.db.prepare(`
       UPDATE model_provider
-      SET name = ?, vendor = ?, base_url = ?, encrypted_api_key = ?, description = ?, enabled = ?, priority = ?,
+      SET name = ?, vendor = ?, base_url = ?, encrypted_api_key = ?, description = ?, enabled = ?, priority = ?, models_json = ?,
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = ?
       RETURNING id, name, vendor, base_url AS baseUrl, encrypted_api_key AS encryptedApiKey,
-                description, enabled, priority, created_at AS createdAt, updated_at AS updatedAt
+                models_json AS modelsJson, description, enabled, priority, created_at AS createdAt, updated_at AS updatedAt
     `).bind(input.name, input.vendor, input.baseUrl, input.encryptedApiKey, input.description,
-      input.enabled ? 1 : 0, input.priority, id).first<ModelProviderRecord>();
+      input.enabled ? 1 : 0, input.priority, input.modelsJson ?? "[]", id).first<ModelProviderRecord>();
   }
 
   async setProviderEnabled(id: number, enabled: boolean): Promise<void> {

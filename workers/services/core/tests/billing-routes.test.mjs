@@ -43,9 +43,9 @@ function createDb(role = "USER") {
           if (sql.includes("SELECT COALESCE(SUM(amount), 0) AS consumedToday")) return { consumedToday: 4_500 };
           if (sql.includes("SELECT COUNT(*) AS total FROM points_ledger")) return { total: 2 };
           if (sql.includes("INSERT INTO billing_model_price")) {
-            const [model, input, output, cached, cachedWrite, enabled, remark] = values;
+            const [model, input, output, cached, cachedWrite, enabled, remark, billingMode, milliPerRequest] = values;
             const row = {
-              id: 1, model, inputMilliPer1kToken: input, outputMilliPer1kToken: output,
+              id: 1, model, billingMode, milliPerRequest, inputMilliPer1kToken: input, outputMilliPer1kToken: output,
               cachedMilliPer1kToken: cached, cachedWriteMilliPer1kToken: cachedWrite,
               enabled, remark, updatedAt: "2026-10-10T00:00:00.000Z",
             };

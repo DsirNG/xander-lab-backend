@@ -1,4 +1,6 @@
 export interface BillingTokenPrice {
+  billingMode?: "TOKEN" | "REQUEST";
+  milliPerRequest?: number;
   inputMilliPer1kToken: number;
   outputMilliPer1kToken: number;
   cachedMilliPer1kToken: number;

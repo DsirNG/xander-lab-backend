@@ -89,6 +89,13 @@ function modelGatewayEnabled(env: AdminEnvironment): boolean {
   return env.ADMIN_MODEL_GATEWAY_ENABLED === "true";
 }
 
+function parseProviderModels(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 200
+    || !value.every((model) => typeof model === "string" && model.trim().length > 0 && model.trim().length <= 100)) return null;
+  return JSON.stringify([...new Set(value.map((model: string) => model.trim()))]);
+}
+
 function providerView(row: ModelProviderRecord) {
   return {
     id: Number(row.id),
@@ -96,6 +103,7 @@ function providerView(row: ModelProviderRecord) {
     vendor: row.vendor,
     baseUrl: row.baseUrl,
     apiKeyConfigured: Boolean(row.encryptedApiKey),
+    models: JSON.parse(row.modelsJson ?? "[]"),
     description: row.description,
     enabled: Boolean(row.enabled),
     priority: Number(row.priority ?? 0),
@@ -137,6 +145,8 @@ async function modelProviders(
   if (collection && request.method === "POST") {
     const body = await readObject(request);
     if (body instanceof Response) return body;
+    const modelsJson = parseProviderModels(body.models);
+    if (modelsJson === null) return apiError(400, "请求内容格式不正确");
     const name = text(body.name);
     const vendor = text(body.vendor);
     const baseUrl = text(body.baseUrl);
@@ -157,6 +167,7 @@ async function modelProviders(
     if (typeof priority !== "number" || !Number.isSafeInteger(priority)
       || priority < -2_147_483_648 || priority > 2_147_483_647) return apiError(400, "priority 格式不正确");
     const result = await service.create({
+      modelsJson,
       name,
       vendor: vendor.toUpperCase() === "OPENAI_COMPATIBLE" ? "OPENAI_COMPATIBLE" : vendor,
       baseUrl,
@@ -194,6 +205,8 @@ async function modelProviders(
 
   const body = await readObject(request);
   if (body instanceof Response) return body;
+  const modelsJson = parseProviderModels(body.models);
+  if (modelsJson === null) return apiError(400, "请求内容格式不正确");
   const name = text(body.name);
   const vendor = text(body.vendor);
   const baseUrl = text(body.baseUrl);
@@ -213,6 +226,7 @@ async function modelProviders(
   if (typeof priority !== "number" || !Number.isSafeInteger(priority)
     || priority < -2_147_483_648 || priority > 2_147_483_647) return apiError(400, "priority 格式不正确");
   const result = await service.update(id, {
+    modelsJson,
     name,
     vendor: vendor.toUpperCase() === "OPENAI_COMPATIBLE" ? "OPENAI_COMPATIBLE" : vendor,
     baseUrl,

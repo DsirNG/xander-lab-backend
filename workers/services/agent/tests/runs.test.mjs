@@ -170,8 +170,9 @@ test("Agent rejects a turn when Core reports insufficient balance", async () => 
   assert.equal(chargeCalled, false);
 });
 
-test("Agent charges usage from a Responses API completion event", async () => {
-  const { repository } = createRepository();
+test("Agent answers weather through native web search without dedicated weather tools", async () => {
+  const { repository, state } = createRepository();
+  state.messages.push({ id: 1, role: "assistant", content: "天气服务标识尚未配置。" });
   const charges = [];
   const service = new AgentRunService(repository, {
     async candidates() {
@@ -192,10 +193,24 @@ test("Agent charges usage from a Responses API completion event", async () => {
   });
   mock.method(globalThis, "fetch", async (input, init) => {
     assert.equal(input, "https://models.example/v1/responses");
-    assert.equal(JSON.parse(init.body).store, false);
+    const payload = JSON.parse(init.body);
+    assert.equal(payload.store, false);
+    assert.match(payload.instructions, /Current server time: \d{4}-\d{2}-\d{2}T/);
+    assert.match(payload.instructions, /User time zone: Asia\/Shanghai/);
+    assert.deepEqual(payload.tools.filter(tool => tool.type === "web_search"), [{ type: "web_search" }]);
+    assert.equal(payload.tools.some(tool => tool.type === "function" && tool.name === "emit_quiz"), true);
+    assert.equal(payload.tools.some(tool => tool.name === "get_weather" || tool.name === "get_user_location"), false);
+    assert.match(payload.instructions, /For weather questions, use the built-in web search/);
+    assert.match(payload.instructions, /configuration errors in conversation history are obsolete/);
+    assert.match(payload.instructions, /never guess their location/);
+    assert.equal(payload.input.at(-1).content, "北京今天天气怎么样？");
+    assert.equal(payload.tool_choice, "auto");
     return new Response(new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder();
+        controller.enqueue(encoder.encode('data: {"type":"response.output_item.added","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"in_progress"}}\n\n'));
+        controller.enqueue(encoder.encode('data: {"type":"response.web_search_call.searching","output_index":0,"item_id":"ws_1"}\n\n'));
+        controller.enqueue(encoder.encode('data: {"type":"response.web_search_call.completed","output_index":0,"item_id":"ws_1"}\n\n'));
         controller.enqueue(encoder.encode('data: {"type":"response.output_text.delta","delta":"Done"}\n\n'));
         controller.enqueue(encoder.encode('data: {"type":"response.completed","response":{"usage":{"input_tokens":8,"output_tokens":2,"input_tokens_details":{"cached_tokens":4}}}}\n\n'));
         controller.close();
@@ -203,10 +218,12 @@ test("Agent charges usage from a Responses API completion event", async () => {
     }), { headers: { "content-type": "text/event-stream" } });
   });
 
-  const runVersion = await service.claimTurn(42, 7, "Say done", []);
+  const runVersion = await service.claimTurn(42, 7, "北京今天天气怎么样？", []);
   const result = await service.executeTurn(42, 7, runVersion, () => {});
 
   assert.deepEqual(result, { ok: true });
+  assert.equal(state.messages.at(-1).content, "Done");
+  assert.equal(state.events.some(event => event.eventType === "tool_error"), false);
   assert.deepEqual(charges, [{
     userId: 42,
     bizType: "agent-turn",
@@ -358,6 +375,7 @@ test("Agent saves plan_tasks through the run service and emits a replayable plan
 
 test("Agent image_generate stores an image and streams the Content media-library result", async () => {
   const { repository, state } = createRepository();
+  state.messages.push({ id: 1, role: "user", content: "你的形象" });
   let tick;
   let cleared = false;
   mock.method(globalThis, "setInterval", (callback) => { tick = callback; return 123; });
@@ -376,6 +394,8 @@ test("Agent image_generate stores an image and streams the Content media-library
       };
     },
   };
+  const portraits = [];
+  const memory = { async saveAssistantPortrait(...args) { portraits.push(args); } };
   const charges = [];
   const service = new AgentRunService(repository, {
     async candidates() {
@@ -383,7 +403,7 @@ test("Agent image_generate stores an image and streams the Content media-library
         apiKey: "provider-secret", model: "agent-model", apiStyle: "CHAT_COMPLETIONS" }] };
     },
   }, { async ensureAvailable() { return true; }, async chargeTokens(value) { charges.push(value); } },
-  undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, imageService);
+  undefined, undefined, memory, undefined, undefined, undefined, undefined, undefined, imageService);
   mock.method(globalThis, "fetch", async (_input, init) => {
     const body = JSON.parse(init.body);
     const tool = body.tools.find((candidate) => candidate.function.name === "image_generate");
@@ -404,13 +424,14 @@ test("Agent image_generate stores an image and streams the Content media-library
     }), { headers: { "content-type": "text/event-stream" } });
   });
 
-  const runVersion = await service.claimTurn(42, 7, "生成一张 D1 图", []);
+  const runVersion = await service.claimTurn(42, 7, "生成一个并且保存一下", []);
   const delivered = [];
   const result = await service.executeTurn(42, 7, runVersion, (id, eventType, data) => delivered.push({ id, eventType, data }));
   assert.deepEqual(result, { ok: true });
   assert.deepEqual(generated.slice(0, 4), [42, 7, 1, { prompt: "small database diagram", title: "D1 illustration" }]);
+  assert.deepEqual(portraits, [[42, 99, 7]]);
   assert.equal(typeof generated[4], "function");
-  assert.equal(state.messages.at(-1).content, "![D1 illustration](https://cdn.example/99.png)");
+  assert.match(state.messages.at(-1).content, /已将这张图片保存为我的形象照/);
   assert.deepEqual(delivered.map((event) => event.eventType), ["started", "tool_start", "tool_progress", "image_preview", "tool_progress", "tool_progress", "tool_progress", "tool_result", "complete"]);
   assert.equal(delivered[1].data.outputType, "image");
   assert.equal(delivered[2].data.progress, 5);
@@ -980,15 +1001,18 @@ test("Agent emits a bounded multi-file artifact card with a safe browser entry",
   const artifact = JSON.parse(artifactMessage.content);
   assert.deepEqual(artifact, {
     type: "artifact",
+    kind: "code",
+    format: "text",
     id: "artifact-7-1",
     name: "Small site",
     framework: "static",
     runHint: "Open index.html",
+    summary: "",
     entry: "public/index.html",
     files: [
-      { path: "src/main.ts", language: "typescript", content: "x".repeat(20_000), truncated: true },
-      { path: "src/ui.css", language: "css", content: "c".repeat(20_000), truncated: false },
-      { path: "public/index.html", language: "html", content: "<!doctype html>" + "h".repeat(5_000), truncated: false },
+      { path: "src/main.ts", language: "typescript", contentType: "", content: "x".repeat(20_000), truncated: true },
+      { path: "src/ui.css", language: "css", contentType: "", content: "c".repeat(20_000), truncated: false },
+      { path: "public/index.html", language: "html", contentType: "", content: "<!doctype html>" + "h".repeat(5_000), truncated: false },
     ],
   });
   assert.deepEqual(delivered.map((event) => event.eventType), [
@@ -1266,25 +1290,78 @@ for (const [name, preferences, expected] of [
   ["fixed English", { locale: "zh", replyLanguage: "en" }, "Otherwise use English"],
   ["fixed Chinese", { locale: "en", replyLanguage: "zh" }, "Otherwise use Simplified Chinese"],
 ]) {
-  test(`Agent sends ${name} as instructions without changing user messages`, async () => {
-    const { repository } = createRepository();
+  for (const apiStyle of ["CHAT_COMPLETIONS", "RESPONSES"]) {
+  test(`Agent sends ${name} via ${apiStyle} without changing user messages`, async () => {
+    const { repository, state } = createRepository();
+    state.messages.push({ id: 1, role: "user", content: "以后都用中文回答" },
+      { id: 2, role: "assistant", content: "好的，我会用中文回答。" });
     const service = new AgentRunService(repository, {
-      async candidates() { return { managed: true, endpoints: [{ providerId: 1, baseUrl: "https://models.example/v1", apiKey: "test", model: "test", apiStyle: "CHAT_COMPLETIONS" }] }; },
+      async candidates() { return { managed: true, endpoints: [{ providerId: 1, baseUrl: "https://models.example/v1", apiKey: "test", model: "test", apiStyle }] }; },
     }, { async ensureAvailable() { return true; }, async chargeTokens() {} });
     let captured;
     mock.method(globalThis, "fetch", async (_input, init) => {
       captured = JSON.parse(init.body);
-      return new Response('data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n', { headers: { "content-type": "text/event-stream" } });
+      const event = apiStyle === "RESPONSES" ? { type: "response.output_text.delta", delta: "Hello" }
+        : { choices: [{ delta: { content: "Hello" } }] };
+      return new Response(`data: ${JSON.stringify(event)}\n\ndata: [DONE]\n\n`, { headers: { "content-type": "text/event-stream" } });
     });
-    const content = "Please explain this 中文 identifier.";
+    const content = "你好，请介绍一下你自己。";
     const version = await service.claimTurn(42, 7, content, []);
     assert.equal((await service.executeTurn(42, 7, version, () => {}, false, undefined, preferences)).ok, true);
-    assert.ok(captured.messages[0].content.includes(expected));
-    assert.ok(captured.messages[0].content.includes("Honor the user's explicit language or translation request first"));
-    assert.ok(!captured.messages[0].content.includes("中文 AI 助手"));
-    assert.equal(captured.messages.find(message => message.role === "user").content, content);
+    const instructions = captured.instructions ?? captured.messages[0].content;
+    assert.ok(instructions.includes(expected));
+    assert.ok(instructions.includes("Honor the user's explicit language or translation request first"));
+    if (preferences.replyLanguage !== "auto") {
+      assert.match(instructions, /This is a fixed setting/);
+      assert.match(instructions, /question alone is not a request to switch/);
+      assert.match(instructions, /Historical language requests do not override/);
+    }
+    assert.ok(!instructions.includes("中文 AI 助手"));
+    assert.equal((captured.input ?? captured.messages).filter(message => message.role === "user").at(-1).content, content);
   });
+  }
 }
+
+test("fixed English summarizes Chinese tool results without repeating the tool action", async () => {
+  const { repository, state } = createRepository();
+  const charges = [];
+  let executions = 0;
+  const contentTools = { async execute(userId, name) {
+    assert.equal(userId, 42);
+    assert.equal(name, "query_posts");
+    executions++;
+    return { data: { total: 0 }, answer: "没有找到相关博客文章。" };
+  } };
+  const service = new AgentRunService(repository, {
+    async candidates() { return { managed: true, endpoints: [{ providerId: 1,
+      baseUrl: "https://models.example/v1", apiKey: "test", model: "test", apiStyle: "CHAT_COMPLETIONS" }] }; },
+  }, { async ensureAvailable() { return true; }, async chargeTokens(charge) { charges.push(charge); } },
+  undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, contentTools);
+  let requests = 0;
+  mock.method(globalThis, "fetch", async (_url, init) => {
+    const payload = JSON.parse(init.body);
+    assert.match(payload.messages[0].content, /Otherwise use English/);
+    requests++;
+    const delta = requests === 1 ? { tool_calls: [{ index: 0, function: {
+      name: "query_posts", arguments: "{}",
+    } }] } : { content: "No matching blog posts were found." };
+    if (requests > 1) {
+      assert.equal(payload.tools, undefined);
+      assert.match(payload.messages.at(-1).content, /没有找到相关博客文章/);
+    }
+    return new Response(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: [DONE]\n\n`,
+      { headers: { "content-type": "text/event-stream" } });
+  });
+  const run = await service.claimTurn(42, 7, "查询我的博客", []);
+  assert.deepEqual(await service.executeTurn(42, 7, run, () => {}, false, undefined,
+    { locale: "zh", replyLanguage: "en" }), { ok: true });
+  assert.equal(executions, 1);
+  assert.equal(requests, 2);
+  assert.equal(state.messages.at(-1).content, "No matching blog posts were found.");
+  assert.equal(state.events.filter(event => event.eventType === "answer_delta").map(event => event.data).join(""),
+    "No matching blog posts were found.");
+  assert.ok(charges.some(charge => charge.bizKey.endsWith(":tool-language-summary")));
+});
 
 test("Agent validates language preferences and passes them to both message transports", async () => {
   for (const suffix of ["messages", "messages/stream"]) {

@@ -9,7 +9,7 @@ import type {
 import { pointsExpiryStatements } from "./points-expiry.js";
 
 const MODEL_PRICE_SELECT = `
-  SELECT id, model,
+  SELECT id, model, billing_mode AS billingMode, milli_per_request AS milliPerRequest,
          input_milli_per_1k_token AS inputMilliPer1kToken,
          output_milli_per_1k_token AS outputMilliPer1kToken,
          cached_milli_per_1k_token AS cachedMilliPer1kToken,
@@ -38,17 +38,19 @@ export class D1BillingMapper implements BillingRepository {
     return this.db.prepare(`
       INSERT INTO billing_model_price (
         model, input_milli_per_1k_token, output_milli_per_1k_token,
-        cached_milli_per_1k_token, cached_write_milli_per_1k_token, enabled, remark
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        cached_milli_per_1k_token, cached_write_milli_per_1k_token, enabled, remark, billing_mode, milli_per_request
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(model) DO UPDATE SET
         input_milli_per_1k_token = excluded.input_milli_per_1k_token,
         output_milli_per_1k_token = excluded.output_milli_per_1k_token,
         cached_milli_per_1k_token = excluded.cached_milli_per_1k_token,
         cached_write_milli_per_1k_token = excluded.cached_write_milli_per_1k_token,
+        billing_mode = excluded.billing_mode,
+        milli_per_request = excluded.milli_per_request,
         enabled = excluded.enabled,
         remark = excluded.remark,
         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-      RETURNING id, model,
+      RETURNING id, model, billing_mode AS billingMode, milli_per_request AS milliPerRequest,
                 input_milli_per_1k_token AS inputMilliPer1kToken,
                 output_milli_per_1k_token AS outputMilliPer1kToken,
                 cached_milli_per_1k_token AS cachedMilliPer1kToken,
@@ -56,7 +58,7 @@ export class D1BillingMapper implements BillingRepository {
                 enabled, remark, updated_at AS updatedAt
     `).bind(input.model, input.inputMilliPer1kToken, input.outputMilliPer1kToken,
       input.cachedMilliPer1kToken, input.cachedWriteMilliPer1kToken,
-      input.enabled ? 1 : 0, input.remark).first<BillingModelPrice>();
+      input.enabled ? 1 : 0, input.remark, input.billingMode ?? "TOKEN", input.milliPerRequest ?? 0).first<BillingModelPrice>();
   }
 
   async appendLedger(input: BillingLedgerInput): Promise<void> {

@@ -36,6 +36,7 @@ const notices: Record<string, string> = {
 
 // Exact notices retain actionable validation details without interpreting user content.
 const chineseNotices: Record<string, string> = {
+  "助手形象图片素材 ID 无效": "Invalid assistant avatar image asset ID",
   "订阅状态暂不可用": "Subscription status is temporarily unavailable",
   "积分请求无效": "Invalid points request",
   "积分发放暂不可用": "Points delivery is temporarily unavailable",
@@ -132,6 +133,9 @@ const chineseNotices: Record<string, string> = {
   "背诵音转文功能只支持 DASHSCOPE_ASR 接口风格": "Recitation transcription only supports the DASHSCOPE_ASR API style",
   "单个附件不能超过20MB": "Each attachment must not exceed 20 MB",
   "消息内容不能超过 4000 个字符": "The message must not exceed 4,000 characters",
+  "会话标题须为 1 至 100 个字符": "The conversation title must contain 1 to 100 characters",
+  "分支消息参数无效": "Invalid conversation branch parameters",
+  "会话或用户消息不存在": "The conversation or user message does not exist",
   "消息内容和附件不能同时为空": "Provide message text or an attachment",
   "分享链接无效或已失效": "The share link is invalid or has expired",
   "修改要求不能为空": "Revision instructions are required",

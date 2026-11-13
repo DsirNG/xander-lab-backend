@@ -170,6 +170,7 @@ function tokenCost(usage: { inputTokens: number; outputTokens: number; cachedTok
 }
 
 function priceSnapshot(price: TokenPrice, model: string | null): string {
+  if (price.billingMode === "REQUEST") return `REQUEST:${price.milliPerRequest ?? 0}${model ? ` ${model}` : ""}`;
   return `${price.inputMilliPer1kToken}/${price.outputMilliPer1kToken}/${price.cachedMilliPer1kToken}${model ? ` ${model}` : ""}`;
 }
 
@@ -266,6 +267,8 @@ async function publicPriceList(env: BillingEnvironment, billing: BillingService)
   for (const row of await billing.listModelPrices()) {
     models[row.model] = {
       source: "db",
+      billingMode: row.billingMode ?? "TOKEN",
+      milliPerRequest: row.milliPerRequest ?? 0,
       enabled: row.enabled === 1,
       inputMilliPer1kToken: row.inputMilliPer1kToken,
       outputMilliPer1kToken: row.outputMilliPer1kToken,
@@ -294,6 +297,8 @@ async function publicPriceList(env: BillingEnvironment, billing: BillingService)
 function modelPriceView(row: ModelPriceRow) {
   return {
     model: row.model,
+    billingMode: row.billingMode ?? "TOKEN",
+    milliPerRequest: row.milliPerRequest ?? 0,
     inputMilliPer1kToken: row.inputMilliPer1kToken,
     outputMilliPer1kToken: row.outputMilliPer1kToken,
     cachedMilliPer1kToken: row.cachedMilliPer1kToken,
@@ -332,8 +337,15 @@ async function adminModelPrices(
   if (request.method !== "PUT") return null;
   const body = await readJson(request);
   if (body instanceof Response) return body;
-  const input = body.inputMilliPer1kToken;
-  const output = body.outputMilliPer1kToken;
+  const billingMode = body.billingMode === undefined ? "TOKEN" : body.billingMode;
+  const milliPerRequest = body.milliPerRequest === undefined ? 0 : body.milliPerRequest;
+  if ((billingMode !== "TOKEN" && billingMode !== "REQUEST")
+    || !safeNonNegativeInteger(milliPerRequest)
+    || (billingMode === "REQUEST" && body.milliPerRequest === undefined)) {
+    return apiError(400, "模型定价参数格式不正确");
+  }
+  const input = body.inputMilliPer1kToken ?? (billingMode === "REQUEST" ? 0 : undefined);
+  const output = body.outputMilliPer1kToken ?? (billingMode === "REQUEST" ? 0 : undefined);
   const cached = body.cachedMilliPer1kToken === undefined ? 0 : body.cachedMilliPer1kToken;
   const cachedWrite = body.cachedWriteMilliPer1kToken === undefined ? 0 : body.cachedWriteMilliPer1kToken;
   const enabled = body.enabled === undefined ? true : body.enabled;
@@ -350,6 +362,8 @@ async function adminModelPrices(
   const remark = typeof body.remark === "string" ? body.remark : null;
   const row = await billing.upsertModelPrice({
     model,
+    billingMode,
+    milliPerRequest,
     inputMilliPer1kToken: inputPrice,
     outputMilliPer1kToken: outputPrice,
     cachedMilliPer1kToken: cachedPrice,
@@ -390,7 +404,7 @@ async function chargeTokens(
   const dbPrice = await billing.findModelPrice(model);
   const price = resolvedPrice(model, dbPrice, env);
   const empty = usage.inputTokens === 0 && usage.outputTokens === 0 && usage.cachedTokens === 0;
-  if (empty) {
+  if (empty && price.billingMode !== "REQUEST") {
     if (bizType === IMAGE_BIZ_TYPE) return apiError(400, "图片模型未返回 token 用量，无法按 token 计费");
     const fallback = settings(env).flat[bizType] ?? 0;
     if (fallback > 0) {
@@ -415,7 +429,7 @@ async function chargeTokens(
     bizType,
     bizKey,
     bizRef: typeof body.bizRef === "string" ? body.bizRef : null,
-    amount: tokenCost(usage, price),
+    amount: price.billingMode === "REQUEST" ? price.milliPerRequest ?? 0 : tokenCost(usage, price),
     model,
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,

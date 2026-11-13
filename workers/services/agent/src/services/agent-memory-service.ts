@@ -52,6 +52,12 @@ function limitedText(value: string | null | undefined, length: number): string {
 export class AgentMemoryService {
   constructor(private readonly repository: AgentMemoryRepository) {}
 
+  /** Persists the owned media reference used by later assistant-portrait lookups. */
+  async saveAssistantPortrait(userId: number, assetId: number, conversationId: number) {
+    if (!Number.isSafeInteger(assetId) || assetId < 1) throw new AgentMemoryError("助手形象图片素材 ID 无效");
+    return this.remember(userId, "assistant-portrait", "PROFILE", `assetId: ${assetId}`, conversationId);
+  }
+
   async remember(userId: number, memoryKey: string, kind: string, content: string, conversationId: number) {
     const key = this.normalizeKey(memoryKey);
     const body = content.trim();

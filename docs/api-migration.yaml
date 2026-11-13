@@ -544,6 +544,38 @@ entries:
       v1_enabled: true
       v2_enabled: false
     status: planned
+  - id: agent-post-agent-conversations-id-fork
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/fork"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/fork"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
+  - id: agent-post-agent-conversations-id-title
+    owner: agent
+    old:
+      method: POST
+      path: "/api/agent/conversations/{id}/title"
+    new:
+      method: POST
+      path: "/api/v2/agents/conversations/{id}/title"
+    clients:
+      web: pending
+      miniprogram: pending
+      admin: not_applicable
+    compatibility:
+      v1_enabled: true
+      v2_enabled: false
+    status: planned
   - id: agent-post-agent-conversations-id-pin
     owner: agent
     old:

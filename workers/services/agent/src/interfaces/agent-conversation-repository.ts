@@ -28,6 +28,8 @@ export interface AgentConversationListPage {
 }
 
 export interface AgentConversationRepository {
+  rename(userId: number, conversationId: number, title: string): Promise<AgentConversationRecord | null>;
+  fork(userId: number, conversationId: number, messageId: number, key: string, title: string): Promise<AgentConversationRecord | null>;
   createConversation(userId: number, title: string): Promise<AgentConversationRecord | null>;
   listConversations(
     userId: number,

@@ -279,6 +279,11 @@ export const ROUTES =
   },
   {
     "method": "POST",
+    "path": "/api/agent/conversations/{id}/title",
+    "service": "agent"
+  },
+  {
+    "method": "POST",
     "path": "/api/blog-plans/topics/generate",
     "service": "content-automation"
   },
@@ -291,6 +296,11 @@ export const ROUTES =
     "method": "POST",
     "path": "/api/virtual-pay/orders/*/refund",
     "service": "payment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent/conversations/{id}/fork",
+    "service": "agent"
   },
   {
     "method": "POST",

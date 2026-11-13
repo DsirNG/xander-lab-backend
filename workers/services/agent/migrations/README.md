@@ -61,3 +61,5 @@ events over WebSocket. Responses API models receive document file blocks; local
 document extraction/OCR is not implemented. `waitUntil` allows a streamed run
 to continue after disconnect while its Worker invocation remains alive; a run
 stopped by runtime termination is not automatically requeued.
+
+- `0011_agent_conversation_forks.sql`: 分支来源与用户级幂等索引；部署新 Agent 前执行。

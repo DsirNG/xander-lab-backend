@@ -62,7 +62,7 @@ export async function handleAgentConversationRequest(
   }
 
   const collectionRoute = url.pathname === basePath;
-  const itemMatch = url.pathname.match(/^\/api\/agent\/conversations\/(\d+)(?:\/(messages|share|pin|read))?$/);
+  const itemMatch = url.pathname.match(/^\/api\/agent\/conversations\/(\d+)(?:\/(messages|share|pin|read|fork|title))?$/);
   if (!collectionRoute && !(request.method === "POST" && url.pathname === basePath) && !itemMatch) return null;
   const userId = await resolveUser();
   if (userId instanceof Response) return userId;
@@ -102,6 +102,24 @@ export async function handleAgentConversationRequest(
     const conversationId = positiveId(itemMatch[1]);
     if (!conversationId) return apiError(400, "会话 ID 无效");
     const action = itemMatch[2];
+    if (request.method === "POST" && (action === "fork" || action === "title")) {
+      const body = await readJsonBody(request);
+      if (body instanceof Response) return body;
+      if (action === "title") {
+        if (typeof body.title !== "string" || !body.title.trim() || body.title.trim().length > 100) {
+          return apiError(400, "会话标题须为 1 至 100 个字符");
+        }
+        const row = await service.rename(userId, conversationId, body.title.trim());
+        return row ? success(row) : apiError(404, "会话不存在");
+      }
+      if (typeof body.messageId !== "number" || !Number.isSafeInteger(body.messageId) || body.messageId <= 0
+        || typeof body.requestId !== "string" || !/^[a-zA-Z0-9_-]{16,100}$/.test(body.requestId)
+        || typeof body.content !== "string" || !body.content.trim() || body.content.length > MAX_MESSAGE_LENGTH) {
+        return apiError(400, "分支消息参数无效");
+      }
+      const result = await service.fork(userId, conversationId, body.messageId, body.requestId, body.content);
+      return result ? success(result) : apiError(404, "会话或用户消息不存在");
+    }
     if (request.method === "GET" && !action) {
       const result = await service.get(userId, conversationId);
       return result ? success(result) : apiError(404, "会话不存在");

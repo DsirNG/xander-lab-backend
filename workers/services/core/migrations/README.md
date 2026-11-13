@@ -40,3 +40,13 @@ local D1 migrations; the migration plan must define an explicit export,
 ID-preserving import, and checksum process before cutover.
 
 `0011_payment_refunds.sql` adds order-attributed permanent point lots, atomic refund holds, and membership revocation. Existing untracked balances remain untouched; refund holds and releases are excluded from consumption. Apply before deploying the refund services.
+
+Migration 0012 adds TOKEN / REQUEST model billing and milli-points per request.
+Apply it before deploying Core and the admin UI. Existing rows remain TOKEN.
+REQUEST charges once per model call using the existing idempotent billing key,
+including calls with zero reported tokens; zero price is free. Disabled/deleted
+prices continue to fall back to configured token rates.
+
+Migration 0013 stores the optional provider model catalog used by the admin UI.
+Apply before deploying Core. Existing providers receive an empty catalog; manual
+feature model IDs remain supported. Updates omitting models preserve the catalog.

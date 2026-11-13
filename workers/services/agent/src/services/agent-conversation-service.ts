@@ -24,6 +24,15 @@ export class AgentConversationService {
     return conversation ? { conversation, messages: [] } : null;
   }
 
+  rename(userId: number, conversationId: number, title: string) {
+    return this.repository.rename(userId, conversationId, title);
+  }
+
+  async fork(userId: number, conversationId: number, messageId: number, key: string, content: string) {
+    const row = await this.repository.fork(userId, conversationId, messageId, key, excerpt(content.trim(), 40));
+    return row ? this.get(userId, row.id) : null;
+  }
+
   async list(
     userId: number,
     page: number,

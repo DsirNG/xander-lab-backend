@@ -45,6 +45,7 @@ import { AgentMcpService } from "./services/agent-mcp-service.js";
 import { AgentImageService } from "./services/agent-image-service.js";
 import { AgentContentToolsService } from "./services/agent-content-tools-service.js";
 import { AgentWeatherService } from "./services/agent-weather-service.js";
+import { DocumentArtifactService } from "./services/document-artifact-service.js";
 
 const agentService = createBusinessService<AgentEnvironment>("agent", async (request, env, context) => {
   const auth = new AgentAuthService(env.JWT_SECRET, new CoreAuthMapper(env));
@@ -82,8 +83,8 @@ const agentService = createBusinessService<AgentEnvironment>("agent", async (req
     mcpService,
     new AgentImageService(new CoreAgentImageModelMapper(env), new OpenAiAgentImageMapper(), contentMedia, billing),
     contentTools,
-    weather,
     env.IMAGE_TASKS ? new DurableAgentImageTaskMapper(env.IMAGE_TASKS) : undefined,
+    new DocumentArtifactService(attachmentService),
   );
   const approvalResponse = await handleAgentApprovalRequest(request, approvalService, resolveUser);
   if (approvalResponse) return approvalResponse;

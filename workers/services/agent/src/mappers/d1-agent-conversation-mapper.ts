@@ -18,6 +18,36 @@ const CONVERSATION_COLUMNS = `
 export class D1AgentConversationMapper implements AgentConversationRepository {
   constructor(private readonly db: D1Binding) {}
 
+  rename(userId: number, conversationId: number, title: string): Promise<AgentConversationRecord | null> {
+    return this.db.prepare(`UPDATE agent_conversation SET title = ?
+      WHERE id = ? AND user_id = ? RETURNING ${CONVERSATION_COLUMNS}`)
+      .bind(title, conversationId, userId).first<AgentConversationRecord>();
+  }
+
+  async fork(userId: number, conversationId: number, messageId: number, key: string, title: string): Promise<AgentConversationRecord | null> {
+    // D1 batch is atomic. The per-user key makes a lost HTTP response safe to retry.
+    await this.db.batch([
+      this.db.prepare(`INSERT INTO agent_conversation
+        (user_id, title, status, run_version, fork_key, fork_source_id, fork_message_id)
+        SELECT c.user_id, ?, 'ready', c.run_version, ?, c.id, m.id
+        FROM agent_conversation c JOIN agent_message m ON m.conversation_id = c.id
+        WHERE c.user_id = ? AND c.id = ? AND m.id = ? AND m.role = 'user' AND m.kind = 'message'
+        ON CONFLICT(user_id, fork_key) DO NOTHING`).bind(title, key, userId, conversationId, messageId),
+      this.db.prepare(`INSERT INTO agent_message
+        (conversation_id, run_version, role, kind, tool_name, invocation_id, content, attachments_json, created_at)
+        SELECT target.id, m.run_version, m.role, m.kind, m.tool_name, m.invocation_id,
+          m.content, m.attachments_json, m.created_at
+        FROM agent_conversation target JOIN agent_message m ON m.conversation_id = target.fork_source_id
+        WHERE target.user_id = ? AND target.fork_key = ?
+          AND target.fork_source_id = ? AND target.fork_message_id = ? AND m.id < target.fork_message_id
+          AND NOT EXISTS (SELECT 1 FROM agent_message existing WHERE existing.conversation_id = target.id)
+        ORDER BY m.id`).bind(userId, key, conversationId, messageId),
+    ]);
+    return this.db.prepare(`SELECT ${CONVERSATION_COLUMNS} FROM agent_conversation
+      WHERE user_id = ? AND fork_key = ? AND fork_source_id = ? AND fork_message_id = ?`)
+      .bind(userId, key, conversationId, messageId).first<AgentConversationRecord>();
+  }
+
   createConversation(userId: number, title: string): Promise<AgentConversationRecord | null> {
     return this.db.prepare(`
       INSERT INTO agent_conversation (user_id, title, status, run_version, cancel_requested, is_pinned)

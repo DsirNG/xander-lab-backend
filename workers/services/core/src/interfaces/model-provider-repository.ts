@@ -4,6 +4,7 @@ export interface ModelProviderRecord {
   vendor: string;
   baseUrl: string;
   encryptedApiKey: string;
+  modelsJson?: string;
   description: string | null;
   enabled: number;
   priority: number;
@@ -16,6 +17,7 @@ export interface ModelProviderInput {
   vendor: string;
   baseUrl: string;
   encryptedApiKey: string;
+  modelsJson?: string;
   description: string | null;
   enabled: boolean;
   priority: number;
