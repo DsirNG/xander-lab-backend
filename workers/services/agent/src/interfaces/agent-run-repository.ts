@@ -37,6 +37,7 @@ export interface AgentTurnRepository {
   findOwnedConversation(userId: number, conversationId: number): Promise<AgentConversationRecord | null>;
   claimTurn(userId: number, conversationId: number, content: string, attachments: unknown[]): Promise<number | null>;
   recentMessages(conversationId: number): Promise<AgentRunMessage[]>;
+  recentToolResults?(conversationId: number): Promise<unknown[]>;
   appendEvent(conversationId: number, runVersion: number, eventType: string, data: unknown): Promise<number>;
   saveSpecialMessage(
     userId: number,

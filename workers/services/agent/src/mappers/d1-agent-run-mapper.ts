@@ -61,6 +61,13 @@ export class D1AgentRunMapper implements AgentTurnRepository {
     return result.results;
   }
 
+  async recentToolResults(conversationId: number): Promise<unknown[]> {
+    const rows = await this.db.prepare(`SELECT data_content AS content FROM agent_event WHERE conversation_id = ? AND event_type = 'tool_result' ORDER BY id DESC LIMIT 40`).bind(conversationId).all<{ content: string }>();
+    return rows.results.reverse().flatMap(row => {
+      try { return [JSON.parse(row.content) as unknown]; } catch { return []; }
+    });
+  }
+
   async appendEvent(
     conversationId: number,
     runVersion: number,

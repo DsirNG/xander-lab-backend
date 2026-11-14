@@ -19,3 +19,8 @@ Migration `0015` adds owner-scoped expression indexes for managed article pagina
 and counts. The display-order expression matches the mapper's `COALESCE(published_at,
 updated_at)` order; no data is rewritten. Apply this migration to Content D1 before
 expecting the query-plan improvement.
+
+Migration `0016` distinguishes scheduled reminders from immediate email. Apply it
+before deploying Content or Agent changes. Immediate requests are persisted before
+delivery, claimed at most once, and never automatically resent after an uncertain
+delivery. Existing reminders default to `SCHEDULED`.

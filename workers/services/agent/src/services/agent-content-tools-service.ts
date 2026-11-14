@@ -12,6 +12,7 @@ const MUTATION_FIELDS: Record<string, readonly string[]> = {
   update_plan_series: ["seriesId", "title", "topic", "days", "topics", "startDate", "triggerTime", "timezone", "audience", "tone", "platforms", "publishMode", "aiOption"],
   activate_plan_series: ["seriesId"],
   retry_plan_series: ["seriesId"],
+  send_email: ["recipientEmail", "subject", "message", "contentType"],
   email_reminder: ["recipientEmail", "subject", "message", "frequency", "scheduledAt", "sendTime", "timezone", "recurrenceDay", "intervalDays", "contentType", "templateId"],
   update_email_reminder: ["taskId", "action"],
 };
@@ -36,7 +37,7 @@ export class AgentContentToolsService {
   }
 
   static needsApproval(toolName: string, input: unknown): boolean {
-    if (toolName === "schedule_plan" || toolName === "email_reminder") return true;
+    if (toolName === "schedule_plan" || toolName === "email_reminder" || toolName === "send_email") return true;
     const args = argsObject(input);
     const action = typeof args.action === "string" ? args.action.trim().toUpperCase() : "";
     return toolName === "activate_plan_series" || toolName === "retry_plan_series"
@@ -79,6 +80,7 @@ export class AgentContentToolsService {
         }
         case "schedule_plan":
         case "email_reminder":
+        case "send_email":
         case "update_plan":
         case "create_plan_series":
         case "update_plan_series":
@@ -99,6 +101,10 @@ export class AgentContentToolsService {
           if (toolName === "update_plan_series") return await this.content.updatePlanSeries(userId, args);
           if (toolName === "activate_plan_series") return await this.content.activatePlanSeries(userId, args);
           if (toolName === "retry_plan_series") return await this.content.retryPlanSeries(userId, args);
+          if (toolName === "send_email") {
+            if (!invocationId) throw new AgentContentToolsError(400, "即时邮件请求缺少幂等标识");
+            return await this.content.sendEmail(userId, args, invocationId);
+          }
           if (toolName === "email_reminder") {
             if (!invocationId) throw new AgentContentToolsError(400, "邮件提醒请求缺少幂等标识");
             return await this.content.createEmailReminder(userId, args, invocationId);
@@ -128,9 +134,17 @@ function validateMutation(toolName: string, args: Record<string, unknown>): void
   if (toolName === "schedule_plan" && (typeof args.topic !== "string" || !args.topic.trim() || args.topic.length > 120)) {
     throw new AgentContentToolsError(400, "文章主题不能为空且不能超过 120 个字符");
   }
-  if (toolName === "email_reminder" && ["recipientEmail", "subject", "message"].some((key) =>
+  if (["email_reminder", "send_email"].includes(toolName) && ["recipientEmail", "subject", "message"].some((key) =>
     typeof args[key] !== "string" || !(args[key] as string).trim())) {
-    throw new AgentContentToolsError(400, "定时邮件提醒缺少收件邮箱、主题或正文");
+    throw new AgentContentToolsError(400, "邮件缺少收件邮箱、主题或正文");
+  }
+  if (toolName === "send_email" && (
+    typeof args.recipientEmail !== "string" || args.recipientEmail.length > 254
+    || !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(args.recipientEmail.trim())
+    || typeof args.subject !== "string" || args.subject.length > 200 || /[\r\n]/.test(args.subject)
+    || typeof args.message !== "string" || args.message.length > 10_000
+    || args.contentType !== undefined && !["PLAIN", "HTML"].includes(String(args.contentType)))) {
+    throw new AgentContentToolsError(400, "即时邮件参数无效");
   }
   if (toolName === "update_plan" && (!Number.isSafeInteger(args.planId) || (args.planId as number) < 1
     || typeof args.action !== "string")) throw new AgentContentToolsError(400, "计划操作参数无效");

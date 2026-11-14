@@ -2,12 +2,14 @@ export interface AgentBlogTaskSummary {
   id: number;
   title: string;
   summary: string;
+  content?: string;
   publishedPostId: number | null;
   status: string;
   generationMode: "quick" | "full";
 }
 
 export interface AgentBlogAgentPort {
+  readContent?(userId: number, taskId: number): Promise<string>;
   cancel?(userId: number, clientRequestId: string): Promise<void>;
   create(userId: number, input: string, clientRequestId: string, mode?: "auto" | "quick" | "full"): Promise<AgentBlogTaskSummary>;
   findReady(userId: number, clientRequestId: string): Promise<AgentBlogTaskSummary | null>;

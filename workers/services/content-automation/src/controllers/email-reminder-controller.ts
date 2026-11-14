@@ -36,6 +36,10 @@ export async function handleEmailReminderRequest(
   service: EmailReminderService,
 ): Promise<Response | null> {
   const url = new URL(request.url);
+  if (url.pathname === "/internal/content-automation/mail/send" && request.method === "POST") {
+    try { return success(await service.sendImmediate(userId(request), await readJson(request))); }
+    catch (error) { return errorResponse(error); }
+  }
   if (url.pathname === "/api/email-reminders" && request.method === "GET") {
     try { return success(await service.list(userId(request), url.searchParams)); }
     catch (error) { return errorResponse(error); }

@@ -21,6 +21,9 @@ import { handleInternalPaymentRequest } from "./controllers/internal-payment-con
 import { handleProfileOverviewRequest } from "./controllers/profile-overview-controller.js";
 import { handleUserAdminRequest } from "./controllers/user-admin-controller.js";
 import { handleQrLoginRequest } from "./controllers/qr-login-controller.js";
+import { handlePaymentHandoffRequest } from "./controllers/payment-handoff-controller.js";
+import { PaymentHandoffService } from "./services/payment-handoff-service.js";
+import { RedisPaymentHandoffMapper } from "./mappers/redis-payment-handoff-mapper.js";
 import { handleAdminNotificationRequest } from "./controllers/admin-notification-controller.js";
 import { handleIdentityAccountRequest } from "./controllers/identity-account-controller.js";
 import { handleWechatAuthRequest } from "./controllers/wechat-auth-controller.js";
@@ -314,6 +317,15 @@ async function handleCoreRequest(
       ),
     });
     if (qrLogin) return qrLogin;
+    const paymentHandoff = await handlePaymentHandoffRequest(request, {
+      service: new PaymentHandoffService(new RedisPaymentHandoffMapper(env)),
+      createQr: (ticket) => wechatLoginQr.createPaymentQr(ticket),
+      resolveUser: (authRequest) => resolveCurrentUser(authRequest, env, identityAuth),
+      rateLimit: (limitedRequest) => enforceAuthLimits(limitedRequest, env, [
+        { namespace: "payment-qr-ip", identifier: requestIp(limitedRequest), limit: 30 },
+      ]),
+    });
+    if (paymentHandoff) return paymentHandoff;
     const identityAccountResponse = await handleIdentityAccountRequest(request, {
       accounts: identityAccounts,
       verificationCodes,

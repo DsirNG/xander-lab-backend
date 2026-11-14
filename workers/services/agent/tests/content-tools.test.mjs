@@ -110,3 +110,53 @@ test("Content tools keep status/edit operations owner-scoped and map deletion th
     { path: "/api/email-reminders/12", method: "DELETE", body: null, owner: "42" },
   ]);
 });
+
+test("send_email requires approval and forwards only this request with stable identity", async () => {
+  const input = { recipientEmail: "owner@example.com", subject: "问候", message: "你在干嘛" };
+  const { mapper, calls } = mapperWith(async (url, request) => {
+    assert.equal(url.pathname, "/internal/content-automation/mail/send");
+    assert.equal(request.method, "POST");
+    const body = await request.json();
+    assert.deepEqual(body, { ...input, clientRequestId: "approved-mail" });
+    return { code: 200, data: { ...body, id: 19, deliveryMode: "IMMEDIATE", status: "SENT" } };
+  });
+  const service = new AgentContentToolsService(mapper);
+  await assert.rejects(service.execute(42, "send_email", input), error => error.status === 409);
+  await assert.rejects(service.executeApprovedMutation(42, "send_email", input, ""), error => error.status === 400);
+  assert.equal(calls.length, 0);
+  const result = await service.executeApprovedMutation(42, "send_email", input, "approved-mail");
+  assert.equal(result.data.deliveryStatus, "ACCEPTED");
+  assert.equal(result.data.email.clientRequestId, "approved-mail");
+  assert.match(result.answer, /尚未确认送达/);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].headers.get("x-user-id"), "42");
+  assert.equal(calls[0].headers.get("x-dinqor-service-token"), "internal-secret");
+});
+
+test("send_email validates before approval and never treats old reminder records as a new result", async () => {
+  const input = { recipientEmail: "owner@example.com", subject: "问候", message: "你在干嘛" };
+  for (const bad of [{ recipientEmail: "not-an-email" }, { message: "" }, { subject: "Hello\r\nBcc: x" },
+    { scheduledAt: "2026-07-24T10:30:00Z" }, { userId: 99 }, { contentType: "SCRIPT" }]) {
+    assert.throws(() => AgentContentToolsService.validateMutationArguments("send_email", { ...input, ...bad }));
+  }
+  for (const changed of [{ clientRequestId: "old-mail", subject: "记得下班", message: "旧邮件" },
+    { recipientEmail: "other@example.com" }, { message: "旧邮件" }, { deliveryMode: "SCHEDULED" }]) {
+    const { mapper } = mapperWith(() => ({ code: 200, data: {
+      ...input, id: 3, clientRequestId: "approved-mail", deliveryMode: "IMMEDIATE", status: "SENT", ...changed,
+    } }));
+    await assert.rejects(mapper.sendEmail(42, input, "approved-mail"), error => error.status === 503);
+  }
+});
+
+test("send_email maps queued, sending and failed delivery honestly", async () => {
+  const input = { recipientEmail: "owner@example.com", subject: "问候", message: "你在干嘛" };
+  for (const [status, expected] of [["PENDING", "QUEUED"], ["SENDING", "SENDING"], ["FAILED", "UNKNOWN"]]) {
+    const { mapper } = mapperWith(() => ({ code: 200, data: {
+      ...input, id: 3, clientRequestId: "approved-mail", deliveryMode: "IMMEDIATE", status,
+    } }));
+    const result = await mapper.sendEmail(42, input, "approved-mail");
+    assert.equal(result.data.deliveryStatus, expected);
+    assert.equal(result.data.ok, status !== "FAILED");
+    assert.doesNotMatch(result.answer, /本次邮件已由邮件服务接受/);
+  }
+});

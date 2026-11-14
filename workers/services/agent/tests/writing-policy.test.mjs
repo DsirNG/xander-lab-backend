@@ -8,3 +8,8 @@ test('Confirmation applies only to the immediately preceding delivery offer', ()
   assert.equal(allowsBlogTask([{role:'assistant',content:'需要的话，可以做成博客并添加两张插图。'},{role:'user',content:'可以'}]), true);
   assert.equal(allowsBlogTask([{role:'assistant',content:'可以做成博客。'},{role:'assistant',content:'要继续解释这段吗？'},{role:'user',content:'可以'}]), false);
 });
+
+test('continuing an authorized blog workflow retains delivery authorization', () => {
+  assert.equal(allowsBlogTask([{ role: 'user', content: 'Write a blog and save a draft' }, { role: 'assistant', content: 'Working' }, { role: 'user', content: 'continue' }]), true);
+  assert.equal(allowsBlogTask([{ role: 'user', content: 'Explain closures' }, { role: 'assistant', content: 'Explanation' }, { role: 'user', content: 'continue' }]), false);
+});

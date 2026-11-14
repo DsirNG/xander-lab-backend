@@ -171,6 +171,12 @@ export async function handleBlogAgentTaskRequest(
         return jsonResponse(task);
       }
       if (pathname === `${INTERNAL_BASE}/find-ready`) return jsonResponse(await service.findReadyByClientRequestId(owner, body.clientRequestId));
+      if (pathname === `${INTERNAL_BASE}/read-content`) {
+        const taskId = positive(String(body.taskId ?? ""));
+        if (!taskId) return apiError(400, "博客生成助手请求参数非法");
+        const view = await service.detail(owner, taskId);
+        return jsonResponse({ content: view.task.content || view.versions?.[0]?.content || "" });
+      }
       if (pathname === `${INTERNAL_BASE}/find-published`) {
         const taskId = positive(String(body.taskId ?? ""));
         if (!taskId) return apiError(400, "博客生成助手请求参数非法");

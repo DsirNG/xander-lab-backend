@@ -222,39 +222,41 @@ export class D1AgentToolApprovalMapper implements AgentToolApprovalRepository {
     runVersion: number,
     invocationId: string,
     result: unknown,
+    outcome: "SUCCEEDED" | "UNKNOWN" = "SUCCEEDED",
   ): Promise<number> {
     const resultJson = JSON.stringify(result);
+    const eventType = outcome === "UNKNOWN" ? "tool_unknown" : "tool_end";
     const rows = await this.db.batch([
       this.db.prepare(`
         UPDATE agent_tool_invocation
-        SET status = 'SUCCEEDED', result_json = ?, error_message = NULL,
+        SET status = ?, result_json = ?, error_message = NULL,
             completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
         WHERE invocation_id = ? AND conversation_id = ? AND run_version = ?
           AND status IN ('RUNNING', 'UNKNOWN')
           AND EXISTS (SELECT 1 FROM agent_conversation WHERE id = ? AND user_id = ?)
         RETURNING tool_name
-      `).bind(resultJson, invocationId, conversationId, runVersion, conversationId, userId),
+      `).bind(outcome, resultJson, invocationId, conversationId, runVersion, conversationId, userId),
       this.db.prepare(`
         INSERT INTO agent_message (conversation_id, run_version, role, kind, tool_name, invocation_id, content)
         SELECT ?, ?, 'tool', 'tool_result', tool_name, invocation_id, ?
-        FROM agent_tool_invocation WHERE invocation_id = ? AND status = 'SUCCEEDED'
+        FROM agent_tool_invocation WHERE invocation_id = ? AND status = ?
           AND EXISTS (SELECT 1 FROM agent_conversation WHERE id = ? AND user_id = ?)
-      `).bind(conversationId, runVersion, resultJson, invocationId, conversationId, userId),
+      `).bind(conversationId, runVersion, resultJson, invocationId, outcome, conversationId, userId),
       this.db.prepare(`
         INSERT INTO agent_event (conversation_id, run_version, event_type, data_content)
-        SELECT ?, ?, 'tool_end', json_object('invocationId', ?, 'tool', tool_name, 'result', json(?))
-        FROM agent_tool_invocation WHERE invocation_id = ? AND status = 'SUCCEEDED'
+        SELECT ?, ?, ?, json_object('invocationId', ?, 'tool', tool_name, 'result', json(?))
+        FROM agent_tool_invocation WHERE invocation_id = ? AND status = ?
         RETURNING id
-      `).bind(conversationId, runVersion, invocationId, resultJson, invocationId),
+      `).bind(conversationId, runVersion, eventType, invocationId, resultJson, invocationId, outcome),
     ]);
     if ((rows[0]?.meta?.changes ?? 0) !== 1 || (rows[1]?.meta?.changes ?? 0) !== 1
       || (rows[2]?.meta?.changes ?? 0) !== 1) throw new Error("Agent tool invocation changed before completion");
     const event = await this.db.prepare(`
       SELECT id FROM agent_event
-      WHERE conversation_id = ? AND run_version = ? AND event_type = 'tool_end'
+      WHERE conversation_id = ? AND run_version = ? AND event_type = ?
         AND json_extract(data_content, '$.invocationId') = ?
-    `).bind(conversationId, runVersion, invocationId).first<{ id: number }>();
+    `).bind(conversationId, runVersion, eventType, invocationId).first<{ id: number }>();
     if (!event) throw new Error("Agent tool completion event could not be read");
     return event.id;
   }

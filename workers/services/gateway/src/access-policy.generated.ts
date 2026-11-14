@@ -344,6 +344,17 @@ export const ACCESS_POLICY =
   ],
   "explicit_private_get": [
     {
+      "id": "payment-handoff-read",
+      "match": {
+        "method": "GET",
+        "path_pattern": "/api/payment-handoffs/*"
+      },
+      "access": "authenticated",
+      "identity_mode": "required",
+      "token_location": "header",
+      "note": "支付扫码意图仅对创建账号可见，不承载登录凭据或支付授权。"
+    },
+    {
       "id": "blog-post-publish-status",
       "match": {
         "method": "GET",
@@ -786,6 +797,22 @@ export const ACCESS_POLICY =
     }
   ],
   "protected": [
+    {
+      "id": "payment-handoff-create",
+      "match": {
+        "method": "POST",
+        "path": "/api/payment-handoffs"
+      },
+      "owner": "identity"
+    },
+    {
+      "id": "payment-handoff-attach",
+      "match": {
+        "method": "POST",
+        "path_pattern": "/api/payment-handoffs/*"
+      },
+      "owner": "identity"
+    },
     {
       "id": "juejin-connection-test",
       "match": {

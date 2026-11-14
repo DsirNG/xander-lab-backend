@@ -23,6 +23,14 @@ export class WechatLoginQrMapper implements WechatLoginQrRepository {
   ) {}
 
   async createLoginQr(ticket: string): Promise<string | null> {
+    return this.createQr(ticket, this.env.WECHAT_MINIAPP_LOGIN_PAGE || "pages/scan-login/index");
+  }
+
+  async createPaymentQr(ticket: string): Promise<string | null> {
+    return this.createQr(ticket, "pages/scan-payment/index");
+  }
+
+  private async createQr(ticket: string, page: string): Promise<string | null> {
     const credential = await this.credentials.resolve(
       this.env.WECHAT_MINIAPP_APP_ID,
       this.env.WECHAT_MINIAPP_APP_SECRET,
@@ -40,7 +48,7 @@ export class WechatLoginQrMapper implements WechatLoginQrRepository {
         headers: { "content-type": "application/json", accept: "image/png,image/jpeg,application/json" },
         body: JSON.stringify({
           scene: ticket,
-          page: this.env.WECHAT_MINIAPP_LOGIN_PAGE || "pages/scan-login/index",
+          page,
           check_path: false,
           env_version: ["develop", "trial", "release"].includes(this.env.WECHAT_MINIAPP_ENV_VERSION ?? "trial")
             ? this.env.WECHAT_MINIAPP_ENV_VERSION ?? "trial"

@@ -2,9 +2,10 @@ import type { D1Binding, ServiceEnvironment } from "@dinqor/worker-runtime";
 import type { AgentImageTaskNamespace } from "./agent-image-task.js";
 import type { AgentModelEnvironment } from "./agent-model-gateway.js";
 import type { AgentImageModelEnvironment } from "./agent-image-model-environment.js";
+import type { AgentWebResearchEnvironment } from "./agent-web-research-port.js";
 import type { ContentAgentPublicationEnvironment } from "../mappers/content-agent-publication-mapper.js";
 
-export interface AgentEnvironment extends ServiceEnvironment, AgentModelEnvironment, AgentImageModelEnvironment, ContentAgentPublicationEnvironment {
+export interface AgentEnvironment extends ServiceEnvironment, AgentModelEnvironment, AgentImageModelEnvironment, AgentWebResearchEnvironment, ContentAgentPublicationEnvironment {
   DB: D1Binding;
   IMAGE_TASKS?: AgentImageTaskNamespace;
   JWT_SECRET?: string;
@@ -19,6 +20,7 @@ export interface AgentEnvironment extends ServiceEnvironment, AgentModelEnvironm
   AGENT_OSS_OBJECT_PREFIX?: string;
   AGENT_OSS_SMOKE_TEST_ENABLED?: string;
   AGENT_MCP_CREDENTIAL_ENCRYPTION_KEY?: string;
+  AGENT_WEB_CREDENTIAL_ENCRYPTION_KEY?: string;
   AGENT_MCP_CLIENT_ENABLED?: string;
   WEATHER_USER_AGENT?: string;
   WEATHER_GEOCODING_URL?: string;

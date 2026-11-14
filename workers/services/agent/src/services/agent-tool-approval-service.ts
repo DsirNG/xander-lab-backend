@@ -180,6 +180,7 @@ export class AgentToolApprovalService {
     const reason = toolName === "schedule_plan" ? "创建自动发文计划，系统会按计划生成并发布内容"
       : toolName === "activate_plan_series" ? "启用系列发文计划，系统会按每日主题建立并执行全部计划"
       : toolName === "retry_plan_series" ? "重新安排系列中失败的每日计划；执行时可能自动发布文章"
+      : toolName === "send_email" ? "立即向指定邮箱发送本次邮件，请核对收件人、主题和正文；服务接受不代表已送达收件箱"
       : toolName === "email_reminder" ? "创建定时邮件提醒，系统会在指定时间向收件人发送邮件"
         : toolName === "update_plan" ? "取消或删除定时发文计划"
           : "删除定时邮件提醒，该操作不可恢复";
@@ -217,7 +218,7 @@ export class AgentToolApprovalService {
       return this.decideRemoteTool(userId, conversationId, approvalId, approved, runVersion,
         decision.approval, decision.argumentsJson);
     }
-    if (["schedule_plan", "email_reminder", "update_plan", "update_email_reminder", "activate_plan_series", "retry_plan_series"].includes(decision.approval.toolName)) {
+    if (["schedule_plan", "email_reminder", "send_email", "update_plan", "update_email_reminder", "activate_plan_series", "retry_plan_series"].includes(decision.approval.toolName)) {
       return this.decideContentMutation(userId, conversationId, approvalId, approved, runVersion,
         decision.approval, decision.argumentsJson);
     }
@@ -368,19 +369,22 @@ export class AgentToolApprovalService {
         break;
       } catch (error) {
         failure = error;
-        const idempotentCreate = approval.toolName === "schedule_plan" || approval.toolName === "email_reminder"
+        const idempotentCreate = approval.toolName === "schedule_plan" || approval.toolName === "email_reminder" || approval.toolName === "send_email"
           || approval.toolName === "activate_plan_series";
         if (attempt === 0 && idempotentCreate && error instanceof AgentContentToolsError && error.status >= 500) continue;
         break;
       }
     }
     if (result) {
-      await this.repository.completeInvocation(userId, conversationId, runVersion, approval.invocationId, result.data);
+      await this.repository.completeInvocation(userId, conversationId, runVersion, approval.invocationId, result.data,
+        approval.toolName === "send_email" && result.data.deliveryStatus === "UNKNOWN" ? "UNKNOWN" : "SUCCEEDED");
       await this.turns.finishTurn(userId, conversationId, runVersion, result.answer);
     } else {
       const unknown = !(failure instanceof AgentContentToolsError) || failure.status >= 500;
       const message = unknown
-        ? "内容服务已收到请求但结果无法确认。系统没有重复执行非幂等操作；请检查计划或提醒状态后再决定下一步。"
+        ? approval.toolName === "send_email"
+          ? "本次邮件请求的结果无法确认；系统没有重新投递，请先核实收件情况和邮件记录。"
+          : "内容服务已收到请求但结果无法确认。系统没有重复执行非幂等操作；请检查计划或提醒状态后再决定下一步。"
         : failure instanceof Error ? failure.message : "内容操作未能完成";
       await this.repository.failInvocation(userId, conversationId, runVersion, approval.invocationId, message, unknown);
       await this.turns.finishTurn(userId, conversationId, runVersion, message);

@@ -50,6 +50,7 @@ export interface AgentToolApprovalRepository {
     runVersion: number,
     invocationId: string,
     result: unknown,
+    outcome?: "SUCCEEDED" | "UNKNOWN",
   ): Promise<number>;
   failInvocation(
     userId: number,

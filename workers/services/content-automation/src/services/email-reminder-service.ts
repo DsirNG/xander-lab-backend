@@ -155,9 +155,26 @@ export class EmailReminderService {
   ) {}
 
   async create(userId: number | null, value: unknown) {
+    return this.createTask(userId, value, false);
+  }
+
+  async sendImmediate(userId: number | null, value: unknown) {
+    const created = await this.createTask(userId, value, true);
+    const claimed = await this.repository.claimImmediate(userId!, created.id, this.now().toISOString());
+    if (claimed) await this.sendOne(claimed, this.now());
+    return publicTask(await this.requireOwned(userId, created.id), this.options.senderEmail);
+  }
+
+  private async createTask(userId: number | null, value: unknown, immediate: boolean) {
     if (!userId || userId < 1) throw new EmailReminderError(401, "未登录或登录已过期");
     if (!value || typeof value !== "object" || Array.isArray(value)) throw new EmailReminderError(400, "邮件提醒格式不正确");
     const body = value as Record<string, unknown>;
+    if (immediate && Object.keys(body).some((key) => !["clientRequestId", "recipientEmail", "subject", "message", "contentType"].includes(key))) {
+      throw new EmailReminderError(400, "即时邮件包含不支持的参数");
+    }
+    if (immediate && (typeof body.clientRequestId !== "string" || !body.clientRequestId.trim())) {
+      throw new EmailReminderError(400, "即时邮件需要幂等请求标识");
+    }
     const recipientEmail = typeof body.recipientEmail === "string" ? body.recipientEmail.trim().toLowerCase() : "";
     const subject = typeof body.subject === "string" ? body.subject.trim() : "";
     const message = typeof body.message === "string" ? body.message.trim() : "";
@@ -193,7 +210,9 @@ export class EmailReminderService {
     }
     const now = this.now();
     let scheduledAt: Date;
-    if (rawFrequency === "ONCE") {
+    if (immediate) {
+      scheduledAt = now;
+    } else if (rawFrequency === "ONCE") {
       const raw = body.scheduledAt;
       const parsed = typeof raw === "string" ? new Date(raw) : null;
       if (!parsed || !Number.isFinite(parsed.getTime()) || !/([zZ]|[+-]\d\d:\d\d)$/.test(raw as string)) {
@@ -208,17 +227,20 @@ export class EmailReminderService {
       scheduledAt = nextMonthly(timezone, sendTime, recurrenceDay!, now);
     }
     const lead = Math.max(1, this.options.minimumLeadSeconds ?? 30);
-    if (scheduledAt.getTime() <= now.getTime() + lead * 1000) {
+    if (!immediate && scheduledAt.getTime() <= now.getTime() + lead * 1000) {
       throw new EmailReminderError(400, "发送时间至少需要晚于当前时间 " + lead + " 秒");
     }
     const requestedTemplate = typeof body.templateId === "string" ? body.templateId.trim().toLowerCase() : "none";
     const explicitContentType = typeof body.contentType === "string" ? body.contentType.trim().toUpperCase() : "";
-    const contentType = explicitContentType
+    if (explicitContentType && !["PLAIN", "HTML"].includes(explicitContentType)) {
+      throw new EmailReminderError(400, "邮件内容类型无效");
+    }
+    const contentType = immediate && !explicitContentType ? "PLAIN" : explicitContentType
       ? explicitContentType === "HTML" ? "HTML" : "PLAIN"
       : TEMPLATES.has(requestedTemplate) && requestedTemplate !== "none"
         || /<\/?[a-z][^>]*>/i.test(message) ? "HTML" : "PLAIN";
     const task = await this.repository.create({
-      userId, clientRequestId, recipientEmail, subject, message, contentType,
+      userId, clientRequestId, deliveryMode: immediate ? "IMMEDIATE" : "SCHEDULED", recipientEmail, subject, message, contentType,
       templateId: TEMPLATES.has(requestedTemplate) ? requestedTemplate : "none",
       frequency: rawFrequency as EmailReminderCreateInput["frequency"], timezone,
       sendTime: rawFrequency === "ONCE" ? null : sendTime,
@@ -229,6 +251,10 @@ export class EmailReminderService {
     if ("kind" in task) {
       if (task.kind === "deleted-replay") throw new EmailReminderError(409, "该幂等请求标识已被删除任务使用，请生成新的标识");
       throw new EmailReminderError(429, "定时邮件任务已达到创建上限");
+    }
+    if (immediate && (task.deliveryMode !== "IMMEDIATE" || task.recipientEmail !== recipientEmail
+      || task.subject !== subject || task.message !== message || task.contentType !== contentType)) {
+      throw new EmailReminderError(409, "幂等请求标识已绑定另一封邮件");
     }
     return publicTask(task, this.options.senderEmail);
   }
@@ -257,6 +283,9 @@ export class EmailReminderService {
     if (typeof requestedStatus !== "string") throw new EmailReminderError(400, "请选择任务状态");
     const status = requestedStatus.toUpperCase();
     if (status !== "PENDING" && status !== "PAUSED") throw new EmailReminderError(400, "任务状态只支持 PENDING 或 PAUSED");
+    if (task.deliveryMode === "IMMEDIATE") {
+      throw new EmailReminderError(409, "即时邮件不能暂停或恢复重发；请先核实收件情况");
+    }
     if (status === task.status) return publicTask(task, this.options.senderEmail);
     let scheduledAt: string | null = null;
     if (status === "PAUSED") {
@@ -312,7 +341,7 @@ export class EmailReminderService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message.slice(0, 1000) : "邮件投递暂时失败";
-      await this.repository.fail(task, message, task.sendAttempts < 3, now.toISOString());
+      await this.repository.fail(task, message, task.deliveryMode !== "IMMEDIATE" && task.sendAttempts < 3, now.toISOString());
     }
   }
 

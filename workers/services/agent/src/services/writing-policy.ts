@@ -4,6 +4,9 @@ export const WRITING_POLICY = "普通写作请求默认直接在对话中给出�
 export function allowsBlogTask(history: { role: string; content: string }[]): boolean {
   const userIndex = history.map(item => item.role).lastIndexOf("user");
   const text = history[userIndex]?.content ?? "";
+  if (/^(?:继续|执行下一步|下一步|进度|咋样了|怎么样了|continue|next step)[？?！!。\s]*$/i.test(text.trim())) {
+    return allowsBlogTask(history.slice(0, userIndex));
+  }
   if (/(不要|不用|不需要).{0,8}(博客|文件|插图|配图)|直接.{0,8}(内容|正文|文字)|(?:no|without) (?:blog|files?|illustrations?)/i.test(text)) return false;
   if (/(博客|blog)|(?:发布|publish).{0,12}(?:文章|博客|post)/i.test(text)) return true;
   if (!/^(好[的啊]?|可以[的啊]?|行|需要|要|开始[吧]?|就这样|yes|ok|sure|go ahead)[，,。.!！\s]*$/i.test(text.trim())) return false;

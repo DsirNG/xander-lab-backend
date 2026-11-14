@@ -278,6 +278,29 @@ export class ContentAgentToolsMapper implements AgentContentToolsPort {
     return { data: { ok: true, planId: id, action: normalizedAction, ...(data ? { plan: data } : {}) }, answer: hint };
   }
 
+  async sendEmail(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult> {
+    const payload: Record<string, unknown> = { clientRequestId: requestId };
+    for (const key of ["recipientEmail", "subject", "message", "contentType"]) {
+      if (Object.hasOwn(args, key)) payload[key] = args[key];
+    }
+    const result = await this.call("/internal/content-automation/mail/send", userId, "POST", payload, 30_000);
+    const data = mutationData(result, "即时邮件发送结果无效")!;
+    if (!Number.isSafeInteger(data.id) || data.clientRequestId !== requestId || data.deliveryMode !== "IMMEDIATE"
+      || text(data.recipientEmail).toLowerCase() !== text(args.recipientEmail).toLowerCase()
+      || text(data.subject) !== text(args.subject) || text(data.message) !== text(args.message)
+      || !["PENDING", "SENDING", "SENT", "FAILED"].includes(text(data.status))) {
+      throw new AgentContentContractError(503, "邮件服务返回的结果与本次请求不匹配");
+    }
+    const deliveryStatus = data.status === "SENT" ? "ACCEPTED"
+      : data.status === "FAILED" ? "UNKNOWN" : data.status === "SENDING" ? "SENDING" : "QUEUED";
+    const answer = deliveryStatus === "ACCEPTED"
+      ? `本次邮件已由邮件服务接受，收件人 ${text(data.recipientEmail)}；尚未确认送达收件箱。`
+      : deliveryStatus === "UNKNOWN" ? "本次邮件投递未能确认，系统已停止自动重发，请先核实收件情况。"
+        : "本次邮件已提交，正在等待发送结果；尚未确认邮件服务接受或送达。";
+    return { data: { ok: deliveryStatus !== "UNKNOWN", deliveryStatus, email: data,
+      ...(deliveryStatus === "UNKNOWN" ? { error: answer } : {}) }, answer };
+  }
+
   async createEmailReminder(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult> {
     const payload: Record<string, unknown> = { clientRequestId: requestId };
     for (const key of [
@@ -311,7 +334,7 @@ export class ContentAgentToolsMapper implements AgentContentToolsPort {
     return { data: { ok: true, taskId: id, action: normalizedAction, ...(data ? { reminder: data } : {}) }, answer: hint };
   }
 
-  private async call(path: string, userId: number, method = "GET", body?: unknown): Promise<unknown> {
+  private async call(path: string, userId: number, method = "GET", body?: unknown, timeoutMs = 5_000): Promise<unknown> {
     const base = this.env.CONTENT_AUTOMATION_SERVICE_URL?.trim();
     const token = this.env.CONTENT_AUTOMATION_SERVICE_TOKEN;
     if (!base || !token) throw new Error("Content query contract is not configured");
@@ -326,7 +349,7 @@ export class ContentAgentToolsMapper implements AgentContentToolsPort {
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
-      redirect: "manual", signal: AbortSignal.timeout(5_000),
+      redirect: "manual", signal: AbortSignal.timeout(timeoutMs),
     });
     const response = this.env.CONTENT_AUTOMATION_SERVICE
       ? await this.env.CONTENT_AUTOMATION_SERVICE.fetch(request) : await fetch(request);

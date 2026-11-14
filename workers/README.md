@@ -152,6 +152,16 @@ settings from the shell for isolated local verification. `pnpm
 smoke:core-refresh` starts an isolated Core Worker and D1 database to exercise
 rotation, concurrent replay, reuse revocation, and logout through HTTP.
 
+Agent tool execution continues across intermediate results, with a maximum of
+20 calls per turn and duplicate-write protection. Ordinary memory, image resend,
+and quiz-recording results do not finish the whole request. Quiz delivery waits
+for user answers; approval pauses and the durable image task retain their own
+execution boundaries. Coordinator tool events carry a persisted invocation ID,
+also used during live delivery. Argument-dependent executor factories resolve
+each call separately; two blog generations receive distinct Content request
+keys. Web and Mini Program restore the latest result per invocation in its
+original turn rather than appending repeated delivery snapshots.
+
 Agent owns D1-backed conversation creation, listing, detail and message
 history reads. New message requests accept optional `locale` (`zh` / `en`) and
 `replyLanguage` (`auto` / `zh` / `en`). Explicit user language or translation

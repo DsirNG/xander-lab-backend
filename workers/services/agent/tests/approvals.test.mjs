@@ -237,3 +237,59 @@ test("approval routes authenticate, scope by owner, and validate decisions", asy
   assert.equal(unauthorized.status, 401);
   assert.deepEqual(calls, [["list", 42, 7], ["decide", 42, 7, 11, false, "cancel", null]]);
 });
+
+test("send_email approval binds exact content, executes that request once and rejects duplicate confirmations", async () => {
+  const { AgentContentToolsService } = await import("../.test-build/services/agent-content-tools-service.js");
+  const calls = [];
+  const contentTools = new AgentContentToolsService({
+    async sendEmail(...args) {
+      calls.push(args);
+      return { data: { ok: true, deliveryStatus: "ACCEPTED", email: { id: 21, ...args[1] } },
+        answer: "本次邮件已由邮件服务接受；尚未确认送达收件箱。" };
+    },
+  });
+  const { service, state } = createHarness({ contentTools });
+  const input = { recipientEmail: "owner@example.com", subject: "问候", message: "你在干嘛" };
+  await service.requestContentMutation(42, 7, 3, "send_email", input);
+  input.message = "later edit must not change the approved mail";
+  assert.equal(calls.length, 0);
+  assert.equal(state.pending.toolName, "send_email");
+  assert.equal(JSON.parse(state.pending.argumentsJson).message, "你在干嘛");
+  await service.decide(42, 7, 11, true, null);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], [42, { recipientEmail: "owner@example.com", subject: "问候", message: "你在干嘛" }, state.pending.invocationId]);
+  assert.equal(state.completed[0][4].email.message, "你在干嘛");
+  assert.match(state.finished[0][3], /尚未确认送达/);
+  await assert.rejects(service.decide(42, 7, 11, true, null), error => error.status === 409);
+  assert.equal(calls.length, 1);
+});
+
+test("rejected or cross-owner email approval never sends", async () => {
+  let sends = 0;
+  const { service } = createHarness({ contentTools: { async executeApprovedMutation() { sends++; } } });
+  await service.requestContentMutation(42, 7, 3, "send_email", {
+    recipientEmail: "owner@example.com", subject: "问候", message: "你在干嘛",
+  });
+  await assert.rejects(service.decide(99, 7, 11, true, null), error => error.status === 404);
+  await service.decide(42, 7, 11, false, null);
+  assert.equal(sends, 0);
+});
+
+test("transient immediate-mail response retries only the exact approved invocation", async () => {
+  const calls = [];
+  const { service, state } = createHarness({ contentTools: { async executeApprovedMutation(...args) {
+    calls.push(args);
+    if (calls.length === 1) throw new AgentContentToolsError(503, "response lost");
+    return { data: { ok: false, deliveryStatus: "UNKNOWN", email: { id: 21, message: "你在干嘛" } },
+      answer: "本次邮件投递未能确认，系统已停止自动重发。" };
+  } } });
+  await service.requestContentMutation(42, 7, 3, "send_email", {
+    recipientEmail: "owner@example.com", subject: "问候", message: "你在干嘛",
+  });
+  await service.decide(42, 7, 11, true, null);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0], calls[1]);
+  assert.equal(state.completed[0][4].deliveryStatus, "UNKNOWN");
+  assert.equal(state.completed[0][5], "UNKNOWN");
+  assert.match(state.finished[0][3], /未能确认/);
+});

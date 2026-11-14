@@ -1,5 +1,36 @@
 # Backend Architecture
 
+## Web payment handoff to the mini program
+
+Core owns `/api/payment-handoffs`: a five-minute Redis navigation intent bound to
+the authenticated user, product, quantity, and optional existing order number.
+The WeChat QR mapper targets `pages/scan-payment/index`; QR codes carry only an
+opaque ticket, never login tokens or payment signatures. Both reading and attaching
+an order require the creator account. Atomic first-order attachment preserves the
+original expiry and allows mobile retries to reuse the same pending order.
+
+The Payment Worker remains the owner of catalog validation, purchase eligibility,
+orders, payment signatures, reconciliation, delivery, and proportional refunds.
+An attached order number is advisory metadata: Web confirms delivery only through
+the authenticated Payment API before refreshing account and wallet information.
+The mini program uses a fresh `Taro.login` code and the existing virtual payment
+flow. Publish its new scan-payment page before enabling the Web QR entry, and
+deploy Core and Gateway together. No D1 schema migration is required.
+
+## Workers immediate email
+
+Agent's `send_email` tool persists the exact recipient, subject and body in the
+owner-scoped approval. Approval dispatches to Content's service-authenticated
+`POST /internal/content-automation/mail/send`; the public Gateway does not expose
+this route. Content owns the durable email task and atomically claims that task.
+The owner and approval invocation ID bind retries to the same task; changed
+payloads with the same key are rejected. Cron recovers unclaimed immediate tasks,
+but an attempted immediate delivery is never automatically resent. Stale claims
+stop for reconciliation. Platform Integration remains the mail-provider adapter.
+Results identify this exact request and distinguish queued, sending, accepted by
+the mail service, and unknown outcomes; acceptance is not an inbox delivery receipt.
+Deploy Content migration `0016` before the Content and Agent workers.
+
 ## Workers image task execution
 
 Agent image generation is owned by an `AgentImageTaskObject` Durable Object alarm,
@@ -625,3 +656,14 @@ Payment 管理订单列表、7天退款窗口、比例金额与退款状态；Co
 - 分支请求以 `(user_id, fork_key)` 唯一约束去重；重试返回同一分支。返回历史快照后，小程序对新会话调用现有流式发送接口；编辑取消不调用分支接口，分支阶段停止不会取消原会话。
 - `POST /api/agent/conversations/{id}/title` 接收 1–100 字符的非空标题，数据库更新按当前用户隔离。Gateway 路由清单同步登记，沿用会话私有鉴权策略。
 - 部署前执行 Agent 迁移 `0011_agent_conversation_forks.sql`；新增字段为可空兼容字段。
+## Agent public web research
+
+Agent owns `agent_web_settings` in its D1 and the admin-only
+`/api/admin/agent-web-search` settings/test routes. Gateway enforces ADMIN; Agent
+checks administrator identity again. Tavily adapters implement a local research
+port, while the Agent service owns validation, per-turn budgets and evidence.
+Keys are write-only and AES-GCM encrypted. Main and delegated tools share the
+existing execution pipeline and durable invocation events. The Web frontend
+renders the same source cards for live and restored owned conversations.
+An explicit admin disable suppresses both custom tools and upstream native search.
+See `../workers/services/agent/WEB_RESEARCH.md` for deployment and runtime limits.

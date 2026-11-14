@@ -3,6 +3,10 @@ opaque references from Core; this schema deliberately has no foreign key to
 Core's D1. Local article/file bytes stay in OSS and are represented by
 attachment metadata only.
 
+`0012_agent_web_settings.sql` adds the admin-managed platform search switch and
+AES-GCM encrypted Tavily key. See `../WEB_RESEARCH.md` for configuration, rollout,
+source evidence and verification. Apply it to Agent D1 before using the admin UI.
+
 `0001_agent_conversations.sql` creates conversation and message storage;
 `0002_agent_events.sql` adds the replayable SSE event log;
 `0003_agent_skills.sql` adds immutable, user-owned Skill versions;

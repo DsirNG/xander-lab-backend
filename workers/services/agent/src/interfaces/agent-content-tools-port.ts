@@ -20,6 +20,7 @@ export interface AgentContentToolsPort {
   activatePlanSeries(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult>;
   retryPlanSeries(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult>;
   updatePlan(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult>;
+  sendEmail(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult>;
   createEmailReminder(userId: number, args: Record<string, unknown>, requestId: string): Promise<AgentContentQueryResult>;
   updateEmailReminder(userId: number, args: Record<string, unknown>): Promise<AgentContentQueryResult>;
 }

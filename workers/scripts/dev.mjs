@@ -106,6 +106,7 @@ const agentImageModelEnvironmentKeys = [
   "AGENT_IMAGE_MODEL_API_STYLE",
 ];
 const agentMcpSecretEnvironmentKeys = ["AGENT_MCP_CREDENTIAL_ENCRYPTION_KEY"];
+const agentWebSecretEnvironmentKeys = ["TAVILY_API_KEY", "AGENT_WEB_CREDENTIAL_ENCRYPTION_KEY"];
 const agentOssEnvironmentKeys = [
   "ALIYUN_OSS_ENDPOINT",
   "ALIYUN_OSS_BUCKET",
@@ -313,6 +314,13 @@ async function localConfigFor(service) {
     }
     if (process.env.AGENT_MCP_CLIENT_ENABLED === "true") {
       config.vars = { ...config.vars, AGENT_MCP_CLIENT_ENABLED: "true" };
+    }
+    if (agentWebSecretEnvironmentKeys.some(key => process.env[key])) {
+      config.secrets = { ...config.secrets,
+        required: [...new Set([...(config.secrets?.required ?? []), ...agentWebSecretEnvironmentKeys.filter(key => process.env[key])])] };
+    }
+    if (process.env.AGENT_WEB_SEARCH_ENABLED) {
+      config.vars = { ...config.vars, AGENT_WEB_SEARCH_ENABLED: process.env.AGENT_WEB_SEARCH_ENABLED };
     }
     if (process.env.AGENT_OSS_OBJECT_PREFIX) {
       config.vars = { ...config.vars, AGENT_OSS_OBJECT_PREFIX: process.env.AGENT_OSS_OBJECT_PREFIX };
@@ -525,6 +533,8 @@ try {
             ...Object.fromEntries(agentImageModelEnvironmentKeys.flatMap((key) =>
               process.env[key] ? [[key, process.env[key]]] : [])),
             ...Object.fromEntries(agentMcpSecretEnvironmentKeys.flatMap((key) =>
+              process.env[key] ? [[key, process.env[key]]] : [])),
+            ...Object.fromEntries(agentWebSecretEnvironmentKeys.flatMap((key) =>
               process.env[key] ? [[key, process.env[key]]] : [])),
           }
           : {}),

@@ -26,6 +26,12 @@ const routeToService = {
   "admin-put-admin-virtual-pay-settings": "payment",
 };
 const workersOwnedRoutes = [
+  { method: "GET", path: "/api/admin/agent-web-search", service: "agent" },
+  { method: "PUT", path: "/api/admin/agent-web-search", service: "agent" },
+  { method: "POST", path: "/api/admin/agent-web-search/test", service: "agent" },
+  { method: "POST", path: "/api/payment-handoffs", service: "core" },
+  { method: "GET", path: "/api/payment-handoffs/*", service: "core" },
+  { method: "POST", path: "/api/payment-handoffs/*", service: "core" },
   { method: "GET", path: "/api/virtual-pay/orders", service: "payment" },
   { method: "GET", path: "/api/virtual-pay/orders/*/refund-quote", service: "payment" },
   { method: "GET", path: "/api/virtual-pay/orders/*/refund-status", service: "payment" },

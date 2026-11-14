@@ -1,5 +1,42 @@
 /** Additional public business notices shared by the API language boundary. */
 export const businessNotices: Record<string, string> = Object.fromEntries(`
+邮件服务返回的结果与本次请求不匹配|The mail service returned a result for a different request
+即时邮件请求缺少幂等标识|An idempotency key is required for immediate email
+邮件缺少收件邮箱、主题或正文|The recipient email, subject and body are required
+即时邮件参数无效|Invalid immediate email parameters
+即时邮件包含不支持的参数|The immediate email request contains unsupported fields
+即时邮件需要幂等请求标识|An idempotency key is required for immediate email
+邮件内容类型无效|Invalid email content type
+幂等请求标识已绑定另一封邮件|The idempotency key is already bound to another email
+即时邮件不能暂停或恢复重发；请先核实收件情况|Immediate email cannot be paused or resent. Please check whether it was received first
+搜索配置服务暂不可用|Search settings are temporarily unavailable
+搜索服务返回了无效结果|The search service returned an invalid result
+无法读取此网页，可能需要登录或网站限制了访问|Unable to read this page. Sign-in may be required or access may be restricted
+网页资料过大，请缩小查询范围|The page is too large. Narrow your query
+联网资料服务超时，请稍后重试|The web research service timed out. Please try again later
+联网资料服务暂时不可用|The web research service is temporarily unavailable
+请输入公开的 HTTP 或 HTTPS 网页地址|Enter a public HTTP or HTTPS page URL
+网页地址格式不正确|Invalid page URL
+仅支持公开网站，不能读取本机、内网、IP 地址或带凭据的网址|Only public websites are supported. Local, private-network, IP-address and credential-bearing URLs are not allowed
+搜索关键词需要 1 至 500 个字符|Search queries must contain 1 to 500 characters
+搜索结果数量需为 1 至 8|The search result count must be between 1 and 8
+搜索时间范围不合法|Invalid search time range
+最多指定 5 个网站域名|Specify at most 5 website domains
+请提供不带路径的网站域名|Provide website domains without paths
+本轮搜索次数已用完，请基于已有资料回答并说明未确认事项|The search limit for this turn has been reached. Answer from the available sources and note any uncertainty
+正文长度需为 1000 至 12000 个字符|The page content limit must be between 1000 and 12000 characters
+本轮网页读取预算已用完，请基于已有资料回答|The page-reading budget for this turn has been reached. Answer from the available sources
+网页没有可读取的正文|This page has no readable content
+搜索配置格式不正确|Invalid search settings format
+搜索配置参数不合法|Invalid search settings parameters
+API Key 格式不正确|Invalid API key format
+不能同时更新和清除 API Key|The API key cannot be updated and cleared in the same request
+启用联网搜索前请先配置 API Key|Configure an API key before enabling web search
+请先保存并启用联网搜索配置|Save and enable web search settings first
+搜索服务连接失败，请检查 API Key、账户额度或稍后重试|Unable to connect to the search service. Check the API key and account balance, or try again later
+搜索凭据加密密钥未正确配置|The search credential encryption key is not configured correctly
+搜索凭据无法读取，请重新保存 API Key|Unable to read search credentials. Save the API key again
+支付二维码已过期，或小程序与网页账号不一致|The payment QR code has expired, or the mini program and web accounts do not match
 文档服务尚未配置|The document service is not configured
 emit_artifact 的文档路径过长|The document artifact path is too long
 emit_artifact 文档内容不能超过 200000 字符|Document artifact content must not exceed 200000 characters

@@ -5,6 +5,26 @@ import gatewayWorker from "../.test-build/index.js";
 
 const secret = "gateway-local-test-secret-with-at-least-32-bytes";
 
+test("web search settings routes require ADMIN and forward to Agent rather than Core", async () => {
+  const forwarded = [];
+  await withFetch(async (input, init) => {
+    const request = asRequest(input, init);
+    if (new URL(request.url).pathname === "/internal/agent/auth/resolve") return authResolverResponse(17);
+    forwarded.push(request);
+    return Response.json({ code: 200, message: "success", data: { enabled: false } });
+  }, async () => {
+    for (const [method, suffix] of [["GET", ""], ["PUT", ""], ["POST", "/test"]]) {
+      const url = `https://gateway.example/api/admin/agent-web-search${suffix}`;
+      assert.equal((await gatewayWorker.fetch(new Request(url, { method }), environment())).status, 401);
+      assert.equal((await gatewayWorker.fetch(new Request(url, { method, headers: { authorization: `Bearer ${signToken()}` } }), environment())).status, 403);
+      const response = await gatewayWorker.fetch(new Request(url, { method, headers: { authorization: `Bearer ${signToken({ role: "ADMIN" })}` } }), environment());
+      assert.equal(response.status, 200);
+      assert.equal(new URL(forwarded.at(-1).url).origin, "https://agent.example");
+    }
+    assert.equal(forwarded.length, 3);
+  });
+});
+
 test("CSDN connection test rejects anonymous callers and forwards the resolved owner only", async () => {
   let forwarded;
   await withFetch(async (input, init) => {
@@ -552,4 +572,13 @@ test("virtual order list and refund reads/writes require identity and forward on
    assert.equal(new URL(forwarded.url).origin,'https://payment.example');assert.equal(forwarded.headers.get('x-user-id'),'17');
   });
  }
+});
+
+test("internal immediate-email sending is never exposed through the public Gateway", async () => {
+  const response = await gatewayWorker.fetch(new Request(
+    "https://gateway.example/internal/content-automation/mail/send", {
+      method: "POST", headers: { authorization: "Bearer " + signToken(), "x-user-id": "17" },
+      body: JSON.stringify({ recipientEmail: "owner@example.test" }),
+    }), environment());
+  assert.equal(response.status, 404);
 });

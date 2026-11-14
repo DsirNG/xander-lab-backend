@@ -121,3 +121,17 @@ test('a successful image response arriving after stop never starts storage or bi
     if (cancelled) throw new DOMException('stopped', 'AbortError');
   }), { name: 'AbortError' });
 });
+
+test('recent tool context is conversation scoped, ordered and bounded', async () => {
+  const { sql, repository } = database();
+  try {
+    sql.exec("INSERT INTO agent_conversation (id,user_id,title,status,run_version) VALUES (8,99,'foreign','running',1)");
+    const insert = sql.prepare("INSERT INTO agent_event (conversation_id,run_version,event_type,data_content) VALUES (?,3,?,?)");
+    for (let id = 1; id <= 45; id++) insert.run(7, 'tool_result', JSON.stringify({ id }));
+    insert.run(8, 'tool_result', JSON.stringify({ id: 'foreign' }));
+    insert.run(7, 'answer_delta', 'not a tool');
+    const results = await repository.recentToolResults(7);
+    assert.equal(results.length, 40);
+    assert.deepEqual(results.map(result => result.id), Array.from({ length: 40 }, (_, index) => index + 6));
+  } finally { sql.close(); }
+});

@@ -200,3 +200,16 @@ test("BlogAgent stores large task and version bodies through the OSS port and ke
   assert.ok(completeEvent);
   assert.ok(completeEvent.dataContent.length < 4_000);
 });
+
+test("internal generated source lookup is token protected, owner scoped and hydrated from storage", async () => {
+  const state = setup({ large: true });
+  const task = await state.serviceWithStorage.create(42, "Write a large article", "source-lookup");
+  const completed = await state.serviceWithStorage.run(42, task.id);
+  const headers = { "x-dinqor-service-token": "content-token" };
+  for (const [userId, suppliedHeaders, status] of [[42, {}, 404], [99, headers, 404], [42, headers, 200]]) {
+    const response = await handleBlogAgentTaskRequest(request("/internal/agent/blogagent/read-content", "POST",
+      { userId, taskId: task.id }, suppliedHeaders), state.env, state.serviceWithStorage);
+    assert.equal(response.status, status);
+    if (status === 200) assert.equal((await response.json()).content, completed.task.content);
+  }
+});

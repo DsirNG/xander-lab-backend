@@ -2,7 +2,7 @@ import type { AgentBlogAgentPort, AgentBlogTaskSummary } from "../interfaces/age
 import { fetchWithServiceBinding } from "@dinqor/worker-runtime";
 import type { ContentAgentPublicationEnvironment } from "./content-agent-publication-mapper.js";
 
-const MAX_JSON_BYTES = 64 * 1024;
+const MAX_JSON_BYTES = 1024 * 1024;
 const MAX_STREAM_BYTES = 4 * 1024 * 1024;
 
 async function readLimited(response: Response, max: number): Promise<string> {
@@ -72,6 +72,7 @@ function summary(value: unknown): AgentBlogTaskSummary | null {
     id: row.id as number,
     title: typeof row.title === "string" ? row.title : "",
     summary: typeof row.summary === "string" ? row.summary : "",
+    content: typeof row.content === "string" ? row.content : "",
     publishedPostId: Number.isSafeInteger(row.publishedPostId) ? row.publishedPostId as number : null,
     status: typeof row.status === "string" ? row.status : "",
     generationMode: row.generationMode === "quick" ? "quick" : "full",
@@ -93,6 +94,12 @@ export class AgentBlogAgentError extends Error {
 /** The Agent talks to Content through a versioned HTTPS service-authenticated task contract. */
 export class ContentAgentBlogAgentMapper implements AgentBlogAgentPort {
   constructor(private readonly env: ContentAgentPublicationEnvironment) {}
+
+  async readContent(userId: number, taskId: number): Promise<string> {
+    const value = await this.post("/internal/agent/blogagent/read-content", { userId, taskId });
+    return value && typeof value === "object" && typeof (value as Record<string, unknown>).content === "string"
+      ? (value as { content: string }).content : "";
+  }
 
   async cancel(userId: number, clientRequestId: string): Promise<void> {
     await this.post("/internal/agent/blogagent/cancel", { userId, clientRequestId });

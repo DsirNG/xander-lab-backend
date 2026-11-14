@@ -214,6 +214,11 @@ export const ROUTES =
   },
   {
     "method": "POST",
+    "path": "/api/admin/agent-web-search/test",
+    "service": "agent"
+  },
+  {
+    "method": "POST",
     "path": "/api/admin/alipay/orders/*/refund",
     "service": "payment"
   },
@@ -396,6 +401,16 @@ export const ROUTES =
     "method": "PATCH",
     "path": "/api/email-reminders/{id}/status",
     "service": "content-automation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/admin/agent-web-search",
+    "service": "agent"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/admin/agent-web-search",
+    "service": "agent"
   },
   {
     "method": "DELETE",
@@ -678,6 +693,16 @@ export const ROUTES =
     "service": "platform-integration"
   },
   {
+    "method": "GET",
+    "path": "/api/payment-handoffs/*",
+    "service": "core"
+  },
+  {
+    "method": "POST",
+    "path": "/api/payment-handoffs/*",
+    "service": "core"
+  },
+  {
     "method": "ANY",
     "path": "/api/blog-plan-series/**",
     "service": "content-automation"
@@ -751,6 +776,11 @@ export const ROUTES =
     "method": "POST",
     "path": "/api/mcp/oauth/revoke",
     "service": "platform-integration"
+  },
+  {
+    "method": "POST",
+    "path": "/api/payment-handoffs",
+    "service": "core"
   },
   {
     "method": "GET",

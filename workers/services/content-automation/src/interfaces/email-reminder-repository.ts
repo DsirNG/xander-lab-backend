@@ -5,6 +5,7 @@ export interface EmailReminderTask {
   id: number;
   userId: number;
   clientRequestId: string;
+  deliveryMode: "SCHEDULED" | "IMMEDIATE";
   recipientEmail: string;
   subject: string;
   message: string;
@@ -46,6 +47,7 @@ export interface EmailReminderRepository {
   listMine(input: { userId: number; status: string | null; search: string; page: number; size: number }): Promise<EmailReminderPage>;
   updateStatus(userId: number, taskId: number, status: "PENDING" | "PAUSED", scheduledAt: string | null, now: string): Promise<boolean>;
   softDelete(userId: number, taskId: number, now: string): Promise<"deleted" | "sending" | "missing">;
+  claimImmediate(userId: number, taskId: number, now: string): Promise<EmailReminderTask | null>;
   claimDue(now: string, staleBefore: string, retryBefore: string, limit: number): Promise<EmailReminderTask[]>;
   finish(task: EmailReminderTask, nextScheduledAt: string | null, now: string): Promise<boolean>;
   fail(task: EmailReminderTask, message: string, retry: boolean, now: string): Promise<void>;

@@ -46,10 +46,18 @@ import { AgentImageService } from "./services/agent-image-service.js";
 import { AgentContentToolsService } from "./services/agent-content-tools-service.js";
 import { AgentWeatherService } from "./services/agent-weather-service.js";
 import { DocumentArtifactService } from "./services/document-artifact-service.js";
+import { AgentWebResearchService } from "./services/agent-web-research-service.js";
+import { TavilyWebResearchMapper } from "./mappers/tavily-web-research-mapper.js";
+import { D1AgentWebSettingsMapper } from "./mappers/d1-agent-web-settings-mapper.js";
+import { AgentWebSettingsService } from "./services/agent-web-settings-service.js";
+import { handleAgentWebSettingsRequest } from "./controllers/agent-web-settings-controller.js";
 
 const agentService = createBusinessService<AgentEnvironment>("agent", async (request, env, context) => {
   const auth = new AgentAuthService(env.JWT_SECRET, new CoreAuthMapper(env));
   const resolveUser = () => auth.currentUserId(request);
+  const webSettings = new AgentWebSettingsService(new D1AgentWebSettingsMapper(env.DB), env, key => new TavilyWebResearchMapper(key));
+  const webSettingsResponse = await handleAgentWebSettingsRequest(request, webSettings, auth);
+  if (webSettingsResponse) return webSettingsResponse;
   const contentMedia = new ContentAgentMediaMapper(env);
   const billing = new CoreAgentBillingMapper(env);
   const attachmentService = new AgentAttachmentService(
@@ -85,6 +93,10 @@ const agentService = createBusinessService<AgentEnvironment>("agent", async (req
     contentTools,
     env.IMAGE_TASKS ? new DurableAgentImageTaskMapper(env.IMAGE_TASKS) : undefined,
     new DocumentArtifactService(attachmentService),
+    new AgentWebResearchService(undefined, async () => {
+      const settings = await webSettings.runtime();
+      return { provider: settings.apiKey ? new TavilyWebResearchMapper(settings.apiKey) : undefined, allowNativeSearch: settings.allowNativeSearch };
+    }),
   );
   const approvalResponse = await handleAgentApprovalRequest(request, approvalService, resolveUser);
   if (approvalResponse) return approvalResponse;

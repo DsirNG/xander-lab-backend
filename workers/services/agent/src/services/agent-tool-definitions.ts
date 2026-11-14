@@ -120,8 +120,9 @@ export const QUIZ_TOOLS: AgentFunctionTool[] = [{
             prompt: { type: "string", maxLength: 500 },
             type: { type: "string", enum: ["single", "multiple", "text"] },
             options: { type: "array", maxItems: 8, items: { type: "string", maxLength: 200 } },
+            correctAnswers: { type: "array", maxItems: 8, items: { type: "string", maxLength: 200 }, description: "Choice questions: privately verify the correct option text here. Every correct answer must exist in options. This field is removed before the card reaches the user." },
           },
-          required: ["prompt", "type"],
+          required: ["prompt", "type", "correctAnswers"],
           additionalProperties: false,
         },
       },
@@ -215,11 +216,11 @@ export const IMAGE_GENERATION_TOOLS: AgentFunctionTool[] = [{
 
 export const IMAGE_RESEND_TOOLS: AgentFunctionTool[] = [{
   name: "image_resend",
-  description: "仅重新发送已经存在的图片，不生成新图。用户明确要看上传过的原图时使用 latest_uploaded；用户要看已有素材库图片时使用 asset_id，必须有真实已知的 assetId，不得猜测。用户要看你自己的形象照或自拍（包括讨论你的外貌后说给我看看）时使用 assistant_portrait，查找已保存的形象照片；没有照片会明确说明，绝不自动生成。",
+  description: "仅重新发送已经存在的图片，不生成新图。重发刚才在本会话生成的图片时使用 latest_generated，由服务端读取真实素材ID，不要猜测。用户明确要看上传过的原图时使用 latest_uploaded；用户要看已有素材库图片时使用 asset_id，必须有真实已知的 assetId，不得猜测。用户要看你自己的形象照或自拍（包括讨论你的外貌后说给我看看）时使用 assistant_portrait，查找已保存的形象照片；没有照片会明确说明，绝不自动生成。",
   parameters: {
     type: "object",
     properties: {
-      source: { type: "string", enum: ["latest_uploaded", "asset_id", "assistant_portrait"] },
+      source: { type: "string", enum: ["latest_uploaded", "asset_id", "assistant_portrait", "latest_generated"] },
       assetId: { type: "integer", minimum: 1 },
     },
     required: ["source"], additionalProperties: false,
@@ -293,7 +294,7 @@ export const SUBTASK_MAX_FINDINGS_CHARS = 4000;
 export const SUBTASK_MAX_OBSERVATION_CHARS = 1200;
 export const SUBTASK_READ_ONLY_TOOLS = new Set([
   "query_knowledge", "query_posts", "query_plans", "query_plan_series", "query_email_reminders",
-  "query_unsynced_posts", "recall_memory",
+  "query_unsynced_posts", "recall_memory", "search_web", "read_webpage",
 ]);
 
 export const CONTENT_MUTATION_TOOLS: AgentFunctionTool[] = [
@@ -371,8 +372,17 @@ export const CONTENT_MUTATION_TOOLS: AgentFunctionTool[] = [
     }, required: ["planId", "action"], additionalProperties: false },
   },
   {
+    name: "send_email",
+    description: "立即向邮箱发送邮件。用户要求现在或立即发邮件时使用；收件人和内容明确时调用此工具生成审批，不要只在正文中口头要求确认。主题未指定时根据正文拟定简短主题供审批。确认后按本次收件人、主题和正文执行。查询历史提醒不能代替发送，历史已发送状态不能证明本次发送。邮件服务接受不代表已送达收件箱。",
+    parameters: { type: "object", properties: {
+      recipientEmail: { type: "string", maxLength: 254 }, subject: { type: "string", minLength: 1, maxLength: 200 },
+      message: { type: "string", minLength: 1, maxLength: 10_000 },
+      contentType: { type: "string", enum: ["PLAIN", "HTML"], description: "默认 PLAIN，保留用户正文原文" },
+    }, required: ["recipientEmail", "subject", "message"], additionalProperties: false },
+  },
+  {
     name: "email_reminder",
-    description: "创建定时邮件提醒，创建前必须经用户审批。支持一次性或周期发送；用户要求在指定时间向邮箱发送邮件时使用。",
+    description: "创建定时邮件提醒，创建前必须经用户审批。支持一次性或周期发送；用户要求在指定时间向邮箱发送邮件时使用。立即发送使用 send_email，不得查询历史记录冒充本次发送。",
     parameters: { type: "object", properties: {
       recipientEmail: { type: "string", maxLength: 254 }, subject: { type: "string", maxLength: 200 },
       message: { type: "string", minLength: 1, maxLength: 10_000 },

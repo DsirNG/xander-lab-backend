@@ -11,7 +11,7 @@ type ReminderRow = Omit<EmailReminderTask, "id" | "userId" | "sendAttempts" | "r
   intervalDays: number | null;
 };
 
-const SELECT = `SELECT id, user_id AS userId, client_request_id AS clientRequestId,
+const SELECT = `SELECT id, user_id AS userId, client_request_id AS clientRequestId, delivery_mode AS deliveryMode,
   recipient_email AS recipientEmail, subject, message, content_type AS contentType,
   template_id AS templateId, frequency, timezone, send_time AS sendTime,
   recurrence_day AS recurrenceDay, interval_days AS intervalDays, scheduled_at AS scheduledAt,
@@ -39,11 +39,11 @@ export class D1EmailReminderMapper implements EmailReminderRepository {
 
     const inserted = await this.db.prepare(`
       INSERT INTO email_reminder_task (
-        user_id, client_request_id, recipient_email, subject, message, content_type, template_id,
+        user_id, client_request_id, delivery_mode, recipient_email, subject, message, content_type, template_id,
         frequency, timezone, send_time, recurrence_day, interval_days, scheduled_at,
         status, send_attempts, created_at, updated_at
       )
-      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?
+      SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', 0, ?, ?
       WHERE (SELECT COUNT(*) FROM email_reminder_task
              WHERE user_id = ? AND deleted_at IS NULL AND status IN ('PENDING', 'PAUSED', 'SENDING')) < 50
         AND (SELECT COUNT(*) FROM email_reminder_task
@@ -51,7 +51,7 @@ export class D1EmailReminderMapper implements EmailReminderRepository {
       ON CONFLICT(user_id, client_request_id) DO NOTHING
       RETURNING id
     `).bind(
-      input.userId, input.clientRequestId, input.recipientEmail, input.subject, input.message,
+      input.userId, input.clientRequestId, input.deliveryMode, input.recipientEmail, input.subject, input.message,
       input.contentType, input.templateId, input.frequency, input.timezone, input.sendTime,
       input.recurrenceDay, input.intervalDays, input.scheduledAt, input.now, input.now,
       input.userId, input.userId, new Date(Date.parse(input.now) - 86_400_000).toISOString(),
@@ -125,6 +125,20 @@ export class D1EmailReminderMapper implements EmailReminderRepository {
     return row?.status === "SENDING" ? "sending" : "missing";
   }
 
+  async claimImmediate(userId: number, taskId: number, now: string): Promise<EmailReminderTask | null> {
+    const token = crypto.randomUUID();
+    // A durable claim fences replayed approvals and concurrent cron scans.
+    const claimed = await this.db.prepare(`UPDATE email_reminder_task SET status = 'SENDING',
+      processing_token = ?, claimed_at = ?, send_attempts = 1, error_message = NULL, updated_at = ?
+      WHERE id = ? AND user_id = ? AND delivery_mode = 'IMMEDIATE'
+        AND status = 'PENDING' AND send_attempts = 0 AND deleted_at IS NULL
+      RETURNING id`).bind(token, now, now, taskId, userId).first<{ id: number }>();
+    if (!claimed) return null;
+    const row = await this.db.prepare(`${SELECT} WHERE id = ? AND user_id = ? AND processing_token = ?`)
+      .bind(taskId, userId, token).first<ReminderRow>();
+    return row ? map(row) : null;
+  }
+
   async claimDue(now: string, staleBefore: string, retryBefore: string, limit: number): Promise<EmailReminderTask[]> {
     await this.db.prepare(`UPDATE email_reminder_task SET status = 'FAILED', processing_token = NULL,
       claimed_at = NULL, error_message = ?, updated_at = ?
@@ -132,14 +146,15 @@ export class D1EmailReminderMapper implements EmailReminderRepository {
       .bind("发送进程意外中断，任务已停止以避免重复发送，请手动恢复后重试", now, staleBefore).run();
     const due = await this.db.prepare(`SELECT id FROM email_reminder_task
       WHERE status = 'PENDING' AND deleted_at IS NULL AND scheduled_at <= ?
-        AND (send_attempts = 0 OR updated_at <= ?)
+        AND (send_attempts = 0 OR (delivery_mode = 'SCHEDULED' AND updated_at <= ?))
       ORDER BY scheduled_at, id LIMIT ?`).bind(now, retryBefore, limit).all<{ id: number }>();
     const claimed: EmailReminderTask[] = [];
     for (const item of due.results) {
       const token = crypto.randomUUID();
       const update = await this.db.prepare(`UPDATE email_reminder_task SET status = 'SENDING',
         processing_token = ?, claimed_at = ?, send_attempts = send_attempts + 1, error_message = NULL, updated_at = ?
-        WHERE id = ? AND status = 'PENDING' AND deleted_at IS NULL AND scheduled_at <= ?`)
+        WHERE id = ? AND status = 'PENDING' AND deleted_at IS NULL AND scheduled_at <= ?
+          AND (send_attempts = 0 OR delivery_mode = 'SCHEDULED')`)
         .bind(token, now, now, item.id, now).run();
       if (update.meta.changes !== 1) continue;
       const row = await this.db.prepare(`${SELECT} WHERE id = ?`).bind(item.id).first<ReminderRow>();

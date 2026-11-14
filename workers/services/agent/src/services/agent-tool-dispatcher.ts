@@ -29,7 +29,8 @@ export class AgentToolDispatcher {
   }
 
   resolve(name: string, args: Record<string, unknown>): AgentTool | undefined {
-    return this.tools.get(name) ?? this.factories.get(name)?.(args);
+    // Factories may capture call arguments; a previous executor must not shadow a new call.
+    return this.factories.get(name)?.(args) ?? this.tools.get(name);
   }
 
   async execute(call: AgentToolCall, context: AgentToolContext): Promise<AgentToolResult> {

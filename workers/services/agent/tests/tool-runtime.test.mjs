@@ -70,6 +70,17 @@ test("tool dispatcher reuses one pipeline for registered and factory tools", asy
   assert.equal(dispatcher.has("dynamic"), true);
 });
 
+test("a factory uses each call's arguments instead of reusing the first captured input", async () => {
+  const dispatcher = new AgentToolDispatcher(new Map());
+  dispatcher.registerFactory("generate", args => tool("generate", false,
+    async () => ({ ok: true, data: args.topic })));
+  const first = await dispatcher.execute({ name: "generate", arguments: { topic: "state" } }, context);
+  const second = await dispatcher.execute({ name: "generate", arguments: { topic: "events" } },
+    { ...context, invocationId: "inv-2", idempotencyKey: "key-2" });
+  assert.equal(first.data, "state");
+  assert.equal(second.data, "events");
+});
+
 test("tool dispatcher can route orchestration through a registered handler", async () => {
   const dispatcher = new AgentToolDispatcher(new Map([["handled", tool("handled", true, async () => ({ data: "runtime" }))]]));
   dispatcher.registerHandler("handled", async () => ({ ok: true, data: "handler" }));
