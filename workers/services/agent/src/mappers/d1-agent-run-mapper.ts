@@ -39,7 +39,7 @@ export class D1AgentRunMapper implements AgentTurnRepository {
           run_version = run_version + 1,
           run_started_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-      WHERE id = ? AND user_id = ? AND status <> 'running'
+      WHERE id = ? AND user_id = ? AND status NOT IN ('running', 'awaiting_approval')
       RETURNING run_version AS runVersion
     `).bind(conversationId, userId).first<{ runVersion: number }>();
     if (!claimed) return null;

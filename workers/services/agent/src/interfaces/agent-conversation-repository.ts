@@ -18,6 +18,8 @@ export interface AgentWorkspaceResult {
   id: number;
   runVersion: number;
   dataContent: string;
+  eventType?: string;
+  createdAt?: string;
 }
 
 export interface AgentConversationListPage {

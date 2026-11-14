@@ -2,6 +2,7 @@
   "$schema": "../../node_modules/wrangler/config-schema.json",
   "name": "dinqor-agent",
   "main": "src/index.ts",
+  "rules": [{ "type": "Data", "globs": ["**/*.ttf"], "fallthrough": true }],
   // OSS endpoints and model settings are configured per Cloudflare account.
   "keep_vars": true,
   "compatibility_date": "2026-10-10",

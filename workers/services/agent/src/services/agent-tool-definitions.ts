@@ -133,7 +133,7 @@ export const QUIZ_TOOLS: AgentFunctionTool[] = [{
 
 export const ARTIFACT_TOOLS: AgentFunctionTool[] = [{
   name: "emit_artifact",
-    description: "把用户明确要求的文件作为对话内交付卡发给用户，文件可预览、复制或下载。支持 Markdown、HTML、TXT、CSV、JSON、DOCX、PDF；用户明确要求 Word/PDF 时使用对应 format，并把完整文章正文放在 content 中，由客户端生成真实文件。普通解释、单个短示例和小修复直接写在回复中。每个文件必须提供完整内容，最多 12 个文件。",
+    description: "把用户明确要求的文件作为对话内交付卡发给用户，文件可预览、复制或下载。支持 Markdown、HTML、TXT、CSV、JSON、DOCX、PDF；用户明确要求 Word/PDF 时使用对应 format，并把完整文章正文放在 content 中，由服务端将 Markdown 渲染为有结构的真实 Word/PDF 文件并上传后交付；支持多个文档，每个文档最多 200000 字符，普通代码文件最多 20000 字符。普通解释、单个短示例和小修复直接写在回复中。每个文件必须提供完整内容，最多 12 个文件。",
   parameters: {
     type: "object",
     properties: {
@@ -150,7 +150,7 @@ export const ARTIFACT_TOOLS: AgentFunctionTool[] = [{
           type: "object",
           properties: {
             path: { type: "string", maxLength: 120 },
-            content: { type: "string", maxLength: 20_000 },
+            content: { type: "string", maxLength: 200_000 },
             contentType: { type: "string", maxLength: 120 },
           },
           required: ["path", "content"],

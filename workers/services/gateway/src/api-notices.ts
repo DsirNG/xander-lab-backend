@@ -1,5 +1,27 @@
 /** Additional public business notices shared by the API language boundary. */
 export const businessNotices: Record<string, string> = Object.fromEntries(`
+文档服务尚未配置|The document service is not configured
+emit_artifact 的文档路径过长|The document artifact path is too long
+emit_artifact 文档内容不能超过 200000 字符|Document artifact content must not exceed 200000 characters
+emit_artifact 文档路径规范化后重复|Document artifact paths must be unique after normalization
+文档内容不能为空|Document content must not be empty
+文档内容不能超过200000字符，请拆分导出|Document content must not exceed 200000 characters. Split it into separate exports
+文档嵌套层级过深|The document nesting depth is too large
+文档超过250页，请拆分导出|The document exceeds 250 pages. Split it into separate exports
+PDF表格最多支持12列，请拆分表格|PDF tables support up to 12 columns. Split the table
+PDF表头过长，请缩短表头|The PDF table header is too long. Shorten the header
+当前会话正在执行或等待审批，请先完成当前操作|This conversation is running or awaiting approval. Complete the current action first
+博客草稿需要标题和正文；当前只有文件名，无法保存草稿|A blog draft requires a title and body. A filename alone cannot be saved as a draft
+博客草稿需要真实的标题和正文；不能只使用文件名或占位提示|A blog draft requires a real title and body, rather than a filename or placeholder
+博客生成工具尚未注册|The blog generation tool is not registered
+文章同步审批工具尚未注册|The article synchronization approval tool is not registered
+文件产物工具尚未注册|The file artifact tool is not registered
+模型请求了当前会话不可用的工具|The model requested a tool that is unavailable in this conversation
+此工具调用需要用户审批|This tool call requires user approval
+工具调用批次不能为空|The tool call batch must not be empty
+包含需要审批的工具调用，批次未执行|The batch contains tool calls requiring approval and was not executed
+工具参数必须是 JSON 对象|Tool arguments must be a JSON object
+工具返回了无效结果|The tool returned an invalid result
 退款请求无效|Invalid refund request
 退款积分处理暂不可用|Refund point processing is temporarily unavailable
 退款服务暂不可用|The refund service is temporarily unavailable

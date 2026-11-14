@@ -102,12 +102,12 @@ export class D1AgentConversationMapper implements AgentConversationRepository {
     // Tool results already live in the replay log. Project the latest bounded set
     // after ownership is checked by the service; do not duplicate persisted writes.
     const rows = await this.db.prepare(`
-      SELECT id, run_version AS runVersion, data_content AS dataContent
+      SELECT id, run_version AS runVersion, event_type AS eventType,
+        created_at AS createdAt, data_content AS dataContent
       FROM agent_event
-      WHERE conversation_id = ? AND event_type IN ('tool_result', 'tool_end')
+      WHERE conversation_id = ? AND event_type IN ('tool_result', 'tool_end', 'tool_error')
         AND json_valid(data_content)
-        AND json_extract(data_content, '$.tool') IN ('blog_generate', 'recall_memory', 'remember', 'publish_post')
-      ORDER BY id DESC LIMIT 100
+      ORDER BY id DESC LIMIT 500
     `).bind(conversationId).all<AgentWorkspaceResult>();
     return rows.results.reverse();
   }

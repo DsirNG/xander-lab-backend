@@ -8,5 +8,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "deploy": "wrangler deploy"
   },
-  "dependencies": { "@dinqor/worker-runtime": "workspace:*" }
+  "dependencies": {
+    "@dinqor/worker-runtime": "workspace:*",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "buffer": "^6.0.3",
+    "docx": "^9.15.3",
+    "marked": "18.0.14",
+    "pdf-lib": "^1.17.1"
+  }
 }

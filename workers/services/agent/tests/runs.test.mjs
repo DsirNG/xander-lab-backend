@@ -772,7 +772,8 @@ test("Agent create_knowledge writes only when the model asks with the authentica
   assert.match(state.messages.at(-1).content, /已将“复习提纲”加入/);
 });
 
-test("Agent starts a Core-owned quiz and asks the model to generate questions from its material", async () => {
+for (const structuredQuiz of [false, true]) {
+test(`Agent delivers a Core-owned quiz card from ${structuredQuiz ? "structured tools" : "legacy numbered questions"}`, async () => {
   const { repository, state } = createRepository();
   const calls = [];
   const charges = [];
@@ -816,13 +817,17 @@ test("Agent starts a Core-owned quiz and asks the model to generate questions fr
         },
       }), { headers: { "content-type": "text/event-stream" } });
     }
-    assert.equal(body.tools, undefined);
+    assert.ok(body.tools.some(tool => tool.function.name === "emit_quiz"));
     assert.match(body.messages.at(-1).content, /Requests carry a method and headers/);
     assert.match(body.messages.at(-1).content, /3 道/);
     return new Response(new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder();
-        controller.enqueue(encoder.encode('data: {"choices":[{"delta":{"content":"1. 请求使用什么方法？\\n2. 请求头用于传递什么？\\n3. 请求由哪些部分组成？"}}]}\n\n'));
+        const delta = structuredQuiz ? { tool_calls: [{ index: 0, function: { name: "emit_quiz", arguments: JSON.stringify({ quizSessionId: 999, questions: [
+          { prompt: "请求使用什么方法？", type: "single", options: ["GET", "POST"] },
+          { prompt: "请求头用于传递什么？", type: "text" }, { prompt: "请求由哪些部分组成？", type: "text" },
+        ] }) } }] } : { content: "1. 请求使用什么方法？\n2. 请求头用于传递什么？\n3. 请求由哪些部分组成？" };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`));
         controller.enqueue(encoder.encode('data: {"choices":[],"usage":{"prompt_tokens":30,"completion_tokens":18}}\n\n'));
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
         controller.close();
@@ -834,12 +839,18 @@ test("Agent starts a Core-owned quiz and asks the model to generate questions fr
   await service.executeTurn(42, 7, runVersion, () => {});
 
   assert.deepEqual(calls, [{ userId: 42, materialId: 31, conversationId: 7 }]);
-  assert.match(state.messages.at(-1).content, /1\. 请求使用什么方法/);
+  assert.match(state.messages.at(-1).content, /答题卡/);
+  const deliveredQuiz = JSON.parse(state.messages.find(message => message.kind === "quiz").content);
+  assert.equal(deliveredQuiz.id, "91");
+  assert.equal(deliveredQuiz.questions.length, 3);
+  assert.equal(deliveredQuiz.questions[0].type, structuredQuiz ? "single" : "text");
+  assert.equal(deliveredQuiz.questions[0].prompt, "请求使用什么方法？");
   assert.equal(state.events.find((event) => event.eventType === "tool_result").data.result.quizSessionId, 91);
   assert.deepEqual(charges.map((charge) => charge.bizKey), [
     "conv:7:run:1:quiz-start", "conv:7:run:1:quiz-generation",
   ]);
 });
+}
 
 test("Agent records quiz evidence against the current conversation owner", async () => {
   const { repository, state } = createRepository();

@@ -114,7 +114,8 @@ export class AgentConversationService {
     const refreshed = this.attachments
       ? await this.attachments.refreshStoredMany(userId, attachmentValues)
       : attachmentValues;
-    const content = await this.refreshImageContents(userId, rows.map(row => row.content));
+    const content = await this.refreshArtifactContents(userId,
+      await this.refreshImageContents(userId, rows.map(row => row.content)));
     return rows.map((row, index) => {
       return {
         id: row.id,
@@ -134,6 +135,38 @@ export class AgentConversationService {
   private refreshImageContents(userId: number, contents: string[]): Promise<string[]> {
     const normalized = contents.map(content => this.refreshMediaUrls(content));
     return this.imageUrls ? this.imageUrls.refresh(userId, normalized) : Promise.resolve(normalized);
+  }
+
+  /** Resolve owned document attachments again so history never depends on an expired signed URL. */
+  private async refreshArtifactContents(userId: number, contents: string[]): Promise<string[]> {
+    if (!this.attachments) return contents;
+    const artifacts = contents.map(content => {
+      try {
+        const parsed: unknown = JSON.parse(content);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+        const row = parsed as Record<string, unknown>;
+        const artifact = row.artifact && typeof row.artifact === "object" && !Array.isArray(row.artifact)
+          ? row.artifact as Record<string, unknown> : row;
+        return artifact.type === "artifact" && Array.isArray(artifact.files) ? { parsed, files: artifact.files } : null;
+      } catch { return null; }
+    });
+    const positions: Array<{ file: Record<string, unknown>; id: number }> = [];
+    for (const artifact of artifacts) for (const value of artifact?.files ?? []) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const file = value as Record<string, unknown>;
+      if (typeof file.attachmentId === "number" && Number.isSafeInteger(file.attachmentId) && file.attachmentId > 0) {
+        positions.push({ file, id: file.attachmentId });
+      }
+    }
+    if (!positions.length) return contents;
+    // One batch ownership lookup covers every file; avoid the five-upload limit per user message.
+    const refreshed = await this.attachments.refreshStoredMany(userId, positions.map(value => [{ id: value.id }]));
+    positions.forEach(({ file }, index) => {
+      const reference = refreshed[index]?.[0];
+      if (reference) { file.url = reference.url; file.contentType = reference.contentType; file.size = reference.size; }
+      else delete file.url;
+    });
+    return contents.map((content, index) => artifacts[index] ? JSON.stringify(artifacts[index]!.parsed) : content);
   }
 
   /** Rewrite only our legacy public-image URLs; durable history remains unchanged. */

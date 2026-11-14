@@ -42,6 +42,16 @@ function database() {
   return { sql, repository: new D1AgentRunMapper(db) };
 }
 
+test('a pending approval cannot be replaced by a newly claimed chat turn', async () => {
+  const { sql, repository } = database();
+  try {
+    sql.exec("UPDATE agent_conversation SET status='awaiting_approval' WHERE id=7");
+    assert.equal(await repository.claimTurn(42, 7, 'replace approval', []), null);
+    assert.equal(sql.prepare('SELECT run_version FROM agent_conversation WHERE id=7').get().run_version, 3);
+    assert.equal(sql.prepare('SELECT COUNT(*) AS count FROM agent_message WHERE conversation_id=7').get().count, 0);
+  } finally { sql.close(); }
+});
+
 test('durable stop is terminal, idempotent, owner scoped and fences late output across a new turn', async () => {
   const { sql, repository: r } = database();
   try {
