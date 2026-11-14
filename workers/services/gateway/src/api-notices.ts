@@ -1,5 +1,48 @@
 /** Additional public business notices shared by the API language boundary. */
 export const businessNotices: Record<string, string> = Object.fromEntries(`
+PPT 渲染服务尚未配置|The presentation renderer is not configured
+PPT 修改内容过大|The slide revision is too large
+PPT 参数无效|Invalid presentation parameters
+PPT 请求格式无效|Invalid presentation request format
+PPT 服务暂不可用|The presentation service is temporarily unavailable
+身份无效|Invalid identity
+PPT 标识无效|Invalid presentation ID
+PPT 渲染或质量检查失败，请精简文字后重试|Presentation rendering or validation failed. Shorten the slide text and retry
+PPT_RENDER_FAILED: 渲染器未能生成可用的演示文稿结果|PPT_RENDER_FAILED: The renderer could not produce a usable presentation result
+PPT 页面要点格式无效|Invalid presentation bullet format
+PPT 来源格式无效|Invalid presentation source format
+PPT 内容模块格式无效|Invalid presentation block format
+图表数据格式无效|Invalid chart data format
+PPT 不存在|Presentation not found
+PPT 操作缺少请求标识|A request ID is required for this presentation action
+请求标识已被其他操作使用|This request ID was used for another action
+PPT 版本已更新，请刷新后操作|The presentation version has changed. Refresh before continuing
+只有失败或取消的 PPT 可以重试|Only failed or cancelled presentations can be retried
+此版本重试次数已达上限，请修改页面后生成新版本|This version has reached its retry limit. Revise a page to create a new version
+请等待当前 PPT 完成或取消后修改|Wait for generation to finish or cancel it before editing
+此 PPT 已达到 20 个版本，请新建演示文稿|This presentation has reached 20 versions. Create a new presentation
+PPT 页码无效|Invalid slide index
+PPT 操作不存在|Presentation action not found
+PPT 版本无效|Invalid presentation version
+PPT 版本不存在|Presentation version not found
+PPT 参数必须是对象|Presentation parameters must be an object
+PPT 文字为空、过长或格式无效|Presentation text is empty, too long or invalid
+PPT 页面布局无效|Invalid slide layout
+PPT 页面内容超过布局容量|The slide content exceeds the layout capacity
+请将页面标题改写为70字内的清晰结论|Rewrite the slide title as a clear conclusion within 70 characters
+PPT 最多四个内容模块|A slide supports up to four content blocks
+模块版式需要2至4个模块，对比版式恰好2个；请勿同时传要点|Structured layouts need 2 to 4 blocks; comparison needs exactly 2. Do not also supply bullets
+此版式不支持内容模块|This layout does not support content blocks
+图表需要2至5组真实数据|Charts need 2 to 5 supported data points
+图表数据必须是有效非负数|Chart values must be valid non-negative numbers
+图表页必须提供数据，解释放副标题、结论或备注|Chart slides require data. Put explanations in the subtitle, takeaway or notes
+PPT 单页内容过多，请重新组织大纲|The slide has too much content. Reorganize the outline
+PPT 单页内容无法在页面与备注中完整保留，请拆分内容|The slide and its notes cannot retain all content. Split the content into smaller sections
+PPT 来源最多四条|Each slide supports up to four sources
+PPT 来源链接无效|Invalid presentation source URL
+PPT 需要 1 到 20 页|A presentation must contain 1 to 20 slides
+PPT 语言或主题无效|Invalid presentation language or theme
+PPT 内容过大，请精简页面|The presentation is too large. Shorten the slides
 邮件服务返回的结果与本次请求不匹配|The mail service returned a result for a different request
 即时邮件请求缺少幂等标识|An idempotency key is required for immediate email
 邮件缺少收件邮箱、主题或正文|The recipient email, subject and body are required

@@ -1,6 +1,9 @@
 import { OssAgentImageUrlMapper } from "./mappers/oss-agent-image-url-mapper.js";
 import { DurableAgentImageTaskMapper } from "./mappers/durable-agent-image-task-mapper.js";
 export { AgentImageTaskObject } from "./controllers/agent-image-task-object.js";
+export { AgentPresentationTaskObject } from "./controllers/agent-presentation-task-object.js";
+import { DurableAgentPresentationMapper } from "./mappers/durable-agent-presentation-mapper.js";
+import { handleAgentPresentationRequest } from "./controllers/agent-presentation-controller.js";
 import { createBusinessService, type WorkerExecutionContextLike } from "@dinqor/worker-runtime";
 import { handleAgentOssSmokeTestRequest } from "./controllers/agent-oss-smoke-test-controller.js";
 import { handleAgentAttachmentSmokeTestRequest } from "./controllers/agent-attachment-smoke-test-controller.js";
@@ -55,6 +58,10 @@ import { handleAgentWebSettingsRequest } from "./controllers/agent-web-settings-
 const agentService = createBusinessService<AgentEnvironment>("agent", async (request, env, context) => {
   const auth = new AgentAuthService(env.JWT_SECRET, new CoreAuthMapper(env));
   const resolveUser = () => auth.currentUserId(request);
+  const presentations = env.PRESENTATION_TASKS && env.PPT_RENDERER_URL && env.PPT_RENDERER_TOKEN
+    ? new DurableAgentPresentationMapper(env.PRESENTATION_TASKS) : undefined;
+  const presentationResponse = await handleAgentPresentationRequest(request, presentations, resolveUser);
+  if (presentationResponse) return presentationResponse;
   const webSettings = new AgentWebSettingsService(new D1AgentWebSettingsMapper(env.DB), env, key => new TavilyWebResearchMapper(key));
   const webSettingsResponse = await handleAgentWebSettingsRequest(request, webSettings, auth);
   if (webSettingsResponse) return webSettingsResponse;
@@ -97,6 +104,7 @@ const agentService = createBusinessService<AgentEnvironment>("agent", async (req
       const settings = await webSettings.runtime();
       return { provider: settings.apiKey ? new TavilyWebResearchMapper(settings.apiKey) : undefined, allowNativeSearch: settings.allowNativeSearch };
     }),
+    presentations,
   );
   const approvalResponse = await handleAgentApprovalRequest(request, approvalService, resolveUser);
   if (approvalResponse) return approvalResponse;

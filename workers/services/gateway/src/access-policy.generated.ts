@@ -1013,6 +1013,24 @@ export const ACCESS_POLICY =
       "owner": "agent"
     },
     {
+      "id": "agent-presentation-read",
+      "match": {
+        "method": "GET",
+        "path_pattern": "/api/agent/presentations/*"
+      },
+      "owner": "agent",
+      "note": "PPT 页面、版本和下载引用仅当前用户可见。"
+    },
+    {
+      "id": "agent-presentation-write",
+      "match": {
+        "method": "POST",
+        "path_pattern": "/api/agent/presentations/**"
+      },
+      "owner": "agent",
+      "note": "单页修改、取消和重试必须校验归属、版本及请求幂等标识。"
+    },
+    {
       "id": "agent-conversation-list",
       "match": {
         "method": "GET",

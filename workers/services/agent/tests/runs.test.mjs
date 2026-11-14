@@ -60,6 +60,45 @@ for (const apiStyle of ["CHAT_COMPLETIONS", "RESPONSES"]) {
 
 afterEach(() => mock.restoreAll());
 
+for (const apiStyle of ["CHAT_COMPLETIONS", "RESPONSES"]) {
+  test(`PPT generation uses the shared tool pipeline and durable invocation result through ${apiStyle}`, async () => {
+    const { repository, state } = createRepository();
+    const deck = { title: "原生演示文稿", slides: [{ title: "制作流程", bullets: ["规划", "校验", "导出"] }] };
+    let starts = 0;
+    const presentations = { async create(userId, conversationId, key, input) {
+      starts++; assert.equal(userId,42); assert.equal(conversationId,7); assert.ok(key);
+      assert.deepEqual(input,{...deck,language:"zh-CN",theme:"navy",slides:[{...deck.slides[0],layout:"bullets",notes:"",sources:[]}]});
+      return { id: "a".repeat(32), version: 1, status: "queued", deck: input };
+    } };
+    const service = new AgentRunService(repository, { async candidates() { return { managed: true, endpoints: [{
+      providerId: 1, baseUrl: "https://models.example/v1", apiKey: "test", model: "test", apiStyle,
+    }] }; } }, { async ensureAvailable() { return true; }, async chargeTokens() {} }, ...Array(13).fill(undefined), presentations);
+    let calls = 0;
+    mock.method(globalThis,"fetch",async (_input,init) => {
+      calls++;
+      const body=JSON.parse(init.body);
+      const names=body.tools.map(tool=>tool.function?.name??tool.name);
+      assert.ok(names.includes("create_presentation"));
+      assert.ok(names.includes("get_presentation"));
+      const events=apiStyle === "CHAT_COMPLETIONS"
+        ? [{choices:[{delta:calls===1 ? {tool_calls:[{index:0,function:{name:"create_presentation",arguments:JSON.stringify(deck)}}]} : {content:"PPT 任务已保存，可在卡片查看进度。"}}]}]
+        : calls===1 ? [{type:"response.output_item.added",output_index:0,item:{type:"function_call",name:"create_presentation",arguments:""}},
+          {type:"response.function_call_arguments.done",output_index:0,name:"create_presentation",arguments:JSON.stringify(deck)}]
+          : [{type:"response.output_text.delta",delta:"PPT 任务已保存，可在卡片查看进度。"}];
+      return new Response(events.map(event=>`data: ${JSON.stringify(event)}\n\n`).join("")+"data: [DONE]\n\n",{headers:{"content-type":"text/event-stream"}});
+    });
+    const version=await service.claimTurn(42,7,"制作一份讲解制作流程的PPT",[]);
+    assert.deepEqual(await service.executeTurn(42,7,version,()=>{}),{ok:true});
+    assert.equal(starts,1);
+    const start=state.events.find(event=>event.eventType==="tool_start"&&event.data.tool==="create_presentation");
+    const result=state.events.find(event=>event.eventType==="tool_result"&&event.data.tool==="create_presentation");
+    assert.ok(start.data.invocationId);
+    assert.equal(result.data.invocationId,start.data.invocationId);
+    assert.equal(result.data.result.status,"queued");
+    assert.equal(state.events.filter(event=>event.eventType==="complete").length,1);
+  });
+}
+
 test("delegated web research uses the shared read-only tools and persists its original evidence", async () => {
   const { repository, state } = createRepository();
   let searches = 0;

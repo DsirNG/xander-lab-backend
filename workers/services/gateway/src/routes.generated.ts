@@ -253,6 +253,16 @@ export const ROUTES =
     "service": "agent"
   },
   {
+    "method": "POST",
+    "path": "/api/agent/presentations/*/cancel",
+    "service": "agent"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent/presentations/*/revise",
+    "service": "agent"
+  },
+  {
     "method": "GET",
     "path": "/api/admin/billing/model-prices",
     "service": "core"
@@ -285,6 +295,11 @@ export const ROUTES =
   {
     "method": "POST",
     "path": "/api/agent/conversations/{id}/title",
+    "service": "agent"
+  },
+  {
+    "method": "POST",
+    "path": "/api/agent/presentations/*/retry",
     "service": "agent"
   },
   {
@@ -495,6 +510,11 @@ export const ROUTES =
   {
     "method": "GET",
     "path": "/api/agent/conversations/{id}",
+    "service": "agent"
+  },
+  {
+    "method": "GET",
+    "path": "/api/agent/presentations/*",
     "service": "agent"
   },
   {

@@ -30,6 +30,8 @@ import { createArtifactTool } from "./agent-artifact-tool-adapters.js";
 import { createMcpApprovalTool } from "./agent-mcp-tool-adapters.js";
 import type { AgentWebResearchService } from "./agent-web-research-service.js";
 import { createWebResearchTools, WEB_RESEARCH_INSTRUCTION } from "./agent-web-tool-adapters.js";
+import { createPresentationTools } from "./agent-presentation-tool-adapters.js";
+import type { PresentationPort } from "../interfaces/agent-presentation.js";
 
 interface AgentInputMessage {
   role: string;
@@ -408,6 +410,11 @@ function isAssistantPortraitSaveRequest(history: { role: string; content: string
   return (explicitSave && portraitContext) || /这个就是你|这张就是你|this is you/i.test(recent);
 }
 
+function isPresentationRequest(history: { role: string; content: string }[]): boolean {
+  const latest = [...history].reverse().find(item => item.role === "user")?.content ?? "";
+  return /(?:pptx?|powerpoint|演示文稿|幻灯片|presentation|汇报材料)/i.test(latest);
+}
+
 export class AgentRunService {
   constructor(
     private readonly repository: AgentTurnRepository,
@@ -426,6 +433,7 @@ export class AgentRunService {
     private readonly imageTasks?: AgentImageTaskPort,
     private readonly documents?: DocumentArtifactService,
     private readonly webResearch?: AgentWebResearchService,
+    private readonly presentations?: PresentationPort,
   ) {}
 
   async cancelTurn(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
@@ -798,8 +806,14 @@ export class AgentRunService {
       const blogAuthorized = allowsBlogTask(history);
       const queryTools = this.contentTools ? createContentQueryTools(this.contentTools, userId, CONTENT_QUERY_TOOLS) : new Map();
       for (const [name, tool] of webTools) queryTools.set(name, tool);
+      const presentationTools = this.presentations ? createPresentationTools(this.presentations, async (event, data) => {
+        const eventId = await appendEvent(conversationId, runVersion, event, data);
+        onEvent(eventId, event, data);
+      }) : new Map<string, AgentTool>();
+      for (const [name, tool] of presentationTools) queryTools.set(name, tool);
       const toolRegistry = new AgentToolRegistry([...skillContext.tools, ...memoryTools, ...(this.recitation ? RECITATION_TOOLS : []), ...QUIZ_TOOLS, ...ARTIFACT_TOOLS,
           ...Array.from(webTools.values(), tool => tool.definition()),
+          ...Array.from(presentationTools.values(), tool => tool.definition()),
           ...PLAN_TASKS_TOOLS, ...(portraitRequest ? [] : IMAGE_GENERATION_TOOLS), ...resendTools,
           ...CONTENT_QUERY_TOOLS, ...CONTENT_MUTATION_TOOLS,
           ...DELEGATE_SUBTASK_TOOLS,
@@ -831,6 +845,12 @@ export class AgentRunService {
         });
       }
       let modelResult = await this.callModel(gateway.endpoints, messages, async (delta) => { if (!portraitRequest) await onDelta(delta); }, abortController.signal, tools);
+      if (!modelResult.toolCalls.length && !answer.trim() && presentationTools.has("create_presentation") && isPresentationRequest(history)) {
+        modelResult = await this.callModel(gateway.endpoints, [...messages, {
+          role: "system",
+          content: "用户请求制作 PPT，但上一次响应没有可显示内容。请立即调用 create_presentation 创建演示文稿，不要只返回空文本，也不要调用其他工具。",
+        }], async (delta) => { await onDelta(delta); }, abortController.signal, tools);
+      }
       // A saved portrait request must never spend image-generation credits, even if a provider ignores tools.
       if (portraitRequest) {
         modelResult = { ...modelResult, toolCalls: [{ name: "image_resend", arguments: JSON.stringify({ source: "assistant_portrait" }) }] };
@@ -1006,6 +1026,17 @@ export class AgentRunService {
           }
           catch (error) {
             if (error instanceof AgentContentToolsError) throw new ResponseError(error.status, error.message);
+            if ((toolName === "create_presentation" || toolName === "revise_presentation_slide")
+              && error instanceof Error && error.name === "AgentToolExecutionError") {
+              const toolEvent = {
+                tool: toolName,
+                result: { ok: false, recoverable: true, code: "PRESENTATION_TOOL_FAILED", error: error.message,
+                  instruction: "根据失败原因重新规划页面结构或内容后再次调用工具，不要把内部错误直接回复给用户。" },
+              };
+              const toolEventId = await appendEvent(conversationId, runVersion, "tool_result", toolEvent);
+              onEvent(toolEventId, "tool_result", toolEvent);
+              return { ok: true };
+            }
             if (error instanceof Error && error.name === "AgentToolExecutionError") throw new ResponseError(400, error.message);
             throw error;
           }

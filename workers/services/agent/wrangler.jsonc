@@ -18,15 +18,25 @@
       "CONTENT_AUTOMATION_SERVICE_TOKEN"
     ]
   },
-  "vars": { "AGENT_OSS_OBJECT_PREFIX": "agent-attachments", "AGENT_MCP_CLIENT_ENABLED": "false" },
+  "vars": {
+    "AGENT_OSS_OBJECT_PREFIX": "agent-attachments",
+    "AGENT_MCP_CLIENT_ENABLED": "false",
+    "PPT_RENDERER_URL": "https://api-ppt.dsircity.top"
+  },
   "services": [
     { "binding": "CORE_SERVICE", "service": "dinqor-core" },
     { "binding": "CONTENT_AUTOMATION_SERVICE", "service": "dinqor-content-automation" }
   ],
   "dev": { "port": 8789 },
   "observability": { "enabled": true },
-  "durable_objects": { "bindings": [{ "name": "IMAGE_TASKS", "class_name": "AgentImageTaskObject" }] },
-  "migrations": [{ "tag": "image-task-v1", "new_sqlite_classes": ["AgentImageTaskObject"] }],
+  "durable_objects": { "bindings": [
+    { "name": "IMAGE_TASKS", "class_name": "AgentImageTaskObject" },
+    { "name": "PRESENTATION_TASKS", "class_name": "AgentPresentationTaskObject" }
+  ] },
+  "migrations": [
+    { "tag": "image-task-v1", "new_sqlite_classes": ["AgentImageTaskObject"] },
+    { "tag": "presentation-task-v1", "new_sqlite_classes": ["AgentPresentationTaskObject"] }
+  ],
   "d1_databases": [{
     "binding": "DB",
     "database_name": "dinqor-agent-local",
