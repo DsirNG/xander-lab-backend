@@ -33,7 +33,8 @@ export class PresentationAssetMapper implements PresentationAssetPort {
     let total = 0;
     for (const ref of await this.references(userId, deck)) {
       const { key } = ref;
-      const response = await this.transport(new Request(ref.url, { redirect: "error", signal: AbortSignal.timeout(30_000) }));
+      // workerd only supports manual/follow; non-2xx redirects are rejected below.
+      const response = await this.transport(new Request(ref.url, { redirect: "manual", signal: AbortSignal.timeout(30_000) }));
       if (!response.ok || !response.body) throw new PresentationError(502, `PPT_IMAGE_UNAVAILABLE: ${key} 图片尚不可读取`);
       const reader = response.body.getReader(), chunks: Uint8Array[] = [];
       let size = 0;

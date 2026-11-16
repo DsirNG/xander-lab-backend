@@ -9,7 +9,7 @@ test('PPT resolves both image namespaces by ownership and deduplicates downloads
   const seen=[];
   const mapper=new PresentationAssetMapper({async resolveOwned(user,ids){assert.equal(user,42);assert.deepEqual(ids,[7]);return [{id:7,url:'https://storage.test/uploaded.png',contentType:'image/png'}];}},
     {async findOwned(user,id){assert.equal(user,42);assert.equal(id,7);return {id:7,url:'https://storage.test/generated.jpg',contentType:'image/jpeg'};}},async request=>{
-      seen.push(request.url);assert.equal(request.redirect,'error');return new Response(new Uint8Array([1,2,3]));
+      seen.push(request.url);assert.equal(request.redirect,'manual');return new Response(new Uint8Array([1,2,3]));
     });
   const assets=await mapper.load(42,deck);
   assert.deepEqual(assets.map(v=>v.key),['media:7','attachment:7']);

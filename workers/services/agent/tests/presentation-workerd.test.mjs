@@ -9,12 +9,16 @@ test('workerd imports source images with supported redirect semantics',async()=>
   const {build}=wranglerRequire('esbuild'),{Miniflare}=wranglerRequire('miniflare');
   const modulePath=fileURLToPath(new URL('../.test-build/mappers/http-presentation-material-mapper.js',import.meta.url));
   const bundle=await build({stdin:{contents:`import {HttpPresentationMaterialMapper} from './http-presentation-material-mapper.js';
+    import {PresentationAssetMapper} from './presentation-asset-mapper.js';
     export default {async fetch(){let calls=0;const mapper=new HttpPresentationMaterialMapper('https://renderer.com','test',async(url,init)=>{
       new Request(url,init);calls++;
       return calls===1?new Response(new Uint8Array([137,80,78,71]),{headers:{'content-type':'image/png'}}):Response.json({data:'iVBORw==',width:2,height:1});
-    });const image=await mapper.read({url:'https://brand.com/logo.png'},new AbortController().signal);return Response.json({calls,width:image.width});}};`,resolveDir:dirname(modulePath)},bundle:true,format:'esm',platform:'browser',write:false});
+    });const image=await mapper.read({url:'https://brand.com/logo.png'},new AbortController().signal);
+    const assets=new PresentationAssetMapper({}, {async findOwned(){return {url:'https://storage.com/owned.png',contentType:'image/png'};}},async request=>{if(request.redirect!=='manual')throw new Error('Unexpected redirects');return new Response(image.bytes);});
+    const loaded=await assets.load(7,{slides:[{elements:[{type:'image',assetId:42}]}]});
+    return Response.json({calls,width:image.width,asset:loaded[0].data});}};`,resolveDir:dirname(modulePath)},bundle:true,format:'esm',platform:'browser',write:false});
   const runtime=new Miniflare({workers:[{config:{name:'material-test',compatibilityDate:'2026-10-10',manifest:{mainModule:'worker.js',modules:{'worker.js':{type:'esm',contents:bundle.outputFiles[0].text}}}}}],logRequests:false,telemetry:{enabled:false}});
-  try{assert.deepEqual(await(await runtime.dispatchFetch('http://test')).json(),{calls:2,width:2});}finally{await runtime.dispose();}
+  try{assert.deepEqual(await(await runtime.dispatchFetch('http://test')).json(),{calls:2,width:2,asset:'iVBORw=='});}finally{await runtime.dispose();}
 });
 
 // Exercise actual SQLite storage transactions and alarms, beyond in-memory unit doubles.
