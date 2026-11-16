@@ -119,10 +119,13 @@ export class AgentPresentationTaskService {
       if (changes.status && !ACTIVE.has(changes.status)) await task.storage.deleteAlarm();
       return true;
     });
+    let phase = "assets";
     try {
       const assets = await this.assets?.load(job.userId, row.deck) ?? [];
+      phase = "render";
       const output = await this.renderer.render(row.deck, assets);
       if (!await update({ status: "uploading" })) return;
+      phase = "saving";
       const upload = async (name: string, type: string, bytes: Uint8Array) => {
         const result = await this.attachments.upload(job.userId, { name, type, bytes, size: bytes.length });
         return result.id;
@@ -140,9 +143,9 @@ export class AgentPresentationTaskService {
     } catch (error) {
       const message = error instanceof PresentationError
         ? error.message
-        : error instanceof Error && error.message.trim()
-          ? error.message
-          : "PPT 渲染或保存失败";
+        : phase === "assets" ? "PPT_ASSET_LOAD_FAILED: 图片读取失败，请重试或替换图片"
+          : phase === "render" ? "PPT_RENDER_FAILED: 页面渲染失败，请重试"
+          : "PPT_SAVE_FAILED: 文件保存失败，请重试";
       await update({ status: "failed", error: message });
     }
   }

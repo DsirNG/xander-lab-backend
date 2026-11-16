@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PresentationAssetMapper } from '../.test-build/mappers/presentation-asset-mapper.js';
 import { AgentPresentationTaskService } from '../.test-build/services/agent-presentation-task-service.js';
+import { PresentationError } from '../.test-build/services/agent-presentation-validation.js';
 const element=(extra)=>({type:'image',x:0,y:0,width:400,height:400,...extra});
 const deck={title:'Images',slides:[{title:'A',layout:'canvas',elements:[element({assetId:7}),element({attachmentId:7}),element({assetId:7})],bullets:[],notes:'',sources:[]}]};
 
@@ -30,9 +31,16 @@ test('foreign, unavailable and oversized PPT assets cannot reach rendering',asyn
 test('task waits for assets before renderer and never publishes files on asset failure',async()=>{
   const data=new Map();let renders=0;
   const storage={async get(k){return data.get(k);},async put(k,v){data.set(k,v);},async setAlarm(){},async deleteAlarm(){}};
-  const assets={async load(user,value){assert.equal(user,42);assert.equal(value.slides[0].elements[0].assetId,7);throw new Error('PPT_IMAGE_UNAVAILABLE: media:7');}};
+  const assets={async load(user,value){assert.equal(user,42);assert.equal(value.slides[0].elements[0].assetId,7);throw new PresentationError(502,'PPT_IMAGE_UNAVAILABLE: media:7');}};
   const service=new AgentPresentationTaskService(storage,{async render(){renders++;}}, {async resolveOwned(){assert.fail();}},undefined,assets);
   await service.start({id:'a'.repeat(32),userId:42,conversationId:1,deck});await service.alarm();
   const view=await service.view(42);
   assert.equal(view.status,'failed');assert.equal(view.files,undefined);assert.equal(renders,0);assert.match(view.error,/PPT_IMAGE_UNAVAILABLE/);
+});
+
+test('unexpected material errors expose a recoverable stage, never vendor details',async()=>{
+ const data=new Map(),storage={async get(k){return data.get(k);},async put(k,v){data.set(k,v);},async setAlarm(){},async deleteAlarm(){}};
+ const service=new AgentPresentationTaskService(storage,{async render(){assert.fail();}}, {},undefined,{async load(){throw new Error('private signed storage credential');}});
+ await service.start({id:'b'.repeat(32),userId:42,conversationId:1,deck});await service.alarm();
+ const view=await service.view(42);assert.equal(view.status,'failed');assert.equal(view.error,'PPT_ASSET_LOAD_FAILED: 图片读取失败，请重试或替换图片');assert.equal(view.files,undefined);
 });
