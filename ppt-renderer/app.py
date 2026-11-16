@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
 
 from render import Deck, compile_deck
+from normalize_image import normalize_image
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 pool = ProcessPoolExecutor(max_workers=1)
@@ -19,6 +20,26 @@ busy = asyncio.Semaphore(1)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.post("/v1/normalize-image")
+async def normalize(request: Request):
+    token = os.environ.get("PPT_RENDERER_TOKEN", "")
+    if not token or not hmac.compare_digest(request.headers.get("authorization", ""), "Bearer " + token):
+        raise HTTPException(401, "Unauthorized")
+    if busy.locked():
+        raise HTTPException(429, "Renderer busy; retry later")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 12 * 1024 * 1024:
+            raise HTTPException(413, "Image too large")
+    try:
+        payload = json.loads(body)
+        async with busy:
+            return await asyncio.get_running_loop().run_in_executor(pool, normalize_image, payload)
+    except Exception:
+        raise HTTPException(422, "Image could not be decoded safely") from None
 
 
 @app.post("/v1/render")

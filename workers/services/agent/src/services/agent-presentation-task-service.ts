@@ -45,7 +45,14 @@ export class AgentPresentationTaskService {
       for (let start = 0; start < all.length; start += 5) refs.push(...await this.attachments.resolveOwned(userId, all.slice(start, start + 5)));
       files = { pptx: refs[0]!, source: refs[1]!, previews: refs.slice(2) };
     }
-    return { ...data, id: job.id, conversationId: job.conversationId, currentVersion: job.version, history, files };
+    let assets: PresentationView["assets"];
+    try { assets = await this.assets?.references?.(userId, row.deck); }
+    catch (error) {
+      // A missing source must not hide the durable failure or prevent replacement in the editor.
+      if (!(error instanceof PresentationError) || ![400, 404].includes(error.status)) throw error;
+      assets = [];
+    }
+    return { ...data, assets, id: job.id, conversationId: job.conversationId, currentVersion: job.version, history, files };
   }
 
   async mutate(userId: number, action: string, input: Record<string, unknown>): Promise<void> {

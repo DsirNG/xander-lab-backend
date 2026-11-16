@@ -1,3 +1,5 @@
+import { PresentationMaterialService } from "./services/presentation-material-service.js";
+import { HttpPresentationMaterialMapper } from "./mappers/http-presentation-material-mapper.js";
 import { OssAgentImageUrlMapper } from "./mappers/oss-agent-image-url-mapper.js";
 import { DurableAgentImageTaskMapper } from "./mappers/durable-agent-image-task-mapper.js";
 export { AgentImageTaskObject } from "./controllers/agent-image-task-object.js";
@@ -105,6 +107,7 @@ const agentService = createBusinessService<AgentEnvironment>("agent", async (req
       return { provider: settings.apiKey ? new TavilyWebResearchMapper(settings.apiKey) : undefined, allowNativeSearch: settings.allowNativeSearch };
     }),
     presentations,
+    env.PPT_RENDERER_URL && env.PPT_RENDERER_TOKEN ? new PresentationMaterialService(new HttpPresentationMaterialMapper(env.PPT_RENDERER_URL, env.PPT_RENDERER_TOKEN), contentMedia) : undefined,
   );
   const approvalResponse = await handleAgentApprovalRequest(request, approvalService, resolveUser);
   if (approvalResponse) return approvalResponse;

@@ -9,14 +9,13 @@ export class PresentationAssetMapper implements PresentationAssetPort {
   constructor(private readonly attachments: PresentationAttachmentPort, private readonly media: Pick<AgentImageMediaPort, "findOwned">,
     private readonly transport = fetch.bind(globalThis)) {}
 
-  async load(userId: number, deck: PresentationDeck): Promise<PresentationAsset[]> {
+  async references(userId: number, deck: PresentationDeck) {
     const wanted = new Map<string, { id: number; media: boolean }>();
     for (const slide of deck.slides) for (const element of slide.elements ?? []) if (element.type === "image") {
       const media = element.assetId !== undefined, id = (media ? element.assetId : element.attachmentId)!;
       wanted.set(`${media ? "media" : "attachment"}:${id}`, { id, media });
     }
-    const assets: PresentationAsset[] = [];
-    let total = 0;
+    const refs = [];
     for (const [key, item] of wanted) {
       const ref = item.media ? await this.media.findOwned(userId, item.id) : (await this.attachments.resolveOwned(userId, [item.id]))[0];
       if (!ref) throw new PresentationError(404, `PPT_IMAGE_NOT_FOUND: ${key} 不存在或不属于当前用户`);
@@ -24,7 +23,17 @@ export class PresentationAssetMapper implements PresentationAssetPort {
       // Storage URLs come from owner-scoped repositories, never model-supplied URLs.
       if (url.protocol !== "https:" || url.username || url.password) throw new PresentationError(400, "PPT 图片存储地址无效");
       if (!/^image\/(png|jpeg|webp|gif)$/.test(ref.contentType)) throw new PresentationError(400, "PPT 图片格式不支持，请使用 PNG、JPEG、WebP、GIF 或页面 SVG 元素");
-      const response = await this.transport(new Request(url, { redirect: "error", signal: AbortSignal.timeout(30_000) }));
+      refs.push({ key, url: url.href, contentType: ref.contentType });
+    }
+    return refs;
+  }
+
+  async load(userId: number, deck: PresentationDeck): Promise<PresentationAsset[]> {
+    const assets: PresentationAsset[] = [];
+    let total = 0;
+    for (const ref of await this.references(userId, deck)) {
+      const { key } = ref;
+      const response = await this.transport(new Request(ref.url, { redirect: "error", signal: AbortSignal.timeout(30_000) }));
       if (!response.ok || !response.body) throw new PresentationError(502, `PPT_IMAGE_UNAVAILABLE: ${key} 图片尚不可读取`);
       const reader = response.body.getReader(), chunks: Uint8Array[] = [];
       let size = 0;

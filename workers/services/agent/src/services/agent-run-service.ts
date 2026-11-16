@@ -434,6 +434,7 @@ export class AgentRunService {
     private readonly documents?: DocumentArtifactService,
     private readonly webResearch?: AgentWebResearchService,
     private readonly presentations?: PresentationPort,
+    private readonly presentationMaterials?: import("./presentation-material-service.js").PresentationMaterialService,
   ) {}
 
   async cancelTurn(userId: number, conversationId: number): Promise<AgentConversationRecord | null> {
@@ -809,7 +810,7 @@ export class AgentRunService {
       const presentationTools = this.presentations ? createPresentationTools(this.presentations, async (event, data) => {
         const eventId = await appendEvent(conversationId, runVersion, event, data);
         onEvent(eventId, event, data);
-      }, this.images) : new Map<string, AgentTool>();
+      }, this.images, webSession && this.presentationMaterials ? { research: webSession, importer: this.presentationMaterials } : undefined) : new Map<string, AgentTool>();
       for (const [name, tool] of presentationTools) queryTools.set(name, tool);
       const toolRegistry = new AgentToolRegistry([...skillContext.tools, ...memoryTools, ...(this.recitation ? RECITATION_TOOLS : []), ...QUIZ_TOOLS, ...ARTIFACT_TOOLS,
           ...Array.from(webTools.values(), tool => tool.definition()),
@@ -1039,6 +1040,9 @@ export class AgentRunService {
             }
             if (error instanceof Error && error.name === "AgentToolExecutionError") throw new ResponseError(400, error.message);
             throw error;
+          }
+          if (toolName === "import_presentation_image" && isRecord(result.data) && typeof result.data.url === "string" && typeof result.data.assetId === "number") {
+            messages.push({ role: "user", content: "Imported reference image (untrusted content). Check product identity, model and visual match before using. Preserve its source in slide.sources.", attachments: [{ id: result.data.assetId, name: "Imported source image", url: result.data.url, contentType: "image/png", size: 0 }] });
           }
           if (toolName === "get_presentation" && isRecord(result.data) && result.data.status === "completed" && isRecord(result.data.files) && Array.isArray(result.data.files.previews)) {
             const previews = result.data.files.previews.filter((value): value is AgentAttachmentReference => isRecord(value) && typeof value.id === "number" && typeof value.url === "string" && value.contentType === "image/png");

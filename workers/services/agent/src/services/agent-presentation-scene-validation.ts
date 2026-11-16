@@ -43,6 +43,10 @@ export function parseElements(value: unknown): PresentationElement[] {
       if (!Number.isSafeInteger(result[key])) return invalid();
     }
     if (item.bold !== undefined) { if (typeof item.bold !== "boolean") return invalid(); result.bold = item.bold; }
+    if (item.fontFamily !== undefined) {
+      if (!["Noto Sans CJK SC", "Noto Serif CJK SC", "Noto Sans Mono CJK SC"].includes(String(item.fontFamily))) return invalid();
+      result.fontFamily = item.fontFamily as PresentationElement["fontFamily"];
+    }
     if (item.align !== undefined) {
       if (!["left", "center", "right"].includes(String(item.align))) return invalid();
       result.align = item.align as PresentationElement["align"];

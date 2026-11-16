@@ -12,7 +12,7 @@ export interface PresentationChart {
 export interface PresentationElement {
   type: "text" | "shape" | "image" | "svg";
   x: number; y: number; width: number; height: number;
-  text?: string; fontSize?: number; color?: string; bold?: boolean;
+  text?: string; fontSize?: number; fontFamily?: "Noto Sans CJK SC" | "Noto Serif CJK SC" | "Noto Sans Mono CJK SC"; color?: string; bold?: boolean;
   align?: "left" | "center" | "right";
   fill?: string; stroke?: string; strokeWidth?: number;
   shape?: "rect" | "ellipse" | "line"; radius?: number; opacity?: number;
@@ -21,7 +21,11 @@ export interface PresentationElement {
 }
 export interface PresentationPalette { background: string; foreground: string; muted: string; accent: string; surface: string }
 export interface PresentationAsset { key: string; contentType: string; data: string }
-export interface PresentationAssetPort { load(userId: number, deck: PresentationDeck): Promise<PresentationAsset[]> }
+export interface PresentationAssetReference { key: string; url: string; contentType: string }
+export interface PresentationAssetPort {
+  load(userId: number, deck: PresentationDeck): Promise<PresentationAsset[]>;
+  references?(userId: number, deck: PresentationDeck): Promise<PresentationAssetReference[]>;
+}
 export interface PresentationSlide {
   title: string;
   layout: "canvas" | "cover" | "bullets" | "columns" | "cards" | "process" | "comparison" | "chart" | "closing";
@@ -59,6 +63,7 @@ export interface PresentationView extends Omit<PresentationVersion, "files" | "a
   conversationId: number;
   currentVersion: number;
   history: { version: number; status: PresentationStatus }[];
+  assets?: PresentationAssetReference[];
   files?: { pptx: AgentAttachmentReference; source: AgentAttachmentReference; previews: AgentAttachmentReference[] };
 }
 export interface PresentationRenderer {

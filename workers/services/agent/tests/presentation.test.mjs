@@ -223,3 +223,10 @@ test('Agent can retry a failed render and receives actionable layout errors', as
   const mapper = new HttpPresentationRendererMapper('https://renderer.test','secret',async()=>Response.json({detail:'PPT_TEXT_FIT: slide 2 element 3 needs more height'},{status:422}));
   await assert.rejects(mapper.render(parsePresentationDeck(deck)),error=>error.status===422 && error.message.includes('slide 2 element 3'));
 });
+
+test('a missing owned source does not hide the durable task status or recovery controls', async()=>{
+ const f=fixture();await f.service.start(input);
+ const {PresentationError}=await import('../.test-build/services/agent-presentation-validation.js');
+ const service=new AgentPresentationTaskService(f.storage,{}, {resolveOwned:async()=>[]},callback=>callback(),{references:async()=>{throw new PresentationError(404,'missing');}});
+ const view=await service.view(7);assert.equal(view.status,'queued');assert.deepEqual(view.assets,[]);
+});

@@ -57,11 +57,11 @@ def export_deck(deck, output: Path, scenes=None):
                     paragraph.space_before = paragraph.space_after = Pt(0)
                     run = paragraph.add_run()
                     run.text = line
-                    run.font.name = FONT
+                    run.font.name = el.get('fontFamily', FONT)
                     run.font.size = Pt(el['fontSize'] * .75)
                     run.font.bold = el['bold']
                     run.font.color.rgb = rgb(el['color'])
-                    ea = OxmlElement('a:ea'); ea.set('typeface', FONT); run._r.get_or_add_rPr().append(ea)
+                    ea = OxmlElement('a:ea'); ea.set('typeface', el.get('fontFamily', FONT)); run._r.get_or_add_rPr().append(ea)
                     alpha(run._r.get_or_add_rPr().solidFill.srgbClr, opacity)
             elif el['type'] == 'shape':
                 kind = el.get('shape', 'rect')

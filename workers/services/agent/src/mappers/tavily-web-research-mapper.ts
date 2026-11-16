@@ -34,6 +34,25 @@ export class TavilyWebResearchMapper implements AgentWebResearchPort {
     return { url: text(item.url) || url, title: text(item.title), content: text(item.raw_content) };
   }
 
+  async images(input: AgentWebSearchInput, signal: AbortSignal) {
+    const body = await this.post("search", { query: input.query, max_results: input.limit,
+      search_depth: "basic", include_images: true, include_image_descriptions: true,
+      include_answer: false, ...(input.domains?.length ? { include_domains: input.domains } : {}) }, signal);
+    const candidates: {url:string;description?:string;sourceUrl?:string}[] = [];
+    // Source-linked page images take precedence; retain compatibility with top-level image search results.
+    for (const page of Array.isArray(body.results) ? body.results.filter(record) : []) {
+      for (const image of Array.isArray(page.images) ? page.images : []) {
+        const item: Record<string, unknown> = record(image) ? image : {url:image};
+        if (text(item.url)) candidates.push({url:text(item.url),description:text(item.description),sourceUrl:text(page.url)});
+      }
+    }
+    for (const image of Array.isArray(body.images) ? body.images : []) {
+      const item: Record<string, unknown> = record(image) ? image : {url:image};
+      if (text(item.url)) candidates.push({url:text(item.url),description:text(item.description),sourceUrl:text(item.source_url) || undefined});
+    }
+    return [...new Map(candidates.map(item=>[item.url,item])).values()].slice(0,input.limit);
+  }
+
   private async post(path: "search" | "extract", body: unknown, signal: AbortSignal): Promise<Record<string, unknown>> {
     signal.throwIfAborted();
     const controller = new AbortController();

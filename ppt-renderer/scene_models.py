@@ -22,6 +22,7 @@ class Element(BaseModel):
     height: float = Field(ge=1, le=720)
     text: str = Field(default="", max_length=4000)
     fontSize: float = Field(default=28, ge=8, le=160)
+    fontFamily: Literal["Noto Sans CJK SC", "Noto Serif CJK SC", "Noto Sans Mono CJK SC"] = "Noto Sans CJK SC"
     color: str | None = Field(default=None, pattern=r"^#[a-fA-F0-9]{6}$")
     bold: bool = False
     align: Literal["left", "center", "right"] = "left"

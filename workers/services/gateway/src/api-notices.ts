@@ -1,5 +1,14 @@
 /** Additional public business notices shared by the API language boundary. */
 export const businessNotices: Record<string, string> = Object.fromEntries(`
+PPT 素材下载失败，请选择其他来源|Could not download the image. Choose another source.
+PPT 素材文件过大|The source image is too large.
+PPT 素材重定向无效|Invalid image redirect.
+PPT 素材不是受支持的图片|Unsupported source image format.
+PPT 素材转换失败|Could not prepare the source image. Try another image.
+PPT 进度文案无效|Invalid presentation progress message.
+图片搜索服务尚未配置|Image search is not configured.
+本轮图片搜索预算已用完|The image search budget for this turn is exhausted.
+请使用本轮图片搜索返回的素材标识|Use an image candidate returned by search in this turn.
 PPT 渲染服务尚未配置|The presentation renderer is not configured
 PPT 图片存储地址无效|Invalid presentation image storage URL
 PPT 图片格式不支持，请使用 PNG、JPEG、WebP、GIF 或页面 SVG 元素|Unsupported presentation image format. Use PNG, JPEG, WebP, GIF or a slide SVG element

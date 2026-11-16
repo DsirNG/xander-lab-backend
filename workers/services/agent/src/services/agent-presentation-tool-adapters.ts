@@ -1,3 +1,6 @@
+import type { AgentWebResearchSession } from "./agent-web-research-service.js";
+import { AgentWebResearchError } from "./agent-web-research-service.js";
+import type { PresentationMaterialService } from "./presentation-material-service.js";
 import type { PresentationPort } from "../interfaces/agent-presentation.js";
 import type { AgentToolDefinition } from "./agent-tool-registry.js";
 import type { AgentTool } from "./agent-tool-runtime.js";
@@ -32,12 +35,13 @@ const slide = { type: "object", properties: {
 }, required: ["title", "layout", "bullets"], additionalProperties: false };
 
 export const PRESENTATION_TOOLS: AgentToolDefinition[] = [
-  { name: "create_presentation", description: "制作用户下载后仅需微调文案的专业PPT。先确定受众、目的和一条主叙事，再写大纲；6页产品介绍优先采用：1封面与核心主张、2用户痛点与产品定位、3产品如何工作、4核心功能分组、5真实使用场景或案例、6价值总结与下一步。每页标题写结论，正文给具体机制、案例、交付物或行动，不堆空泛口号。使用用户资料，公开事实缺依据时先搜索阅读；不得虚构品牌事实、性能数字、客户或来源。不确定事项在备注中明确标注待确认。按内容关系安排封面、模块、流程、对比、图表、结尾等版式，统一主题且保持页面节奏；详细解释放演讲备注。提交持久化异步任务后只报告任务已保存，只有查询确认 status=completed 且 files.pptx 与 files.previews 齐全时才可展示完成、图片或下载链接。专业设计采用canvas自由构图，Agent自行决定配色、留白、字号、图片与插图，不要把所有主题套成圆环封面和卡片网格。需要照片、产品氛围或背景时先调用prepare_presentation_image或查询用户素材，等待保存完成后用assetId引用；用户上传图片用attachmentId。没有真实产品资料时不得把生成包装伪装为真实产品，可明确作为概念插图。图标、关系图和抽象插图可直接编写安全的自包含SVG；文字单独用text元素，基础图形用shape以保持可编辑。页面应围绕主题使用不同构图，深蓝只决定色调，不决定布局。canvas页面全部可见内容由elements定义。提交前检查每页信息与画布，完成后读取预览图片检查效果，有问题修改后重生成。文字和基础图形为原生可编辑对象，照片为可替换图片，SVG保留矢量与PNG兼容回退。最多20页，不接受可执行代码。",
+  { name: "create_presentation", description: "制作用户下载后仅需微调文案的专业PPT。先确定受众、目的和一条主叙事，再写大纲；6页产品介绍优先采用：1封面与核心主张、2用户痛点与产品定位、3产品如何工作、4核心功能分组、5真实使用场景或案例、6价值总结与下一步。每页标题写结论，正文给具体机制、案例、交付物或行动，不堆空泛口号。使用用户资料，公开事实缺依据时先搜索阅读；不得虚构品牌事实、性能数字、客户或来源。不确定事项在备注中明确标注待确认。按内容关系安排封面、模块、流程、对比、图表、结尾等版式，统一主题且保持页面节奏；详细解释放演讲备注。提交持久化异步任务后只报告任务已保存，只有查询确认 status=completed 且 files.pptx 与 files.previews 齐全时才可展示完成、图片或下载链接。专业设计采用canvas自由构图，Agent自行决定配色、留白、字号、图片与插图，不要把所有主题套成圆环封面和卡片网格。涉及真实产品、品牌或公司Logo时先用search_presentation_images搜索官方素材并import_presentation_image导入，核对实际图片；背景、氛围和概念插图可调用prepare_presentation_image或查询用户素材，等待保存完成后用assetId引用；用户上传图片用attachmentId。没有真实产品资料时不得把生成包装伪装为真实产品，可明确作为概念插图。图标、关系图和抽象插图可直接编写安全的自包含SVG；文字单独用text元素，基础图形用shape以保持可编辑。页面应围绕主题使用不同构图，深蓝只决定色调，不决定布局。canvas页面全部可见内容由elements定义。提交前检查每页信息与画布，完成后读取预览图片检查效果，有问题修改后重生成。制作过程中使用report_presentation_progress简短说明当前在做什么、已完成什么；未检查完不可声称已完成。最后先回复交付说明，再由界面展示唯一交付卡，不重复输出下载链接或图片。文字和基础图形为原生可编辑对象，照片为可替换图片，SVG保留矢量与PNG兼容回退。最多20页，不接受可执行代码。",
     parameters: { type: "object", properties: {
       title: { type: "string", maxLength: 100 }, language: { type: "string", enum: ["zh-CN", "en-US"] },
       theme: { type: "string", enum: ["navy", "paper"], description: "兼容主题默认值，不限制palette和每页的自定义构图" }, palette: presentationPaletteSchema,
       slides: { type: "array", minItems: 1, maxItems: 20, items: slide },
     }, required: ["title", "slides"], additionalProperties: false } },
+  { name: "report_presentation_progress", description: "向用户报告PPT制作进展：当前步骤、已经完成的内容或正在处理的问题。用简短自然语言，不泄露内部工具名，不伪造已完成状态。规划、素材准备、页面制作、预览检查等阶段可调用。", parameters: { type: "object", properties: { message: { type:"string",minLength:1,maxLength:300 } }, required:["message"],additionalProperties:false } },
   { name: "get_presentation", description: "查询当前用户的 PPT 任务、页面结构、文件和版本。waitMs可等待本次异步渲染，未完成时继续查询；完成后查看返回的实际预览图片，检查内容和视觉效果，有问题修改页面。修改单页前先读取，保留该页来源与备注；不要猜测任务ID或版本号。", parameters: {
     type: "object", properties: { id: { type: "string" }, version: { type: "integer", minimum: 1 }, waitMs: { type: "integer", minimum: 0, maximum: 20000 } }, required: ["id"], additionalProperties: false,
   } },
@@ -50,8 +54,12 @@ export const PRESENTATION_TOOLS: AgentToolDefinition[] = [
   } },
 ];
 
-export function createPresentationTools(service: PresentationPort, emit: (event: string, data: Record<string, unknown>) => Promise<void>, images?: AgentImageService): Map<string, AgentTool> {
+export function createPresentationTools(service: PresentationPort, emit: (event: string, data: Record<string, unknown>) => Promise<void>, images?: AgentImageService, materials?: { research: AgentWebResearchSession; importer: PresentationMaterialService }): Map<string, AgentTool> {
   const definitions = [...PRESENTATION_TOOLS];
+  if (materials) definitions.push(
+    { name: "search_presentation_images", description: "为PPT搜索真实产品图、公司Logo和公开主题图片。明确品牌、型号、用途，优先指定官方域名；返回候选不代表已核实身份或授权，核对来源后用import_presentation_image导入。真实产品或Logo优先真实素材，不要用生成图冒充。", parameters: { type: "object", properties: { query: {type:"string",maxLength:500}, domains:{type:"array",maxItems:5,items:{type:"string"}} }, required:["query"],additionalProperties:false } },
+    { name: "import_presentation_image", description: "导入本轮图片搜索的实际candidateId。安全下载、解码并保存后返回assetId、预览图和来源；确认图片匹配主题/型号后使用，来源写入页面sources。失败可换来源，不能猜测候选标识。", parameters: { type:"object",properties:{candidateId:{type:"string",maxLength:100}},required:["candidateId"],additionalProperties:false } }
+  );
   if (images) definitions.push({ name: "prepare_presentation_image", description: "为演示文稿生成并保存照片风格插图、产品概念图或背景。仅在用户授权制作或美化PPT且需要新图时调用。等待保存完成，返回真实assetId后继续制作PPT；此工具不会结束制作流程。不要把概念图宣称为真实产品照片。提示词中指定构图、画幅、留白、风格；通常不让图片承担正文文字。",
     parameters: { type: "object", additionalProperties: false, required: ["prompt"], properties: {
       prompt: { type: "string", minLength: 1, maxLength: 2000 }, title: { type: "string", maxLength: 120 },
@@ -63,6 +71,18 @@ export function createPresentationTools(service: PresentationPort, emit: (event:
       const identity = { tool: definition.name, invocationId: context.invocationId };
       await emit("tool_start", { ...identity, startedAt: new Date().toISOString() });
       try {
+        if (definition.name === "report_presentation_progress") {
+          if (typeof input.message !== "string" || !input.message.trim() || input.message.length > 300) throw new PresentationError(400,"PPT 进度文案无效");
+          await emit("presentation_progress", { ...identity, message: input.message.trim() });
+          return { ok:true, data:{ message:input.message.trim() }, answer:"制作进展已展示，继续完成剩余工作。" };
+        }
+        if (definition.name === "search_presentation_images") {
+          return { ok: true, data: await materials!.research.searchImages(input, context.signal), answer: "已找到图片候选，请核对来源与产品身份后导入。" };
+        }
+        if (definition.name === "import_presentation_image") {
+          const candidate = materials!.research.imageCandidate(input.candidateId);
+          return { ok: true, data: await materials!.importer.import(context.userId, candidate, context.signal), answer: "真实来源图片已保存，请查看图片并核对后用于PPT，保留来源。" };
+        }
         if (definition.name === "prepare_presentation_image") {
           const data = await images!.generate(context.userId, context.conversationId, context.runVersion, input,
             undefined, async () => { context.signal.throwIfAborted(); });
@@ -90,7 +110,7 @@ export function createPresentationTools(service: PresentationPort, emit: (event:
         return { ok: true, data, answer: answer
           + (prepared?.adjustedSlides ? " 已自动适配页面布局，缩略的完整内容保留在演讲备注中。" : "") };
       } catch (error) {
-        const message = (error instanceof PresentationError || error instanceof AgentImageError) ? error.message : "PPT 服务暂不可用";
+        const message = (error instanceof PresentationError || error instanceof AgentImageError || error instanceof AgentWebResearchError) ? error.message : "PPT 服务暂不可用";
         await emit("tool_error", { ...identity, error: message });
         throw new AgentToolExecutionError("PRESENTATION_FAILED", message, true);
       }

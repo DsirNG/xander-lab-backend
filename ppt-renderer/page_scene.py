@@ -18,18 +18,22 @@ Image.MAX_IMAGE_PIXELS = 16000000
 
 
 @lru_cache(maxsize=64)
-def font(size, bold=False):
+def font(size, bold=False, family=FONT):
+    serif = family == "Noto Serif CJK SC"
+    mono = family == "Noto Sans Mono CJK SC"
+    stem = "NotoSerifCJK" if serif else "NotoSansCJK"
     candidates = [os.environ.get("PPT_PREVIEW_FONT", ""),
-                  "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc" if bold else "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-                  "C:/Windows/Fonts/msyhbd.ttc" if bold else "C:/Windows/Fonts/msyh.ttc"]
+                  f"/usr/share/fonts/opentype/noto/{stem}-{'Bold' if bold else 'Regular'}.ttc",
+                  str(Path(os.environ.get("PPT_FONT_DIRECTORY", "/usr/share/fonts/opentype/noto")) / f"{stem}-{'Bold' if bold else 'Regular'}.ttc"),
+                  "C:/Windows/Fonts/simsun.ttc" if serif else "C:/Windows/Fonts/msyhbd.ttc" if bold else "C:/Windows/Fonts/msyh.ttc"]
     for path in candidates:
         if path and Path(path).exists():
-            return ImageFont.truetype(path, max(1, round(size)))
+            return ImageFont.truetype(path, max(1, round(size)), index=(7 if mono else 2) if "Noto" in path else 0)
     raise RuntimeError("A CJK font is required for preview and text measurement")
 
 
-def wrap_text(value, size, width, bold):
-    measured = font(size, bold)
+def wrap_text(value, size, width, bold, family=FONT):
+    measured = font(size, bold, family)
     result = []
     for paragraph in value.split("\n"):
         if not paragraph:
@@ -146,7 +150,8 @@ def prepare_scene(deck, item, index, assets):
             el.setdefault("bold", False)
             el.setdefault("align", "left")
             el.setdefault("color", p["foreground"])
-            el["_lines"] = wrap_text(el["text"], el["fontSize"], el["width"], el["bold"])
+            el.setdefault("fontFamily", FONT)
+            el["_lines"] = wrap_text(el["text"], el["fontSize"], el["width"], el["bold"], el["fontFamily"])
             el["_lineHeight"] = el["fontSize"] * 1.35
             if len(el["_lines"]) * el["_lineHeight"] > el["height"] + .1:
                 raise ValueError(f"PPT_TEXT_FIT: page {index + 1} element {n + 1} needs {len(el['_lines']) * el['_lineHeight']:.0f}px height, has {el['height']:g}px; enlarge the box or rewrite the text")
@@ -200,9 +205,10 @@ def scene_svg(scene):
             align = el["align"]
             anchor = {"left": "start", "center": "middle", "right": "end"}[align]
             tx = x + (w / 2 if align == "center" else w if align == "right" else 0)
-            ascent = font(size, el["bold"]).getmetrics()[0]
+            family = el.get("fontFamily", FONT)
+            ascent = font(size, el["bold"], family).getmetrics()[0]
             for n, line in enumerate(el["_lines"]):
-                out.append(f'<text x="{tx:g}" y="{y + ascent + n * el["_lineHeight"]:g}" font-family="{FONT}" font-size="{size:g}" font-weight="{700 if el["bold"] else 400}" text-anchor="{anchor}" fill="{el["color"]}" opacity="{opacity}">{escape(line)}</text>')
+                out.append(f'<text x="{tx:g}" y="{y + ascent + n * el["_lineHeight"]:g}" font-family="{family}" font-size="{size:g}" font-weight="{700 if el["bold"] else 400}" text-anchor="{anchor}" fill="{el["color"]}" opacity="{opacity}">{escape(line)}</text>')
         elif el["type"] == "shape":
             style = f'fill="{el.get("fill", "none")}" stroke="{el.get("stroke", "none")}" stroke-width="{el.get("strokeWidth", 1)}" opacity="{opacity}"'
             kind = el.get("shape", "rect")

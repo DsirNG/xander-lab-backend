@@ -46,6 +46,8 @@ export class AgentWebResearchService {
 }
 
 export class AgentWebResearchSession {
+  private imageSearches = 0;
+  private readonly imageCandidates = new Map<string, { url: string; description: string; sourceUrl: string }>();
   private searches = 0;
   private reads = 0;
   private remainingContent = 48_000;
@@ -54,6 +56,34 @@ export class AgentWebResearchSession {
   private readonly readCache = new Map<string, AgentWebSource>();
 
   constructor(private readonly provider: AgentWebResearchPort) {}
+
+  async searchImages(args: Record<string, unknown>, signal: AbortSignal) {
+    const query = typeof args.query === "string" ? clean(args.query, 501) : "";
+    if (!query || query.length > 500) throw new AgentWebResearchError("WEB_INVALID_ARGUMENTS", "搜索关键词需要 1 至 500 个字符");
+    if (!this.provider.images) throw new AgentWebResearchError("WEB_PROVIDER_UNAVAILABLE", "图片搜索服务尚未配置");
+    if (++this.imageSearches > 5) throw new AgentWebResearchError("WEB_SEARCH_BUDGET", "本轮图片搜索预算已用完");
+    const domains = Array.isArray(args.domains) ? args.domains.slice(0, 5).map(value => new URL(publicWebUrl(`https://${value}`)).hostname) : undefined;
+    const raw = await this.provider.images({ query, limit: 8, domains }, signal);
+    const results = [];
+    for (const item of raw) {
+      try {
+        const url = publicWebUrl(item.url);
+        const sourceUrl = item.sourceUrl ? publicWebUrl(item.sourceUrl) : url;
+        const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(url));
+        const candidateId = `img_${Array.from(new Uint8Array(digest)).slice(0,12).map(v=>v.toString(16).padStart(2,"0")).join("")}`;
+        const value = { url, sourceUrl, description: clean(item.description ?? "", 500) };
+        this.imageCandidates.set(candidateId, value);
+        results.push({ candidateId, ...value });
+      } catch (error) { if (!(error instanceof AgentWebResearchError)) throw error; }
+    }
+    return { results, untrusted: true, attribution: "Search candidates are not proof of product identity or permission. Verify the source and exact product before use." };
+  }
+
+  imageCandidate(id: unknown) {
+    const value = typeof id === "string" ? this.imageCandidates.get(id) : undefined;
+    if (!value) throw new AgentWebResearchError("WEB_INVALID_ARGUMENTS", "请使用本轮图片搜索返回的素材标识");
+    return value;
+  }
 
   async search(args: Record<string, unknown>, signal: AbortSignal) {
     signal.throwIfAborted();

@@ -36,3 +36,11 @@ docker build -t dinqor-ppt-renderer .
 先发布兼容新协议的 renderer，再发布 Agent Worker 与 Web。Worker 保留现有 D1、Durable Object、服务绑定、secret 与线上环境变量。沿用 IMAGE_TASKS 和 PRESENTATION_TASKS，无新增数据库迁移。
 
 不要把 health 存活检查当成功能验收：用包含位图、SVG、原生文字的实际多页输入验证预览、PPTX 页数与文件内容，再验证平台普通登录用户的创建、预览、下载和修改。
+
+## Source imagery and direct editing
+
+`search_presentation_images` uses configured Tavily image search; `import_presentation_image` accepts only a candidate from the current turn. Worker downloads enforce public-host/redirect/type/byte limits and `/v1/normalize-image` decodes images in the isolated renderer. Imported assets retain source attribution and are not marked as AI-generated. Search results require Agent identity/licensing review; unsuccessful searches do not justify fabricated logos or product photography. Search is unavailable when the platform search provider is disabled.
+
+Text elements may select Noto Sans CJK SC, Noto Serif CJK SC or Noto Sans Mono CJK SC. Measurement, PNG and native PPTX use the selected family. The web canvas loads matching licensed WOFF2 fonts from the frontend origin; PPTX references names without embedding font binaries.
+
+The frontend displays scene elements directly and supports selection, drag, resize, text/font/color edits, layer ordering, undo/redo and owner-scoped replacement image upload. Save uses the existing expected-version revision API. Individual raster images and SVG illustrations remain image/vector elements; this is not path-level SVG editing or the full PowerPoint feature set. Existing legacy semantic slides retain their image preview and form editor.

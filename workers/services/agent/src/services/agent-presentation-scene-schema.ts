@@ -12,6 +12,7 @@ export const presentationElementsSchema = {
     x: { type: "number", minimum: 0, maximum: 1280 }, y: { type: "number", minimum: 0, maximum: 720 },
     width: { type: "number", minimum: 1, maximum: 1280 }, height: { type: "number", minimum: 1, maximum: 720 },
     text: { type: "string", maxLength: 4000 }, fontSize: { type: "number", minimum: 8, maximum: 160, description: "画布像素字号，正文通常24至30，标题44至72，按实际构图决定" },
+    fontFamily: { type: "string", enum: ["Noto Sans CJK SC", "Noto Serif CJK SC", "Noto Sans Mono CJK SC"], description: "按场景选择字体：无衬线适合产品与商务，衬线适合文化与叙事，等宽适合代码与参数；标题与正文可分别选择，保持层级统一" },
     color, bold: { type: "boolean" }, align: { type: "string", enum: ["left", "center", "right"] },
     fill: color, stroke: color, strokeWidth: { type: "number", minimum: 0, maximum: 30 },
     shape: { type: "string", enum: ["rect", "ellipse", "line"] }, radius: { type: "number", minimum: 0, maximum: 360 },

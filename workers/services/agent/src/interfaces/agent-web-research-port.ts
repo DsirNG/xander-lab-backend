@@ -27,6 +27,7 @@ export interface AgentWebProviderSource {
 
 /** Remote search/extraction adapter. The Worker never fetches model-supplied URLs. */
 export interface AgentWebResearchPort {
+  images?(input: AgentWebSearchInput, signal: AbortSignal): Promise<{ url: string; description?: string; sourceUrl?: string }[]>;
   search(input: AgentWebSearchInput, signal: AbortSignal): Promise<AgentWebProviderSource[]>;
   read(url: string, signal: AbortSignal): Promise<AgentWebProviderSource>;
 }
