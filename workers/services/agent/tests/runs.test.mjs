@@ -80,6 +80,7 @@ for (const apiStyle of ["CHAT_COMPLETIONS", "RESPONSES"]) {
       const names=body.tools.map(tool=>tool.function?.name??tool.name);
       assert.ok(names.includes("create_presentation"));
       assert.ok(names.includes("get_presentation"));
+      if(apiStyle==='RESPONSES')assert.equal(body.tools.find(tool=>tool.name==='create_presentation').strict,false);
       const events=apiStyle === "CHAT_COMPLETIONS"
         ? [{choices:[{delta:calls===1 ? {tool_calls:[{index:0,function:{name:"create_presentation",arguments:JSON.stringify(deck)}}]} : {content:"PPT 任务已保存，可在卡片查看进度。"}}]}]
         : calls===1 ? [{type:"response.output_item.added",output_index:0,item:{type:"function_call",name:"create_presentation",arguments:""}},
