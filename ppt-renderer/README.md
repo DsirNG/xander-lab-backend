@@ -44,3 +44,5 @@ docker build -t dinqor-ppt-renderer .
 Text elements may select Noto Sans CJK SC, Noto Serif CJK SC or Noto Sans Mono CJK SC. Measurement, PNG and native PPTX use the selected family. The web canvas loads matching licensed WOFF2 fonts from the frontend origin; PPTX references names without embedding font binaries.
 
 The frontend displays scene elements directly and supports selection, drag, resize, text/font/color edits, layer ordering, undo/redo and owner-scoped replacement image upload. Save uses the existing expected-version revision API. Individual raster images and SVG illustrations remain image/vector elements; this is not path-level SVG editing or the full PowerPoint feature set. Existing legacy semantic slides retain their image preview and form editor.
+
+The HTTPS reverse proxy must allow authenticated POST to **both** `/v1/render` and `/v1/normalize-image`, with a 30 MiB request limit and a render read timeout of at least 250 seconds. Unmatched paths remain 404. After swapping the renderer container, reload Nginx to refresh its Docker upstream address. The production proxy configuration has a pre-editor backup for rollback.
