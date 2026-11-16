@@ -1,4 +1,4 @@
-import type { PresentationDeck, PresentationRenderer } from "../interfaces/agent-presentation.js";
+import type { PresentationAsset, PresentationDeck, PresentationRenderer } from "../interfaces/agent-presentation.js";
 import { PresentationError } from "../services/agent-presentation-validation.js";
 
 const MAX_RESPONSE_BYTES = 50 * 1024 * 1024;
@@ -13,13 +13,19 @@ function decode(value: unknown, max: number): Uint8Array {
 export class HttpPresentationRendererMapper implements PresentationRenderer {
   constructor(private readonly endpoint: string, private readonly token: string, private readonly transport = fetch.bind(globalThis)) {}
 
-  async render(deck: PresentationDeck) {
+  async render(deck: PresentationDeck, assets: PresentationAsset[] = []) {
     try {
       const url = new URL(this.endpoint);
       if (url.protocol !== "https:" && !(url.protocol === "http:" && ["localhost", "127.0.0.1"].includes(url.hostname))) throw new Error();
       if (url.username || url.password) throw new Error();
       const response = await this.transport(new Request(new URL("/v1/render", url), { method: "POST", redirect: "manual",
-        signal: AbortSignal.timeout(240_000), headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" }, body: JSON.stringify(deck) }));
+        signal: AbortSignal.timeout(240_000), headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" }, body: JSON.stringify({ ...deck, assets }) }));
+      if (response.status === 422) {
+        const detail = await response.json() as { detail?: unknown };
+        if (typeof detail.detail === "string" && /^PPT_(TEXT_FIT|SVG_INVALID|ASSET_INVALID):/.test(detail.detail)) {
+          throw new PresentationError(422, detail.detail.slice(0, 350));
+        }
+      }
       if (!response.ok || !response.body) throw new Error();
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
@@ -50,6 +56,9 @@ export class HttpPresentationRendererMapper implements PresentationRenderer {
         quality: { passed: true } }));
       if (source.length > 8 * 1024 * 1024) throw new Error();
       return { pptx, source, previews };
-    } catch { throw new PresentationError(502, "PPT_RENDER_FAILED: 渲染器未能生成可用的演示文稿结果"); }
+    } catch (error) {
+      if (error instanceof PresentationError) throw error;
+      throw new PresentationError(502, "PPT_RENDER_FAILED: 渲染器未能生成可用的演示文稿结果");
+    }
   }
 }

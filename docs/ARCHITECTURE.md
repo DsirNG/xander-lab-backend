@@ -667,3 +667,6 @@ existing execution pipeline and durable invocation events. The Web frontend
 renders the same source cards for live and restored owned conversations.
 An explicit admin disable suppresses both custom tools and upstream native search.
 See `../workers/services/agent/WEB_RESEARCH.md` for deployment and runtime limits.
+# Agent presentation production
+
+Agent PPT production uses the existing tool pipeline and a per-presentation Durable Object for owner-scoped task state, versions and durable alarms. The Agent authors a 1280×720 canvas of native text/shapes, owned raster images and self-contained SVG, with custom palette and per-page backgrounds. `prepare_presentation_image` reuses the image service without terminating the Agent loop; completed `get_presentation` results attach actual previews to subsequent model input for inspection and revision. Owner-scoped asset resolution occurs in the Worker; the Python renderer never fetches URLs. Both PNG preview and editable PPTX consume the same measured scene. SVGs retain vector data with a PNG fallback; technical quality checks do not claim aesthetic approval. There is no ppt-master runtime dependency. Binary artifacts remain in OSS. See `../ppt-renderer/README.md`.

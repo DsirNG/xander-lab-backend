@@ -7,15 +7,19 @@ import { HttpPresentationRendererMapper } from "../mappers/http-presentation-ren
 import { AgentAttachmentService } from "../services/agent-attachment-service.js";
 import { AgentPresentationTaskService } from "../services/agent-presentation-task-service.js";
 import { PresentationError } from "../services/agent-presentation-validation.js";
+import { ContentAgentMediaMapper } from "../mappers/content-agent-media-mapper.js";
+import { PresentationAssetMapper } from "../mappers/presentation-asset-mapper.js";
 
 export class AgentPresentationTaskObject {
   private readonly tasks: AgentPresentationTaskService;
   constructor(state: { storage: PresentationStorage; blockConcurrencyWhile<T>(callback: () => Promise<T>): Promise<T> }, env: AgentEnvironment) {
+    const media = new ContentAgentMediaMapper(env);
+    const attachments = new AgentAttachmentService(new D1AgentAttachmentMapper(env.DB), new OssAgentAttachmentStorageMapper(env), media);
     this.tasks = new AgentPresentationTaskService(state.storage,
       new HttpPresentationRendererMapper(env.PPT_RENDERER_URL ?? "", env.PPT_RENDERER_TOKEN ?? ""),
       // Generated previews share the Agent artifact lifecycle and do not create library assets.
       new AgentAttachmentService(new D1AgentAttachmentMapper(env.DB), new OssAgentAttachmentStorageMapper(env)),
-      callback => state.blockConcurrencyWhile(callback));
+      callback => state.blockConcurrencyWhile(callback), new PresentationAssetMapper(attachments, media));
   }
   async fetch(request: Request): Promise<Response> {
     if (request.method !== "POST") return apiError(405, "Method not allowed");

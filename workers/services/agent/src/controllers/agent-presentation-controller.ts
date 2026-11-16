@@ -13,7 +13,7 @@ async function readInput(request: Request): Promise<Record<string, unknown>> {
       const { value, done } = await reader.read();
       if (done) break;
       length += value.byteLength;
-      if (length > 16_384) { await reader.cancel(); throw new PresentationError(413, "PPT 修改内容过大"); }
+      if (length > 512 * 1024) { await reader.cancel(); throw new PresentationError(413, "PPT 修改内容过大"); }
       chunks.push(value);
     }
   } finally { reader.releaseLock(); }

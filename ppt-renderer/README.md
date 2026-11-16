@@ -1,35 +1,38 @@
-# Agent PPT renderer
+# DinQor presentation renderer
 
-独立 Python 服务将 Agent 生成的页面结构转换为 SVG 预览，并由 DinQor 自有的 `native_pptx.py` 生成原生可编辑 PPTX。页面内容、版式和图表由 Agent 决策，渲染器只负责安全边界、排版和文件生成。
+Agent 自己策划内容和视觉方向，选择图片、SVG、原生文字和形状。`canvas` 页面在 1280×720 画布上直接描述元素，不必选择固定模板；`palette` 与页面 `background` 可自定义。旧版式仍可读取已有任务。
 
-## 本地运行
+## 生成链路
+
+1. Agent 按需调用 `prepare_presentation_image` 生成并完整保存素材，再使用实际返回的 `assetId`；用户上传图片使用 `attachmentId`。工具正常返回后 Agent 继续制作，不结束对话。
+2. Worker 通过素材或附件所属服务校验用户归属，读取有大小与时间限制的图片，去重后把字节传给渲染器。禁止由模型提供任意下载 URL；渲染器不访问网络。
+3. `page_scene.py` 统一确定坐标、换行、图片裁切和矢量视口。PNG 与 PPTX 消费同一份 scene，已移除运行中的两套独立排版代码。
+4. 文字与基础图形导出为可编辑对象，位图为可替换图片；SVG 经白名单验证后嵌入原始矢量和 PNG 兼容回退。PNG、JPEG、WebP、GIF 均解码为统一静态图片（GIF 使用首帧）。SVG 不接受脚本、网络、外链、foreignObject 或 CSS。
+5. PPTX、来源文件及所有预览上传完毕才发布 completed。前端保持加载占位，浏览器完成图片解码后才显示预览。
+6. Agent 用 `get_presentation`（可设置 waitMs 等待）查询，完成后的实际预览会作为图像输入送回模型。Agent 根据实际效果决定是否修改；`quality` 只表示技术检查通过，并明确视觉审查仍由 Agent 完成。
+
+文字不再按固定条数裁剪或偷偷转移到备注。安全限制只约束文档大小、元素结构、资源归属与可渲染性。文字无法放入其指定容器时返回 `PPT_TEXT_FIT` 及页码、元素、所需高度，Agent 可扩大容器、调整构图或改写内容。图片与 SVG 失败返回相应错误，不发布假完成结果。
+
+## 运行与测试
 
 ```powershell
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements.txt
 $env:PPT_RENDERER_TOKEN = '<本地随机服务令牌>'
 .venv/Scripts/python -m uvicorn app:app --host 127.0.0.1 --port 8080 --no-access-log
-```
-
-容器已安装 Noto Sans CJK 字体。本地预览也需要该字体；可用 `PPT_PREVIEW_FONT` 指向已安装的 Noto Sans CJK SC OTF 文件。缺少字体会导致预览替代字体，与 PowerPoint 的字体替代效果可能不同。PPTX 文字仍为原生可编辑对象，接收方应安装对应字体。
-
-```powershell
-.venv/Scripts/python -m unittest -v test_render
+.venv/Scripts/python -m unittest discover -v
+.venv/Scripts/python examples/canvas_showcase.py <本地输出目录>
 docker build -t dinqor-ppt-renderer .
 ```
 
+`examples/canvas_showcase.py` 是人工 QA 输入，独立展示六种构图，不是产品运行时模板。回归测试覆盖图片解码、裁切、缺失资源、SVG 安全、文字完整性、备注、可编辑对象及两种模型接口的“素材→创建→查询→查看预览→修改”流程。
+
+容器安装 Noto Sans CJK；本地测量可通过 `PPT_PREVIEW_FONT` 指向匹配字体。用户 PowerPoint 的字体替代仍可能改变视觉，应安装相同字体。原生文本与 SVG 的具体显示由 Office 版本决定，旧版本可使用图片兼容回退。
+
 ## 部署
 
-1. 把镜像部署到可以运行 Python 进程的容器平台，至少 1 CPU / 1 GiB 内存，允许 `/tmp` 写入。镜像使用非 root 用户。只暴露 HTTPS；限制入站到 Agent 服务路径，设置 `PPT_RENDERER_TOKEN` 为随机长令牌。
-2. Agent Worker 配置 `PPT_RENDERER_URL` 与 `PPT_RENDERER_TOKEN`（后者使用 Wrangler secret）。服务令牌不能放入 Web、模型上下文或数据库明文配置。地址/token 是基础设施配置，复用现有 Agent 模型，无需另设 PPT 模型。
-3. 发布 Agent Worker 时保留已有 `image-task-v1` 迁移并追加 `presentation-task-v1`，绑定 `PRESENTATION_TASKS`。这是 Durable Object SQLite 迁移，**没有新增 D1 SQL 迁移**。
-4. 发布 Gateway（包含新路由与鉴权规则），随后发布 Web。OSS 沿用 Agent 附件配置。缺少渲染配置时模型工具不会暴露，接口返回 503。
-5. 管理员以普通用户完整验证创建、等待完成、刷新、逐页预览、下载、单页修改、取消和重试。确认 PPTX 可以在 PowerPoint 中编辑文字。不要把 `/health` 的进程存活响应当作完整渲染验证。
+`POST /v1/render` 使用 Bearer 服务认证，最大请求 30 MiB，包含最多 20 MiB 图片与 512 KiB 左右结构数据。Worker 原始文档限制为 512 KiB / 20 页 / 单页 200 元素（技术资源限制，不是内容规划规则）；单图最多 8 MiB。渲染器单进程同时编译一个任务，繁忙返回 429。使用非 root、只读文件系统、受限 /tmp、CPU/内存/进程限制，禁止渲染器主动访问网络。
 
-`POST /v1/render` 只接受 Bearer 服务认证后的结构化 JSON，最多 128 KiB / 20 页。返回有界 base64 PPTX、PNG 预览和包含 SVG 的来源文件。拒绝任意 SVG、脚本、远程图片或可执行代码；用户文本经 XML 转义。来源 URL 仅作为备注文字，不在渲染器访问。
+先发布兼容新协议的 renderer，再发布 Agent Worker 与 Web。Worker 保留现有 D1、Durable Object、服务绑定、secret 与线上环境变量。沿用 IMAGE_TASKS 和 PRESENTATION_TASKS，无新增数据库迁移。
 
-单进程同一时间只编译一个任务，繁忙时返回 429，由用户显式重试。每条上游子进程最多 90 秒。建议容器运行时设置 CPU/内存限制、只读根文件系统、可写受限 `/tmp`，并禁止出站网络（构建阶段仍需下载锁定上游）。按实例扩容。
-
-当前支持 cover / bullets / columns / cards / process / comparison / chart / closing 与 navy / paper 两种统一主题。文字、形状和基础图表导出为原生可编辑对象；PNG 预览来自同一套 DinQor SVG 设计。上传模板、动画和旁白暂不支持。输入过长时会返回具体排版错误，由 Agent 修改后重试。
-
-任务完成后下载附件 ID 持久化；每次查询重新签发 URL。关闭窗口不停止任务，取消操作通过版本和 attempt 栅栏防止旧任务覆盖。执行中断由持久化 watchdog 标记失败，不会静默重复执行。取消或失败发生在上传中时，已上传但未发布到结果的附件可能留在 OSS，后续需纳入统一附件生命周期清理。
+不要把 health 存活检查当成功能验收：用包含位图、SVG、原生文字的实际多页输入验证预览、PPTX 页数与文件内容，再验证平台普通登录用户的创建、预览、下载和修改。

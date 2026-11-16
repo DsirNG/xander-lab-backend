@@ -69,7 +69,7 @@ class RenderTests(unittest.TestCase):
                     self.assertNotIn("PPT Master", archive.read(name).decode())
         self.assertEqual(len(result["previews"]), 2)
         self.assertTrue(result["quality"]["passed"])
-        self.assertEqual(result["quality"]["engine"], "dinqor-native")
+        self.assertEqual(result["quality"]["engine"], "dinqor-scene-v2")
         output = os.environ.get("PPT_TEST_OUTPUT")
         if output:
             path = Path(output)

@@ -1,87 +1,103 @@
+"""Export shared scenes as editable shapes/text and replaceable raster/vector pictures."""
+import io
 from pathlib import Path
-
+from lxml import etree
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.shapes import MSO_SHAPE
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_CONNECTOR, MSO_SHAPE
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+from pptx.oxml.xmlchemy import OxmlElement
+from pptx.opc.package import Part
+from pptx.opc.constants import RELATIONSHIP_TYPE as RT
 from pptx.util import Inches, Pt
+from page_scene import FONT, decode_assets, prepare_scene
 
 
-W, H = Inches(13.333), Inches(7.5)
-NAVY = RGBColor(8, 24, 52)
-WHITE = RGBColor(248, 250, 252)
-MUTED = RGBColor(167, 188, 214)
-CYAN = RGBColor(54, 198, 238)
-CARD = RGBColor(18, 42, 75)
+def units(px):
+    return Inches(px / 96)
 
 
-def _text(slide, value, x, y, w, h, size=18, color=WHITE, bold=False, align=PP_ALIGN.LEFT):
-    box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
-    frame = box.text_frame
-    frame.clear()
-    frame.word_wrap = True
-    p = frame.paragraphs[0]
-    p.alignment = align
-    run = p.add_run()
-    run.text = str(value)
-    run.font.name = "Noto Sans CJK SC"
-    run.font.size = Pt(size)
-    run.font.bold = bold
-    run.font.color.rgb = color
-    return box
+def rgb(value):
+    return RGBColor.from_string(value.lstrip('#'))
 
 
-def _background(slide, theme):
-    fill = slide.background.fill
-    fill.solid()
-    fill.fore_color.rgb = WHITE if theme == "paper" else NAVY
+def alpha(color_node, opacity):
+    if opacity != 1:
+        child = OxmlElement('a:alpha')
+        child.set('val', str(round(opacity * 100000)))
+        color_node.append(child)
 
 
-def _card(slide, x, y, w, h):
-    shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(x), Inches(y), Inches(w), Inches(h))
-    shape.fill.solid(); shape.fill.fore_color.rgb = CARD
-    shape.line.color.rgb = RGBColor(37, 75, 112)
-    return shape
-
-
-def export_deck(deck, output: Path):
+def export_deck(deck, output: Path, scenes=None):
+    if scenes is None:
+        assets = decode_assets(deck.assets)
+        scenes = [prepare_scene(deck, item, i, assets) for i, item in enumerate(deck.slides)]
     prs = Presentation()
     prs.core_properties.title = deck.title
-    prs.core_properties.author = "DinQorAI"
-    prs.core_properties.company = "DinQorAI"
-    prs.slide_width, prs.slide_height = W, H
-    blank = prs.slide_layouts[6]
-    for index, item in enumerate(deck.slides):
-        slide = prs.slides.add_slide(blank)
-        _background(slide, deck.theme)
-        _text(slide, item.kicker or f"DINQOR / {deck.title}", .65, .38, 6.8, .35, 10, MUTED, True)
-        _text(slide, f"{index + 1:02d} / {len(deck.slides):02d}", 11.65, .38, 1, .35, 10, MUTED, False, PP_ALIGN.RIGHT)
-        _text(slide, item.title, .65, 1.0, 11.2, .8, 28 if item.layout == "cover" else 24, WHITE, True)
-        if item.subtitle:
-            _text(slide, item.subtitle, .65, 1.9, 11.2, .5, 14, MUTED)
-        blocks = item.blocks or []
-        if item.layout == "chart" and item.chart:
-            points = item.chart.points
-            maximum = max((p.value for p in points), default=1) or 1
-            for n, point in enumerate(points):
-                x = .9 + n * (11.3 / max(len(points), 1))
-                height = 3.6 * point.value / maximum
-                shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, Inches(x), Inches(6.0 - height), Inches(.55), Inches(height))
-                shape.fill.solid(); shape.fill.fore_color.rgb = CYAN; shape.line.fill.background()
-                _text(slide, point.label, x - .15, 6.12, .9, .3, 10, MUTED, False, PP_ALIGN.CENTER)
-                _text(slide, point.value, x - .15, 5.75 - height, .9, .25, 9, WHITE, True, PP_ALIGN.CENTER)
-        elif blocks:
-            columns = 2 if len(blocks) > 1 else 1
-            cell_w = 5.45 if columns == 2 else 11.2
-            for n, block in enumerate(blocks):
-                col, row = n % columns, n // columns
-                x, y = .65 + col * 5.75, 2.55 + row * 1.45
-                _card(slide, x, y, cell_w, 1.12)
-                _text(slide, block.heading, x + .22, y + .18, cell_w - .4, .3, 14, CYAN, True)
-                _text(slide, block.body, x + .22, y + .53, cell_w - .4, .4, 11, WHITE)
-        else:
-            for n, bullet in enumerate(item.bullets):
-                _text(slide, f"•  {bullet}", .9, 2.55 + n * .62, 11, .42, 15, WHITE)
-        if item.takeaway:
-            _text(slide, item.takeaway, .65, 6.65, 11.2, .38, 12, MUTED)
+    prs.core_properties.author = 'DinQorAI'
+    prs.slide_width, prs.slide_height = units(1280), units(720)
+    for item, scene in zip(deck.slides, scenes):
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        slide.background.fill.solid()
+        slide.background.fill.fore_color.rgb = rgb(scene['background'])
+        for el in scene['elements']:
+            x, y, w, h = (units(el[k]) for k in ('x', 'y', 'width', 'height'))
+            opacity = el.get('opacity', 1)
+            if el['type'] == 'text':
+                # The same measured lines drive preview and export, never two independent layouts.
+                for n, line in enumerate(el['_lines']):
+                    box = slide.shapes.add_textbox(x, y + units(n * el['_lineHeight']), w, units(el['_lineHeight']))
+                    frame = box.text_frame
+                    frame.clear()
+                    frame.margin_left = frame.margin_right = frame.margin_top = frame.margin_bottom = 0
+                    frame.word_wrap = False
+                    frame.vertical_anchor = MSO_ANCHOR.TOP
+                    paragraph = frame.paragraphs[0]
+                    paragraph.alignment = {'left': PP_ALIGN.LEFT, 'center': PP_ALIGN.CENTER, 'right': PP_ALIGN.RIGHT}[el['align']]
+                    paragraph.space_before = paragraph.space_after = Pt(0)
+                    run = paragraph.add_run()
+                    run.text = line
+                    run.font.name = FONT
+                    run.font.size = Pt(el['fontSize'] * .75)
+                    run.font.bold = el['bold']
+                    run.font.color.rgb = rgb(el['color'])
+                    ea = OxmlElement('a:ea'); ea.set('typeface', FONT); run._r.get_or_add_rPr().append(ea)
+                    alpha(run._r.get_or_add_rPr().solidFill.srgbClr, opacity)
+            elif el['type'] == 'shape':
+                kind = el.get('shape', 'rect')
+                if kind == 'line':
+                    shape = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, x, y, x + w, y + h)
+                else:
+                    shape = slide.shapes.add_shape(MSO_SHAPE.OVAL if kind == 'ellipse' else MSO_SHAPE.ROUNDED_RECTANGLE if el.get('radius') else MSO_SHAPE.RECTANGLE, x, y, w, h)
+                    if kind == 'rect' and el.get('radius'):
+                        shape.adjustments[0] = min(.5, el['radius'] / min(el['width'], el['height']))
+                    if el.get('fill'):
+                        shape.fill.solid(); shape.fill.fore_color.rgb = rgb(el['fill'])
+                        alpha(shape._element.spPr.solidFill.srgbClr, opacity)
+                    else:
+                        shape.fill.background()
+                if el.get('stroke'):
+                    shape.line.color.rgb = rgb(el['stroke'])
+                    shape.line.width = Pt(el.get('strokeWidth', 1) * .75)
+                    alpha(shape._element.spPr.ln.solidFill.srgbClr, opacity)
+                else:
+                    shape.line.fill.background()
+            else:
+                picture = slide.shapes.add_picture(io.BytesIO(el['_png']), x, y, w, h)
+                picture._element.nvPicPr.cNvPr.set('descr', el.get('alt', ''))
+                if el.get('_svg'):
+                    package = prs.part.package
+                    vector = Part(package.next_partname('/ppt/media/vector%d.svg'), 'image/svg+xml', package, el['_svg'])
+                    relation = slide.part.relate_to(vector, RT.IMAGE)
+                    ext_list = OxmlElement('a:extLst')
+                    ext = OxmlElement('a:ext'); ext.set('uri', '{96DAC541-7B7A-43D3-8B79-37D633B846F1}')
+                    svg_blip = etree.Element('{http://schemas.microsoft.com/office/drawing/2016/SVG/main}svgBlip', nsmap={'asvg': 'http://schemas.microsoft.com/office/drawing/2016/SVG/main'})
+                    svg_blip.set('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed', relation)
+                    ext.append(svg_blip); ext_list.append(ext)
+                    picture._element.blipFill.blip.append(ext_list)
+        notes = item.notes
+        if item.sources:
+            notes += '\n\n' + '\n'.join(f'{s.title}: {s.url}' for s in item.sources)
+        if notes:
+            slide.notes_slide.notes_text_frame.text = notes
     prs.save(output)

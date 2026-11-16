@@ -1,5 +1,5 @@
 import type {
-  PresentationAttachmentPort, PresentationJob, PresentationRenderer, PresentationStorage, PresentationVersion, PresentationView,
+  PresentationAssetPort, PresentationAttachmentPort, PresentationJob, PresentationRenderer, PresentationStorage, PresentationVersion, PresentationView,
 } from "../interfaces/agent-presentation.js";
 import { parsePresentationDeck, parsePresentationSlide, PresentationError } from "./agent-presentation-validation.js";
 
@@ -10,7 +10,8 @@ const MIME = "application/vnd.openxmlformats-officedocument.presentationml.prese
 /** One durable object owns a presentation's versions, cancellation fence and watchdog. */
 export class AgentPresentationTaskService {
   constructor(private readonly storage: PresentationStorage, private readonly renderer: PresentationRenderer,
-    private readonly attachments: PresentationAttachmentPort, private readonly exclusive: Exclusive = callback => callback()) {}
+    private readonly attachments: PresentationAttachmentPort, private readonly exclusive: Exclusive = callback => callback(),
+    private readonly assets?: PresentationAssetPort) {}
 
   async start(input: { id: string; userId: number; conversationId: number; deck: unknown }): Promise<void> {
     await this.atomic(async task => {
@@ -112,7 +113,8 @@ export class AgentPresentationTaskService {
       return true;
     });
     try {
-      const output = await this.renderer.render(row.deck);
+      const assets = await this.assets?.load(job.userId, row.deck) ?? [];
+      const output = await this.renderer.render(row.deck, assets);
       if (!await update({ status: "uploading" })) return;
       const upload = async (name: string, type: string, bytes: Uint8Array) => {
         const result = await this.attachments.upload(job.userId, { name, type, bytes, size: bytes.length });

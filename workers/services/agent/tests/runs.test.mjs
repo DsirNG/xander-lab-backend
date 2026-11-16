@@ -2207,3 +2207,43 @@ test("Agent registers send_email and stops at approval without querying or sendi
   assert.equal(state.conversation.status, "awaiting_approval");
   assert.ok(delivered.some((event) => event.eventType === "approval_required"));
 });
+for (const apiStyle of ['CHAT_COMPLETIONS','RESPONSES']) {
+  test(`PPT image preparation continues into creation, polling, visual review and revision through ${apiStyle}`,async()=>{
+    const {repository,state}=createRepository();
+    const id='b'.repeat(32);let imageCalls=0,creates=0,gets=0,revisions=0,modelCalls=0;
+    const slide={title:'Useful feeding guidance',layout:'canvas',bullets:[],elements:[
+      {type:'image',assetId:71,x:720,y:0,width:560,height:720,fit:'cover'},
+      {type:'text',text:'Read the feeding guide',x:64,y:120,width:600,height:180,fontSize:56},
+    ]};
+    const files={pptx:{id:1,url:'https://files.test/deck.pptx',contentType:'application/vnd.openxmlformats-officedocument.presentationml.presentation'},previews:[{id:2,url:'https://files.test/slide.png',contentType:'image/png',name:'preview',size:100}]};
+    const images={async generate(user,conversation,version,input,_preview,ensure){imageCalls++;assert.equal(user,42);assert.equal(conversation,7);assert.equal(input.prompt,'A pet product concept illustration');await ensure();return {ok:true,assetId:71,url:'https://files.test/photo.png'};}};
+    const presentations={async create(user,conversation,key,value){creates++;assert.equal(value.slides[0].elements[0].assetId,71);return {id,version:1,status:'queued',deck:value};},
+      async action(user,job,action,input){assert.equal(user,42);assert.equal(job,id);
+        if(action==='revise'){revisions++;assert.equal(input.slide.elements[1].fontSize,48);return {id,version:2,status:'queued',deck:{title:'Pet food',slides:[input.slide]}};}
+        gets++;return {id,version:revisions?2:1,status:gets===1?'rendering':'completed',deck:{title:'Pet food',slides:[slide]},...(gets===1?{}:{files})};
+      }};
+    const service=new AgentRunService(repository,{async candidates(){return {managed:true,endpoints:[{providerId:1,baseUrl:'https://models.example/v1',apiKey:'test',model:'test',apiStyle}]};}},
+      {async ensureAvailable(){return true;},async chargeTokens(){}},...Array(8).fill(undefined),images,...Array(4).fill(undefined),presentations);
+    const calls=[
+      ['prepare_presentation_image',{prompt:'A pet product concept illustration'}],
+      ['create_presentation',{title:'Pet food',slides:[slide]}],
+      ['get_presentation',{id}],['get_presentation',{id}],
+      ['revise_presentation_slide',{id,expectedVersion:1,slideIndex:0,slide:{...slide,elements:[slide.elements[0],{...slide.elements[1],fontSize:48}]}}],
+      ['get_presentation',{id}],
+    ];
+    mock.method(globalThis,'fetch',async(_input,init)=>{
+      const body=JSON.parse(init.body);const at=modelCalls++;
+      const names=body.tools.map(tool=>tool.function?.name??tool.name);assert.ok(names.includes('prepare_presentation_image'));
+      if(at===4||at===6){assert.match(JSON.stringify(body),/https:\/\/files.test\/slide.png/);assert.match(JSON.stringify(body),apiStyle==='RESPONSES'?/input_image/:/image_url/);}
+      const [name,args]=calls[at]??[];
+      const events=apiStyle==='CHAT_COMPLETIONS'
+        ?[{choices:[{delta:name?{tool_calls:[{index:0,function:{name,arguments:JSON.stringify(args)}}]}:{content:'演示文稿已完成，已检查预览。'}}]}]
+        : name?[{type:'response.output_item.added',output_index:0,item:{type:'function_call',name,arguments:''}},{type:'response.function_call_arguments.done',output_index:0,name,arguments:JSON.stringify(args)}]:[{type:'response.output_text.delta',delta:'演示文稿已完成，已检查预览。'}];
+      return new Response(events.map(e=>`data: ${JSON.stringify(e)}\n\n`).join('')+'data: [DONE]\n\n',{headers:{'content-type':'text/event-stream'}});
+    });
+    const version=await service.claimTurn(42,7,'制作漂亮的狗粮介绍PPT，需要时生成图片，检查预览后修改',[]);
+    assert.deepEqual(await service.executeTurn(42,7,version,()=>{}),{ok:true});
+    assert.equal(imageCalls,1);assert.equal(creates,1);assert.equal(gets,3);assert.equal(revisions,1);assert.equal(modelCalls,7);
+    assert.equal(state.events.filter(e=>e.eventType==='complete').length,1);
+  });
+}

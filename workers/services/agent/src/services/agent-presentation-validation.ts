@@ -1,4 +1,5 @@
 import type { PresentationDeck, PresentationSlide } from "../interfaces/agent-presentation.js";
+import { parseElements, parsePalette, sceneColor } from "./agent-presentation-scene-validation.js";
 
 export class PresentationError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = "PresentationError"; }
@@ -17,12 +18,14 @@ function text(value: unknown, max: number, optional = false): string {
 export function parsePresentationSlide(value: unknown): PresentationSlide {
   const input = object(value);
   const layout = input.layout ?? "bullets";
-  if (!["cover", "bullets", "columns", "cards", "process", "comparison", "chart", "closing"].includes(String(layout))) throw new PresentationError(400, "PPT 页面布局无效");
+  if (!["canvas", "cover", "bullets", "columns", "cards", "process", "comparison", "chart", "closing"].includes(String(layout))) throw new PresentationError(400, "PPT 页面布局无效");
   const bullets = input.bullets ?? [];
   if (!Array.isArray(bullets)) throw new PresentationError(400, "PPT 页面要点格式无效");
   const sources = input.sources ?? [];
   if (!Array.isArray(sources)) throw new PresentationError(400, "PPT 来源格式无效");
   const rich: Partial<PresentationSlide> = {};
+  if (input.background !== undefined) rich.background = sceneColor(input.background);
+  if (input.elements !== undefined) rich.elements = parseElements(input.elements);
   for (const [key, max] of [["kicker", 28], ["subtitle", 80], ["takeaway", 100]] as const) {
     if (input[key] !== undefined) rich[key] = text(input[key], max, true);
   }
@@ -60,8 +63,9 @@ export function parsePresentationDeck(value: unknown): PresentationDeck {
   if (!Array.isArray(input.slides) || input.slides.length < 1 || input.slides.length > 20) throw new PresentationError(400, "PPT 需要 1 到 20 页");
   const language = input.language ?? "zh-CN", theme = input.theme ?? "navy";
   if (!["zh-CN", "en-US"].includes(String(language)) || !["navy", "paper"].includes(String(theme))) throw new PresentationError(400, "PPT 语言或主题无效");
-  const deck = { title: text(input.title, 100), language: language as PresentationDeck["language"],
+  const deck: PresentationDeck = { title: text(input.title, 100), language: language as PresentationDeck["language"],
     theme: theme as PresentationDeck["theme"], slides: input.slides.map(parsePresentationSlide) };
-  if (new TextEncoder().encode(JSON.stringify(deck)).length > 110_000) throw new PresentationError(413, "PPT 内容过大，请精简页面");
+  if (input.palette !== undefined) deck.palette = parsePalette(input.palette);
+  if (new TextEncoder().encode(JSON.stringify(deck)).length > 512 * 1024) throw new PresentationError(413, "PPT 内容超过安全大小限制");
   return deck;
 }

@@ -32,87 +32,59 @@ test('structured story and factual chart survive preparation without flattening 
   ]}));
 });
 
-test('legacy layouts normalize accidental rich blocks without rejecting the whole deck', () => {
-  const result = preparePresentationDeck({title:'Compatible',slides:[{
-    title:'Capabilities', layout:'bullets', bullets:[], blocks:[
-      {heading:'Answer', body:'Return evidence and citations'},
-      {heading:'Draft', body:'Create an editable deliverable'}
-    ]
-  }]});
-  assert.deepEqual(result.deck.slides[0].bullets,[
-    'Answer：Return evidence and citations', 'Draft：Create an editable deliverable'
-  ]);
-  assert.equal(result.deck.slides[0].blocks, undefined);
-  assert.equal(result.adjustedSlides, 1);
-});
-
-test('model layout mismatches adapt before submission without losing page content or changing page count', () => {
-  const slides = [
+test('preparation preserves Agent layout, all content and notes without count-based rewriting', () => {
+  const value = {title:'Agent decides',slides:[
     {title:'Cover',layout:'cover',bullets:['A','B','C']},
-    {title:'Capabilities',layout:'columns',bullets:['One','Two','Three','Four','Five']},
+    {title:'Columns',layout:'columns',bullets:['One','Two','Three','Four','Five']},
     {title:'Details',layout:'bullets',bullets:['1','2','3','4','5','Sixth detail'],notes:'Original notes'},
-  ];
-  const original=structuredClone(slides);
-  const result=preparePresentationDeck({title:'Deck',slides});
-  assert.equal(result.deck.slides.length,3);
-  assert.deepEqual(result.deck.slides[0].bullets,['A','B','C']);
-  assert.equal(result.deck.slides[0].layout,'bullets');
-  assert.equal(result.deck.slides[1].layout,'bullets');
-  assert.deepEqual(result.deck.slides[1].bullets,slides[1].bullets);
-  assert.equal(result.deck.slides[2].bullets.length,5);
-  assert.match(result.deck.slides[2].notes,/Original notes/);
-  assert.match(result.deck.slides[2].notes,/Sixth detail/);
-  assert.deepEqual(slides,original);
-  assert.equal(result.adjustedSlides,3);
+    {title:'Blocks',layout:'bullets',bullets:[],blocks:[{heading:'Answer',body:'Return evidence'}]},
+  ]};
+  const before = structuredClone(value);
+  assert.deepEqual(preparePresentationDeck(value), {deck:parsePresentationDeck(value),adjustedSlides:0});
+  assert.deepEqual(value,before);
+  assert.equal(preparePresentationDeck(value).deck.slides[2].bullets[5],'Sixth detail');
+  assert.equal(preparePresentationDeck(value).deck.slides[3].blocks[0].body,'Return evidence');
 });
 
-test('long Chinese text and explicit line breaks fit the renderer and retain originals in notes', () => {
-  const title='人工智能'.repeat(20);
-  const bullet='场景应用'.repeat(30);
-  const multiline='First\nSecond\nThird\nFourth';
-  const {deck:prepared}=preparePresentationDeck({title:'Deck',slides:[
-    {title,layout:'bullets',bullets:[bullet,multiline],notes:'Existing notes',sources:[{title:'Evidence',url:'https://example.org/report'}]},
-  ]});
-  const slide=prepared.slides[0];
-  assert.ok(slide.title.length<=62);
-  assert.ok(slide.bullets[0].length<=84);
-  assert.ok(slide.bullets[1].split('\n').length<=2);
-  assert.ok(slide.notes.includes(title));
-  assert.ok(slide.notes.includes(bullet));
-  assert.ok(slide.notes.includes(multiline));
-  assert.match(slide.notes,/Existing notes/);
-  assert.equal(slide.sources[0].url,'https://example.org/report');
+test('canvas keeps custom composition, palette and owned image references', () => {
+  const value={title:'Subject-specific design',palette:{background:'#102034',foreground:'#ffffff',muted:'#aabbcc',accent:'#ffcc88',surface:'#203040'},slides:[{
+    title:'Pet nutrition',layout:'canvas',background:'#faf3e7',elements:[
+      {type:'image',assetId:7,x:720,y:0,width:560,height:720,fit:'cover',alt:'A pet food concept image'},
+      {type:'text',text:'Practical feeding advice',x:64,y:100,width:600,height:160,fontSize:48,color:'#102034'},
+      {type:'svg',svg:'<svg viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg>',x:64,y:400,width:120,height:120},
+    ],bullets:[],notes:'Concept illustration, not an actual brand',sources:[],
+  }]};
+  const result=preparePresentationDeck(value);
+  assert.deepEqual(result.deck, {...value,language:'zh-CN',theme:'navy'});
+  assert.equal(result.adjustedSlides,0);
+  for (const element of [
+    {...value.slides[0].elements[0],assetId:undefined},
+    {...value.slides[0].elements[0],attachmentId:9},
+    {...value.slides[0].elements[1],x:1200},
+    {...value.slides[0].elements[1],fontSize:NaN},
+    {...value.slides[0].elements[1],color:'url(https://evil.test)'},
+  ]) assert.throws(()=>parsePresentationDeck({...value,slides:[{...value.slides[0],elements:[element]}]}));
 });
 
-test('already valid decks remain unchanged and automatic fitting is idempotent', () => {
-  const source=parsePresentationDeck(deck);
-  assert.deepEqual(preparePresentationDeck(source),{deck:source,adjustedSlides:0});
-  const prepared=preparePresentationDeck({title:'Dense',slides:[{title:'Page',bullets:['长内容'.repeat(40)]}]}).deck;
-  assert.deepEqual(preparePresentationDeck(prepared),{deck:prepared,adjustedSlides:0});
-});
-
-test('automatic fitting never drops excess notes or relaxes source and control-character validation', () => {
-  assert.throws(()=>preparePresentationDeck({title:'Deck',slides:[{title:'Page',bullets:Array(20).fill('内容'.repeat(100)),notes:'Existing notes'}]}),error=>error.status===400&&error.message.includes('完整保留'));
+test('technical limits reject invalid payloads explicitly rather than hiding original text in notes', () => {
+  assert.throws(()=>preparePresentationDeck({title:'Deck',slides:[{title:'Page',bullets:['A'.repeat(121)]}]}));
   assert.throws(()=>preparePresentationDeck({title:'Deck',slides:[{title:'Page',bullets:['abc\u0000def']}]}));
-  assert.throws(()=>preparePresentationDeck({title:'Deck',slides:[{title:'Page',bullets:['A'],sources:[{title:'X',url:'javascript:alert(1)'}]}]}));
+  assert.throws(()=>preparePresentationDeck({title:'Deck',slides:[{title:'Page',sources:[{title:'X',url:'javascript:alert(1)'}]}]}));
+  const parsed=parsePresentationDeck(deck);
+  assert.deepEqual(preparePresentationDeck(parsed),{deck:parsed,adjustedSlides:0});
 });
 
-test('PPT tool submits fitted slides once under the original idempotency key and reports full notes', async () => {
+test('PPT tool submits the exact Agent plan once under its invocation key', async () => {
   let calls=0;
   const tools=createPresentationTools({async create(user,conversation,key,value){
-    calls++;
-    assert.equal(user,7);assert.equal(conversation,9);assert.equal(key,'original-invocation');
-    assert.equal(value.slides[0].layout,'bullets');
-    assert.equal(value.slides.length,1);
-    assert.ok(value.slides[0].notes.includes('Very detailed text '.repeat(20).trim()));
+    calls++; assert.equal(user,7);assert.equal(conversation,9);assert.equal(key,'original-invocation');
+    assert.equal(value.slides[0].layout,'cover');
+    assert.deepEqual(value.slides[0].bullets,['One','Two','Three']);
     return {...value,id,deck:value,status:'queued',version:1};
   }},async()=>{});
-  const result=await tools.get('create_presentation').execute({userId:7,conversationId:9,idempotencyKey:'original-invocation',invocationId:'original-invocation',signal:new AbortController().signal},
-    {title:'Deck',slides:[{title:'Page',layout:'cover',bullets:['One','Two','Very detailed text '.repeat(20)]}]});
-  assert.equal(calls,1);
-  assert.equal(result.ok,true);
-  assert.match(result.answer,/自动适配/);
-  assert.match(result.answer,/备注/);
+  const result=await tools.get('create_presentation').execute({userId:7,conversationId:9,runVersion:1,idempotencyKey:'original-invocation',invocationId:'original-invocation',signal:new AbortController().signal},
+    {title:'Deck',slides:[{title:'Page',layout:'cover',bullets:['One','Two','Three']}]});
+  assert.equal(calls,1); assert.equal(result.ok,true); assert.doesNotMatch(result.answer,/自动适配/);
 });
 function fixture(render = async () => ({ pptx: new Uint8Array([80,75]), source: new Uint8Array([1]), previews: [new Uint8Array([2]),new Uint8Array([3])] })) {
   const values = new Map(), files = new Map();
@@ -205,7 +177,7 @@ test('public PPT controller resolves identity before reading body; private resou
   assert.equal(response.status,200);
   assert.equal(called[0],7);
   assert.equal(called[2],'cancel');
-  const large = await handleAgentPresentationRequest(new Request(`https://app.test/api/agent/presentations/${id}/revise`,{method:'POST',body:'x'.repeat(20_000)}),{action(){assert.fail('Oversized body must not execute');}},async()=>7);
+  const large = await handleAgentPresentationRequest(new Request(`https://app.test/api/agent/presentations/${id}/revise`,{method:'POST',body:'x'.repeat(512 * 1024 + 1)}),{action(){assert.fail('Oversized body must not execute');}},async()=>7);
   assert.equal(large.status,413);
 });
 
@@ -237,4 +209,17 @@ test('PPT tools preserve invocation identity, read-only query policy and determi
   assert.equal(tools.get('create_presentation').definition().readOnly,false);
   await tools.get('create_presentation').execute({userId:7,conversationId:9,idempotencyKey:'call-1234',invocationId:'call-1234',signal:new AbortController().signal},deck);
   assert.equal(events[0].data.invocationId,'call-1234');
+});
+
+test('Agent can retry a failed render and receives actionable layout errors', async () => {
+  let called;
+  const tools = createPresentationTools({ async action(...args) { called = args; return {id,status:'queued'}; } }, async()=>{});
+  const context = {userId:7,conversationId:9,idempotencyKey:'retry-123456',invocationId:'retry-123456',signal:new AbortController().signal};
+  const result = await tools.get('retry_presentation').execute(context,{id,expectedVersion:2});
+  assert.equal(result.ok,true);
+  assert.equal(called[2],'retry');
+  assert.equal(called[3].expectedVersion,2);
+  assert.equal(tools.get('retry_presentation').definition().readOnly,false);
+  const mapper = new HttpPresentationRendererMapper('https://renderer.test','secret',async()=>Response.json({detail:'PPT_TEXT_FIT: slide 2 element 3 needs more height'},{status:422}));
+  await assert.rejects(mapper.render(parsePresentationDeck(deck)),error=>error.status===422 && error.message.includes('slide 2 element 3'));
 });

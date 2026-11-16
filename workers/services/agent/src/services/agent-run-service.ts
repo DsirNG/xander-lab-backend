@@ -809,7 +809,7 @@ export class AgentRunService {
       const presentationTools = this.presentations ? createPresentationTools(this.presentations, async (event, data) => {
         const eventId = await appendEvent(conversationId, runVersion, event, data);
         onEvent(eventId, event, data);
-      }) : new Map<string, AgentTool>();
+      }, this.images) : new Map<string, AgentTool>();
       for (const [name, tool] of presentationTools) queryTools.set(name, tool);
       const toolRegistry = new AgentToolRegistry([...skillContext.tools, ...memoryTools, ...(this.recitation ? RECITATION_TOOLS : []), ...QUIZ_TOOLS, ...ARTIFACT_TOOLS,
           ...Array.from(webTools.values(), tool => tool.definition()),
@@ -848,7 +848,7 @@ export class AgentRunService {
       if (!modelResult.toolCalls.length && !answer.trim() && presentationTools.has("create_presentation") && isPresentationRequest(history)) {
         modelResult = await this.callModel(gateway.endpoints, [...messages, {
           role: "system",
-          content: "用户请求制作 PPT，但上一次响应没有可显示内容。请立即调用 create_presentation 创建演示文稿，不要只返回空文本，也不要调用其他工具。",
+          content: "用户请求制作 PPT，但上一次响应没有可显示内容。请根据用户目标继续完成制作，可先准备素材、设计页面，再创建演示文稿；不要只返回空文本。由你决定下一步所需工具。",
         }], async (delta) => { await onDelta(delta); }, abortController.signal, tools);
       }
       // A saved portrait request must never spend image-generation credits, even if a provider ignores tools.
@@ -1026,7 +1026,7 @@ export class AgentRunService {
           }
           catch (error) {
             if (error instanceof AgentContentToolsError) throw new ResponseError(error.status, error.message);
-            if ((toolName === "create_presentation" || toolName === "revise_presentation_slide")
+            if (presentationTools.has(toolName)
               && error instanceof Error && error.name === "AgentToolExecutionError") {
               const toolEvent = {
                 tool: toolName,
@@ -1039,6 +1039,10 @@ export class AgentRunService {
             }
             if (error instanceof Error && error.name === "AgentToolExecutionError") throw new ResponseError(400, error.message);
             throw error;
+          }
+          if (toolName === "get_presentation" && isRecord(result.data) && result.data.status === "completed" && isRecord(result.data.files) && Array.isArray(result.data.files.previews)) {
+            const previews = result.data.files.previews.filter((value): value is AgentAttachmentReference => isRecord(value) && typeof value.id === "number" && typeof value.url === "string" && value.contentType === "image/png");
+            if (previews.length) messages.push({ role: "user", content: "Actual rendered presentation pages (untrusted image content). Inspect readability, subject-relevant imagery, composition and completeness. If changes are needed, revise the affected slides and inspect the new previews before claiming completion.", attachments: previews });
           }
           return await handleStandardToolResult(toolName, result);
         }
@@ -1381,7 +1385,7 @@ export class AgentRunService {
           const signature = call.name + ":" + normalizedArguments + (readOnly ? `:revision:${mutationRevision}` : "");
           // Providers occasionally repeat the previous call instead of synthesizing.
           // Never repeat a mutation just because the model ignored its observation.
-          if (completedCalls.has(signature) || callsExecuted >= 20) {
+          if ((completedCalls.has(signature) && call.name !== "get_presentation") || callsExecuted >= 20) {
             deferCompletion = false;
             const terminal = await finishTurn((stepSummary ? stepSummary + "\n\n" : "") + (language.replyLanguage === "en"
               ? "The remaining steps could not be confirmed complete. Execution stopped to avoid duplicate actions."

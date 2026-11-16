@@ -8,9 +8,25 @@ export interface PresentationChart {
   caption: string;
   points: { label: string; value: number }[];
 }
+/** One 1280 × 720 scene is consumed by both preview and editable export. */
+export interface PresentationElement {
+  type: "text" | "shape" | "image" | "svg";
+  x: number; y: number; width: number; height: number;
+  text?: string; fontSize?: number; color?: string; bold?: boolean;
+  align?: "left" | "center" | "right";
+  fill?: string; stroke?: string; strokeWidth?: number;
+  shape?: "rect" | "ellipse" | "line"; radius?: number; opacity?: number;
+  attachmentId?: number; assetId?: number; svg?: string; alt?: string;
+  fit?: "cover" | "contain";
+}
+export interface PresentationPalette { background: string; foreground: string; muted: string; accent: string; surface: string }
+export interface PresentationAsset { key: string; contentType: string; data: string }
+export interface PresentationAssetPort { load(userId: number, deck: PresentationDeck): Promise<PresentationAsset[]> }
 export interface PresentationSlide {
   title: string;
-  layout: "cover" | "bullets" | "columns" | "cards" | "process" | "comparison" | "chart" | "closing";
+  layout: "canvas" | "cover" | "bullets" | "columns" | "cards" | "process" | "comparison" | "chart" | "closing";
+  background?: string;
+  elements?: PresentationElement[];
   kicker?: string;
   subtitle?: string;
   takeaway?: string;
@@ -24,6 +40,7 @@ export interface PresentationDeck {
   title: string;
   language: "zh-CN" | "en-US";
   theme: "navy" | "paper";
+  palette?: PresentationPalette;
   slides: PresentationSlide[];
 }
 export type PresentationStatus = "queued" | "rendering" | "uploading" | "completed" | "failed" | "cancelled";
@@ -45,7 +62,7 @@ export interface PresentationView extends Omit<PresentationVersion, "files" | "a
   files?: { pptx: AgentAttachmentReference; source: AgentAttachmentReference; previews: AgentAttachmentReference[] };
 }
 export interface PresentationRenderer {
-  render(deck: PresentationDeck): Promise<{ pptx: Uint8Array; source: Uint8Array; previews: Uint8Array[] }>;
+  render(deck: PresentationDeck, assets?: PresentationAsset[]): Promise<{ pptx: Uint8Array; source: Uint8Array; previews: Uint8Array[] }>;
 }
 export interface PresentationAttachmentPort {
   upload(userId: number, file: { name: string; type: string; size: number; bytes: Uint8Array }): Promise<AgentAttachmentReference>;

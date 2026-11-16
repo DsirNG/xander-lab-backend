@@ -1,6 +1,11 @@
 /** Additional public business notices shared by the API language boundary. */
 export const businessNotices: Record<string, string> = Object.fromEntries(`
 PPT 渲染服务尚未配置|The presentation renderer is not configured
+PPT 图片存储地址无效|Invalid presentation image storage URL
+PPT 图片格式不支持，请使用 PNG、JPEG、WebP、GIF 或页面 SVG 元素|Unsupported presentation image format. Use PNG, JPEG, WebP, GIF or a slide SVG element
+PPT 图片超过安全大小限制|Presentation images exceed the safe size limit
+PPT 页面元素格式无效，请检查坐标、颜色和素材引用|Invalid slide element. Check coordinates, colors and image references
+PPT 内容超过安全大小限制|The presentation exceeds the safe size limit
 PPT 修改内容过大|The slide revision is too large
 PPT 参数无效|Invalid presentation parameters
 PPT 请求格式无效|Invalid presentation request format
