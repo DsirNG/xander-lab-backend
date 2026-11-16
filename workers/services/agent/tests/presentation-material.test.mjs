@@ -5,6 +5,24 @@ import { HttpPresentationMaterialMapper } from '../.test-build/mappers/http-pres
 import { PresentationMaterialService } from '../.test-build/services/presentation-material-service.js';
 import { TavilyWebResearchMapper } from '../.test-build/mappers/tavily-web-research-mapper.js';
 const signal=()=>new AbortController().signal;
+
+test('image import normalizes downloaded bytes without following credential-bearing redirects',async()=>{
+ const candidate={url:'https://brand.com/logo.png',sourceUrl:'https://brand.com/product'};
+ let calls=0;
+ const mapper=new HttpPresentationMaterialMapper('https://renderer.com','secret',async(url,init)=>{
+  calls++;
+  assert.equal(init.redirect,'manual');
+  if(calls===1)return new Response(new Uint8Array([137,80,78,71]),{headers:{'content-type':'image/png'}});
+  assert.equal(String(url),'https://renderer.com/v1/normalize-image');
+  assert.equal(JSON.parse(init.body).data,'iVBORw==');
+  return Response.json({data:'iVBORw==',width:2,height:1});
+ });
+ assert.equal((await mapper.read(candidate,signal())).width,2);assert.equal(calls,2);
+ const redirected=new HttpPresentationMaterialMapper('https://renderer.com','secret',async(url)=>String(url).includes('renderer.com')
+  ?new Response(null,{status:302,headers:{location:'https://other.com'}})
+  :new Response(new Uint8Array([137,80,78,71]),{headers:{'content-type':'image/png'}}));
+ await assert.rejects(()=>redirected.read(candidate,signal()),/素材下载失败/);
+});
 test('searched candidates retain provenance and cannot be invented or reused across turns',async()=>{
  const session=new AgentWebResearchSession({images:async()=>[{url:'https://brand.com/product.png',sourceUrl:'https://brand.com/product',description:'Exact package'},{url:'http://127.0.0.1/a'}]});
  const result=await session.searchImages({query:'product',domains:['brand.com']},signal());

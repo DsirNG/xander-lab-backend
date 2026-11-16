@@ -1429,6 +1429,9 @@ export class AgentRunService {
       return { ok: true };
     } catch (error) {
       // Finish outstanding checkpoints before publishing a terminal failure/cancellation.
+      console.error("agent.turn.failed", { conversationId, runVersion,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        status: error instanceof ResponseError ? error.status : undefined });
       try { await answerStream?.flush(); } catch { /* The turn fails below; no false completion. */ }
       const message = stoppedByUser
         ? "好的，已停止当前任务。你可以继续说新的需求。"
@@ -1645,9 +1648,10 @@ export class AgentRunService {
           type: "function",
           function: { name: tool.name, description: tool.description, parameters: tool.parameters },
         })) : undefined;
+        // Preserve optional fields: Responses otherwise normalizes schemas to strict mode.
         // Use one search path per turn; custom research also works with chat providers.
         const responseTools = chatCompletions ? undefined : [...tools.map((tool) => ({
-          type: "function", name: tool.name, description: tool.description, parameters: tool.parameters,
+          type: "function", name: tool.name, description: tool.description, parameters: tool.parameters, strict: false,
         })), ...(this.webResearch?.nativeSearchAllowed === false ? [] : [{ type: "web_search" }])];
         const payload = chatCompletions
           ? {

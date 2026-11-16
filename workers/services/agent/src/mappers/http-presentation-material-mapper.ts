@@ -41,7 +41,8 @@ export class HttpPresentationMaterialMapper implements PresentationMaterialPort 
     const binary = []; for (let offset = 0; offset < bytes.length; offset += 8192) binary.push(String.fromCharCode(...bytes.subarray(offset, offset + 8192)));
     const endpoint = new URL("/v1/normalize-image", this.endpoint);
     if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) throw new PresentationError(503, "PPT 渲染服务尚未配置");
-    const result = await this.transport(endpoint, { method: "POST", redirect: "error", signal: abort,
+    // workerd supports only manual/follow. Reject redirects through bounded's status check.
+    const result = await this.transport(endpoint, { method: "POST", redirect: "manual", signal: abort,
       headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" }, body: JSON.stringify({ contentType: type, data: btoa(binary.join("")) }) });
     const decoded = JSON.parse(new TextDecoder().decode(await bounded(result, 12 * 1024 * 1024))) as { data: string; width: number; height: number };
     if (!Number.isSafeInteger(decoded.width) || !Number.isSafeInteger(decoded.height) || decoded.width < 1 || decoded.height < 1 || decoded.width * decoded.height > 16_000_000
